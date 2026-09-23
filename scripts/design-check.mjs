@@ -64,7 +64,7 @@ try {
   await page.goto(process.env.BASE_URL || "http://localhost:5174");
   await page.evaluate(() => document.fonts.ready);
   await audit("lobby-desktop");
-  for (const width of [320, 390, 768, 1024, 1440]) {
+  for (const width of [1280, 1440, 1920]) {
     await fit(`lobby-${width}`, width);
     await capture(`lobby-${width}`);
   }
@@ -73,9 +73,9 @@ try {
     .click();
   await audit("collection-desktop");
   await capture("collection-desktop");
-  await fit("collection-mobile", 390);
-  await audit("collection-mobile");
-  await capture("collection-mobile");
+  await fit("collection-laptop", 1280);
+  await audit("collection-laptop");
+  await capture("collection-laptop");
   await page.getByRole("button", { name: "How to play", exact: false }).click();
   assert.equal(
     await page.evaluate(() => document.body.style.overflow),
@@ -95,15 +95,15 @@ try {
     await page.evaluate(() => document.activeElement.textContent.trim()),
     "Let’s play",
   );
-  await audit("help-dialog-mobile");
-  await capture("help-mobile");
+  await audit("help-dialog-laptop");
+  await capture("help-laptop");
   await page.keyboard.press("Escape");
   assert.equal(await page.evaluate(() => document.body.style.overflow), "");
   checks.push("Modal focus trap, Escape and background scroll lock");
   await page.getByRole("button", { name: "Marvel Champions home" }).click();
   await page.locator("#start-btn").click();
-  await audit("mulligan-mobile");
-  await capture("mulligan-mobile");
+  await audit("mulligan-laptop");
+  await capture("mulligan-laptop");
   const chosen = page.locator(".selection-card").nth(1);
   await chosen.click();
   assert.equal(await chosen.getAttribute("aria-pressed"), "true");
@@ -113,7 +113,20 @@ try {
   );
   await chosen.click();
   await page.getByRole("button", { name: "Keep hand & begin" }).click();
+  const proceed = async () => {
+    for (
+      let n = 0;
+      n < 30 &&
+      (await page
+        .getByRole("button", { name: "Proceed", exact: true })
+        .count());
+      n++
+    )
+      await page.getByRole("button", { name: "Proceed", exact: true }).click();
+  };
+  await proceed();
   await page.getByRole("button", { name: "Suit up" }).click();
+  await proceed();
   const state = () =>
     page.evaluate(() => JSON.parse(window.render_game_to_text()));
   const ready = (await state()).hand.filter((c) => c.playable).length;
@@ -126,8 +139,8 @@ try {
     (await state()).hand.length,
   );
   checks.push("Hand filter preserves all cards and shows only legal plays");
-  await audit("battlefield-mobile");
-  for (const width of [320, 390, 768, 1024, 1440]) {
+  await audit("battlefield-laptop");
+  for (const width of [1280, 1440, 1920]) {
     await fit(`game-${width}`, width);
     await capture(`game-${width}`);
   }
@@ -148,9 +161,9 @@ try {
       assert.equal(await source.getAttribute("aria-pressed"), "true");
       await audit("payment-desktop");
       await capture("payment-desktop");
-      await fit("payment-mobile", 390);
-      await audit("payment-mobile");
-      await capture("payment-mobile");
+      await fit("payment-laptop", 1280);
+      await audit("payment-laptop");
+      await capture("payment-laptop");
       checks.push(
         "Payment selections keep keyboard focus and expose selection state",
       );

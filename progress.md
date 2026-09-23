@@ -32,3 +32,11 @@ Original prompt: I want to create fully playable and scripted Marvel Champions L
 - First visual review led to tighter portrait crops, a mobile dock layout fix, and corrected text contrast. The ten axe audits then reported zero violations; 12 layout checks passed across 320–1440 px. Browser checks reported zero errors and all 74 engine tests passed.
 - Image generation was rejected; the delivered artwork is the preexisting official core banner. See docs/visual-direction.md for references and validation limits.
 - Release target remains the existing private GitHub repository and https://marvel-lcg.vercel.app.
+
+## Guided desktop hot-seat — 2026-09-23
+
+- User requested transparent player/villain actions with Proceed, improved tokens/stats, and solo control of 1–3 heroes. Follow-up prioritizes desktop; mobile polish is deferred.
+- Implemented saved engine checkpoints with source/explanation/stat deltas; queued effects carry actor context and stop until Proceed. Added independent hero seats, owner-aware zones, teammate Action events/abilities, shared targets/interrupts, defensive redirection, per-hero encounters/minions, scaling, first-player rotation, and elimination. Existing solo saves migrate.
+- Desktop setup includes team size and per-seat loadouts. Table has a team strip, persistent action/history rail, stat/status/counter tokens, and read-only/basic-action gating for off-turn seats while permitting requested Action abilities.
+- Validation so far: 109 engine tests pass, including seeded two/three-hero missions with save hydration and exact card ownership; real three-hero browser mission reaches round 2 with 53 acknowledged steps; 7 flow accessibility audits and 10 design audits report no violations; 1280/1440/1920 desktop layouts checked. Screenshots inspected; contrast and scroll-region keyboard fixes made.
+- Final local checks: teammate Commander works during Spider-Man’s turn and preserves the once-per-round limit; 109 tests, production build, formatting, 7 three-hero flow audits, and 10 desktop design audits passed. Final screenshot review tightened the identity stat-row spacing at laptop widths. Release work: push to main, verify Vercel READY + source commit parity + canonical browser smoke.

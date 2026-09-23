@@ -24,3 +24,12 @@ The attempted generated illustration was rejected by the image tool. No generate
 `npm run test:design` captures the lobby and battlefield at 320, 390, 768, 1024, and 1440 pixels, checks for horizontal page overflow, and exercises hand filtering, selection state, focus trapping, Escape, scroll locking, and payment focus. It runs axe against the lobby, archive, battlefield, mulligan, inspection, help, and payment dialogs. Screenshots and findings are written to `output/design/`.
 
 These automated audits complement visual inspection; they do not constitute comprehensive accessibility certification. The existing browser test still covers the complete setup/payment/villain-turn/save-resume flow, and engine rules coverage is unchanged.
+
+
+## Desktop hot-seat and action clarity
+
+A persistent cream-and-yellow action panel sits beside the blue game table. Each checkpoint names the actor and source, lists changes as before → after values, and keeps Proceed in a consistent footer. Attack explanations show ATK, defense, prevention, and resulting damage. All automatic resolution is explicitly acknowledged. The scrollable action/history regions are keyboard accessible.
+
+The team strip keeps all 1–3 identities visible with health, hand counts, form/readiness, a first-player token, and current actor emphasis. Selecting another hero exposes that hero's cards and permitted Action abilities without changing turn order. Scenario scaling is shown before starting. Colored, embossed token emblems distinguish health, attack, threat/thwart, defense, and card counters; statuses include icons and descriptive tooltips.
+
+Desktop layouts (1280, 1440, 1920px), real three-hero progression, checkpoint reload, keyboard focus, and WCAG AA checks are the current verification scope. Dedicated mobile design is deferred at the user's request.

@@ -38,6 +38,9 @@ export interface Card {
   deck_limit?: number;
   position: number;
   subname?: string;
+  base_threat_fixed?: boolean;
+  threat_fixed?: boolean;
+  escalation_threat_fixed?: boolean;
 }
 export interface Piece {
   id: string;
@@ -54,6 +57,9 @@ export interface Piece {
   bonusAtk?: number;
   bonusThw?: number;
   used?: boolean;
+  ownerId?: string;
+  engagedWith?: string;
+  dealtTo?: string;
 }
 export interface Effect {
   type: string;
@@ -83,6 +89,7 @@ export interface Prompt {
   selectAction?: Effect;
 }
 export interface Attack {
+  targetPlayerId?: string;
   attacker: string;
   base: number;
   boostCodes: string[];
@@ -106,6 +113,14 @@ export interface GameState {
   module: string;
   phase: "mulligan" | "player" | "villain" | "won" | "lost";
   round: number;
+  players: PlayerSeat[];
+  activePlayerId: string;
+  firstPlayerId: string;
+  turnPlayerId: string;
+  playerCount: number;
+  guided: boolean;
+  review: ActionReview | null;
+  reviewCount: number;
   player: {
     form: "hero" | "alter";
     hp: number;
@@ -145,14 +160,39 @@ export interface GameState {
   result?: string;
   error?: string;
 }
+export interface PlayerSeat {
+  id: string;
+  heroId: string;
+  aspect: Aspect;
+  player: GameState["player"];
+  flags: GameState["flags"];
+  ended: boolean;
+  eliminated: boolean;
+  mulliganDone: boolean;
+}
+export interface ActionReview {
+  id: number;
+  title: string;
+  actor: string;
+  phase: string;
+  source?: string;
+  messages: string[];
+  changes: {
+    label: string;
+    before: string | number;
+    after: string | number;
+    kind: "health" | "threat" | "cards" | "status";
+  }[];
+}
 export type Command =
+  | { type: "PROCEED" }
   | { type: "MULLIGAN"; ids: string[] }
   | { type: "CHOOSE"; id: string }
   | { type: "SELECT"; ids: string[] }
   | { type: "PAY"; ids: string[]; wildAs?: Resource }
-  | { type: "PLAY"; id: string }
+  | { type: "PLAY"; id: string; playerId?: string }
   | { type: "BASIC"; action: "attack" | "thwart" | "recover" }
   | { type: "FLIP" }
-  | { type: "ABILITY"; id: string; action?: string }
+  | { type: "ABILITY"; id: string; action?: string; playerId?: string }
   | { type: "END_TURN"; discard?: string[] }
   | { type: "CANCEL" };

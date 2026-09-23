@@ -64,11 +64,20 @@ import {
   paymentSources,
   playable,
   summarize,
+  schemeLimit,
+  escalation,
 } from "./game/engine";
+import { seatView, upgradeSave } from "./game/team";
+import { effectTitle } from "./game/review";
 import type { Aspect, Command, GameState, Piece, Resource } from "./game/types";
 
 type Screen = "lobby" | "game" | "collection";
-type Inspect = { code: string; piece?: Piece; hand?: boolean };
+type Inspect = {
+  code: string;
+  piece?: Piece;
+  hand?: boolean;
+  playerId?: string;
+};
 const resIcon = {
   energy: Lightning,
   mental: Brain,
@@ -233,9 +242,33 @@ function Status({
 }) {
   return (
     <span className="statuses">
-      {piece.tough && <span className="tough">Tough</span>}
-      {piece.stunned && <span className="stunned">Stunned</span>}
-      {piece.confused && <span className="confused">Confused</span>}
+      {piece.tough && (
+        <span
+          className="tough"
+          title="Prevents the next instance of damage, then discard this status."
+        >
+          <ShieldCheck size={13} weight="fill" />
+          Tough
+        </span>
+      )}
+      {piece.stunned && (
+        <span
+          className="stunned"
+          title="Your next attack removes this status instead of attacking."
+        >
+          <Lightning size={13} weight="fill" />
+          Stunned
+        </span>
+      )}
+      {piece.confused && (
+        <span
+          className="confused"
+          title="Your next thwart or scheme removes this status instead."
+        >
+          <Brain size={13} weight="fill" />
+          Confused
+        </span>
+      )}
     </span>
   );
 }
@@ -248,7 +281,7 @@ function readSave(): GameState | null {
       a.player?.hand &&
       a.attachments
     )
-      return a;
+      return upgradeSave(a);
     return null;
   } catch {
     return null;
@@ -264,8 +297,31 @@ const fanCards: Record<string, [string, string]> = {
 export default function App() {
   const [screen, setScreen] = useState<Screen>("lobby");
   const [game, setGame] = useState<GameState | null>(readSave);
-  const [hero, setHero] = useState(HEROES[0]);
-  const [aspect, setAspect] = useState<Aspect>("justice");
+  const [team, setTeam] = useState<{ heroId: string; aspect: Aspect }[]>([
+    { heroId: HEROES[0].id, aspect: "justice" },
+  ]);
+  const [setupSeat, setSetupSeat] = useState(0);
+  const hero = HEROES.find((h) => h.id === team[setupSeat].heroId)!;
+  const aspect = team[setupSeat].aspect;
+  const setHero = (h: (typeof HEROES)[number]) =>
+    setTeam((a) =>
+      a.map((p, i) =>
+        i === setupSeat ? { heroId: h.id, aspect: h.aspect } : p,
+      ),
+    );
+  const setAspect = (aspect: Aspect) =>
+    setTeam((a) => a.map((p, i) => (i === setupSeat ? { ...p, aspect } : p)));
+  function setTeamSize(size: number) {
+    setTeam((prev) => {
+      const next = prev.slice(0, size);
+      while (next.length < size) {
+        const h = HEROES.find((h) => !next.some((p) => p.heroId === h.id))!;
+        next.push({ heroId: h.id, aspect: h.aspect });
+      }
+      return next;
+    });
+    setSetupSeat((i) => Math.min(i, size - 1));
+  }
   const [villain, setVillain] = useState(VILLAINS[0]);
   const [difficulty, setDifficulty] = useState<"standard" | "expert">(
     "standard",
@@ -324,13 +380,14 @@ export default function App() {
           : {
               screen,
               selectedHero: hero.name,
+              team,
               selectedVillain: villain.name,
               aspect,
               difficulty,
             },
       );
     (window as any).advanceTime = () => {};
-  }, [screen, hero, villain, aspect, difficulty]);
+  }, [screen, hero, villain, aspect, difficulty, team]);
   function tone() {
     if (!sound) return;
     try {
@@ -363,6 +420,8 @@ export default function App() {
       newGame({
         heroId: hero.id,
         aspect,
+        heroes: team,
+        guided: true,
         villainId: villain.id,
         difficulty,
         module,
@@ -508,7 +567,7 @@ export default function App() {
               </div>
               <div className="banner-meta">
                 <span>
-                  <User size={16} /> Solo adventure
+                  <User size={16} /> 1–3 hero hot-seat
                 </span>
                 <span>
                   <ShieldCheck size={17} /> 5 iconic heroes
@@ -530,12 +589,70 @@ export default function App() {
             </div>
             <span>Pick your hero. Build your approach. Save the day.</span>
           </div>
+          <section
+            className="team-builder"
+            aria-label="Team size and hero seats"
+          >
+            <div className="team-builder-top">
+              <div>
+                <span className="small-label">
+                  SOLO COMMAND. ASSEMBLED TOGETHER.
+                </span>
+                <h3>How many heroes will you command?</h3>
+                <p>
+                  One player, one device. Take each hero’s turn in sequence.
+                </p>
+              </div>
+              <div className="team-size" aria-label="Number of heroes">
+                {[1, 2, 3].map((n) => (
+                  <button
+                    key={n}
+                    aria-pressed={team.length === n}
+                    onClick={() => setTeamSize(n)}
+                  >
+                    <Users size={18} />
+                    {n} {n === 1 ? "hero" : "heroes"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="setup-seats">
+              {team.map((p, i) => {
+                const h = HEROES.find((h) => h.id === p.heroId)!;
+                return (
+                  <button
+                    key={i}
+                    className={`setup-seat ${setupSeat === i ? "selected" : ""}`}
+                    style={aspectStyle(h.color)}
+                    aria-pressed={setupSeat === i}
+                    onClick={() => setSetupSeat(i)}
+                    aria-label={`Configure hero ${i + 1}: ${h.name}`}
+                  >
+                    <span className="seat-number">0{i + 1}</span>
+                    <img src={imageFor(h.code)} alt="" />
+                    <span>
+                      <b>{h.name}</b>
+                      <small>
+                        {ASPECTS.find((a) => a.id === p.aspect)?.name} · 40
+                        cards
+                      </small>
+                    </span>
+                    {setupSeat === i ? (
+                      <CheckCircle size={20} weight="fill" />
+                    ) : (
+                      <ChevronRight size={20} />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
           <div className="setup-grid">
             <section id="hero-setup" className="hero-setup">
               <div className="section-heading">
                 <div>
                   <span className="step-number">01</span>
-                  <h2>CHOOSE YOUR HERO</h2>
+                  <h2>CHOOSE HERO {setupSeat + 1}</h2>
                 </div>
                 <span className="muted">Find your superpower.</span>
               </div>
@@ -549,6 +666,14 @@ export default function App() {
                       setHero(h);
                       setAspect(h.aspect);
                     }}
+                    disabled={team.some(
+                      (p, i) => i !== setupSeat && p.heroId === h.id,
+                    )}
+                    title={
+                      team.some((p, i) => i !== setupSeat && p.heroId === h.id)
+                        ? "Already assigned to another hero seat"
+                        : h.name
+                    }
                     aria-pressed={hero.id === h.id}
                   >
                     <div className="portrait">
@@ -728,16 +853,33 @@ export default function App() {
                   ))}
                 </select>
               </label>
-              <div className="mission-loadout">
-                <Shield size={20} />
-                <span>
-                  <b>{hero.name}</b>
-                  <small>
-                    {ASPECTS.find((a) => a.id === aspect)?.name} · 40-card
-                    starter deck
-                  </small>
-                </span>
-                <CheckCircle size={19} weight="fill" />
+              <div className="mission-team-summary">
+                {team.map((p, i) => (
+                  <div className="mission-loadout" key={p.heroId}>
+                    <span className="seat-number">0{i + 1}</span>
+                    <span>
+                      <b>{HEROES.find((h) => h.id === p.heroId)!.name}</b>
+                      <small>
+                        {ASPECTS.find((a) => a.id === p.aspect)?.name} · 40-card
+                        deck
+                      </small>
+                    </span>
+                    <CheckCircle size={19} weight="fill" />
+                  </div>
+                ))}
+                <div className="scaling-summary">
+                  <span>
+                    <Heart size={16} />
+                    {card(villain.codes[difficulty === "expert" ? 1 : 0])
+                      .health! * team.length}{" "}
+                    villain HP
+                  </span>
+                  <span>
+                    <Target size={16} />
+                    {card(villain.schemes[0]).threat! * team.length} threat
+                    limit
+                  </span>
+                </div>
               </div>
               <button
                 id="start-btn"
@@ -813,15 +955,18 @@ export default function App() {
           send={send}
           inspect={setInspect}
           logOpen={logOpen}
-          onEnd={() => setEndTurn(true)}
+          onEnd={() =>
+            game.playerCount > 1 ? send({ type: "END_TURN" }) : setEndTurn(true)
+          }
           onHome={() => setScreen("lobby")}
           onHelp={() => setHelp(true)}
         />
       )}
       {game?.error && <span className="sr-only">{game.error}</span>}
-      {screen === "game" && game?.phase === "mulligan" && (
+      {screen === "game" && game?.phase === "mulligan" && !game.review && (
         <CardSelection
-          title="Your opening hand"
+          key={game.activePlayerId}
+          title={`${HEROES.find((h) => h.id === game.heroId)!.name} · opening hand`}
           text="Keep the cards you want. Select any cards to replace once before your first turn."
           pieces={game.player.hand}
           min={0}
@@ -830,7 +975,7 @@ export default function App() {
           onConfirm={(ids) => send({ type: "MULLIGAN", ids })}
         />
       )}
-      {screen === "game" && game?.prompt && !inspect && (
+      {screen === "game" && game?.prompt && !game.review && !inspect && (
         <Decision
           key={`${game.prompt.title}-${game.prompt.kind}-${game.nextId}`}
           game={game}
@@ -880,16 +1025,28 @@ export default function App() {
               {inspect.hand && game && inspect.piece && (
                 <>
                   <p className="hint">
-                    {playable(game, inspect.piece) ||
+                    {playable(
+                      inspect.playerId
+                        ? seatView(game, inspect.playerId)
+                        : game,
+                      inspect.piece,
+                    ) ||
                       `Pay ${Math.max(0, (card(inspect.code).cost || 0) - Number(game.flags.discount || 0))} resources to play this card.`}
                   </p>
                   <button
                     className="primary-button"
-                    disabled={!!playable(game, inspect.piece)}
+                    disabled={
+                      !!playable(
+                        inspect.playerId
+                          ? seatView(game, inspect.playerId)
+                          : game,
+                        inspect.piece,
+                      )
+                    }
                     onClick={() => {
                       const id = inspect.piece!.id;
                       setInspect(null);
-                      send({ type: "PLAY", id });
+                      send({ type: "PLAY", id, playerId: inspect.playerId });
                     }}
                   >
                     Play card <ArrowRight size={18} />
@@ -962,61 +1119,69 @@ export default function App() {
           </div>
         </Modal>
       )}
-      {screen === "game" && game && ["won", "lost"].includes(game.phase) && (
-        <Modal
-          title={
-            game.phase === "won" ? "THE CITY IS SAFE." : "EVERY HERO FALLS."
-          }
-        >
-          <div className={`result-banner ${game.phase}`}>
-            <div className="result-icon">
-              {game.phase === "won" ? (
-                <ShieldCheck size={60} weight="fill" />
-              ) : (
-                <Skull size={60} />
-              )}
+      {screen === "game" &&
+        game &&
+        ["won", "lost"].includes(game.phase) &&
+        !game.review && (
+          <Modal
+            title={
+              game.phase === "won" ? "THE CITY IS SAFE." : "EVERY HERO FALLS."
+            }
+          >
+            <div className={`result-banner ${game.phase}`}>
+              <div className="result-icon">
+                {game.phase === "won" ? (
+                  <ShieldCheck size={60} weight="fill" />
+                ) : (
+                  <Skull size={60} />
+                )}
+              </div>
+              <span className="small-label">
+                {game.phase === "won" ? "MISSION COMPLETE" : "MISSION FAILED"}
+              </span>
+              <h3>
+                {game.phase === "won"
+                  ? "A true champion."
+                  : "Rise. And try again."}
+              </h3>
+              <p>{game.result}</p>
+              <span className="result-rounds">
+                {game.round} rounds ·{" "}
+                {HEROES.find((h) => h.id === game.heroId)!.name} ·{" "}
+                {game.difficulty}
+              </span>
+              <div className="modal-actions">
+                <button
+                  className="secondary-button"
+                  onClick={() => setScreen("lobby")}
+                >
+                  Choose a mission
+                </button>
+                <button
+                  className="primary-button"
+                  onClick={() =>
+                    setGame(
+                      newGame({
+                        heroId: game.players[0].heroId,
+                        heroes: game.players.map((p) => ({
+                          heroId: p.heroId,
+                          aspect: p.aspect,
+                        })),
+                        guided: true,
+                        aspect: game.aspect,
+                        villainId: game.villainId,
+                        difficulty: game.difficulty,
+                        module: game.module,
+                      }),
+                    )
+                  }
+                >
+                  <ArrowsClockwise size={17} /> Play again
+                </button>
+              </div>
             </div>
-            <span className="small-label">
-              {game.phase === "won" ? "MISSION COMPLETE" : "MISSION FAILED"}
-            </span>
-            <h3>
-              {game.phase === "won"
-                ? "A true champion."
-                : "Rise. And try again."}
-            </h3>
-            <p>{game.result}</p>
-            <span className="result-rounds">
-              {game.round} rounds ·{" "}
-              {HEROES.find((h) => h.id === game.heroId)!.name} ·{" "}
-              {game.difficulty}
-            </span>
-            <div className="modal-actions">
-              <button
-                className="secondary-button"
-                onClick={() => setScreen("lobby")}
-              >
-                Choose a mission
-              </button>
-              <button
-                className="primary-button"
-                onClick={() =>
-                  setGame(
-                    newGame({
-                      heroId: game.heroId,
-                      aspect: game.aspect,
-                      villainId: game.villainId,
-                      difficulty: game.difficulty,
-                      module: game.module,
-                    }),
-                  )
-                }
-              >
-                <ArrowsClockwise size={17} /> Play again
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
+          </Modal>
+        )}
       {(toast || storageError) && (
         <div className="toast" role="alert">
           <Info size={20} />
@@ -1139,10 +1304,10 @@ function Decision({
       wide={p.kind === "payment"}
       eyebrow={
         p.kind === "payment"
-          ? "POWER YOUR NEXT MOVE"
+          ? `${HEROES.find((h) => h.id === s.heroId)!.name.toUpperCase()} · POWER YOUR NEXT MOVE`
           : s.phase === "villain"
-            ? "INCOMING THREAT · YOUR RESPONSE"
-            : "THE NEXT MOVE IS YOURS"
+            ? `${HEROES.find((h) => h.id === s.heroId)!.name.toUpperCase()} · YOUR RESPONSE`
+            : `${HEROES.find((h) => h.id === s.heroId)!.name.toUpperCase()} · YOUR DECISION`
       }
       onClose={p.cancelable ? () => send({ type: "CANCEL" }) : undefined}
     >
@@ -1300,8 +1465,197 @@ function Decision({
     </Modal>
   );
 }
-function Tabletop({
+function StatToken({
+  kind,
+  value,
+  max,
+  label,
+  compact = false,
+}: {
+  kind: "health" | "threat" | "attack" | "defense";
+  value: number;
+  max?: number;
+  label: string;
+  compact?: boolean;
+}) {
+  const Icon =
+    kind === "health"
+      ? Heart
+      : kind === "attack"
+        ? Fist
+        : kind === "defense"
+          ? Shield
+          : Target;
+  return (
+    <div
+      className={`stat-token ${kind} ${compact ? "compact" : ""}`}
+      aria-label={`${label}: ${value}${max !== undefined ? ` of ${max}` : ""}`}
+    >
+      <span className="token-emblem">
+        <Icon size={compact ? 15 : 22} weight="fill" />
+      </span>
+      <span className="token-value">
+        <strong>{value}</strong>
+        {max !== undefined && <small>/ {max}</small>}
+      </span>
+      <span className="token-label">{label}</span>
+    </div>
+  );
+}
+function ActionDirector({
   game: s,
+  send,
+}: {
+  game: GameState;
+  send: (c: Command) => void;
+}) {
+  const review = s.review;
+  const button = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (review) button.current?.focus({ preventScroll: true });
+  }, [review?.id]);
+  const activeHero = HEROES.find((h) => h.id === s.heroId)!;
+  const waiting =
+    s.phase === "mulligan"
+      ? "Confirm your opening hand"
+      : s.prompt
+        ? "A decision needs you"
+        : ["won", "lost"].includes(s.phase)
+          ? "Mission complete"
+          : `Your move, ${activeHero.name}.`;
+  return (
+    <section
+      className={`action-director ${review ? "has-review" : ""}`}
+      aria-label="Action resolution"
+    >
+      <div className="director-top">
+        <span>
+          <Eye size={17} />
+          ACTION RESOLUTION
+        </span>
+        <b>
+          {review ? `STEP ${String(review.id).padStart(2, "0")}` : "GUIDED"}
+        </b>
+      </div>
+      <div
+        className="director-body"
+        key={review?.id || "idle"}
+        tabIndex={0}
+        role="region"
+        aria-label="Current action details"
+      >
+        <div className="director-actor">
+          <span
+            className={`resolution-dot ${s.phase === "villain" ? "enemy" : ""}`}
+          />
+          {review?.actor || activeHero.name}
+          <small>
+            {s.phase === "villain" ? "VILLAIN PHASE" : "HERO PHASE"}
+          </small>
+        </div>
+        <h2>{review?.title || waiting}</h2>
+        {review ? (
+          <>
+            {review.source && (
+              <div className="review-source">
+                <img src={imageFor(review.source)} alt="" />
+                <span>
+                  <small>IN THIS ACTION</small>
+                  <b>{card(review.source).name}</b>
+                  <span>
+                    {review.messages[0] ||
+                      "The table has updated. Review the changes below."}
+                  </span>
+                </span>
+              </div>
+            )}
+            {review.messages.length > 1 && (
+              <ul className="review-messages">
+                {review.messages.slice(1).map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            )}
+            {review.changes.length > 0 && (
+              <div className="review-changes">
+                <div className="change-heading">
+                  <span>WHAT CHANGED</span>
+                  <span>BEFORE → AFTER</span>
+                </div>
+                {review.changes.map((c, i) => {
+                  const Icon =
+                    c.kind === "health"
+                      ? Heart
+                      : c.kind === "threat"
+                        ? Target
+                        : c.kind === "cards"
+                          ? Cards
+                          : ArrowsClockwise;
+                  return (
+                    <div className={`change-row ${c.kind}`} key={i}>
+                      <Icon size={16} />
+                      <span>{c.label}</span>
+                      <div>
+                        <del>{c.before}</del>
+                        <ArrowRight size={12} />
+                        <b>{c.after}</b>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="director-idle">
+            <ShieldCheck size={34} weight="duotone" />
+            <p>
+              Play a card, use an ability, or change form. Every resolved action
+              will appear here.
+            </p>
+            <span>
+              <CheckCircle size={14} />
+              No timers. You control the pace.
+            </span>
+          </div>
+        )}
+      </div>
+      <div className="director-footer">
+        {review ? (
+          <>
+            <div className="next-step">
+              <small>UP NEXT</small>
+              <span>
+                {s.prompt
+                  ? s.prompt.title
+                  : s.phase === "mulligan"
+                    ? "The next opening hand"
+                    : ["won", "lost"].includes(s.phase)
+                      ? "Mission results"
+                      : effectTitle(s.queue[0])}
+              </span>
+            </div>
+            <button
+              ref={button}
+              className="primary-button proceed-button"
+              onClick={() => send({ type: "PROCEED" })}
+            >
+              Proceed <ArrowRight size={21} />
+            </button>
+            <span className="pace-note">Continue only when you’re ready.</span>
+          </>
+        ) : (
+          <span className="pace-note">
+            <ShieldCheck size={14} />
+            Every step is saved automatically.
+          </span>
+        )}
+      </div>
+    </section>
+  );
+}
+function Tabletop({
+  game,
   send,
   inspect,
   logOpen,
@@ -1317,14 +1671,40 @@ function Tabletop({
   onHome: () => void;
   onHelp: () => void;
 }) {
+  const [viewId, setViewId] = useState(game.activePlayerId);
+  const s = seatView(
+    game,
+    game.players.some((p) => p.id === viewId) ? viewId : game.activePlayerId,
+  );
+  useEffect(() => {
+    setViewId(game.activePlayerId);
+    setHandFilter("all");
+  }, [game.activePlayerId, game.review?.id]);
   const h = HEROES.find((h) => h.id === s.heroId)!;
   const v = VILLAINS.find((v) => v.id === s.villainId)!;
   const stats = heroStats(s);
-  const acting = s.phase === "player" && !s.prompt;
+  const acting =
+    s.phase === "player" &&
+    !s.prompt &&
+    !s.review &&
+    game.activePlayerId === s.activePlayerId &&
+    s.turnPlayerId === s.activePlayerId &&
+    !game.players.find((p) => p.id === s.activePlayerId)!.eliminated;
+  const canUseAction =
+    game.phase === "player" &&
+    !game.review &&
+    !game.prompt &&
+    !game.players.find((p) => p.id === s.activePlayerId)!.eliminated;
+  const sendAction = (c: Command) =>
+    send(
+      c.type === "PLAY" || c.type === "ABILITY"
+        ? { ...c, playerId: s.activePlayerId }
+        : c,
+    );
   const [handFilter, setHandFilter] = useState<"all" | "playable">("all");
   const playableHand = s.player.hand.filter((p) => !playable(s, p));
   const visibleHand = handFilter === "playable" ? playableHand : s.player.hand;
-  const threatLimit = card(s.scheme.code).threat || 7;
+  const threatLimit = schemeLimit(s);
   const threatCritical = s.scheme.threat >= threatLimit - 2;
   const [pile, setPile] = useState<{ title: string; cards: Piece[] } | null>(
     null,
@@ -1374,7 +1754,7 @@ function Tabletop({
             {v.location} · MISSION IN PROGRESS
           </span>
           <h1>
-            {h.name} <span>vs.</span> {v.name}
+            {s.playerCount > 1 ? "The team" : h.name} <span>vs.</span> {v.name}
           </h1>
         </div>
         <div className="mission-objectives">
@@ -1388,7 +1768,96 @@ function Tabletop({
           </span>
         </div>
       </div>
-      <div className={`table-layout ${logOpen ? "with-log" : ""}`}>
+      <div className="team-strip" aria-label="Hero team">
+        {game.players.map((seat) => {
+          const view = seatView(game, seat),
+            h = HEROES.find((h) => h.id === seat.heroId)!;
+          const current = seat.id === game.activePlayerId;
+          return (
+            <button
+              key={seat.id}
+              className={`team-seat ${current ? "acting" : ""} ${seat.id === viewId ? "viewing" : ""} ${seat.eliminated ? "eliminated" : ""}`}
+              style={aspectStyle(h.color)}
+              aria-pressed={seat.id === viewId}
+              onClick={() => {
+                setViewId(seat.id);
+                setHandFilter("all");
+              }}
+              aria-label={`View ${h.name}${current ? ", active hero" : ""}`}
+            >
+              <img src={imageFor(h.code)} alt="" />
+              <div className="team-seat-copy">
+                <span className="team-seat-state">
+                  {seat.eliminated
+                    ? "DEFEATED"
+                    : current
+                      ? s.phase === "villain"
+                        ? "RESOLVING"
+                        : "ACTIVE HERO"
+                      : seat.ended && s.phase === "player"
+                        ? "TURN COMPLETE"
+                        : "TEAMMATE"}
+                  {seat.id === s.firstPlayerId && (
+                    <span
+                      className="first-player-token"
+                      title="First player this round"
+                    >
+                      <Star size={11} weight="fill" />
+                      1ST
+                    </span>
+                  )}
+                </span>
+                <strong>{h.name}</strong>
+                <span className="seat-vitals">
+                  <span>
+                    <Heart size={13} weight="fill" />
+                    {view.player.hp}
+                    <small>/{maxHP(view)}</small>
+                  </span>
+                  <span>
+                    <Cards size={13} />
+                    {view.player.hand.length}
+                  </span>
+                  <small>
+                    {view.player.form === "hero" ? "Hero" : "Alter-ego"} ·{" "}
+                    {view.player.exhausted ? "Exhausted" : "Ready"}
+                  </small>
+                </span>
+                <div className="seat-health-bar">
+                  <i
+                    style={{
+                      width: `${(Math.max(0, view.player.hp) / maxHP(view)) * 100}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            </button>
+          );
+        })}
+        {game.playerCount === 1 && (
+          <div className="team-strip-note">
+            <ShieldCheck size={22} />
+            <span>
+              <b>Guided play is on</b>
+              <small>Read each action. Proceed at your pace.</small>
+            </span>
+          </div>
+        )}
+      </div>
+      {s.activePlayerId !== game.activePlayerId && (
+        <div className="viewing-banner">
+          <Eye size={17} />
+          <span>
+            Viewing {h.name}’s cards.{" "}
+            {HEROES.find((h) => h.id === game.heroId)!.name} is resolving the
+            current action.
+          </span>
+          <button onClick={() => setViewId(game.activePlayerId)}>
+            Return to active hero <ArrowRight size={15} />
+          </button>
+        </div>
+      )}
+      <div className="table-layout with-director">
         <div className="playmat">
           <div className="zone-label">
             <span>
@@ -1412,11 +1881,12 @@ function Tabletop({
                   VILLAIN · STAGE {["", "I", "II", "III"][s.villain.stage]}
                 </span>
                 <h2>{v.name.toUpperCase()}</h2>
-                <div className="health-display enemy">
-                  <Heart size={19} weight="fill" />
-                  <strong>{s.villain.hp}</strong>
-                  <span>/ {s.villain.maxHp}</span>
-                </div>
+                <StatToken
+                  kind="health"
+                  value={s.villain.hp}
+                  max={s.villain.maxHp}
+                  label="Villain HP"
+                />
                 <div className="health-track">
                   <i
                     style={{
@@ -1424,16 +1894,33 @@ function Tabletop({
                     }}
                   />
                 </div>
-                <div className="enemy-stats">
-                  <span>
-                    <Fist size={13} />
-                    {card(s.villain).attack} ATK
-                  </span>
-                  <span>
-                    <Target size={13} />
-                    {card(s.villain).scheme} SCH
-                  </span>
+                <div className="enemy-stats stat-row">
+                  <StatToken
+                    kind="attack"
+                    value={
+                      (card(s.villain).attack || 0) +
+                      s.attachments
+                        .filter((p) => p.attachedTo === s.villain.id)
+                        .reduce((n, p) => n + (card(p).attack || 0), 0)
+                    }
+                    label="ATK"
+                    compact
+                  />
+                  <StatToken
+                    kind="threat"
+                    value={
+                      (card(s.villain).scheme || 0) +
+                      s.attachments
+                        .filter((p) => p.attachedTo === s.villain.id)
+                        .reduce((n, p) => n + (card(p).scheme || 0), 0)
+                    }
+                    label="SCH"
+                    compact
+                  />
                 </div>
+                <span className="stat-caption">
+                  Before boosts & triggered abilities
+                </span>
                 <Status piece={s.villain} />
                 {s.attachments
                   .filter((p) => p.attachedTo === s.villain.id)
@@ -1453,8 +1940,10 @@ function Tabletop({
                       ].includes(p.code) && (
                         <button
                           className="text-button"
-                          disabled={!acting || s.player.form !== "hero"}
-                          onClick={() => send({ type: "ABILITY", id: p.id })}
+                          disabled={!canUseAction || s.player.form !== "hero"}
+                          onClick={() =>
+                            sendAction({ type: "ABILITY", id: p.id })
+                          }
                         >
                           Remove
                         </button>
@@ -1474,29 +1963,20 @@ function Tabletop({
               >
                 <CardImage code={s.scheme.code} />
               </button>
-              <div className="threat-display">
-                <span>
-                  <Target size={16} /> THREAT
-                </span>
-                <strong>
-                  {s.scheme.threat}
-                  <small> / {card(s.scheme.code).threat}</small>
-                </strong>
-              </div>
+              <StatToken
+                kind="threat"
+                value={s.scheme.threat}
+                max={threatLimit}
+                label="Main scheme threat"
+              />
               <div className="threat-track">
-                {Array.from(
-                  { length: card(s.scheme.code).threat || 7 },
-                  (_, i) => (
-                    <i
-                      className={i < s.scheme.threat ? "filled" : ""}
-                      key={i}
-                    />
-                  ),
-                )}
+                {Array.from({ length: threatLimit }, (_, i) => (
+                  <i className={i < s.scheme.threat ? "filled" : ""} key={i} />
+                ))}
               </div>
               <p>
                 +
-                {(card(s.scheme.code).escalation_threat || 0) +
+                {escalation(s) +
                   s.encounter.acceleration +
                   s.sideSchemes.reduce(
                     (n, p) => n + (card(p).scheme_acceleration || 0),
@@ -1530,7 +2010,7 @@ function Tabletop({
               </button>
               {s.encounter.dealt.length > 0 && (
                 <span className="encounter-dealt">
-                  {s.encounter.dealt.length} dealt to you
+                  {s.encounter.dealt.length} dealt across the team
                 </span>
               )}
               {s.encounter.acceleration > 0 && (
@@ -1553,6 +2033,20 @@ function Tabletop({
                   </div>
                   <span>
                     <strong>{card(p).name}</strong>
+                    <span className="engagement-label">
+                      Engaged with{" "}
+                      {
+                        HEROES.find(
+                          (h) =>
+                            h.id ===
+                            game.players.find(
+                              (seat) =>
+                                seat.id ===
+                                (p.engagedWith || game.activePlayerId),
+                            )?.heroId,
+                        )?.name
+                      }
+                    </span>
                     <small>
                       <Heart size={12} />
                       {pieceHP(s, p) - p.damage} HP <Fist size={12} />
@@ -1614,10 +2108,31 @@ function Tabletop({
                   {s.player.form === "hero" ? "YOUR HERO" : "YOUR ALTER-EGO"}
                 </span>
                 <h2>{heroCard(s).name}</h2>
-                <div className="health-display">
-                  <Heart size={17} weight="fill" />
-                  <strong>{s.player.hp}</strong>
-                  <span>/ {maxHP(s)}</span>
+                <StatToken
+                  kind="health"
+                  value={s.player.hp}
+                  max={maxHP(s)}
+                  label="Hero HP"
+                />
+                <div className="identity-stats stat-row">
+                  <StatToken
+                    kind="attack"
+                    value={stats.attack}
+                    label="ATK"
+                    compact
+                  />
+                  <StatToken
+                    kind="threat"
+                    value={stats.thwart}
+                    label="THW"
+                    compact
+                  />
+                  <StatToken
+                    kind="defense"
+                    value={stats.defense}
+                    label="DEF"
+                    compact
+                  />
                 </div>
                 <div
                   className={`hero-health-track ${s.player.hp <= 3 ? "low" : ""}`}
@@ -1634,8 +2149,10 @@ function Tabletop({
                 {abilityActive && (
                   <button
                     className="ability-button"
-                    disabled={!acting}
-                    onClick={() => send({ type: "ABILITY", id: "identity" })}
+                    disabled={!canUseAction}
+                    onClick={() =>
+                      sendAction({ type: "ABILITY", id: "identity" })
+                    }
                   >
                     <Sparkle size={13} />
                     {s.heroId === "iron_man"
@@ -1697,7 +2214,15 @@ function Tabletop({
                         )}
                         {p.counters > 0 && (
                           <span className="mini-token counter-token">
+                            <Lightning size={12} weight="fill" />
                             {p.counters}
+                            <small>
+                              {p.code === "01066"
+                                ? "ARROWS"
+                                : p.code === "01018"
+                                  ? "ENERGY"
+                                  : "USES"}
+                            </small>
                           </span>
                         )}
                       </button>
@@ -1706,10 +2231,20 @@ function Tabletop({
                         {abilityOptions(s, p).map((a) => (
                           <button
                             key={a.id}
-                            disabled={!acting || !!a.disabled}
+                            disabled={
+                              !canUseAction ||
+                              !!a.disabled ||
+                              (!acting &&
+                                (["attack", "thwart"].includes(a.id) ||
+                                  !card(p).text?.includes("Action")))
+                            }
                             title={a.disabled || a.label}
                             onClick={() =>
-                              send({ type: "ABILITY", id: p.id, action: a.id })
+                              sendAction({
+                                type: "ABILITY",
+                                id: p.id,
+                                action: a.id,
+                              })
                             }
                           >
                             {a.label}
@@ -1792,7 +2327,8 @@ function Tabletop({
                 disabled={!acting}
                 onClick={onEnd}
               >
-                End hero phase <ArrowRight size={17} />
+                {s.playerCount > 1 ? "End hero turn" : "End hero phase"}{" "}
+                <ArrowRight size={17} />
               </button>
             </div>
           </div>
@@ -1867,7 +2403,12 @@ function Tabletop({
                       }
                       key={p.id}
                       onClick={() =>
-                        inspect({ code: p.code, piece: p, hand: true })
+                        inspect({
+                          code: p.code,
+                          piece: p,
+                          hand: true,
+                          playerId: s.activePlayerId,
+                        })
                       }
                       aria-label={`Inspect ${card(p).name}`}
                       title={disabled || `Play ${card(p).name}`}
@@ -1920,35 +2461,44 @@ function Tabletop({
             </div>
           </section>
         </div>
-        {logOpen && (
-          <aside className="battle-log">
-            <div className="log-heading">
-              <span>
-                <ListBullets size={17} /> MISSION COMMS
-              </span>
-              <span className="live-dot" />
-            </div>
-            <div className="log-entries" ref={logRef}>
-              {s.log.map((l) => (
-                <div className={`log-entry ${l.kind}`} key={l.id}>
-                  {l.kind === "phase" ? (
-                    <span className="log-phase">{l.text}</span>
-                  ) : (
-                    <>
-                      <span className="log-round">
-                        {String(l.round).padStart(2, "0")}
-                      </span>
-                      <p>{l.text}</p>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className="log-footer">
-              <ShieldCheck size={14} /> Progress saved on this device
-            </div>
-          </aside>
-        )}
+        <aside className="mission-rail">
+          <ActionDirector game={game} send={send} />
+          {logOpen && (
+            <section className="battle-log">
+              <div className="log-heading">
+                <span>
+                  <ListBullets size={17} /> MISSION COMMS
+                </span>
+                <span className="live-dot" />
+              </div>
+              <div
+                className="log-entries"
+                ref={logRef}
+                tabIndex={0}
+                role="region"
+                aria-label="Mission history"
+              >
+                {s.log.map((l) => (
+                  <div className={`log-entry ${l.kind}`} key={l.id}>
+                    {l.kind === "phase" ? (
+                      <span className="log-phase">{l.text}</span>
+                    ) : (
+                      <>
+                        <span className="log-round">
+                          {String(l.round).padStart(2, "0")}
+                        </span>
+                        <p>{l.text}</p>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="log-footer">
+                <ShieldCheck size={14} /> Progress saved on this device
+              </div>
+            </section>
+          )}
+        </aside>
       </div>
       {pile && (
         <Modal title={pile.title} wide onClose={() => setPile(null)}>
@@ -2131,17 +2681,17 @@ function Help({ onClose }: { onClose: () => void }) {
           {
             icon: Shield,
             title: "Ready for the villain",
-            text: "End your phase to discard unwanted cards, refill your hand, and ready your cards. The villain adds threat, attacks or schemes, then reveals encounters.",
+            text: "After every hero has taken a turn, choose each hero’s discards, refill all hands, and ready all cards. The villain then activates against each hero and reveals each hero’s encounters.",
           },
           {
             icon: Users,
-            title: "Call in reinforcements",
-            text: "Allies can attack and thwart in either form, and defend against attacks. They take their printed consequential damage when using a basic power.",
+            title: "One player. Up to three heroes.",
+            text: "Choose 1–3 heroes at mission setup. Each has a separate deck, hand, and health. The first-player token rotates each round. Click a team portrait to inspect that hero’s table.",
           },
           {
             icon: BookOpen,
             title: "Read. React. Repeat.",
-            text: "Reaction windows appear when relevant. Choose a defender before boost cards are revealed. Tough, stunned, and confused each cancel one applicable effect.",
+            text: "The action panel explains every step. Click Proceed to continue; nothing advances on a timer. Choose defenders before boosts. Any ready hero or ally can defend for a teammate.",
           },
         ].map(({ icon: Icon, title, text }, i) => (
           <div className="help-step" key={title}>
@@ -2168,7 +2718,7 @@ function Help({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <p className="help-scope">
-        This first build supports solo core-set missions. Online co-op and
+        Core-set missions support 1–3 heroes controlled by you. Online co-op and
         custom deck building are not included.
       </p>
     </Modal>

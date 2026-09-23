@@ -1,183 +1,331 @@
 import { chromium } from "playwright";
 import { mkdir, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import assert from "node:assert/strict";
-await mkdir("output/browser", { recursive: true });
+const require = createRequire(import.meta.url);
+const root = "output/hotseat";
+await mkdir(root, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({
-  viewport: { width: 1440, height: 1080 },
-  deviceScaleFactor: 1,
+  viewport: { width: 1440, height: 1000 },
+  reducedMotion: "reduce",
 });
-const errors = [];
+await page.addInitScript(() => {
+  Date.now = () => 54321;
+});
+const errors = [],
+  checks = [],
+  audits = [],
+  reviews = [];
 page.on("pageerror", (e) => errors.push(e.message));
 page.on("console", (m) => {
   if (m.type() === "error") errors.push(m.text());
 });
 const url = process.env.BASE_URL || "http://localhost:5174";
-await page.goto(url);
-await page.evaluate(() => document.fonts.ready);
-await page.screenshot({
-  path: "output/browser/lobby-desktop.png",
-  fullPage: true,
-});
-for (const hero of [
-  "Captain Marvel",
-  "Iron Man",
-  "Black Panther",
-  "She-Hulk",
-  "Spider-Man",
-]) {
-  await page.locator(".hero-tile").filter({ hasText: hero }).click();
-  assert.equal(await page.locator(".hero-name h3").textContent(), hero);
-}
-await page.getByRole("button", { name: "View 40-card deck" }).click();
-assert.equal(await page.locator(".deck-list section").count(), 3);
-await page.getByRole("button", { name: "Close dialog" }).click();
-await page.getByRole("button", { name: "Card library" }).click();
-await page
-  .getByRole("textbox", { name: "Search cards" })
-  .fill("Swinging Web Kick");
-assert.equal(await page.locator(".collection-card").count(), 1);
-await page.locator(".collection-card").click();
-assert.equal(
-  await page.locator(".modal-heading h2").textContent(),
-  "Swinging Web Kick",
-);
-await page.getByRole("button", { name: "Close dialog" }).click();
-await page.getByRole("button", { name: "Clear search" }).click();
-assert.equal(await page.locator(".collection-card").count(), 209);
-await page.getByRole("button", { name: "Play", exact: false }).first().click();
-await page.locator("#start-btn").click();
-await page.getByRole("button", { name: "Keep hand & begin" }).click();
 const state = () =>
   page.evaluate(() => JSON.parse(window.render_game_to_text()));
-assert.equal((await state()).phase, "player");
-assert.equal((await state()).form, "alter");
-await page.getByRole("button", { name: "Suit up" }).click();
-assert.equal((await state()).form, "hero");
-await page.getByRole("button", { name: /^Attack/ }).click();
-assert.equal((await state()).villain.hp, 12);
-// Pay for a real card entirely through the interface.
-const playable = page.locator(".hand-card.playable");
-if (await playable.count()) {
-  await playable.first().click();
-  await page.getByRole("button", { name: "Play card", exact: true }).click();
-  for (let i = 0; i < 25; i++) {
-    const st = await state();
-    if (!st.prompt) break;
-    const p = st.prompt;
-    if (p.kind === "payment") {
-      let total = 0;
-      for (let j = 0; j < p.sources.length && total < p.cost; j++) {
-        await page.locator(".payment-source").nth(j).click();
-        total += p.sources[j].resources.length;
-      }
+async function screenshot(name) {
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({
+    path: `${root}/${name}.png`,
+    fullPage: !(await page.getByRole("dialog").count()),
+  });
+}
+async function audit(name) {
+  if (!(await page.evaluate(() => !!window.axe)))
+    await page.addScriptTag({ path: require.resolve("axe-core/axe.min.js") });
+  const result = await page.evaluate(() =>
+    window.axe.run(document, {
+      runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
+    }),
+  );
+  audits.push({
+    name,
+    violations: result.violations.map((v) => ({
+      id: v.id,
+      nodes: v.nodes.map((n) => ({
+        target: n.target,
+        message: n.failureSummary,
+      })),
+    })),
+  });
+}
+async function clickProceed() {
+  const s = await state();
+  if (s.review)
+    reviews.push({
+      title: s.review.title,
+      actor: s.review.actor,
+      changes: s.review.changes.length,
+    });
+  await page.getByRole("button", { name: "Proceed", exact: true }).click();
+}
+async function settle({ choices = true, mulligans = false } = {}) {
+  for (let n = 0; n < 240; n++) {
+    const s = await state();
+    if (s.error) throw Error(s.error);
+    if (s.review) {
+      await clickProceed();
+      continue;
+    }
+    if (s.phase === "mulligan" && mulligans) {
+      await page.getByRole("button", { name: "Keep hand & begin" }).click();
+      continue;
+    }
+    if (!s.prompt || !choices) return s;
+    const p = s.prompt;
+    if (p.kind === "choice") {
+      const idx = p.options.findIndex((o) =>
+        [
+          "take",
+          "resolve",
+          "allow",
+          "skip",
+          "pass",
+          "threat",
+          "exhaust",
+        ].includes(o.id),
+      );
+      await page.locator(".decision-option").nth(Math.max(0, idx)).click();
+    } else if (p.kind === "payment") {
+      // Spend all available sources: a real payment through the interface.
+      for (let i = 0; i < p.sources.length; i++)
+        await page.locator(".payment-source").nth(i).click();
       await page.getByRole("button", { name: /Spend .* & resolve/ }).click();
-    } else if (p.kind === "choice") {
-      await page.locator(".decision-option").first().click();
     } else {
+      for (let i = 0; i < (p.min || 0); i++)
+        await page.locator(".decision-option").nth(i).click();
       await page.getByRole("button", { name: "Confirm selection" }).click();
     }
   }
+  throw Error("UI did not settle after 240 steps");
 }
-await page.screenshot({
-  path: "output/browser/tabletop-desktop.png",
-  fullPage: true,
-});
-await page.getByRole("button", { name: "End hero phase" }).click();
-const count = (await state()).hand.length;
-if (count > 5) {
-  for (let i = 0; i < count - 5; i++)
-    await page.locator(".selection-card").nth(i).click();
-}
-await page.getByRole("button", { name: "Begin villain phase" }).click();
-for (let i = 0; i < 80; i++) {
-  const st = await state();
-  if (!st.prompt) break;
-  const p = st.prompt;
-  if (p.kind === "choice") {
-    const idx = p.options.findIndex((o) =>
-      [
-        "take",
-        "resolve",
-        "allow",
-        "skip",
-        "pass",
-        "threat",
-        "exhaust",
-      ].includes(o.id),
+try {
+  await page.goto(url);
+  await page.evaluate(() => document.fonts.ready);
+  for (const width of [1280, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 1000 });
+    assert.ok(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      `lobby ${width} overflow`,
     );
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole("button", { name: "3 heroes", exact: true }).click();
+  assert.equal(await page.locator(".setup-seat").count(), 3);
+  await page.getByRole("button", { name: /Configure hero 2/ }).click();
+  assert.equal(
+    await page.locator(".hero-tile.selected").innerText(),
+    "CAPTAIN MARVEL\nCarol Danvers",
+  );
+  assert.equal(
     await page
-      .locator(".decision-option")
-      .nth(idx < 0 ? 0 : idx)
-      .click();
-  } else if (p.kind === "payment") {
-    let total = 0;
-    for (let j = 0; j < p.sources.length && total < p.cost; j++) {
-      await page.locator(".payment-source").nth(j).click();
-      total += p.sources[j].resources.length;
+      .locator(".hero-tile")
+      .filter({ hasText: "Spider-Man" })
+      .isDisabled(),
+    true,
+  );
+  await page
+    .locator(".aspect-option")
+    .filter({ hasText: "Protection" })
+    .click();
+  assert.match(
+    await page.locator(".setup-seat").nth(1).innerText(),
+    /Protection/,
+  );
+  await page
+    .locator(".aspect-option")
+    .filter({ hasText: "Leadership" })
+    .click();
+  await screenshot("team-setup");
+  await audit("three-hero-setup");
+  checks.push(
+    "Three distinct hero seats, individual aspects, duplicate identity prevention",
+  );
+  await page.getByRole("button", { name: "View 40-card deck" }).click();
+  assert.equal(await page.locator(".deck-list section").count(), 3);
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  await page.locator("#start-btn").click();
+  await screenshot("opening-hand");
+  await audit("mulligan-desktop");
+  await settle({ mulligans: true });
+  assert.equal((await state()).players.length, 3);
+  assert.equal((await state()).villain.hp, 42);
+  assert.equal((await state()).scheme.limit, 21);
+  await screenshot("team-tabletop");
+  await audit("battlefield-desktop");
+  await page.getByRole("button", { name: "Suit up" }).click();
+  assert.ok((await state()).review);
+  assert.equal((await state()).form, "hero");
+  await screenshot("identity-review");
+  await audit("action-review");
+  const saved = await state();
+  await page.reload();
+  await page.getByRole("button", { name: /Resume mission/ }).click();
+  assert.equal((await state()).review.id, saved.review.id);
+  assert.deepEqual((await state()).players, saved.players);
+  checks.push(
+    "Autosave restores all seats and the exact pending Proceed checkpoint",
+  );
+  await settle();
+  await page.getByRole("button", { name: /^Attack/ }).click();
+  assert.equal((await state()).villain.hp, 42);
+  await clickProceed();
+  assert.equal((await state()).villain.hp, 40);
+  await screenshot("damage-review");
+  await settle();
+  checks.push(
+    "Basic attack pauses before damage and reports 42 → 40 villain HP",
+  );
+  await page.getByRole("button", { name: /View Captain Marvel/ }).click();
+  assert.match(await page.locator(".identity-info h2").innerText(), /Carol/);
+  assert.equal(
+    await page.getByRole("button", { name: "End hero turn" }).isDisabled(),
+    true,
+  );
+  await page.getByRole("button", { name: "Use Commander" }).click();
+  await settle({ choices: false });
+  assert.equal((await state()).turnPlayerId, "p1");
+  await page
+    .locator(".decision-option")
+    .filter({ hasText: "Spider-Man" })
+    .click();
+  await settle();
+  assert.equal((await state()).activePlayerId, "p1");
+  checks.push(
+    "Teammate inspection gates basic actions but allows Commander during Spider-Man’s turn, then restores his control",
+  );
+  if (await page.locator(".hand-card.playable").count()) {
+    await page.locator(".hand-card.playable").first().click();
+    await page.getByRole("button", { name: "Play card", exact: true }).click();
+    if ((await state()).prompt?.kind === "payment") {
+      await screenshot("payment");
+      await audit("payment-desktop");
     }
-    await page.getByRole("button", { name: /Spend .* & resolve/ }).click();
-  } else {
+    await settle();
+    checks.push(
+      "Play and pay for an actual card, including each resulting effect",
+    );
+  }
+  await page.getByRole("button", { name: "End hero turn" }).click();
+  await settle();
+  assert.equal((await state()).activePlayerId, "p2");
+  assert.equal((await state()).phase, "player");
+  assert.equal(
+    await page.getByRole("button", { name: "Use Commander" }).count(),
+    0,
+  );
+  checks.push("Commander’s once-per-round limit persists into her own turn");
+  await page.getByRole("button", { name: "Suit up" }).click();
+  await settle();
+  await page.getByRole("button", { name: "End hero turn" }).click();
+  await settle();
+  assert.equal((await state()).activePlayerId, "p3");
+  await page.getByRole("button", { name: "Suit up" }).click();
+  await settle();
+  await page.getByRole("button", { name: "End hero turn" }).click();
+  await settle({ choices: false });
+  assert.match((await state()).prompt.title, /end of hero phase/);
+  for (let n = 0; n < 120; n++) {
+    const s = await state();
+    if (s.review) {
+      await clickProceed();
+      continue;
+    }
+    if (s.prompt?.title.includes("attacks")) break;
+    assert.equal(s.prompt?.kind, "select");
+    for (let i = 0; i < (s.prompt.min || 0); i++)
+      await page.locator(".decision-option").nth(i).click();
     await page.getByRole("button", { name: "Confirm selection" }).click();
   }
+  const defense = await state();
+  assert.match(defense.prompt.title, /attacks/);
+  await screenshot("team-defense");
+  await audit("team-defense-dialog");
+  const other = defense.prompt.options.findIndex((p) => p.id === "hero:p2");
+  assert.ok(other >= 0);
+  await page.locator(".decision-option").nth(other).click();
+  for (let n = 0; n < 15; n++) {
+    const s = await state();
+    if (s.review?.title === "Reveal attack boosts") break;
+    await clickProceed();
+  }
+  await screenshot("villain-boost-review");
+  await audit("villain-boost-review");
+  await settle();
+  const after = await state();
+  assert.equal(after.round, 2);
+  assert.equal(after.firstPlayerId, "p2");
+  assert.equal(after.activePlayerId, "p2");
+  checks.push(
+    "All three turns, all end-phase discards, teammate defense, boost checkpoints, per-hero encounters and first-player rotation",
+  );
+  await screenshot("round-two");
+  for (const [width, height] of [
+    [1280, 800],
+    [1440, 900],
+    [1920, 1080],
+  ]) {
+    await page.setViewportSize({ width, height });
+    assert.ok(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      `table ${width} overflow`,
+    );
+    await page.locator(".hand-section").scrollIntoViewIfNeeded();
+    const bounds = await page.locator(".action-director").boundingBox();
+    assert.ok(
+      bounds.x > width / 2 && bounds.y >= 0,
+      `resolution rail not visible at ${width}`,
+    );
+    await screenshot(`desktop-${width}`);
+  }
+  checks.push(
+    "Desktop layouts at 1280, 1440 and 1920 pixels with persistent resolution rail",
+  );
+  assert.equal(errors.length, 0, JSON.stringify(errors));
+  const violations = audits.reduce((n, a) => n + a.violations.length, 0);
+  await writeFile(
+    `${root}/result.json`,
+    JSON.stringify(
+      { checks, audits, violations, errors, reviews, after },
+      null,
+      2,
+    ),
+  );
+  console.log(
+    JSON.stringify(
+      {
+        checks,
+        audits: audits.length,
+        violations,
+        errors,
+        reviewSteps: reviews.length,
+        round: after.round,
+      },
+      null,
+      2,
+    ),
+  );
+  assert.equal(
+    violations,
+    0,
+    "Accessibility violations; inspect output/hotseat/result.json",
+  );
+} catch (e) {
+  await screenshot("failure");
+  await writeFile(
+    `${root}/failure.json`,
+    JSON.stringify(
+      { error: String(e), state: await state(), errors, audits },
+      null,
+      2,
+    ),
+  );
+  throw e;
+} finally {
+  await browser.close();
 }
-const after = await state();
-assert.ok(after.round === 2 || after.phase === "lost");
-await page.reload();
-await page.getByRole("button", { name: /Resume mission/ }).click();
-assert.equal((await state()).round, after.round);
-assert.equal((await state()).heroHP, after.heroHP);
-await page.screenshot({ path: "output/browser/round-two.png", fullPage: true });
-await page.setViewportSize({ width: 390, height: 844 });
-await page.screenshot({
-  path: "output/browser/tabletop-mobile.png",
-  fullPage: true,
-});
-assert.ok(
-  await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-  "mobile table overflow",
-);
-await page.getByRole("button", { name: "Marvel Champions home" }).click();
-await page.screenshot({
-  path: "output/browser/lobby-mobile.png",
-  fullPage: true,
-});
-assert.ok(
-  await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-  "mobile lobby overflow",
-);
-await page.getByRole("button", { name: "How to play" }).click();
-await page.screenshot({
-  path: "output/browser/help-mobile.png",
-  fullPage: true,
-});
-await page.getByRole("button", { name: "Let’s play" }).click();
-await writeFile(
-  "output/browser/result.json",
-  JSON.stringify(
-    {
-      passed: true,
-      checks: [
-        "hero selection",
-        "starter decks",
-        "collection search",
-        "card inspection",
-        "start mission",
-        "mulligan",
-        "flip",
-        "basic attack",
-        "card payment",
-        "villain phase",
-        "autosave/resume",
-        "mobile layout",
-      ],
-      errors,
-      after,
-    },
-    null,
-    2,
-  ),
-);
-await browser.close();
-console.log(JSON.stringify({ passed: true, errors, round: after.round }));
-if (errors.length) process.exitCode = 1;

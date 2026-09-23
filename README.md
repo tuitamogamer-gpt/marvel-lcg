@@ -1,6 +1,6 @@
 # Marvel Champions — The Tabletop
 
-A playable, scripted **solo core-set** fan implementation built with React, TypeScript, and Vite. Choose a hero, aspect, villain, difficulty, and modular encounter; play a complete mission with visible rules decisions and an automatic local save.
+A playable, scripted **core-set, 1–3 hero hot-seat** fan implementation built with React, TypeScript, and Vite. Command one, two, or three heroes yourself. Choose each hero’s aspect and a shared villain, difficulty, and modular encounter. Play a mission at your own pace with explained action checkpoints and an automatic local save.
 
 **[Play the game](https://marvel-lcg.vercel.app)**
 
@@ -19,7 +19,7 @@ npm run build    # TypeScript and production bundle
 npm run preview  # serve the production bundle
 npm run sync:cards
 npm run test:ui   # with the dev server running at localhost:5174
-npm run test:design # responsive layouts, keyboard behavior, and axe audits
+npm run test:design # desktop layouts, keyboard behavior, and axe audits
 ```
 
 ## Deploy
@@ -36,7 +36,9 @@ Run the same browser checks against a deployment with `BASE_URL=https://your-pro
 - Bomb Scare, Masters of Evil, Under Attack, Legions of Hydra, and The Doomsday Chair.
 - Mulligan, payments with typed and wild resources, identity abilities, basic actions, allies, upgrades/supports, encounter/boost cards, defense and interrupt windows, nemeses, obligations, status cards, scheme and villain transitions, and victory/defeat.
 - Card inspection, searchable 209-face collection, deck inspection, discard inspection, battle log, optional sound, responsive layouts, keyboard focus, reduced-motion support, and fullscreen with `F`.
-- Local autosave, including mid-payment and mid-encounter decisions. Resume from the lobby after a reload.
+- A desktop team strip, individual hands/decks/health, player-order turns, per-hero villain activations, engaged minions, teammate defense, shared card targets, and hero elimination. Scenario values scale with the starting team size.
+- An action resolution panel with source cards, explanations, stat changes, and a **Proceed** button. No automatic playback or timers.
+- Local autosave, including a pending Proceed checkpoint, mid-payment and mid-encounter decisions. Resume from the lobby after a reload.
 
 ## Card API and artwork
 
@@ -48,11 +50,11 @@ See `src/data/provenance.json` for retrieval details. The app never needs a live
 
 ## Implementation and scope
 
-The rules engine is a serializable state machine in `src/game/engine.ts`. Commands operate on a cloned state; invalid commands leave gameplay unchanged and return an error. Effects enter a queue that pauses for an explicit choice, payment, or selection. Shuffle RNG is seeded and part of the saved state. The UI does not implement game effects.
+The rules engine is a serializable state machine in `src/game/engine.ts`. Commands operate on a cloned state; invalid commands leave gameplay unchanged and return an error. Effects enter a queue that pauses at a meaningful action checkpoint or an explicit choice, payment, or selection. Player context is carried by queued effects; ownership and control are separate. `team.ts` rebinds the active view after save hydration, and `review.ts` records visible changes. The UI enables guided resolution by default; engine fixtures may use immediate resolution. Shuffle RNG is seeded and part of the saved state. The UI does not implement game effects.
 
 This is the first playable implementation, **not a claim of exhaustive rules certification**. Tests cover all proactive core event handlers, all core encounter handlers, key rule interactions, and complete seeded missions for all 15 hero/villain pairings. See [rules coverage](docs/rules-coverage.md) for remaining limitations and validation boundaries.
 
-Online co-op, multiple player seats, custom deck construction/import, campaigns, and expansions are not included. One save slot is stored in the current browser. Starting a new mission asks before replacing an unfinished one.
+Online co-op, custom deck construction/import, campaigns, and expansions are not included. Current layout verification prioritizes desktop (1280–1920px); dedicated mobile polish is deferred. One save slot is stored in the current browser. Starting a new mission asks before replacing an unfinished one.
 
 The interface uses a comic-book visual system across the lobby, battlefield, archive, and decision dialogs. See [visual direction](docs/visual-direction.md) for references, UX decisions, and verification scope.
 
