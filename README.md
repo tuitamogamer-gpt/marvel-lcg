@@ -2,6 +2,8 @@
 
 A playable, scripted **solo core-set** fan implementation built with React, TypeScript, and Vite. Choose a hero, aspect, villain, difficulty, and modular encounter; play a complete mission with visible rules decisions and an automatic local save.
 
+**[Play the game](https://marvel-lcg.vercel.app)**
+
 ## Run
 
 ```sh
@@ -17,6 +19,7 @@ npm run build    # TypeScript and production bundle
 npm run preview  # serve the production bundle
 npm run sync:cards
 npm run test:ui   # with the dev server running at localhost:5174
+npm run test:design # responsive layouts, keyboard behavior, and axe audits
 ```
 
 ## Deploy
@@ -50,5 +53,7 @@ The rules engine is a serializable state machine in `src/game/engine.ts`. Comman
 This is the first playable implementation, **not a claim of exhaustive rules certification**. Tests cover all proactive core event handlers, all core encounter handlers, key rule interactions, and complete seeded missions for all 15 hero/villain pairings. See [rules coverage](docs/rules-coverage.md) for remaining limitations and validation boundaries.
 
 Online co-op, multiple player seats, custom deck construction/import, campaigns, and expansions are not included. One save slot is stored in the current browser. Starting a new mission asks before replacing an unfinished one.
+
+The interface uses a comic-book visual system across the lobby, battlefield, archive, and decision dialogs. See [visual direction](docs/visual-direction.md) for references, UX decisions, and verification scope.
 
 This is an unofficial fan project. Marvel characters and card artwork/text belong to Marvel and Fantasy Flight Games. Community API availability does not transfer those rights. The source attribution is shown in the interface; no affiliation is implied.

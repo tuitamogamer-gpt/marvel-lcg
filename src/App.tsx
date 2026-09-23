@@ -139,21 +139,27 @@ function Modal({
   children,
   onClose,
   wide = false,
+  eyebrow = "MARVEL CHAMPIONS",
 }: {
   title: string;
   children: ReactNode;
   onClose?: () => void;
   wide?: boolean;
+  eyebrow?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
   useEffect(() => {
     const prev = document.activeElement as HTMLElement;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const target = ref.current?.querySelector<HTMLElement>(
       "button, input, select",
     );
     target?.focus();
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && onClose) onClose();
+      if (e.key === "Escape") closeRef.current?.();
       if (e.key === "Tab") {
         const nodes = ref.current?.querySelectorAll<HTMLElement>(
           'button:not(:disabled),input:not(:disabled),select:not(:disabled),[tabindex="0"]',
@@ -173,9 +179,10 @@ function Modal({
     window.addEventListener("keydown", key);
     return () => {
       window.removeEventListener("keydown", key);
-      prev?.focus();
+      document.body.style.overflow = overflow;
+      if (prev?.isConnected) prev.focus();
     };
-  }, [onClose]);
+  }, []);
   return (
     <div
       className="modal-backdrop"
@@ -191,7 +198,10 @@ function Modal({
         ref={ref}
       >
         <div className="modal-heading">
-          <h2>{title}</h2>
+          <div>
+            <span className="modal-eyebrow">{eyebrow}</span>
+            <h2>{title}</h2>
+          </div>
           {onClose && (
             <button
               className="icon-button"
@@ -274,6 +284,9 @@ export default function App() {
   const [storageError, setStorageError] = useState(false);
   const gameRef = useRef(game);
   gameRef.current = game;
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, [screen]);
   useEffect(() => {
     if (game)
       try {
@@ -365,7 +378,20 @@ export default function App() {
   }
   const active = game && !["won", "lost"].includes(game.phase);
   return (
-    <div className={`app ${screen === "game" ? "playing" : ""}`}>
+    <div
+      className={`app ${screen === "game" ? "playing" : ""}`}
+      style={
+        {
+          "--hero-color": (screen === "game" && game
+            ? HEROES.find((h) => h.id === game.heroId)
+            : hero
+          )?.color,
+        } as CSSProperties
+      }
+    >
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
       <header className="topbar">
         <Brand onClick={() => setScreen("lobby")} />
         <nav aria-label="Main navigation">
@@ -373,13 +399,13 @@ export default function App() {
             className={screen === "lobby" ? "active" : ""}
             onClick={() => setScreen("lobby")}
           >
-            Play<small>01</small>
+            <Shield size={17} /> Play<small>01</small>
           </button>
           <button
             className={screen === "collection" ? "active" : ""}
             onClick={() => setScreen("collection")}
           >
-            Card library<small>02</small>
+            <Cards size={17} /> Card library<small>02</small>
           </button>
           <button onClick={() => setHelp(true)}>
             How to play
@@ -387,7 +413,10 @@ export default function App() {
           </button>
         </nav>
         <div className="top-tools">
-          <span className="edition">CORE SET</span>
+          <span className="edition">
+            <span>CORE SET</span>
+            <b>01</b>
+          </span>
           <button
             className="icon-button"
             aria-label={sound ? "Mute sound" : "Enable sound"}
@@ -411,13 +440,12 @@ export default function App() {
         </div>
       </header>
       {screen === "lobby" && (
-        <main className="lobby page-width">
+        <main id="main-content" className="lobby page-width">
           <div className="lobby-kicker">
             <span>
-              <span className="live-dot" />
-              THE WORLD NEEDS CHAMPIONS
+              <span className="live-dot" />A NEW MISSION AWAITS
             </span>
-            <span>YOUR TABLE. YOUR STORY.</span>
+            <span>FIVE HEROES. ONE EXTRAORDINARY UNIVERSE.</span>
           </div>
           {active && (
             <button className="resume-banner" onClick={() => setScreen("game")}>
@@ -438,71 +466,78 @@ export default function App() {
             </button>
           )}
           <section className="hero-banner" style={aspectStyle(hero.color)}>
-            <div className="banner-grain" />
+            <div
+              className="hero-illustration"
+              role="img"
+              aria-label="Marvel heroes assemble over New York"
+            />
+            <div className="banner-grain" aria-hidden="true" />
             <div className="banner-copy">
-              <span className="small-label">A MARVEL CHAMPIONS TABLETOP</span>
+              <span className="comic-caption">
+                YOUR NEXT GREAT ORIGIN STORY
+              </span>
               <h1>
-                SUIT UP.
+                THE WORLD
                 <br />
-                <span>SAVE THE WORLD.</span>
+                <span>NEEDS YOU.</span>
               </h1>
               <p>
-                Extraordinary heroes. Impossible odds.
+                The villains have a plan. You have a deck.
                 <br />
-                Your next great story starts at the table.
+                Suit up. Take a stand. Become a champion.
               </p>
+              <div className="banner-actions">
+                <button
+                  className="primary-button"
+                  onClick={() =>
+                    document.getElementById("hero-setup")?.scrollIntoView({
+                      behavior: window.matchMedia(
+                        "(prefers-reduced-motion: reduce)",
+                      ).matches
+                        ? "instant"
+                        : "smooth",
+                      block: "start",
+                    })
+                  }
+                >
+                  Choose your hero <ArrowRight size={21} />
+                </button>
+                <button className="text-button" onClick={() => setHelp(true)}>
+                  <BookOpen size={17} /> Learn to play
+                </button>
+              </div>
               <div className="banner-meta">
                 <span>
-                  <User size={16} /> Solo play
+                  <User size={16} /> Solo adventure
                 </span>
                 <span>
-                  <ShieldCheck size={17} /> Scripted encounters
+                  <ShieldCheck size={17} /> 5 iconic heroes
                 </span>
                 <span>
-                  <Stack size={17} /> Core collection
+                  <Skull size={17} /> 3 villain scenarios
                 </span>
               </div>
             </div>
-            <div
-              className="card-fan"
-              aria-label={`${hero.name} signature cards`}
-            >
-              <div className="fan-orbit" />
-              <div className="fan-label">
-                {hero.identity.toUpperCase()}
-                <span>{hero.style}</span>
-              </div>
-              <button
-                className="fan-card fan-left"
-                onClick={() => setInspect({ code: fanCards[hero.id][0] })}
-              >
-                <CardImage code={fanCards[hero.id][0]} />
-              </button>
-              <button
-                className="fan-card fan-right"
-                onClick={() => setInspect({ code: fanCards[hero.id][1] })}
-              >
-                <CardImage code={fanCards[hero.id][1]} />
-              </button>
-              <button
-                className="fan-card fan-center"
-                onClick={() => setInspect({ code: hero.code })}
-              >
-                <CardImage code={hero.code} />
-              </button>
-              <span className="fan-caption">
-                <Sparkle size={14} /> A hero is more than a mask.
-              </span>
-            </div>
+            <span className="cover-tag">
+              <b>BIG HEROES.</b>
+              <span>BIGGER DECISIONS.</span>
+            </span>
           </section>
+          <div className="setup-heading">
+            <div>
+              <span className="small-label">MISSION CONTROL</span>
+              <h2>ASSEMBLE YOUR ADVENTURE.</h2>
+            </div>
+            <span>Pick your hero. Build your approach. Save the day.</span>
+          </div>
           <div className="setup-grid">
-            <section className="hero-setup">
+            <section id="hero-setup" className="hero-setup">
               <div className="section-heading">
                 <div>
                   <span className="step-number">01</span>
                   <h2>CHOOSE YOUR HERO</h2>
                 </div>
-                <span className="muted">5 heroes. Your call.</span>
+                <span className="muted">Find your superpower.</span>
               </div>
               <div className="hero-roster">
                 {HEROES.map((h) => (
@@ -539,6 +574,28 @@ export default function App() {
                     <span className="hero-style">{hero.style}</span>
                   </div>
                   <p>{hero.description}</p>
+                  <div className="signature-links">
+                    <button
+                      className="text-button"
+                      onClick={() => setInspect({ code: hero.code })}
+                    >
+                      <Eye size={15} /> Identity card
+                    </button>
+                    <button
+                      className="text-button"
+                      onClick={() => setInspect({ code: fanCards[hero.id][0] })}
+                    >
+                      <Lightning size={15} /> Signature move
+                    </button>
+                    <span className="complexity-label">
+                      <Difficulty level={hero.complexity} />{" "}
+                      {hero.complexity === 1
+                        ? "Easy to learn"
+                        : hero.complexity === 2
+                          ? "A little strategy"
+                          : "Plan your combos"}
+                    </span>
+                  </div>
                 </div>
                 <div className="hero-stat-group">
                   {[
@@ -557,7 +614,7 @@ export default function App() {
               <div className="aspect-heading">
                 <div>
                   <span className="step-number">02</span>
-                  <h2>MAKE IT YOUR OWN</h2>
+                  <h2>CHOOSE YOUR APPROACH</h2>
                 </div>
                 <button
                   className="text-button"
@@ -603,7 +660,7 @@ export default function App() {
               <div className="section-heading">
                 <div>
                   <span className="step-number">03</span>
-                  <h2>PICK YOUR FIGHT</h2>
+                  <h2>CHOOSE YOUR VILLAIN</h2>
                 </div>
               </div>
               <div className="villain-tabs">
@@ -611,6 +668,7 @@ export default function App() {
                   <button
                     key={v.id}
                     className={v.id === villain.id ? "active" : ""}
+                    aria-pressed={v.id === villain.id}
                     onClick={() => {
                       setVillain(v);
                       setModule(v.module);
@@ -649,6 +707,7 @@ export default function App() {
                     <button
                       key={d}
                       className={difficulty === d ? "selected" : ""}
+                      aria-pressed={difficulty === d}
                       onClick={() => setDifficulty(d)}
                     >
                       {d === "standard" ? "Standard" : "Expert"}
@@ -669,6 +728,17 @@ export default function App() {
                   ))}
                 </select>
               </label>
+              <div className="mission-loadout">
+                <Shield size={20} />
+                <span>
+                  <b>{hero.name}</b>
+                  <small>
+                    {ASPECTS.find((a) => a.id === aspect)?.name} · 40-card
+                    starter deck
+                  </small>
+                </span>
+                <CheckCircle size={19} weight="fill" />
+              </div>
               <button
                 id="start-btn"
                 className="primary-button start-button"
@@ -682,6 +752,43 @@ export default function App() {
               </span>
             </section>
           </div>
+          <section className="field-guide">
+            <div>
+              <BookOpen size={29} />
+              <span className="small-label">YOUR MISSION, AT A GLANCE</span>
+              <h2>
+                GREAT POWER.
+                <br /> YOUR CALL.
+              </h2>
+              <button className="text-button" onClick={() => setHelp(true)}>
+                Read the field guide <ArrowUpRight size={17} />
+              </button>
+            </div>
+            <article>
+              <Fist size={28} />
+              <h3>Take down the villain.</h3>
+              <p>
+                Fight through both villain stages. Your cards and allies are
+                your greatest weapons.
+              </p>
+            </article>
+            <article>
+              <Target size={28} />
+              <h3>Keep the city safe.</h3>
+              <p>
+                Remove threat before the main scheme completes. Every turn is a
+                balancing act.
+              </p>
+            </article>
+            <article>
+              <ArrowsClockwise size={28} />
+              <h3>Embrace both identities.</h3>
+              <p>
+                Switch between hero and alter-ego to fight, recover, and use
+                your unique abilities.
+              </p>
+            </article>
+          </section>
           <footer className="footer">
             <span>Built for the love of the game.</span>
             <span>
@@ -943,13 +1050,23 @@ function CardSelection({
 }) {
   const [selected, setSelected] = useState<string[]>([]);
   return (
-    <Modal title={title} wide onClose={onClose}>
+    <Modal
+      title={title}
+      wide
+      onClose={onClose}
+      eyebrow={
+        mode === "mulligan"
+          ? "YOUR ORIGIN STORY STARTS HERE"
+          : "THE VILLAIN STRIKES NEXT"
+      }
+    >
       <p className="modal-intro">{text}</p>
       <div className="selection-cards">
         {pieces.map((p) => (
           <button
             key={p.id}
             className={`selection-card ${selected.includes(p.id) ? "selected" : ""}`}
+            aria-pressed={selected.includes(p.id)}
             onClick={() =>
               setSelected(
                 selected.includes(p.id)
@@ -975,7 +1092,7 @@ function CardSelection({
         ))}
       </div>
       <div className="selection-footer">
-        <span>
+        <span aria-live="polite">
           {selected.length} selected
           {min > 0 ? ` · discard at least ${min}` : ""}
         </span>
@@ -1020,11 +1137,40 @@ function Decision({
     <Modal
       title={p.title}
       wide={p.kind === "payment"}
+      eyebrow={
+        p.kind === "payment"
+          ? "POWER YOUR NEXT MOVE"
+          : s.phase === "villain"
+            ? "INCOMING THREAT · YOUR RESPONSE"
+            : "THE NEXT MOVE IS YOURS"
+      }
       onClose={p.cancelable ? () => send({ type: "CANCEL" }) : undefined}
     >
       <p className="modal-intro">{p.text}</p>
       {p.kind === "payment" ? (
         <>
+          <div
+            className={`payment-summary ${total >= (p.cost || 0) ? "ready" : ""}`}
+            role="status"
+          >
+            <Lightning size={21} weight="fill" />
+            <span>
+              <b>
+                {Math.max(0, (p.cost || 0) - total) > 0
+                  ? `${(p.cost || 0) - total} more resources needed`
+                  : "Resource cost covered"}
+              </b>
+              <small>
+                {total > (p.cost || 0)
+                  ? `${total - (p.cost || 0)} extra resources will be spent.`
+                  : "Select cards to spend or abilities to use below."}
+              </small>
+            </span>
+            <strong>
+              {total}
+              <small> / {p.cost || 0}</small>
+            </strong>
+          </div>
           <div className="payment-layout">
             {p.card && (
               <div className="payment-card">
@@ -1041,6 +1187,7 @@ function Decision({
                 <button
                   key={x.id}
                   className={`payment-source ${selected.includes(x.id) ? "selected" : ""}`}
+                  aria-pressed={selected.includes(x.id)}
                   onClick={() => toggle(x.id)}
                 >
                   <span className="check-square">
@@ -1103,6 +1250,7 @@ function Decision({
               <button
                 key={o.id}
                 className={`decision-option ${selected.includes(o.id) ? "selected" : ""}`}
+                aria-pressed={selected.includes(o.id)}
                 onClick={() => toggle(o.id)}
               >
                 {o.image && <img src={imageFor(o.image)} alt="" />}
@@ -1173,6 +1321,11 @@ function Tabletop({
   const v = VILLAINS.find((v) => v.id === s.villainId)!;
   const stats = heroStats(s);
   const acting = s.phase === "player" && !s.prompt;
+  const [handFilter, setHandFilter] = useState<"all" | "playable">("all");
+  const playableHand = s.player.hand.filter((p) => !playable(s, p));
+  const visibleHand = handFilter === "playable" ? playableHand : s.player.hand;
+  const threatLimit = card(s.scheme.code).threat || 7;
+  const threatCritical = s.scheme.threat >= threatLimit - 2;
   const [pile, setPile] = useState<{ title: string; cards: Piece[] } | null>(
     null,
   );
@@ -1189,7 +1342,7 @@ function Tabletop({
       !s.flags.rechannel &&
       s.player.hp < maxHP(s));
   return (
-    <main className="tabletop">
+    <main id="main-content" className="tabletop">
       <div className="tabletop-top">
         <button className="back-button" onClick={onHome}>
           <ArrowLeft size={16} /> Mission control
@@ -1215,11 +1368,31 @@ function Tabletop({
           {MODULES.find((m) => m.id === s.module)?.name}
         </span>
       </div>
+      <div className="mission-brief">
+        <div>
+          <span className="small-label">
+            {v.location} · MISSION IN PROGRESS
+          </span>
+          <h1>
+            {h.name} <span>vs.</span> {v.name}
+          </h1>
+        </div>
+        <div className="mission-objectives">
+          <span>
+            <Crosshair size={18} />
+            <b>Defeat stage {s.difficulty === "expert" ? "III" : "II"}</b>
+          </span>
+          <span className={threatCritical ? "danger" : ""}>
+            <Target size={18} />
+            <b>Keep threat below {threatLimit}</b>
+          </span>
+        </div>
+      </div>
       <div className={`table-layout ${logOpen ? "with-log" : ""}`}>
         <div className="playmat">
           <div className="zone-label">
             <span>
-              <Skull size={14} /> THE OPPOSITION
+              <Skull size={17} weight="fill" /> VILLAIN TERRITORY
             </span>
             <span>{v.location}</span>
           </div>
@@ -1290,7 +1463,7 @@ function Tabletop({
                   ))}
               </div>
             </div>
-            <div className="main-scheme">
+            <div className={`main-scheme ${threatCritical ? "critical" : ""}`}>
               <div className="scheme-heading">
                 <span className="small-label">MAIN SCHEME</span>
                 <span className="scheme-stage">{s.scheme.index + 1}B</span>
@@ -1331,6 +1504,11 @@ function Tabletop({
                   )}{" "}
                 threat each villain phase
               </p>
+              {threatCritical && (
+                <span className="threat-warning">
+                  <Warning size={15} weight="fill" /> Threat is critical
+                </span>
+              )}
             </div>
             <div className="encounter-zone">
               <div className="card-back encounter-back">
@@ -1433,13 +1611,23 @@ function Tabletop({
               </button>
               <div className="identity-info">
                 <span className="small-label">
-                  {s.player.form === "hero" ? "HERO" : "ALTER-EGO"}
+                  {s.player.form === "hero" ? "YOUR HERO" : "YOUR ALTER-EGO"}
                 </span>
                 <h2>{heroCard(s).name}</h2>
                 <div className="health-display">
                   <Heart size={17} weight="fill" />
                   <strong>{s.player.hp}</strong>
                   <span>/ {maxHP(s)}</span>
+                </div>
+                <div
+                  className={`hero-health-track ${s.player.hp <= 3 ? "low" : ""}`}
+                  role="meter"
+                  aria-label="Hero health"
+                  aria-valuemin={0}
+                  aria-valuemax={maxHP(s)}
+                  aria-valuenow={s.player.hp}
+                >
+                  <i style={{ width: `${(100 * s.player.hp) / maxHP(s)}%` }} />
                 </div>
                 <Status piece={s.player} />
                 <p className="identity-power">{plain(heroCard(s).text)}</p>
@@ -1474,7 +1662,9 @@ function Tabletop({
             </div>
             <div className="in-play-area">
               <div className="zone-label">
-                <span>YOUR PLAY AREA</span>
+                <span>
+                  <Shield size={15} /> YOUR REINFORCEMENTS
+                </span>
                 <span>
                   {
                     s.player.inPlay.filter((p) => card(p).type_code === "ally")
@@ -1547,6 +1737,8 @@ function Tabletop({
               {s.player.form === "hero" ? (
                 <>
                   <button
+                    className="attack-action"
+                    title="Attack an enemy. Exhaust your identity."
                     disabled={!acting || s.player.exhausted}
                     onClick={() => send({ type: "BASIC", action: "attack" })}
                   >
@@ -1556,6 +1748,8 @@ function Tabletop({
                     </span>
                   </button>
                   <button
+                    className="thwart-action"
+                    title="Remove threat from a scheme. Exhaust your identity."
                     disabled={!acting || s.player.exhausted}
                     onClick={() => send({ type: "BASIC", action: "thwart" })}
                   >
@@ -1571,6 +1765,8 @@ function Tabletop({
                 </>
               ) : (
                 <button
+                  className="recover-action"
+                  title="Heal your identity. Exhaust your identity."
                   disabled={
                     !acting || s.player.exhausted || s.player.hp >= maxHP(s)
                   }
@@ -1589,7 +1785,7 @@ function Tabletop({
                   ? "The villain is acting"
                   : s.player.exhausted
                     ? "Your identity is exhausted"
-                    : "You can act in any order"}
+                    : "Choose your next move"}
               </span>
               <button
                 className="primary-button"
@@ -1606,7 +1802,7 @@ function Tabletop({
                 YOUR HAND <b>{s.player.hand.length}</b>
               </span>
               <span>
-                Click a card to inspect or play{" "}
+                Select a card to read or play{" "}
                 <button
                   className="icon-button"
                   aria-label="Open rules"
@@ -1614,6 +1810,28 @@ function Tabletop({
                 >
                   <Info size={14} />
                 </button>
+              </span>
+            </div>
+            <div className="hand-tools">
+              <div className="hand-filter" aria-label="Filter hand">
+                <button
+                  className={handFilter === "all" ? "selected" : ""}
+                  aria-pressed={handFilter === "all"}
+                  onClick={() => setHandFilter("all")}
+                >
+                  All cards <b>{s.player.hand.length}</b>
+                </button>
+                <button
+                  className={handFilter === "playable" ? "selected" : ""}
+                  aria-pressed={handFilter === "playable"}
+                  onClick={() => setHandFilter("playable")}
+                >
+                  Ready to play <b>{playableHand.length}</b>
+                </button>
+              </div>
+              <span>
+                <Lightning size={15} /> Other cards in hand can pay resource
+                costs.
               </span>
             </div>
             <div className="hand-layout">
@@ -1637,15 +1855,14 @@ function Tabletop({
                 </button>
               </div>
               <div className="hand-cards">
-                {s.player.hand.map((p, i) => {
+                {visibleHand.map((p, i) => {
                   const disabled = playable(s, p);
                   return (
                     <button
                       className={`hand-card ${!disabled ? "playable" : ""}`}
                       style={
                         {
-                          "--tilt": `${(i - (s.player.hand.length - 1) / 2) * 1.6}deg`,
-                          "--lift": `${Math.abs(i - (s.player.hand.length - 1) / 2) * 3}px`,
+                          "--tilt": `${(i - (visibleHand.length - 1) / 2) * 1.2}deg`,
                         } as CSSProperties
                       }
                       key={p.id}
@@ -1653,13 +1870,15 @@ function Tabletop({
                         inspect({ code: p.code, piece: p, hand: true })
                       }
                       aria-label={`Inspect ${card(p).name}`}
+                      title={disabled || `Play ${card(p).name}`}
                     >
                       <CardImage code={p.code} />
+                      <span className="hand-card-name">{card(p).name}</span>
                       <span className="hand-card-footer">
                         <ResourceIcons items={resources(card(p))} />
                         {!disabled ? (
                           <span>
-                            PLAY <CaretRight size={10} weight="fill" />
+                            PLAY <CaretRight size={12} weight="fill" />
                           </span>
                         ) : card(p).type_code === "resource" ? (
                           <span>RESOURCE</span>
@@ -1674,6 +1893,29 @@ function Tabletop({
                     </button>
                   );
                 })}
+                {!visibleHand.length && (
+                  <div className="empty-hand">
+                    <Cards size={30} />
+                    <strong>
+                      {handFilter === "playable"
+                        ? "No cards ready to play"
+                        : "Your hand is empty"}
+                    </strong>
+                    <span>
+                      {handFilter === "playable"
+                        ? "You can still use basic powers, change form, or activate cards in play."
+                        : "End your hero phase to draw a new hand."}
+                    </span>
+                    {handFilter === "playable" && (
+                      <button
+                        className="text-button"
+                        onClick={() => setHandFilter("all")}
+                      >
+                        Show all cards <ArrowRight size={16} />
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </section>
@@ -1682,7 +1924,7 @@ function Tabletop({
           <aside className="battle-log">
             <div className="log-heading">
               <span>
-                <ListBullets size={17} /> BATTLE LOG
+                <ListBullets size={17} /> MISSION COMMS
               </span>
               <span className="live-dot" />
             </div>
@@ -1750,11 +1992,15 @@ function Collection({ onInspect }: { onInspect: (code: string) => void }) {
       (type === "all" || c.type_code === type),
   );
   return (
-    <main className="collection page-width">
+    <main id="main-content" className="collection page-width">
       <div className="collection-title">
-        <span className="small-label">THE CORE COLLECTION</span>
-        <h1>KNOW YOUR CARDS.</h1>
-        <p>Every hero. Every encounter. A whole universe of possibilities.</p>
+        <span className="comic-caption">THE S.H.I.E.L.D. ARCHIVES</span>
+        <h1>
+          KNOW YOUR <span>SUPERPOWERS.</span>
+        </h1>
+        <p>
+          209 card faces. Every ally, every threat, every ace up your sleeve.
+        </p>
       </div>
       <div className="collection-toolbar">
         <label className="search-box">
@@ -1807,7 +2053,19 @@ function Collection({ onInspect }: { onInspect: (code: string) => void }) {
             </option>
           ))}
         </select>
-        <span>{cards.length} card faces</span>
+        <span aria-live="polite">{cards.length} card faces</span>
+        {(faction !== "all" || type !== "all") && (
+          <button
+            className="text-button"
+            onClick={() => {
+              setFaction("all");
+              setType("all");
+              setQ("");
+            }}
+          >
+            Clear filters <X size={14} />
+          </button>
+        )}
       </div>
       {cards.length ? (
         <div className="collection-grid">

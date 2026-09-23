@@ -22,3 +22,13 @@ Original prompt: I want to create fully playable and scripted Marvel Champions L
 - Follow the explicit limitations in docs/rules-coverage.md: general response ordering, optional search/entrance choices, obligation free-form change choice, tied attachment targets, and per-resource optional wild assignment.
 - Extend browser coverage to complete victories and additional hero-specific interaction sequences before claiming comprehensive rules certification.
 - Multiplayer, deck construction/import, and expansion support are separate future features.
+
+## Marvel visual redesign — 2026-09-23
+
+- User requested a full Marvel-inspired UI/UX treatment after the first GitHub/Vercel release.
+- Rebuilt the visual system: comic-cover lobby using the existing FFG artwork, paper/ink/halftone styling, colored hero and aspect selection, a deck-aware mission brief, tactical battlefield zones, archive, help, card inspection, result, and decision panels.
+- Added identity/signature previews, a hand filter, persistent victory/threat objectives, health feedback, explicit resource progress, and a mobile action dock. Kept engine behavior and existing saves compatible.
+- Fixed dialog rerender focus jumps, added scroll locking and pressed-state semantics, and verified keyboard focus trapping and cancellation.
+- First visual review led to tighter portrait crops, a mobile dock layout fix, and corrected text contrast. The ten axe audits then reported zero violations; 12 layout checks passed across 320–1440 px. Browser checks reported zero errors and all 74 engine tests passed.
+- Image generation was rejected; the delivered artwork is the preexisting official core banner. See docs/visual-direction.md for references and validation limits.
+- Release target remains the existing private GitHub repository and https://marvel-lcg.vercel.app.
