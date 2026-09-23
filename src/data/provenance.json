@@ -1,0 +1,62 @@
+{
+  "source": "https://marvelcdb.com/api/public/cards/core.json",
+  "fallback": "https://github.com/zzorba/marvelsdb-json-data",
+  "syncedAt": "2026-09-23T17:26:16.074Z",
+  "cardFaces": 209,
+  "cachedImages": 209,
+  "failedImages": [],
+  "fallbackArt": [
+    {
+      "code": "01097a",
+      "url": "https://hallofheroeslcg.com/wp-content/uploads/2019/12/rhino4a.jpg"
+    },
+    {
+      "code": "01116a",
+      "url": "https://hallofheroeslcg.com/wp-content/uploads/2019/12/klaw4a.jpg"
+    },
+    {
+      "code": "01117a",
+      "url": "https://hallofheroeslcg.com/wp-content/uploads/2019/12/klaw5a.jpg"
+    },
+    {
+      "code": "01137a",
+      "url": "https://hallofheroeslcg.com/wp-content/uploads/2019/12/ultron4a.jpg"
+    },
+    {
+      "code": "01138a",
+      "url": "https://hallofheroeslcg.com/wp-content/uploads/2019/12/ultron5a.jpg"
+    },
+    {
+      "code": "01139a",
+      "url": "https://hallofheroeslcg.com/wp-content/uploads/2019/12/ultron6a.jpg"
+    }
+  ],
+  "correctedSchemeArt": [
+    {
+      "code": "01097b",
+      "url": "https://hallofheroeslcg.com/wp-content/uploads/2019/12/rhino4b.jpg"
+    },
+    {
+      "code": "01116b",
+      "url": "https://hallofheroeslcg.com/wp-content/uploads/2019/12/klaw4b.jpg"
+    },
+    {
+      "code": "01117b",
+      "url": "https://hallofheroeslcg.com/wp-content/uploads/2019/12/klaw5b.jpg"
+    },
+    {
+      "code": "01137b",
+      "url": "https://hallofheroeslcg.com/wp-content/uploads/2019/12/ultron4b.jpg"
+    },
+    {
+      "code": "01138b",
+      "url": "https://hallofheroeslcg.com/wp-content/uploads/2019/12/ultron5b.jpg"
+    },
+    {
+      "code": "01139b",
+      "url": "https://hallofheroeslcg.com/wp-content/uploads/2019/12/ultron6b.jpg"
+    }
+  ],
+  "apiCardRecords": null,
+  "dataSource": "https://raw.githubusercontent.com/zzorba/marvelsdb-json-data/master/pack/"
+}
