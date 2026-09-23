@@ -11,6 +11,7 @@ import "@fontsource/barlow-condensed/latin-800.css";
 import "@fontsource/barlow-condensed/latin-800-italic.css";
 import App from "./App";
 import "./styles.css";
+import "./tabletop.css";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />

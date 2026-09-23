@@ -20,6 +20,7 @@ npm run preview  # serve the production bundle
 npm run sync:cards
 npm run test:ui   # with the dev server running at localhost:5174
 npm run test:design # desktop layouts, keyboard behavior, and axe audits
+npm run test:tabletop # crowded physical table, exhaustion, piles, and responsive layouts
 ```
 
 ## Deploy
@@ -59,6 +60,6 @@ This is the first playable implementation, **not a claim of exhaustive rules cer
 
 Online co-op, custom deck construction/import, campaigns, and expansions are not included. Current layout verification prioritizes desktop (1280–1920px); dedicated mobile polish is deferred. One save slot is stored in the current browser. Starting a new mission asks before replacing an unfinished one.
 
-The interface uses a comic-book visual system across the lobby, battlefield, archive, and decision dialogs. See [visual direction](docs/visual-direction.md) for references, UX decisions, and verification scope.
+The lobby, archive, and decision dialogs use a comic-book visual system. The battlefield recreates a physical card table with a textured playmat, health dials, full card faces, separate draw/discard piles, sideways exhausted cards, and visible teammate tableaus. See [tabletop design research](docs/tabletop-design-research.md) for the real-world references and [visual direction](docs/visual-direction.md) for the broader interface and verification scope.
 
 This is an unofficial fan project. Marvel characters and card artwork/text belong to Marvel and Fantasy Flight Games. Community API availability does not transfer those rights. The source attribution is shown in the interface; no affiliation is implied.

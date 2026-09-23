@@ -1,6 +1,6 @@
 # Visual direction
 
-The game combines comic-cover composition with a tactical mission table: ivory paper, dark ink outlines, halftone texture, condensed display lettering, red actions, and yellow emphasis. Individual hero and aspect colors remain meaningful selection cues.
+The lobby, collection, and decision windows use comic-cover composition: ivory paper, dark ink outlines, halftone texture, condensed display lettering, red actions, and yellow emphasis. Gameplay uses a physical card table informed by the official mid-game layout and photographs of real play: a textured playmat, complete card faces, blue/orange draw piles, face-up discards, health dials, and sideways exhausted cards. See [tabletop design research](tabletop-design-research.md) for the sources and the physical-to-digital decisions. Individual hero and aspect colors remain meaningful selection cues.
 
 Use soft, rounded silhouettes throughout the interface: 20px panel and dialog corners, 12px controls and card containers, and 8px smaller labels and image frames. Grouped controls share a rounded outer frame; separate buttons keep their own rounded edges. Diffuse shadows give panels depth, while the comic lettering, artwork, colors, and tokens preserve the Marvel character.
 

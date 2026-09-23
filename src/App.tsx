@@ -2037,6 +2037,95 @@ function ActionDirector({
     </>
   );
 }
+// Physical components keep public cards face up and hidden decks face down.
+function HealthDial({
+  value,
+  max,
+  label,
+  villain = false,
+}: {
+  value: number;
+  max: number;
+  label: string;
+  villain?: boolean;
+}) {
+  return (
+    <div
+      className={`health-dial ${villain ? "villain-dial" : "hero-dial"} ${value <= max * 0.25 ? "low" : ""}`}
+      role="meter"
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={max}
+      aria-valuenow={Math.max(0, value)}
+    >
+      <Heart size={13} weight="fill" aria-hidden="true" />
+      <strong>{String(Math.max(0, value)).padStart(2, "0")}</strong>
+      <span>
+        <b>HP</b>
+        <small>/ {max}</small>
+      </span>
+    </div>
+  );
+}
+function TablePile({
+  kind,
+  count,
+  top,
+  onOpen,
+  label,
+}: {
+  kind: "hero" | "encounter" | "discard";
+  count: number;
+  top?: Piece;
+  onOpen?: () => void;
+  label: string;
+}) {
+  const face = (
+    <>
+      <span className={`pile-face ${count ? "has-cards" : "empty-pile"}`}>
+        {top ? (
+          <CardImage code={top.code} />
+        ) : kind === "discard" ? (
+          <Trash size={23} weight="thin" />
+        ) : (
+          <>
+            <span className="deck-back-mark">
+              <b>MARVEL</b>
+              <strong>CHAMPIONS</strong>
+              <small>THE CARD GAME</small>
+            </span>
+            {kind === "hero" ? (
+              <Shield size={24} weight="duotone" />
+            ) : (
+              <Skull size={24} weight="duotone" />
+            )}
+          </>
+        )}
+        <b className="pile-count">{count}</b>
+      </span>
+      <span className="table-pile-label">
+        {label}
+        {onOpen && <Eye size={11} />}
+      </span>
+    </>
+  );
+  return onOpen ? (
+    <button
+      className={`table-pile ${kind}-pile`}
+      onClick={onOpen}
+      aria-label={`${label}, ${count} cards. Inspect pile`}
+    >
+      {face}
+    </button>
+  ) : (
+    <div
+      className={`table-pile ${kind}-pile`}
+      aria-label={`${label}, ${count} cards, face down`}
+    >
+      {face}
+    </div>
+  );
+}
 function Tabletop({
   game,
   send,
@@ -2105,7 +2194,7 @@ function Tabletop({
       !s.flags.rechannel &&
       s.player.hp < maxHP(s));
   return (
-    <main id="main-content" className="tabletop">
+    <main id="main-content" className="tabletop physical-table">
       <div className="tabletop-top">
         <button className="back-button" onClick={onHome}>
           <ArrowLeft size={16} /> Mission control
@@ -2131,101 +2220,111 @@ function Tabletop({
           {MODULES.find((m) => m.id === s.module)?.name}
         </span>
       </div>
-      <div className="mission-brief">
-        <div>
-          <span className="small-label">
-            {v.location} · MISSION IN PROGRESS
-          </span>
-          <h1>
-            {s.playerCount > 1 ? "The team" : h.name} <span>vs.</span> {v.name}
-          </h1>
-        </div>
-        <div className="mission-objectives">
-          <span>
-            <Crosshair size={18} />
-            <b>Defeat stage {s.difficulty === "expert" ? "III" : "II"}</b>
-          </span>
-          <span className={threatCritical ? "danger" : ""}>
-            <Target size={18} />
-            <b>Keep threat below {threatLimit}</b>
-          </span>
-        </div>
-      </div>
-      <div className="team-strip" aria-label="Hero team">
-        {game.players.map((seat) => {
-          const view = seatView(game, seat),
-            h = HEROES.find((h) => h.id === seat.heroId)!;
-          const current = seat.id === game.activePlayerId;
-          return (
-            <button
-              key={seat.id}
-              className={`team-seat ${current ? "acting" : ""} ${seat.id === viewId ? "viewing" : ""} ${seat.eliminated ? "eliminated" : ""}`}
-              style={aspectStyle(h.color)}
-              aria-pressed={seat.id === viewId}
-              onClick={() => {
-                setViewId(seat.id);
-                setHandFilter("all");
-              }}
-              aria-label={`View ${h.name}${current ? ", active hero" : ""}`}
-            >
-              <img src={imageFor(h.code)} alt="" />
-              <div className="team-seat-copy">
-                <span className="team-seat-state">
-                  {seat.eliminated
-                    ? "DEFEATED"
-                    : current
-                      ? s.phase === "villain"
-                        ? "RESOLVING"
-                        : "ACTIVE HERO"
-                      : seat.ended && s.phase === "player"
-                        ? "TURN COMPLETE"
-                        : "TEAMMATE"}
-                  {seat.id === s.firstPlayerId && (
-                    <span
-                      className="first-player-token"
-                      title="First player this round"
-                    >
-                      <Star size={11} weight="fill" />
-                      1ST
-                    </span>
-                  )}
-                </span>
-                <strong>{h.name}</strong>
-                <span className="seat-vitals">
-                  <span>
-                    <Heart size={13} weight="fill" />
-                    {view.player.hp}
-                    <small>/{maxHP(view)}</small>
-                  </span>
-                  <span>
-                    <Cards size={13} />
-                    {view.player.hand.length}
-                  </span>
-                  <small>
-                    {view.player.form === "hero" ? "Hero" : "Alter-ego"} ·{" "}
-                    {view.player.exhausted ? "Exhausted" : "Ready"}
-                  </small>
-                </span>
-                <div className="seat-health-bar">
-                  <i
-                    style={{
-                      width: `${(Math.max(0, view.player.hp) / maxHP(view)) * 100}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            </button>
-          );
-        })}
-        {game.playerCount === 1 && (
-          <div className="team-strip-note">
-            <ShieldCheck size={22} />
+      <div
+        className={`table-heading ${game.playerCount === 1 ? "solo-heading" : ""}`}
+      >
+        <div className="mission-brief">
+          <div>
+            <span className="small-label">
+              {v.location} · MISSION IN PROGRESS
+            </span>
+            <h1>
+              {s.playerCount > 1 ? "The team" : h.name} <span>vs.</span>{" "}
+              {v.name}
+            </h1>
+          </div>
+          <div className="mission-objectives">
             <span>
-              <b>Guided play is on</b>
-              <small>Read each action. Proceed at your pace.</small>
+              <Crosshair size={18} />
+              <b>Defeat stage {s.difficulty === "expert" ? "III" : "II"}</b>
+            </span>
+            <span className={threatCritical ? "danger" : ""}>
+              <Target size={18} />
+              <b>Keep threat below {threatLimit}</b>
             </span>
           </div>
-        )}
+        </div>
+        <div
+          className={`team-strip ${game.playerCount === 1 ? "solo-strip" : ""}`}
+          aria-label="Hero team"
+        >
+          {game.players.map((seat) => {
+            const view = seatView(game, seat),
+              h = HEROES.find((h) => h.id === seat.heroId)!;
+            const current = seat.id === game.activePlayerId;
+            return (
+              <button
+                key={seat.id}
+                className={`team-seat ${current ? "acting" : ""} ${seat.id === viewId ? "viewing" : ""} ${seat.eliminated ? "eliminated" : ""}`}
+                style={aspectStyle(h.color)}
+                aria-pressed={seat.id === viewId}
+                onClick={() => {
+                  setViewId(seat.id);
+                  setHandFilter("all");
+                }}
+                aria-label={`View ${h.name}${current ? ", active hero" : ""}`}
+              >
+                <img src={imageFor(h.code)} alt="" />
+                <div className="team-seat-copy">
+                  <span className="team-seat-state">
+                    {seat.eliminated
+                      ? "DEFEATED"
+                      : current
+                        ? s.phase === "villain"
+                          ? "RESOLVING"
+                          : "ACTIVE HERO"
+                        : seat.ended && s.phase === "player"
+                          ? "TURN COMPLETE"
+                          : "TEAMMATE"}
+                    {seat.id === s.firstPlayerId && (
+                      <span
+                        className="first-player-token"
+                        title="First player this round"
+                      >
+                        <Star size={11} weight="fill" />
+                        1ST
+                      </span>
+                    )}
+                  </span>
+                  <strong>{h.name}</strong>
+                  <span className="seat-vitals">
+                    <span>
+                      <Heart size={13} weight="fill" />
+                      {view.player.hp}
+                      <small>/{maxHP(view)}</small>
+                    </span>
+                    <span>
+                      <Cards size={13} />
+                      {view.player.hand.length}
+                    </span>
+                    <small>
+                      {view.player.form === "hero" ? "Hero" : "Alter-ego"} ·{" "}
+                      {view.player.exhausted ? "Exhausted" : "Ready"}
+                    </small>
+                  </span>
+                  <div className="seat-health-bar">
+                    <i
+                      style={{
+                        width: `${(Math.max(0, view.player.hp) / maxHP(view)) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+          {game.playerCount === 1 && (
+            <div className="team-strip-note">
+              <span className="table-mode-label">
+                <Cards size={17} /> TABLETOP VIEW
+              </span>
+              <span>
+                <b>A seat at the table.</b>
+                <small>Click any face-up card to take a closer look.</small>
+              </span>
+            </div>
+          )}
+        </div>
       </div>
       {s.activePlayerId !== game.activePlayerId && (
         <div className="viewing-banner">
@@ -2244,9 +2343,12 @@ function Tabletop({
         <div className="playmat">
           <div className="zone-label">
             <span>
-              <Skull size={17} weight="fill" /> VILLAIN TERRITORY
+              <Skull size={17} weight="fill" /> VILLAIN PLAY AREA
             </span>
-            <span>{v.location}</span>
+            <span>
+              {s.playerCount} {s.playerCount === 1 ? "HERO" : "HEROES"} · SHARED
+              PLAY AREA
+            </span>
           </div>
           <section className="opposition">
             <div className="villain-area">
@@ -2264,19 +2366,12 @@ function Tabletop({
                   VILLAIN · STAGE {["", "I", "II", "III"][s.villain.stage]}
                 </span>
                 <h2>{v.name.toUpperCase()}</h2>
-                <StatToken
-                  kind="health"
+                <HealthDial
                   value={s.villain.hp}
                   max={s.villain.maxHp}
                   label="Villain HP"
+                  villain
                 />
-                <div className="health-track">
-                  <i
-                    style={{
-                      width: `${(100 * s.villain.hp) / s.villain.maxHp}%`,
-                    }}
-                  />
-                </div>
                 <div className="enemy-stats stat-row">
                   <StatToken
                     kind="attack"
@@ -2309,8 +2404,13 @@ function Tabletop({
                   .filter((p) => p.attachedTo === s.villain.id)
                   .map((p) => (
                     <div className="attachment-row" key={p.id}>
-                      <button onClick={() => inspect({ code: p.code })}>
-                        {card(p).name} <Eye size={11} />
+                      <button
+                        className="attachment-card"
+                        onClick={() => inspect({ code: p.code })}
+                        aria-label={`Inspect ${card(p).name}`}
+                      >
+                        <CardImage code={p.code} />
+                        <span>{card(p).name}</span>
                       </button>
                       {[
                         "01100",
@@ -2335,62 +2435,99 @@ function Tabletop({
                   ))}
               </div>
             </div>
-            <div className={`main-scheme ${threatCritical ? "critical" : ""}`}>
-              <div className="scheme-heading">
-                <span className="small-label">MAIN SCHEME</span>
-                <span className="scheme-stage">{s.scheme.index + 1}B</span>
-              </div>
-              <button
-                onClick={() => inspect({ code: s.scheme.code })}
-                className="scheme-card"
+            <div className="scheme-area">
+              <div
+                className={`main-scheme ${threatCritical ? "critical" : ""}`}
               >
-                <CardImage code={s.scheme.code} />
-              </button>
-              <StatToken
-                kind="threat"
-                value={s.scheme.threat}
-                max={threatLimit}
-                label="Main scheme threat"
-              />
-              <div className="threat-track">
-                {Array.from({ length: threatLimit }, (_, i) => (
-                  <i className={i < s.scheme.threat ? "filled" : ""} key={i} />
-                ))}
+                <div className="scheme-heading">
+                  <span className="small-label">MAIN SCHEME</span>
+                  <span className="scheme-stage">{s.scheme.index + 1}B</span>
+                </div>
+                <button
+                  onClick={() => inspect({ code: s.scheme.code })}
+                  className="scheme-card"
+                >
+                  <CardImage code={s.scheme.code} />
+                </button>
+                <StatToken
+                  kind="threat"
+                  value={s.scheme.threat}
+                  max={threatLimit}
+                  label="Main scheme threat"
+                />
+                <div className="threat-track">
+                  {Array.from({ length: threatLimit }, (_, i) => (
+                    <i
+                      className={i < s.scheme.threat ? "filled" : ""}
+                      key={i}
+                    />
+                  ))}
+                </div>
+                <p>
+                  +
+                  {escalation(s) +
+                    s.encounter.acceleration +
+                    s.sideSchemes.reduce(
+                      (n, p) => n + (card(p).scheme_acceleration || 0),
+                      0,
+                    )}{" "}
+                  threat each villain phase
+                </p>
+                {threatCritical && (
+                  <span className="threat-warning">
+                    <Warning size={15} weight="fill" /> Threat is critical
+                  </span>
+                )}
               </div>
-              <p>
-                +
-                {escalation(s) +
-                  s.encounter.acceleration +
-                  s.sideSchemes.reduce(
-                    (n, p) => n + (card(p).scheme_acceleration || 0),
-                    0,
-                  )}{" "}
-                threat each villain phase
-              </p>
-              {threatCritical && (
-                <span className="threat-warning">
-                  <Warning size={15} weight="fill" /> Threat is critical
-                </span>
-              )}
+              {s.sideSchemes.map((p) => (
+                <div className="table-side-scheme" key={p.id}>
+                  <span className="table-group-label">SIDE SCHEME</span>
+                  <button
+                    className="scheme-card"
+                    onClick={() => inspect({ code: p.code })}
+                    aria-label={`Inspect ${card(p).name}`}
+                  >
+                    <CardImage code={p.code} />
+                  </button>
+                  <div className="side-scheme-counter">
+                    <span className="threat-chip">
+                      <Target size={13} />
+                      <b>{p.counters}</b>
+                    </span>
+                    <span>
+                      {card(p).scheme_crisis
+                        ? "CRISIS"
+                        : card(p).scheme_hazard
+                          ? "HAZARD"
+                          : card(p).scheme_acceleration
+                            ? "ACCELERATION"
+                            : "THREAT"}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
             <div className="encounter-zone">
-              <div className="card-back encounter-back">
-                <Skull size={32} />
-                <span>ENCOUNTER</span>
-                <b>{s.encounter.deck.length}</b>
+              <span className="table-group-label">ENCOUNTER DECK</span>
+              <div className="table-piles">
+                <TablePile
+                  kind="encounter"
+                  count={s.encounter.deck.length}
+                  label="Draw pile"
+                />
+                <TablePile
+                  kind="discard"
+                  count={s.encounter.discard.length}
+                  top={s.encounter.discard.at(-1)}
+                  label="Encounter discard"
+                  onOpen={() =>
+                    setPile({
+                      title: "Encounter discard",
+                      cards: s.encounter.discard,
+                    })
+                  }
+                />
               </div>
-              <button
-                className="pile-label"
-                onClick={() =>
-                  setPile({
-                    title: "Encounter discard",
-                    cards: s.encounter.discard,
-                  })
-                }
-              >
-                <Stack size={14} /> {s.encounter.discard.length} discarded{" "}
-                <Eye size={12} />
-              </button>
               {s.encounter.dealt.length > 0 && (
                 <span className="encounter-dealt">
                   {s.encounter.dealt.length} dealt across the team
@@ -2403,17 +2540,16 @@ function Tabletop({
               )}
             </div>
           </section>
-          {(s.minions.length > 0 || s.sideSchemes.length > 0) && (
-            <div className="encounter-field">
+          {s.minions.length > 0 && (
+            <div className="encounter-field" aria-label="Engaged minions">
+              <span className="table-group-label">ENGAGED MINIONS</span>
               {s.minions.map((p) => (
                 <button
                   className="enemy-tile"
                   key={p.id}
                   onClick={() => inspect({ code: p.code })}
                 >
-                  <div className="enemy-crop">
-                    <img src={imageFor(p.code)} alt="" />
-                  </div>
+                  <CardImage code={p.code} />
                   <span>
                     <strong>{card(p).name}</strong>
                     <span className="engagement-label">
@@ -2444,88 +2580,76 @@ function Tabletop({
                   </span>
                 </button>
               ))}
-              {s.sideSchemes.map((p) => (
-                <button
-                  className="side-scheme-tile"
-                  key={p.id}
-                  onClick={() => inspect({ code: p.code })}
-                >
-                  <Target size={24} />
-                  <span>
-                    <strong>{card(p).name}</strong>
-                    <small>
-                      {card(p).scheme_crisis
-                        ? "Crisis · blocks main scheme"
-                        : card(p).scheme_hazard
-                          ? "Hazard · extra encounter"
-                          : card(p).scheme_acceleration
-                            ? "Acceleration · +1 threat"
-                            : "Side scheme"}
-                    </small>
-                  </span>
-                  <b>{p.counters}</b>
-                </button>
-              ))}
             </div>
           )}
           <div className="battle-divider">
             <i />
             <span>
-              {h.name} <b>VS</b> {v.name}
+              <Shield size={13} /> {h.name.toUpperCase()}’S PLAY AREA{" "}
+              <span className="table-form-label">
+                {s.player.form === "hero" ? "HERO" : "ALTER-EGO"}
+              </span>
             </span>
             <i />
           </div>
           <section className="player-area">
             <div className="identity-area">
-              <button
-                className={`table-card identity-card ${s.player.exhausted ? "is-exhausted" : ""}`}
-                onClick={() => inspect({ code: heroCard(s).code })}
-              >
-                <CardImage code={heroCard(s).code} />
-                {s.player.exhausted && (
-                  <span className="exhausted-badge">EXHAUSTED</span>
-                )}
-              </button>
+              <div className="identity-card-space">
+                <button
+                  className={`table-card identity-card ${s.player.exhausted ? "is-exhausted" : ""}`}
+                  onClick={() => inspect({ code: heroCard(s).code })}
+                >
+                  <CardImage code={heroCard(s).code} />
+                  {s.player.exhausted && (
+                    <span className="exhausted-badge">EXHAUSTED</span>
+                  )}
+                </button>
+                <span
+                  className={`readiness-label ${s.player.exhausted ? "spent" : ""}`}
+                >
+                  {s.player.exhausted ? "EXHAUSTED" : "READY"}
+                </span>
+              </div>
               <div className="identity-info">
                 <span className="small-label">
                   {s.player.form === "hero" ? "YOUR HERO" : "YOUR ALTER-EGO"}
                 </span>
                 <h2>{heroCard(s).name}</h2>
-                <StatToken
-                  kind="health"
+                <HealthDial
                   value={s.player.hp}
                   max={maxHP(s)}
                   label="Hero HP"
                 />
                 <div className="identity-stats stat-row">
-                  <StatToken
-                    kind="attack"
-                    value={stats.attack}
-                    label="ATK"
-                    compact
-                  />
-                  <StatToken
-                    kind="threat"
-                    value={stats.thwart}
-                    label="THW"
-                    compact
-                  />
-                  <StatToken
-                    kind="defense"
-                    value={stats.defense}
-                    label="DEF"
-                    compact
-                  />
-                </div>
-                <div
-                  className={`hero-health-track ${s.player.hp <= 3 ? "low" : ""}`}
-                  role="meter"
-                  aria-label="Hero health"
-                  aria-valuemin={0}
-                  aria-valuemax={maxHP(s)}
-                  aria-valuenow={s.player.hp}
-                >
-                  <i style={{ width: `${(100 * s.player.hp) / maxHP(s)}%` }} />
+                  {s.player.form === "hero" ? (
+                    <>
+                      <StatToken
+                        kind="attack"
+                        value={stats.attack}
+                        label="ATK"
+                        compact
+                      />
+                      <StatToken
+                        kind="threat"
+                        value={stats.thwart}
+                        label="THW"
+                        compact
+                      />
+                      <StatToken
+                        kind="defense"
+                        value={stats.defense}
+                        label="DEF"
+                        compact
+                      />
+                    </>
+                  ) : (
+                    <StatToken
+                      kind="health"
+                      value={stats.recover}
+                      label="REC"
+                      compact
+                    />
+                  )}
                 </div>
                 <Status piece={s.player} />
                 <p className="identity-power">{plain(heroCard(s).text)}</p>
@@ -2563,7 +2687,7 @@ function Tabletop({
             <div className="in-play-area">
               <div className="zone-label">
                 <span>
-                  <Shield size={15} /> YOUR REINFORCEMENTS
+                  <Shield size={15} /> YOUR PLAY AREA
                 </span>
                 <span>
                   {
@@ -2574,82 +2698,222 @@ function Tabletop({
                   allies
                 </span>
               </div>
-              {s.player.inPlay.length ? (
-                <div className="in-play-cards">
-                  {s.player.inPlay.map((p) => (
-                    <div
-                      className={`in-play-card ${p.exhausted ? "exhausted" : ""}`}
-                      key={p.id}
-                    >
-                      <button
-                        className="in-play-image"
-                        onClick={() => inspect({ code: p.code, piece: p })}
-                      >
-                        <CardImage code={p.code} />
-                        {p.exhausted && (
-                          <span className="exhausted-badge">EXHAUSTED</span>
-                        )}
-                        {card(p).type_code === "ally" && (
-                          <span className="mini-token">
-                            <Heart size={10} weight="fill" />
-                            {pieceHP(s, p) - p.damage}
-                          </span>
-                        )}
-                        {p.counters > 0 && (
-                          <span className="mini-token counter-token">
-                            <Lightning size={12} weight="fill" />
-                            {p.counters}
-                            <small>
-                              {p.code === "01066"
-                                ? "ARROWS"
-                                : p.code === "01018"
-                                  ? "ENERGY"
-                                  : "USES"}
-                            </small>
-                          </span>
-                        )}
-                      </button>
-                      <Status piece={p} />
-                      <div className="in-play-actions">
-                        {abilityOptions(s, p).map((a) => (
-                          <button
-                            key={a.id}
-                            disabled={
-                              !canUseAction ||
-                              !!a.disabled ||
-                              (!acting &&
-                                (["attack", "thwart"].includes(a.id) ||
-                                  !card(p).text?.includes("Action")))
-                            }
-                            title={a.disabled || a.label}
-                            onClick={() =>
-                              sendAction({
-                                type: "ABILITY",
-                                id: p.id,
-                                action: a.id,
-                              })
-                            }
-                          >
-                            {a.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-play">
-                  <Stack size={30} weight="thin" />
-                  <div>
-                    <strong>Every hero needs a little backup.</strong>
-                    <span>
-                      Play allies, supports, and upgrades from your hand.
+              <div className="tableau-groups">
+                {[
+                  {
+                    key: "allies",
+                    title: "ALLIES",
+                    pieces: s.player.inPlay.filter(
+                      (p) => card(p).type_code === "ally",
+                    ),
+                    empty: "Your allies join you here",
+                  },
+                  {
+                    key: "setup",
+                    title: "UPGRADES & SUPPORTS",
+                    pieces: s.player.inPlay.filter(
+                      (p) => card(p).type_code !== "ally",
+                    ),
+                    empty: "Build your hero’s setup",
+                  },
+                ].map((group) => (
+                  <div className={`tableau-group ${group.key}`} key={group.key}>
+                    <span className="table-group-label">
+                      {group.title}
+                      <b>
+                        {group.pieces.length}
+                        {group.key === "allies" &&
+                          ` / ${s.player.inPlay.some((p) => p.code === "01073") ? 4 : 3}`}
+                      </b>
                     </span>
+                    <div className="in-play-cards">
+                      {group.pieces.map((p) => (
+                        <div
+                          className={`in-play-card ${p.exhausted ? "exhausted" : ""}`}
+                          key={p.id}
+                        >
+                          <button
+                            className="in-play-image"
+                            onClick={() => inspect({ code: p.code, piece: p })}
+                          >
+                            <CardImage code={p.code} />
+
+                            {card(p).type_code === "ally" && (
+                              <span className="mini-token">
+                                <Heart size={10} weight="fill" />
+                                {pieceHP(s, p) - p.damage}
+                              </span>
+                            )}
+                            {p.counters > 0 && (
+                              <span className="mini-token counter-token">
+                                <Lightning size={12} weight="fill" />
+                                {p.counters}
+                                <small>
+                                  {p.code === "01066"
+                                    ? "ARROWS"
+                                    : p.code === "01018"
+                                      ? "ENERGY"
+                                      : "USES"}
+                                </small>
+                              </span>
+                            )}
+                          </button>
+                          <span className="in-play-name">{card(p).name}</span>
+                          {p.exhausted && (
+                            <span className="card-spent-label">EXHAUSTED</span>
+                          )}
+                          <Status piece={p} />
+                          <div className="in-play-actions">
+                            {abilityOptions(s, p).map((a) => (
+                              <button
+                                key={a.id}
+                                disabled={
+                                  !canUseAction ||
+                                  !!a.disabled ||
+                                  (!acting &&
+                                    (["attack", "thwart"].includes(a.id) ||
+                                      !card(p).text?.includes("Action")))
+                                }
+                                title={a.disabled || a.label}
+                                onClick={() =>
+                                  sendAction({
+                                    type: "ABILITY",
+                                    id: p.id,
+                                    action: a.id,
+                                  })
+                                }
+                              >
+                                {a.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      {!group.pieces.length && (
+                        <div className="table-empty-slot">
+                          <span>
+                            {group.key === "allies" ? (
+                              <Users size={22} weight="thin" />
+                            ) : (
+                              <Stack size={22} weight="thin" />
+                            )}
+                          </span>
+                          <small>{group.empty}</small>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                ))}
+              </div>
+            </div>
+            <div className="hero-pile-area">
+              <span className="table-group-label">
+                {h.name.toUpperCase()}’S DECK
+              </span>
+              <div className="table-piles">
+                <TablePile
+                  kind="hero"
+                  count={s.player.deck.length}
+                  label="Draw pile"
+                />
+                <TablePile
+                  kind="discard"
+                  count={s.player.discard.length}
+                  top={s.player.discard.at(-1)}
+                  label="Your discard"
+                  onOpen={() =>
+                    setPile({
+                      title: "Your discard pile",
+                      cards: s.player.discard,
+                    })
+                  }
+                />
+              </div>
+              {s.encounter.dealt.filter((p) => p.dealtTo === s.activePlayerId)
+                .length > 0 && (
+                <div
+                  className="dealt-encounters"
+                  aria-label="Facedown encounters"
+                >
+                  <Skull size={14} />
+                  <span>
+                    {
+                      s.encounter.dealt.filter(
+                        (p) => p.dealtTo === s.activePlayerId,
+                      ).length
+                    }{" "}
+                    facedown encounter(s)
+                  </span>
                 </div>
               )}
             </div>
           </section>
+          {game.playerCount > 1 && (
+            <section
+              className="teammate-tableaux"
+              aria-label="Other heroes at the table"
+            >
+              {game.players
+                .filter((seat) => seat.id !== s.activePlayerId)
+                .map((seat) => {
+                  const view = seatView(game, seat);
+                  const teammate = HEROES.find(
+                    (hero) => hero.id === seat.heroId,
+                  )!;
+                  return (
+                    <div
+                      className={`teammate-tableau ${seat.eliminated ? "eliminated" : ""}`}
+                      key={seat.id}
+                    >
+                      <button
+                        className="teammate-identity"
+                        onClick={() => {
+                          setViewId(seat.id);
+                          setHandFilter("all");
+                        }}
+                        aria-label={`Switch to ${teammate.name}’s play area`}
+                      >
+                        <CardImage code={heroCard(view).code} />
+                        <span>
+                          <strong>{teammate.name}</strong>
+                          <small>
+                            <Heart size={11} weight="fill" />
+                            {view.player.hp}/{maxHP(view)} ·{" "}
+                            {view.player.exhausted ? "Exhausted" : "Ready"}
+                          </small>
+                          <small>
+                            {view.player.hand.length} in hand ·{" "}
+                            {view.player.deck.length} in deck
+                          </small>
+                        </span>
+                        <ArrowRight size={14} />
+                      </button>
+                      <div className="teammate-cards">
+                        {view.player.inPlay.map((p) => (
+                          <button
+                            key={p.id}
+                            className={p.exhausted ? "spent" : ""}
+                            onClick={() =>
+                              inspect({
+                                code: p.code,
+                                piece: p,
+                                playerId: seat.id,
+                              })
+                            }
+                            aria-label={`Inspect ${teammate.name}’s ${card(p).name}`}
+                          >
+                            <CardImage code={p.code} />
+                          </button>
+                        ))}
+                        {!view.player.inPlay.length && (
+                          <small>No cards in play yet</small>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </section>
+          )}
           <div className="action-bar">
             <div className="basic-actions">
               {s.player.form === "hero" ? (
@@ -2754,25 +3018,6 @@ function Tabletop({
               </span>
             </div>
             <div className="hand-layout">
-              <div className="player-piles">
-                <div className="card-back player-back">
-                  <Shield size={28} />
-                  <span>HERO DECK</span>
-                  <b>{s.player.deck.length}</b>
-                </div>
-                <button
-                  className="pile-label"
-                  onClick={() =>
-                    setPile({
-                      title: "Your discard pile",
-                      cards: s.player.discard,
-                    })
-                  }
-                >
-                  <Trash size={13} />
-                  {s.player.discard.length} discarded <Eye size={12} />
-                </button>
-              </div>
               <div className="hand-cards">
                 {visibleHand.map((p, i) => {
                   const disabled = playable(s, p);
