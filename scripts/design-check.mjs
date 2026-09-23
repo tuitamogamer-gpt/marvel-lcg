@@ -43,6 +43,13 @@ async function audit(name) {
 async function capture(name, fullPage = true) {
   const dialog = (await page.getByRole("dialog").count()) > 0;
   if (fullPage && !dialog) await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(async () => {
+    const images = Array.from(document.images).filter(
+      (img) => img.getClientRects().length && img.loading !== "lazy",
+    );
+    await Promise.all(images.map((img) => img.decode()));
+    await new Promise(requestAnimationFrame);
+  });
   await page.screenshot({
     path: `${root}/${name}.png`,
     fullPage: fullPage && !dialog,

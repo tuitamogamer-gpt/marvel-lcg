@@ -22,10 +22,22 @@ page.on("console", (m) => {
   if (m.type() === "error") errors.push(m.text());
 });
 const url = process.env.BASE_URL || "http://localhost:5174";
+// Exercise a cold boost image: its card frame must exist before artwork arrives.
+await page.route("**/cards/01099.png", async (route) => {
+  await new Promise((resolve) => setTimeout(resolve, 750));
+  await route.continue();
+});
 const state = () =>
   page.evaluate(() => JSON.parse(window.render_game_to_text()));
 async function screenshot(name) {
   await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(async () => {
+    const images = Array.from(document.images).filter(
+      (img) => img.getClientRects().length && img.loading !== "lazy",
+    );
+    await Promise.all(images.map((img) => img.decode()));
+    await new Promise(requestAnimationFrame);
+  });
   await page.screenshot({
     path: `${root}/${name}.png`,
     fullPage: !(await page.getByRole("dialog").count()),
@@ -356,7 +368,20 @@ try {
     if (s.review?.title === "Reveal attack boosts") break;
     await clickProceed();
   }
+  const boostImage = page.locator(".review-focus .review-card img").first();
+  const boostBounds = await boostImage.boundingBox();
+  assert.ok(
+    boostBounds.width > 200 && boostBounds.height > 250,
+    "A cold boost image reserves its full card dimensions",
+  );
   await screenshot("villain-boost-review");
+  assert.equal(
+    await boostImage.evaluate((img) => img.complete && img.naturalWidth > 0),
+    true,
+  );
+  checks.push(
+    "Slow boost artwork retains its full card frame and is decoded before visual verification",
+  );
   await audit("villain-boost-review");
   await settle();
   const after = await state();

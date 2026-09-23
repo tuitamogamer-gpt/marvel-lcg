@@ -124,16 +124,32 @@ function CardImage({
   onClick?: () => void;
 }) {
   const [failed, setFailed] = useState(false);
+  const [loadedCode, setLoadedCode] = useState<string | null>(null);
   useEffect(() => setFailed(false), [code]);
+  const landscape = ["main_scheme", "side_scheme"].includes(
+    card(code)?.type_code,
+  );
   return (
     <div className={`card-image ${className}`} onClick={onClick}>
       {!failed ? (
-        <img
-          draggable={false}
-          src={imageFor(code)}
-          alt={card(code)?.name || "Card"}
-          onError={() => setFailed(true)}
-        />
+        <>
+          <img
+            draggable={false}
+            width={landscape ? 419 : 300}
+            height={landscape ? 300 : 419}
+            src={imageFor(code)}
+            alt={card(code)?.name || "Card"}
+            onLoad={() => setLoadedCode(code)}
+            onError={() => setFailed(true)}
+          />
+          {loadedCode !== code && (
+            <span className="card-loading" aria-hidden="true">
+              <Shield size={24} weight="duotone" />
+              <span>{card(code)?.name || "Card"}</span>
+              <small>Loading artwork…</small>
+            </span>
+          )}
+        </>
       ) : (
         <div className="card-fallback">
           <Shield size={32} />
