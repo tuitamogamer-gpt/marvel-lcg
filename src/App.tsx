@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { CSSProperties, ReactNode } from "react";
 import {
   ArrowLeft,
@@ -69,7 +70,15 @@ import {
 } from "./game/engine";
 import { seatView, upgradeSave } from "./game/team";
 import { effectTitle } from "./game/review";
-import type { Aspect, Command, GameState, Piece, Resource } from "./game/types";
+import { paymentStatus, paymentSubject } from "./game/payment";
+import type {
+  ActionReview,
+  Aspect,
+  Command,
+  GameState,
+  Piece,
+  Resource,
+} from "./game/types";
 
 type Screen = "lobby" | "game" | "collection";
 type Inspect = {
@@ -87,7 +96,13 @@ const resIcon = {
 const aspectStyle = (color: string) => ({ "--accent": color }) as CSSProperties;
 function ResourceIcons({ items }: { items: Resource[] }) {
   return (
-    <span className="resources">
+    <span
+      className="resources"
+      role="img"
+      aria-label={
+        items.length ? items.join(", ") + " resources" : "No resources"
+      }
+    >
       {items.map((r, i) => {
         const Icon = resIcon[r];
         return (
@@ -148,12 +163,14 @@ function Modal({
   children,
   onClose,
   wide = false,
+  className = "",
   eyebrow = "MARVEL CHAMPIONS",
 }: {
   title: string;
   children: ReactNode;
   onClose?: () => void;
   wide?: boolean;
+  className?: string;
   eyebrow?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -192,7 +209,7 @@ function Modal({
       if (prev?.isConnected) prev.focus();
     };
   }, []);
-  return (
+  return createPortal(
     <div
       className="modal-backdrop"
       onMouseDown={(e) => {
@@ -200,7 +217,7 @@ function Modal({
       }}
     >
       <div
-        className={`modal ${wide ? "wide" : ""}`}
+        className={`modal ${wide ? "wide" : ""} ${className}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -223,7 +240,8 @@ function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 function Difficulty({ level }: { level: number }) {
@@ -1277,7 +1295,7 @@ function CardSelection({
     </Modal>
   );
 }
-function Decision({
+function PaymentDecision({
   game: s,
   send,
 }: {
@@ -1287,110 +1305,223 @@ function Decision({
   const p = s.prompt!;
   const [selected, setSelected] = useState<string[]>([]);
   const [wild, setWild] = useState<Resource>(p.wildAs || "energy");
+  const [preview, setPreview] = useState<string | null>(null);
+  const sources = paymentSources(s, p.card?.id, p.paymentTarget);
+  const status = paymentStatus(sources, selected, p.cost || 0, p.requirements);
+  const subject = paymentSubject(s, p);
+  const discards = status.selected.filter((x) => x.kind === "card").length;
+  const abilities = status.selected.length - discards;
   const toggle = (id: string) =>
-    setSelected(
-      selected.includes(id)
-        ? selected.filter((x) => x !== id)
-        : [...selected, id],
+    setSelected((ids) =>
+      ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id],
     );
-  const sources =
-    p.kind === "payment" ? paymentSources(s, p.card?.id, p.paymentTarget) : [];
-  const total = sources
-    .filter((x) => selected.includes(x.id))
-    .reduce((n, x) => n + x.resources.length, 0);
+  if (preview)
+    return (
+      <Modal
+        key="resource-inspection"
+        title={card(preview).name}
+        eyebrow="RESOURCE CARD · READ BEFORE SPENDING"
+        onClose={() => setPreview(null)}
+        className="resource-inspection"
+      >
+        <CardImage code={preview} />
+        <button className="primary-button" onClick={() => setPreview(null)}>
+          <ArrowLeft size={18} /> Back to payment
+        </button>
+      </Modal>
+    );
   return (
     <Modal
-      title={p.title}
-      wide={p.kind === "payment"}
-      eyebrow={
-        p.kind === "payment"
-          ? `${HEROES.find((h) => h.id === s.heroId)!.name.toUpperCase()} · POWER YOUR NEXT MOVE`
-          : s.phase === "villain"
-            ? `${HEROES.find((h) => h.id === s.heroId)!.name.toUpperCase()} · YOUR RESPONSE`
-            : `${HEROES.find((h) => h.id === s.heroId)!.name.toUpperCase()} · YOUR DECISION`
-      }
+      key="payment"
+      title={`Pay for ${p.title}`}
+      className="payment-modal"
+      wide
+      eyebrow={`${HEROES.find((h) => h.id === s.heroId)!.name.toUpperCase()} · RESOURCE PAYMENT`}
       onClose={p.cancelable ? () => send({ type: "CANCEL" }) : undefined}
     >
-      <p className="modal-intro">{p.text}</p>
-      {p.kind === "payment" ? (
-        <>
-          <div
-            className={`payment-summary ${total >= (p.cost || 0) ? "ready" : ""}`}
-            role="status"
-          >
-            <Lightning size={21} weight="fill" />
+      <div className="payment-steps" aria-label="Payment steps">
+        <span className="active">
+          <b>1</b> Choose resources
+        </span>
+        <ChevronRight size={14} />
+        <span>
+          <b>2</b> Confirm payment
+        </span>
+        <ChevronRight size={14} />
+        <span>
+          <b>3</b> Review & proceed
+        </span>
+      </div>
+      <div className="payment-workspace">
+        <aside className="payment-target">
+          <span className="small-label">
+            {p.card ? "YOU ARE PLAYING" : "YOU ARE PAYING FOR"}
+          </span>
+          {subject && (
+            <button
+              className="payment-target-card"
+              aria-label={`Read ${card(subject).name}`}
+              onClick={() => setPreview(subject)}
+            >
+              <CardImage code={subject} />
+              <span>
+                <ArrowsOut size={13} /> Read card
+              </span>
+            </button>
+          )}
+          <h3>{p.title}</h3>
+          <div className="payment-cost">
             <span>
-              <b>
-                {Math.max(0, (p.cost || 0) - total) > 0
-                  ? `${(p.cost || 0) - total} more resources needed`
-                  : "Resource cost covered"}
-              </b>
-              <small>
-                {total > (p.cost || 0)
-                  ? `${total - (p.cost || 0)} extra resources will be spent.`
-                  : "Select cards to spend or abilities to use below."}
-              </small>
+              <Lightning size={19} weight="fill" /> RESOURCE COST
             </span>
-            <strong>
-              {total}
-              <small> / {p.cost || 0}</small>
-            </strong>
+            <b>{p.cost || 0}</b>
           </div>
-          <div className="payment-layout">
-            {p.card && (
-              <div className="payment-card">
-                <CardImage code={p.card.code} />
-                <div className="payment-total">
-                  <strong>{total}</strong>
-                  <span>/ {p.cost} resources</span>
+          {!!p.requirements?.length && (
+            <div className="payment-required">
+              <span>Must include</span>
+              <ResourceIcons items={p.requirements} />
+            </div>
+          )}
+          <p>
+            The card’s effect waits until you review the payment and click
+            Proceed.
+          </p>
+        </aside>
+        <section
+          className="payment-pool"
+          aria-label="Available resource cards"
+          tabIndex={0}
+        >
+          <div className="payment-pool-heading">
+            <div>
+              <h3>Choose what to spend</h3>
+              <p>
+                Click a card to select it. Use <ArrowsOut size={13} /> to read
+                it up close.
+              </p>
+            </div>
+            <span>
+              {sources.filter((x) => x.kind === "card").length} CARDS AVAILABLE
+            </span>
+          </div>
+          {(["card", "ability"] as const).map((kind) => {
+            const group = sources.filter((x) => x.kind === kind);
+            if (!group.length) return null;
+            return (
+              <div className="payment-source-group" key={kind}>
+                <div className="payment-group-heading">
+                  {kind === "card" ? (
+                    <Trash size={14} />
+                  ) : (
+                    <Lightning size={14} />
+                  )}
+                  <b>
+                    {kind === "card" ? "FROM YOUR HAND" : "RESOURCE ABILITIES"}
+                  </b>
+                  <span>
+                    {kind === "card"
+                      ? "Selected cards go to your discard pile"
+                      : "Use the ability shown below each card"}
+                  </span>
+                </div>
+                <div className="payment-sources">
+                  {group.map((x) => (
+                    <div className="resource-option" key={x.id}>
+                      <button
+                        className={`payment-source ${selected.includes(x.id) ? "selected" : ""}`}
+                        aria-label={`${x.name} · ${x.resources.join(" + ")} · ${x.description}`}
+                        aria-pressed={selected.includes(x.id)}
+                        onClick={() => toggle(x.id)}
+                      >
+                        <span className="payment-art">
+                          <CardImage code={x.code} />
+                          <span className="resource-value">
+                            <ResourceIcons items={x.resources} />
+                          </span>
+                          <span className="payment-mark">
+                            <Check size={17} weight="bold" />
+                          </span>
+                        </span>
+                        <span className="payment-source-caption">
+                          <b>{x.name}</b>
+                          <small>{x.description}</small>
+                          <span className="payment-selection-label">
+                            {selected.includes(x.id)
+                              ? kind === "card"
+                                ? "WILL BE DISCARDED"
+                                : "ABILITY SELECTED"
+                              : `${x.resources.length} RESOURCE${x.resources.length === 1 ? "" : "S"}`}
+                          </span>
+                        </span>
+                      </button>
+                      <button
+                        className="resource-zoom"
+                        aria-label={`Read resource card ${x.name}`}
+                        onClick={() => setPreview(x.code)}
+                      >
+                        <ArrowsOut size={16} weight="bold" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
-            )}
-            <div className="payment-sources">
-              <span className="small-label">AVAILABLE RESOURCES</span>
-              {sources.map((x) => (
-                <button
-                  key={x.id}
-                  className={`payment-source ${selected.includes(x.id) ? "selected" : ""}`}
-                  aria-pressed={selected.includes(x.id)}
-                  onClick={() => toggle(x.id)}
-                >
-                  <span className="check-square">
-                    {selected.includes(x.id) && (
-                      <Check size={14} weight="bold" />
-                    )}
-                  </span>
-                  <span>
-                    <b>{x.name}</b>
-                    <small>{x.description}</small>
-                  </span>
-                  <ResourceIcons items={x.resources} />
-                </button>
-              ))}
-              {!sources.length && <p>No resources available.</p>}
-              {sources.some(
-                (x) => selected.includes(x.id) && x.resources.includes("wild"),
-              ) && (
-                <label className="wild-label">
-                  Use wild resources as
-                  <select
-                    value={wild}
-                    onChange={(e) => setWild(e.target.value as Resource)}
-                  >
-                    <option value="energy">Energy</option>
-                    <option value="mental">Mental</option>
-                    <option value="physical">Physical</option>
-                  </select>
-                </label>
-              )}
-              {!!p.requirements?.length && (
-                <p className="payment-required">
-                  Required: <ResourceIcons items={p.requirements} />
-                </p>
-              )}
-            </div>
-          </div>
-          <div className="modal-actions">
+            );
+          })}
+          {!sources.length && (
+            <p className="payment-empty">
+              No resources are available for this payment.
+            </p>
+          )}
+        </section>
+      </div>
+      <div className="payment-footer">
+        <div
+          className={`payment-summary ${status.ready ? "ready" : ""}`}
+          role="status"
+        >
+          <span className="payment-meter">
+            <strong>{status.total}</strong>
+            <span>
+              / {p.cost || 0}
+              <small>RESOURCES</small>
+            </span>
+          </span>
+          <span>
+            <b>
+              {status.total < (p.cost || 0)
+                ? `Choose ${(p.cost || 0) - status.total} more resource${(p.cost || 0) - status.total === 1 ? "" : "s"}`
+                : status.missing.length
+                  ? `Still need ${status.missing.join(" + ")}`
+                  : "Payment ready to confirm"}
+            </b>
+            <small>
+              {selected.length
+                ? `${discards} card${discards === 1 ? "" : "s"} to discard${abilities ? ` · ${abilities} abilit${abilities === 1 ? "y" : "ies"} to use` : ""}`
+                : "Nothing selected yet. Your hand is unchanged."}
+              {status.total > (p.cost || 0)
+                ? ` · ${status.total - (p.cost || 0)} extra resource(s) will be spent.`
+                : ""}
+            </small>
+          </span>
+          {status.selected.some((x) => x.resources.includes("wild")) && (
+            <label className="wild-label">
+              Optional wild type
+              <select
+                value={wild}
+                onChange={(e) => setWild(e.target.value as Resource)}
+              >
+                <option value="energy">Energy</option>
+                <option value="mental">Mental</option>
+                <option value="physical">Physical</option>
+              </select>
+            </label>
+          )}
+        </div>
+        <div className="payment-confirm-row">
+          <span>
+            <ShieldCheck size={16} /> Nothing is spent until you confirm.
+          </span>
+          <div>
             {p.cancelable && (
               <button
                 className="secondary-button"
@@ -1401,14 +1532,45 @@ function Decision({
             )}
             <button
               className="primary-button"
-              disabled={total < (p.cost || 0)}
+              disabled={!status.ready}
               onClick={() => send({ type: "PAY", ids: selected, wildAs: wild })}
             >
-              Spend {total} & resolve <ArrowRight size={18} />
+              Confirm payment <ArrowRight size={18} />
             </button>
           </div>
-        </>
-      ) : p.kind === "select" ? (
+        </div>
+      </div>
+    </Modal>
+  );
+}
+function Decision({
+  game: s,
+  send,
+}: {
+  game: GameState;
+  send: (c: Command) => void;
+}) {
+  const p = s.prompt!;
+  const [selected, setSelected] = useState<string[]>([]);
+  const toggle = (id: string) =>
+    setSelected(
+      selected.includes(id)
+        ? selected.filter((x) => x !== id)
+        : [...selected, id],
+    );
+  if (p.kind === "payment") return <PaymentDecision game={s} send={send} />;
+  return (
+    <Modal
+      title={p.title}
+      eyebrow={
+        s.phase === "villain"
+          ? `${HEROES.find((h) => h.id === s.heroId)!.name.toUpperCase()} · YOUR RESPONSE`
+          : `${HEROES.find((h) => h.id === s.heroId)!.name.toUpperCase()} · YOUR DECISION`
+      }
+      onClose={p.cancelable ? () => send({ type: "CANCEL" }) : undefined}
+    >
+      <p className="modal-intro">{p.text}</p>
+      {p.kind === "select" ? (
         <>
           <div className="decision-options">
             {p.options.map((o) => (
@@ -1502,18 +1664,200 @@ function StatToken({
     </div>
   );
 }
+function ReviewDetails({
+  review,
+  inspect,
+}: {
+  review: ActionReview;
+  inspect: (c: Inspect) => void;
+}) {
+  return (
+    <div
+      className={`review-details ${review.cards?.length ? "has-cards" : ""} ${review.cards?.length === 1 ? "one-card" : ""}`}
+    >
+      <div className="review-explanation">
+        <div className="resolution-paused" role="status">
+          <Clock size={14} /> Step {review.id} · waiting for your Proceed
+        </div>
+        {review.source && (
+          <div className="review-source">
+            <button
+              className="review-source-image"
+              aria-label={`Read action card ${card(review.source).name}`}
+              onClick={() => inspect({ code: review.source! })}
+            >
+              <img
+                src={imageFor(review.source)}
+                alt={card(review.source).name}
+              />
+              <ArrowsOut size={13} />
+            </button>
+            <span>
+              <small>IN THIS ACTION</small>
+              <b>{card(review.source).name}</b>
+              <span>
+                {review.messages[0] ||
+                  "The table has updated. Review the changes below."}
+              </span>
+            </span>
+          </div>
+        )}
+        {review.messages.length > 1 && (
+          <ul className="review-messages">
+            {review.messages.slice(1).map((m, i) => (
+              <li key={i}>{m}</li>
+            ))}
+          </ul>
+        )}
+        {review.payment && (
+          <div className="review-payment">
+            <Lightning size={22} weight="fill" />
+            <span>
+              <b>
+                {review.payment.total} / {review.payment.cost} resources paid
+              </b>
+              <small>
+                Payment complete. The card effect waits for Proceed.
+              </small>
+            </span>
+          </div>
+        )}
+        {review.calculation && (
+          <div className="review-calculation">
+            <div className="calculation-heading">
+              <span>{review.calculation.label}</span>
+              <b>
+                {review.calculation.total}
+                <small>DAMAGE</small>
+              </b>
+            </div>
+            <div className="calculation-parts">
+              {review.calculation.parts.map((part, i) => (
+                <span key={part.label}>
+                  <b>
+                    {i === 1 ? "+" : ""}
+                    {part.value}
+                  </b>
+                  <small>{part.label}</small>
+                </span>
+              ))}
+            </div>
+            <p>{review.calculation.note}</p>
+          </div>
+        )}
+        {review.changes.length > 0 && (
+          <div className="review-changes">
+            <div className="change-heading">
+              <span>WHAT CHANGED</span>
+              <span>BEFORE → AFTER</span>
+            </div>
+            {review.changes.map((c, i) => {
+              const Icon =
+                c.kind === "health"
+                  ? Heart
+                  : c.kind === "threat"
+                    ? Target
+                    : c.kind === "cards"
+                      ? Cards
+                      : ArrowsClockwise;
+              return (
+                <div className={`change-row ${c.kind}`} key={i}>
+                  <Icon size={16} />
+                  <span>{c.label}</span>
+                  <div>
+                    <del>{c.before}</del>
+                    <ArrowRight size={12} />
+                    <b>{c.after}</b>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      {!!review.cards?.length && (
+        <div className="review-card-section">
+          <div className="change-heading">
+            <span>CARDS IN THIS STEP</span>
+            <span>
+              {review.cards.length}{" "}
+              {review.cards.length === 1 ? "CARD" : "CARDS"}
+            </span>
+          </div>
+          <div className="review-cards">
+            {review.cards.map((c) => (
+              <div className={`review-card ${c.kind}`} key={c.id}>
+                {c.code ? (
+                  <button
+                    aria-label={`Read ${c.name} · ${c.label}`}
+                    onClick={() => inspect({ code: c.code! })}
+                  >
+                    <CardImage code={c.code} />
+                    <span className="review-card-zoom">
+                      <ArrowsOut size={13} />
+                    </span>
+                  </button>
+                ) : (
+                  <div className="review-card-back">
+                    <Shield size={30} weight="duotone" />
+                    <span>FACE DOWN</span>
+                  </div>
+                )}
+                <span className="review-card-label">{c.label}</span>
+                <b>{c.name}</b>
+                {c.resources && <ResourceIcons items={c.resources} />}
+                <small>{c.detail}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 function ActionDirector({
   game: s,
   send,
+  inspect,
 }: {
   game: GameState;
   send: (c: Command) => void;
+  inspect: (c: Inspect) => void;
 }) {
   const review = s.review;
   const button = useRef<HTMLButtonElement>(null);
+  const focusButton = useRef<HTMLButtonElement>(null);
+  const director = useRef<HTMLElement>(null);
+  const [collapsedId, setCollapsedId] = useState<number | null>(null);
+  const focused = !!review && collapsedId !== review.id;
+  const next = s.prompt
+    ? s.prompt.title
+    : s.phase === "mulligan"
+      ? "The next opening hand"
+      : ["won", "lost"].includes(s.phase)
+        ? "Mission results"
+        : effectTitle(s.queue[0]);
   useEffect(() => {
-    if (review) button.current?.focus({ preventScroll: true });
+    const resize = () => {
+      const node = director.current;
+      if (node)
+        node.style.setProperty(
+          "--director-height",
+          `${Math.max(280, innerHeight - Math.max(18, node.getBoundingClientRect().top) - 18)}px`,
+        );
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    window.addEventListener("scroll", resize, { passive: true });
+    return () => {
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("scroll", resize);
+    };
   }, [review?.id]);
+  useEffect(() => {
+    if (review)
+      (focused ? focusButton : button).current?.focus({ preventScroll: true });
+  }, [review?.id, focused]);
   const activeHero = HEROES.find((h) => h.id === s.heroId)!;
   const waiting =
     s.phase === "mulligan"
@@ -1524,134 +1868,141 @@ function ActionDirector({
           ? "Mission complete"
           : `Your move, ${activeHero.name}.`;
   return (
-    <section
-      className={`action-director ${review ? "has-review" : ""}`}
-      aria-label="Action resolution"
-    >
-      <div className="director-top">
-        <span>
-          <Eye size={17} />
-          ACTION RESOLUTION
-        </span>
-        <b>
-          {review ? `STEP ${String(review.id).padStart(2, "0")}` : "GUIDED"}
-        </b>
-      </div>
-      <div
-        className="director-body"
-        key={review?.id || "idle"}
-        tabIndex={0}
-        role="region"
-        aria-label="Current action details"
+    <>
+      <section
+        ref={director}
+        aria-hidden={focused || undefined}
+        className={`action-director ${review ? "has-review" : ""}`}
+        aria-label="Action resolution"
       >
-        <div className="director-actor">
-          <span
-            className={`resolution-dot ${s.phase === "villain" ? "enemy" : ""}`}
-          />
-          {review?.actor || activeHero.name}
-          <small>
-            {s.phase === "villain" ? "VILLAIN PHASE" : "HERO PHASE"}
-          </small>
+        <div className="director-top">
+          <span>
+            <Eye size={17} />
+            ACTION RESOLUTION
+          </span>
+          <b>
+            {review ? `STEP ${String(review.id).padStart(2, "0")}` : "GUIDED"}
+          </b>
         </div>
-        <h2>{review?.title || waiting}</h2>
-        {review ? (
-          <>
-            {review.source && (
-              <div className="review-source">
-                <img src={imageFor(review.source)} alt="" />
-                <span>
-                  <small>IN THIS ACTION</small>
-                  <b>{card(review.source).name}</b>
-                  <span>
-                    {review.messages[0] ||
-                      "The table has updated. Review the changes below."}
-                  </span>
-                </span>
-              </div>
-            )}
-            {review.messages.length > 1 && (
-              <ul className="review-messages">
-                {review.messages.slice(1).map((m, i) => (
-                  <li key={i}>{m}</li>
-                ))}
-              </ul>
-            )}
-            {review.changes.length > 0 && (
-              <div className="review-changes">
-                <div className="change-heading">
-                  <span>WHAT CHANGED</span>
-                  <span>BEFORE → AFTER</span>
-                </div>
-                {review.changes.map((c, i) => {
-                  const Icon =
-                    c.kind === "health"
-                      ? Heart
-                      : c.kind === "threat"
-                        ? Target
-                        : c.kind === "cards"
-                          ? Cards
-                          : ArrowsClockwise;
-                  return (
-                    <div className={`change-row ${c.kind}`} key={i}>
-                      <Icon size={16} />
-                      <span>{c.label}</span>
-                      <div>
-                        <del>{c.before}</del>
-                        <ArrowRight size={12} />
-                        <b>{c.after}</b>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="director-idle">
-            <ShieldCheck size={34} weight="duotone" />
-            <p>
-              Play a card, use an ability, or change form. Every resolved action
-              will appear here.
-            </p>
-            <span>
-              <CheckCircle size={14} />
-              No timers. You control the pace.
-            </span>
+        <div
+          className="director-body"
+          key={review?.id || "idle"}
+          tabIndex={0}
+          role="region"
+          aria-label="Current action details"
+        >
+          <div className="director-actor">
+            <span
+              className={`resolution-dot ${s.phase === "villain" ? "enemy" : ""}`}
+            />
+            {review?.actor || activeHero.name}
+            <small>
+              {s.phase === "villain" ? "VILLAIN PHASE" : "HERO PHASE"}
+            </small>
           </div>
-        )}
-      </div>
-      <div className="director-footer">
-        {review ? (
-          <>
-            <div className="next-step">
-              <small>UP NEXT</small>
+          <h2>{review?.title || waiting}</h2>
+          {review ? (
+            focused ? (
+              <p className="director-idle">
+                Read the current action in the focus window. The mission is
+                paused until you click Proceed.
+              </p>
+            ) : (
+              <ReviewDetails review={review} inspect={inspect} />
+            )
+          ) : (
+            <div className="director-idle">
+              <ShieldCheck size={34} weight="duotone" />
+              <p>
+                Play a card, use an ability, or change form. Every resolved
+                action will appear here.
+              </p>
               <span>
-                {s.prompt
-                  ? s.prompt.title
-                  : s.phase === "mulligan"
-                    ? "The next opening hand"
-                    : ["won", "lost"].includes(s.phase)
-                      ? "Mission results"
-                      : effectTitle(s.queue[0])}
+                <CheckCircle size={14} />
+                No timers. You control the pace.
               </span>
             </div>
-            <button
-              ref={button}
-              className="primary-button proceed-button"
-              onClick={() => send({ type: "PROCEED" })}
-            >
-              Proceed <ArrowRight size={21} />
-            </button>
-            <span className="pace-note">Continue only when you’re ready.</span>
-          </>
-        ) : (
-          <span className="pace-note">
-            <ShieldCheck size={14} />
-            Every step is saved automatically.
-          </span>
-        )}
-      </div>
-    </section>
+          )}
+        </div>
+        <div className="director-footer">
+          {review ? (
+            <>
+              <button
+                className="review-expand"
+                onClick={() => setCollapsedId(null)}
+              >
+                <ArrowsOut size={14} /> Open action details
+              </button>
+              <div className="next-step">
+                <small>UP NEXT</small>
+                <span>{next}</span>
+              </div>
+              <button
+                ref={button}
+                className="primary-button proceed-button"
+                onClick={() => send({ type: "PROCEED" })}
+              >
+                Proceed <ArrowRight size={21} />
+              </button>
+              <span className="pace-note">
+                Continue only when you’re ready.
+              </span>
+            </>
+          ) : (
+            <span className="pace-note">
+              <ShieldCheck size={14} />
+              Every step is saved automatically.
+            </span>
+          )}
+        </div>
+      </section>
+      {focused && review && (
+        <Modal
+          key={review.id}
+          title={review.title}
+          wide={!!review.cards?.length}
+          className={`review-focus ${review.cards?.length ? "with-cards" : ""}`}
+          eyebrow={`STEP ${String(review.id).padStart(2, "0")} · ${review.actor.toUpperCase()} · ${review.phase === "villain" ? "VILLAIN PHASE" : "HERO PHASE"}`}
+          onClose={() => setCollapsedId(review.id)}
+        >
+          <div
+            className="review-focus-body"
+            tabIndex={0}
+            role="region"
+            aria-label="Action details and cards"
+          >
+            <ReviewDetails
+              review={review}
+              inspect={(c) => {
+                setCollapsedId(review.id);
+                inspect(c);
+              }}
+            />
+          </div>
+          <div className="review-focus-footer">
+            <div className="next-step">
+              <small>ON YOUR NEXT CLICK</small>
+              <span>{next}</span>
+            </div>
+            <div>
+              <button
+                className="secondary-button"
+                onClick={() => setCollapsedId(review.id)}
+              >
+                View table
+              </button>
+              <button
+                ref={focusButton}
+                className="primary-button"
+                onClick={() => send({ type: "PROCEED" })}
+              >
+                Proceed <ArrowRight size={20} />
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
 function Tabletop({
@@ -2462,7 +2813,7 @@ function Tabletop({
           </section>
         </div>
         <aside className="mission-rail">
-          <ActionDirector game={game} send={send} />
+          <ActionDirector game={game} send={send} inspect={inspect} />
           {logOpen && (
             <section className="battle-log">
               <div className="log-heading">

@@ -37,7 +37,9 @@ Run the same browser checks against a deployment with `BASE_URL=https://your-pro
 - Mulligan, payments with typed and wild resources, identity abilities, basic actions, allies, upgrades/supports, encounter/boost cards, defense and interrupt windows, nemeses, obligations, status cards, scheme and villain transitions, and victory/defeat.
 - Card inspection, searchable 209-face collection, deck inspection, discard inspection, battle log, optional sound, responsive layouts, keyboard focus, reduced-motion support, and fullscreen with `F`.
 - A desktop team strip, individual hands/decks/health, player-order turns, per-hero villain activations, engaged minions, teammate defense, shared card targets, and hero elimination. Scenario values scale with the starting team size.
-- An action resolution panel with source cards, explanations, stat changes, and a **Proceed** button. No automatic playback or timers.
+- A full action review with card artwork, before/after stats, attack calculations, and a permanently visible **Proceed** button. **View table** closes the review without advancing the game; reopen it from the side panel. No automatic playback or timers.
+- Visual resource payment: full card faces, enlarged inspection, resource icons, selected discard/ability labels, typed-cost validation, and a payment receipt. Paying pauses before the purchased card resolves.
+- Encounter cards and individual attack boosts are revealed before their effects resolve, with separate acknowledgements for boost abilities and damage. Drawn/discarded cards are shown by image; unrevealed encounter cards stay face down.
 - Local autosave, including a pending Proceed checkpoint, mid-payment and mid-encounter decisions. Resume from the lobby after a reload.
 
 ## Card API and artwork

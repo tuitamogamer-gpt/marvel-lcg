@@ -38,6 +38,8 @@ import {
   upgradeSave,
 } from "./team";
 import { boardSnapshot, recordReview } from "./review";
+import { paymentSources, paymentStatus } from "./payment";
+export { paymentSources } from "./payment";
 export const SAVE_KEY = "champions.save.v1";
 const E = (type: string, args: Record<string, any> = {}): Effect => ({
   type,
@@ -824,58 +826,6 @@ function thwartAction(
   }
   thwart(s, target, n);
 }
-export function paymentSources(
-  s: GameState,
-  exclude?: string,
-  targetCode?: string,
-) {
-  const t = targetCode ? card(targetCode) : undefined;
-  const r: {
-    id: string;
-    name: string;
-    code?: string;
-    resources: Resource[];
-    description: string;
-  }[] = s.player.hand
-    .filter((p) => p.id !== exclude)
-    .map((p) => ({
-      id: p.id,
-      name: card(p).name,
-      code: p.code,
-      resources: resources(card(p), t),
-      description: "Discard from hand",
-    }));
-  if (
-    s.heroId === "spider_man" &&
-    s.player.form === "alter" &&
-    !s.flags.scientist
-  )
-    r.push({
-      id: "scientist",
-      name: "Scientist",
-      resources: ["mental"],
-      description: "Peter Parker · once per round",
-    });
-  for (const p of s.player.inPlay.filter((p) => !p.exhausted)) {
-    if (p.code === "01008" && p.counters > 0 && s.player.form === "hero")
-      r.push({
-        id: p.id,
-        name: "Web-Shooter",
-        code: p.code,
-        resources: ["wild"],
-        description: `Exhaust · ${p.counters} web counters`,
-      });
-    if (p.code === "01033" && s.player.discard.length)
-      r.push({
-        id: p.id,
-        name: "Pepper Potts",
-        code: p.code,
-        resources: resources(card(s.player.discard.at(-1)!)),
-        description: "Exhaust · copy top discard resources",
-      });
-  }
-  return r.filter((x) => x.resources.length);
-}
 function requestPayment(
   s: GameState,
   title: string,
@@ -911,16 +861,15 @@ function pay(s: GameState, ids: string[], wildAs: Resource = "energy") {
   const sources = paymentSources(s, p.card?.id, p.paymentTarget);
   const selected = ids.map((id) => sources.find((x) => x.id === id));
   need(selected.every(Boolean), "A selected resource is unavailable.");
-  const printed = selected.flatMap((x) => x!.resources);
+  const { printed, missing } = paymentStatus(
+    sources,
+    ids,
+    p.cost || 0,
+    p.requirements,
+  );
   need(printed.length >= (p.cost || 0), "Not enough resources.");
+  need(!missing.length, `You need a ${missing[0]} resource.`);
   const req = [...(p.requirements || [])];
-  const available = [...printed];
-  for (const k of req) {
-    let i = available.indexOf(k);
-    if (i < 0) i = available.indexOf("wild");
-    need(i >= 0, `You need a ${k} resource.`);
-    available.splice(i, 1);
-  }
   for (const id of ids) {
     if (id === "scientist") s.flags.scientist = true;
     else if (s.player.hand.some((x) => x.id === id)) discardHand(s, id);
@@ -2083,15 +2032,7 @@ function boostEffects(s: GameState, p: Piece) {
       );
       break;
     case "01164":
-      if (s.attack) {
-        const next = drawEncounter(s);
-        if (next) {
-          s.encounter.discard.push(next);
-          s.attack.base += card(next).boost || 0;
-          s.attack.boostCodes.push(next.code);
-          boostEffects(s, next);
-        }
-      }
+      if (s.attack) add(s, E("revealBoost"));
       break;
     case "01123":
     case "01168":
@@ -2123,7 +2064,7 @@ function enemyScheme(s: GameState, id: string, extra?: string) {
         s,
         `${card(p).name} schemes: ${card(boost).name} adds ${card(boost).boost || 0} boost.`,
       );
-      boostEffects(s, boost);
+      if (card(boost).boost_star) add(s, E("boostEffect", { piece: boost }));
     }
   }
   const after = [
@@ -2267,7 +2208,7 @@ function affordable(
 }
 function reveal(s: GameState, p: Piece, skip = false) {
   s.lastEncounter = p.code;
-  log(s, `Encounter: ${card(p).name}.`, "bad");
+  log(s, `${skip ? "Resolve" : "Encounter"}: ${card(p).name}.`, "bad");
   if (!skip) {
     const opts: Option[] = [];
     const revealing = s.activePlayerId;
@@ -2342,6 +2283,9 @@ function reveal(s: GameState, p: Piece, skip = false) {
       choose(s, card(p).name, "You have an interrupt available.", opts);
       return;
     }
+    // Reveal first; the player acknowledges the card before its text resolves.
+    add(s, E("reveal", { piece: p, skip: true }));
+    return;
   }
   const c = card(p);
   if (c.type_code === "minion") {
@@ -3225,15 +3169,22 @@ function resolve(s: GameState, e: Effect) {
       const a = s.attack;
       if (!a) break;
       const n = a.isVillain ? (s.villainId === "klaw" ? 2 : 1) : 0;
-      add(s, E("damageWindow"));
-      for (let i = 0; i < n; i++) {
-        const p = drawEncounter(s);
-        if (p) {
-          s.encounter.discard.push(p);
-          a.base += card(p).boost || 0;
-          a.boostCodes.push(p.code);
-          boostEffects(s, p);
-        }
+      add(
+        s,
+        ...Array.from({ length: n }, () => E("revealBoost")),
+        E("damageWindow"),
+      );
+      break;
+    }
+    case "revealBoost": {
+      const a = s.attack;
+      if (!a) break;
+      const p = drawEncounter(s);
+      if (p) {
+        s.encounter.discard.push(p);
+        a.base += card(p).boost || 0;
+        a.boostCodes.push(p.code);
+        if (card(p).boost_star) add(s, E("boostEffect", { piece: p }));
       }
       log(
         s,
@@ -3242,6 +3193,9 @@ function resolve(s: GameState, e: Effect) {
       );
       break;
     }
+    case "boostEffect":
+      boostEffects(s, e.piece);
+      break;
     case "damageWindow": {
       const a = s.attack;
       if (!a) break;

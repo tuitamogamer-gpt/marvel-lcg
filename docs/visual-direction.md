@@ -14,21 +14,23 @@ The attempted generated illustration was rejected by the image tool. No generate
 - Hero identity and signature cards can be inspected before starting. The mission brief confirms the chosen hero, aspect, and 40-card deck.
 - The battlefield distinguishes villain territory, the player's identity and reinforcements, and the hand. The current victory objective and scheme threshold are visible above the table.
 - Playable cards have yellow borders plus a text label. A hand filter shows available plays without removing resource cards from the game state.
-- Payment dialogs show the resource deficit or readiness and warn about extra resources. Selection controls expose their pressed state; keyboard focus stays on the selected resource.
+- Payment uses a desktop resource desk: the purchased card stays beside a grid of full resource-card faces. Selected cards explicitly say they will be discarded; resource abilities are a separate group with their own identity/support/upgrade artwork and costs. Enlarging a card preserves the selection. A fixed footer reports the resource total, missing types, excess payment, and the confirmation button.
 - Dialogs trap keyboard focus, support Escape when cancellation is legal, restore prior focus, and lock background scrolling.
 - Mobile uses an action dock with safe-area spacing. Card rows scroll within their own area. All primary card and action controls remain accessible by touch.
 - Reduced-motion preferences disable interface transitions. The red action and text colors were adjusted to pass contrast checks against their actual backgrounds.
 
 ## Verification
 
-`npm run test:design` captures the lobby and battlefield at 320, 390, 768, 1024, and 1440 pixels, checks for horizontal page overflow, and exercises hand filtering, selection state, focus trapping, Escape, scroll locking, and payment focus. It runs axe against the lobby, archive, battlefield, mulligan, inspection, help, and payment dialogs. Screenshots and findings are written to `output/design/`.
+`npm run test:design` checks desktop layouts at 1280, 1440, and 1920 pixels for horizontal page overflow and exercises hand filtering, selection state, focus trapping, Escape, scroll locking, and payment focus. It runs axe against the lobby, archive, battlefield, mulligan, inspection, help, and payment dialogs. Screenshots and findings are written to `output/design/`.
 
-These automated audits complement visual inspection; they do not constitute comprehensive accessibility certification. The existing browser test still covers the complete setup/payment/villain-turn/save-resume flow, and engine rules coverage is unchanged.
+These automated audits complement visual inspection; they do not constitute comprehensive accessibility certification. The browser test also exercises the complete setup/payment/villain-turn/save-resume flow, resource-card enlargement, cancellation, saved receipts, and the absence of timed advancement.
 
 
 ## Desktop hot-seat and action clarity
 
-A persistent cream-and-yellow action panel sits beside the blue game table. Each checkpoint names the actor and source, lists changes as before → after values, and keeps Proceed in a consistent footer. Attack explanations show ATK, defense, prevention, and resulting damage. All automatic resolution is explicitly acknowledged. The scrollable action/history regions are keyboard accessible.
+A cream-and-yellow focus window opens for each action checkpoint. Card faces occupy the main area; the source, explanation, payment receipt or attack calculation, and before → after values stay alongside them. Proceed and the next-step description remain in a fixed footer, including on 1280×800 laptops. View table returns to the persistent side panel without advancing the game. Card inspection also leaves the step pending. Dialogs render above the navigation through a shared portal. The scrollable action/history regions are keyboard accessible.
+
+The engine separates encounter revelation from its text, each attack boost from its star ability, and payment from the resulting play. Draws and discards show the actual card identities even if the hand count stays unchanged. Face-down encounter cards show a back until they are revealed. Pending reviews, including their card images and receipt details, survive save/resume.
 
 The team strip keeps all 1–3 identities visible with health, hand counts, form/readiness, a first-player token, and current actor emphasis. Selecting another hero exposes that hero's cards and permitted Action abilities without changing turn order. Scenario scaling is shown before starting. Colored, embossed token emblems distinguish health, attack, threat/thwart, defense, and card counters; statuses include icons and descriptive tooltips.
 

@@ -1,6 +1,70 @@
 import { card, heroCard, heroStats, HEROES } from "./cards";
 import { allInPlay, seatView } from "./team";
-import type { ActionReview, Effect, GameState } from "./types";
+import { paymentSources, paymentStatus, paymentSubject } from "./payment";
+import type {
+  ActionReview,
+  Effect,
+  GameState,
+  Piece,
+  ReviewCard,
+} from "./types";
+
+type LocatedCard = {
+  id: string;
+  code: string;
+  zone: string;
+  owner: string;
+  visible: boolean;
+  exhausted: boolean;
+  counters: number;
+};
+function cardLocations(s: GameState) {
+  const located: Record<string, LocatedCard> = {};
+  const put = (
+    pieces: Piece[],
+    zone: string,
+    owner = "Encounter",
+    visible = true,
+  ) => {
+    for (const p of pieces)
+      located[p.id] = {
+        id: p.id,
+        code: p.code,
+        zone,
+        owner,
+        visible,
+        exhausted: p.exhausted,
+        counters: p.counters,
+      };
+  };
+  for (const seat of s.players) {
+    const name = HEROES.find((h) => h.id === seat.heroId)!.name;
+    const p = seatView(s, seat).player;
+    put(p.hand, "Hand", name);
+    put(p.deck, "Deck", name, false);
+    put(p.discard, "Discard", name);
+    put(p.inPlay, "In play", name);
+  }
+  put(s.encounter.deck, "Deck", "Encounter", false);
+  put(s.encounter.discard, "Discard");
+  for (const p of s.encounter.dealt) {
+    const seat = s.players.find(
+      (seat) => seat.id === (p.dealtTo || s.activePlayerId),
+    );
+    put(
+      [p],
+      "Dealt",
+      HEROES.find((h) => h.id === seat?.heroId)?.name || "Encounter",
+      false,
+    );
+  }
+  put([...s.minions, ...s.sideSchemes, ...s.attachments], "In play");
+  put(s.removed, "Removed");
+  for (const p of s.minions)
+    if (p.droneCard) put([p.droneCard], "Drone", "", false);
+  for (const p of s.sideSchemes) put(p.captured || [], "Captured", "", false);
+  return located;
+}
 
 type Value = {
   label: string;
@@ -91,7 +155,19 @@ export function boardSnapshot(s: GameState) {
       if (p[status])
         put(`${p.id}:${status}`, `${name} · ${status}`, "Active", "status");
   }
-  return { values, logId: s.log.at(-1)?.id || 0 };
+  return {
+    values,
+    locations: cardLocations(s),
+    logId: s.log.at(-1)?.id || 0,
+    attack: s.attack ? structuredClone(s.attack) : null,
+    prompt: s.prompt ? structuredClone(s.prompt) : null,
+    paymentSources:
+      s.prompt?.kind === "payment"
+        ? paymentSources(s, s.prompt.card?.id, s.prompt.paymentTarget)
+        : [],
+    paymentSubject:
+      s.prompt?.kind === "payment" ? paymentSubject(s, s.prompt) : undefined,
+  };
 }
 const titles: Record<string, string> = {
   MULLIGAN: "Opening hand confirmed",
@@ -122,6 +198,8 @@ const titles: Record<string, string> = {
   enemyScheme: "Enemy schemes",
   defender: "Defender declared",
   boostAttack: "Reveal attack boosts",
+  revealBoost: "Reveal attack boosts",
+  boostEffect: "Resolve boost ability",
   finishAttack: "Resolve the attack",
   reveal: "Reveal encounter",
   revealNext: "Reveal an additional encounter",
@@ -203,6 +281,9 @@ const titles: Record<string, string> = {
 export function effectTitle(e?: Effect) {
   return e
     ? e.title ||
+        (e.type === "reveal" && e.skip
+          ? "Resolve encounter effect"
+          : undefined) ||
         (e.type === "BASIC" ? `Basic ${e.action}` : titles[e.type]) ||
         "Resolve card effect"
     : "Your next action";
@@ -257,7 +338,181 @@ export function recordReview(
       });
   }
   const messages = s.log.filter((l) => l.id > before.logId).map((l) => l.text);
-  if (!changes.length && !messages.length) return;
+  const cards: ReviewCard[] = [];
+  for (const id of new Set([
+    ...Object.keys(before.locations),
+    ...Object.keys(after.locations),
+  ])) {
+    const a = before.locations[id],
+      b = after.locations[id];
+    if (!a?.visible && !b?.visible && b?.zone !== "Dealt") continue;
+    if (
+      a?.zone === b?.zone &&
+      a?.owner === b?.owner &&
+      a?.exhausted === b?.exhausted &&
+      a?.counters === b?.counters
+    )
+      continue;
+    // Hidden decks stay hidden, including their order after a reshuffle.
+    if (b?.zone === "Deck") continue;
+    const p = b || a;
+    if (!p) continue;
+    let label =
+      b?.zone === "Hand"
+        ? "Added to hand"
+        : b?.zone === "Discard"
+          ? "Discarded"
+          : b?.zone === "In play"
+            ? "Entered play"
+            : b?.zone === "Dealt"
+              ? "Dealt face down"
+              : b?.zone === "Removed"
+                ? "Removed from game"
+                : b?.zone || "Revealed";
+    let kind: ReviewCard["kind"] =
+      b?.zone === "Hand"
+        ? "drawn"
+        : b?.zone === "Discard"
+          ? "discarded"
+          : b?.zone === "Dealt"
+            ? "dealt"
+            : "moved";
+    if (a?.zone === b?.zone) {
+      label =
+        b?.exhausted && !a?.exhausted
+          ? "Exhausted"
+          : !b?.exhausted && a?.exhausted
+            ? "Readied"
+            : "Tokens updated";
+      kind = "ability";
+    }
+    if (effect.type === "play" && effect.piece?.id === id) {
+      label = "Played";
+      kind = "played";
+    }
+    cards.push({
+      id,
+      code: p.visible ? p.code : undefined,
+      name: p.visible
+        ? card(p.code).name
+        : p.zone === "Dealt"
+          ? "Facedown encounter"
+          : "Facedown card",
+      label,
+      kind,
+      detail: `${p.owner}${a?.zone !== b?.zone ? ` · ${a?.zone || "Deck"} → ${b?.zone || "Revealed"}` : ""}`,
+    });
+  }
+  const prompt = before.prompt;
+  let payment: ActionReview["payment"];
+  if (effect.type === "PAY" && prompt?.kind === "payment") {
+    const status = paymentStatus(
+      before.paymentSources,
+      effect.ids,
+      prompt.cost || 0,
+      prompt.requirements,
+    );
+    payment = {
+      title: prompt.title,
+      cost: prompt.cost || 0,
+      total: status.total,
+    };
+    for (const p of status.selected) {
+      const index = cards.findIndex((c) => c.id === p.id);
+      if (index >= 0) cards.splice(index, 1);
+      cards.push({
+        id: p.id,
+        code: p.code,
+        name: p.name,
+        label: p.kind === "card" ? "Spent → discard" : "Resource ability used",
+        detail: p.description,
+        kind: p.kind === "card" ? "spent" : "ability",
+        resources: p.resources,
+      });
+    }
+  }
+  const revealing =
+    ["reveal", "revealNext", "revealDealt"].includes(effect.type) &&
+    messages.some((m) =>
+      m.includes(`${effect.skip ? "Resolve" : "Encounter"}:`),
+    ) &&
+    s.lastEncounter;
+  if (revealing) {
+    const index = cards.findIndex(
+      (c) => c.code === s.lastEncounter || c.kind === "dealt",
+    );
+    if (index >= 0) cards.splice(index, 1);
+    cards.unshift({
+      id: "encounter",
+      code: s.lastEncounter,
+      name: card(s.lastEncounter!).name,
+      label: effect.skip ? "Encounter effect" : "Encounter revealed",
+      kind: "revealed",
+      detail: effect.skip
+        ? "Resolving the revealed card"
+        : "Read the card. Its effect waits for Proceed.",
+    });
+  }
+  const a = s.attack || before.attack;
+  const boostCodes =
+    effect.type === "revealBoost" || effect.type === "boostAttack"
+      ? (s.attack?.boostCodes || []).slice(
+          before.attack?.boostCodes.length || 0,
+        )
+      : [];
+  if (effect.type === "enemyScheme") {
+    for (const p of cards.filter(
+      (c) =>
+        c.kind === "discarded" &&
+        c.code &&
+        card(c.code).faction_code === "encounter",
+    ))
+      boostCodes.push(p.code!);
+  }
+  for (const [i, code] of boostCodes.entries()) {
+    const existing = cards.findIndex((c) => c.code === code);
+    if (existing >= 0) cards.splice(existing, 1);
+    cards.unshift({
+      id: `boost-${i}`,
+      code,
+      name: card(code).name,
+      label: `+${card(code).boost || 0} boost`,
+      detail: card(code).boost_star
+        ? "Star ability follows on Proceed"
+        : "Only the boost icons apply",
+      kind: "boost",
+    });
+  }
+  let calculation: ActionReview["calculation"];
+  if (
+    a &&
+    ["revealBoost", "preventAttack", "finishAttack"].includes(effect.type)
+  ) {
+    const boost = a.boostCodes.reduce(
+      (n, code) => n + (card(code).boost || 0),
+      0,
+    );
+    calculation = {
+      label:
+        effect.type === "finishAttack" ? "Attack resolved" : "Incoming damage",
+      parts: [
+        { label: "Base ATK", value: a.base - boost },
+        { label: "Boost", value: boost },
+        { label: "DEF", value: -a.defense },
+        {
+          label: "Prevented",
+          value: -Math.min(a.prevented, Math.max(0, a.base - a.defense)),
+        },
+      ],
+      total: Math.max(0, a.base - a.defense - a.prevented),
+      note:
+        effect.type === "finishAttack"
+          ? "The changes below show damage actually taken, including Tough and other effects."
+          : "Damage has not been applied. Boost abilities, responses and Tough may still change the result.",
+    };
+  }
+  if (!changes.length && !messages.length && !cards.length && !calculation)
+    return;
   const p =
     effect.piece ||
     [...allInPlay(s), s.villain, ...s.minions].find((p) => p.id === effect.id);
@@ -268,13 +523,21 @@ export function recordReview(
     phase: s.phase,
     source:
       effect.sourceCode ||
+      (payment ? before.paymentSubject : undefined) ||
+      (revealing ? s.lastEncounter : undefined) ||
       p?.code ||
-      (["boostAttack", "finishAttack", "defender"].includes(effect.type)
+      before.locations[effect.id]?.code ||
+      (["boostAttack", "revealBoost", "finishAttack", "defender"].includes(
+        effect.type,
+      )
         ? [s.villain, ...s.minions].find((p) => p.id === s.attack?.attacker)
             ?.code
         : undefined) ||
       heroCard(s).code,
     messages,
     changes,
+    cards,
+    payment,
+    calculation,
   };
 }

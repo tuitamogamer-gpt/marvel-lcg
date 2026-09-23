@@ -170,12 +170,38 @@ export interface PlayerSeat {
   eliminated: boolean;
   mulliganDone: boolean;
 }
+export interface ReviewCard {
+  id: string;
+  code?: string;
+  name: string;
+  label: string;
+  detail: string;
+  kind:
+    | "spent"
+    | "drawn"
+    | "discarded"
+    | "played"
+    | "revealed"
+    | "moved"
+    | "ability"
+    | "boost"
+    | "dealt";
+  resources?: Resource[];
+}
 export interface ActionReview {
   id: number;
   title: string;
   actor: string;
   phase: string;
   source?: string;
+  cards?: ReviewCard[];
+  payment?: { title: string; cost: number; total: number };
+  calculation?: {
+    label: string;
+    parts: { label: string; value: number }[];
+    total: number;
+    note: string;
+  };
   messages: string[];
   changes: {
     label: string;

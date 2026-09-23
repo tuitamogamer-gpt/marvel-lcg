@@ -91,7 +91,7 @@ async function settle({ choices = true, mulligans = false } = {}) {
       // Spend all available sources: a real payment through the interface.
       for (let i = 0; i < p.sources.length; i++)
         await page.locator(".payment-source").nth(i).click();
-      await page.getByRole("button", { name: /Spend .* & resolve/ }).click();
+      await page.getByRole("button", { name: "Confirm payment" }).click();
     } else {
       for (let i = 0; i < (p.min || 0); i++)
         await page.locator(".decision-option").nth(i).click();
@@ -156,6 +156,31 @@ try {
   assert.equal((await state()).scheme.limit, 21);
   await screenshot("team-tabletop");
   await audit("battlefield-desktop");
+  // Inspect an alter-ego payment to verify identity resources have card art too.
+  const early = (await state()).hand.find((c) => c.playable && c.cost > 0);
+  if (early) {
+    await page
+      .getByRole("button", { name: `Inspect ${early.name}`, exact: true })
+      .first()
+      .click();
+    await page.getByRole("button", { name: "Play card", exact: true }).click();
+    const scientist = page
+      .locator(".payment-source")
+      .filter({ hasText: "Scientist" });
+    assert.equal(
+      await scientist.locator("img").getAttribute("src"),
+      "/cards/01001b.png",
+    );
+    await scientist.click();
+    assert.equal(await scientist.getAttribute("aria-pressed"), "true");
+    await screenshot("payment-ability");
+    await audit("payment-ability");
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    assert.equal((await state()).hand.length, 6);
+    checks.push(
+      "Scientist has identity artwork and canceling spends no cards or abilities",
+    );
+  }
   await page.getByRole("button", { name: "Suit up" }).click();
   assert.ok((await state()).review);
   assert.equal((await state()).form, "hero");
@@ -203,6 +228,85 @@ try {
     if ((await state()).prompt?.kind === "payment") {
       await screenshot("payment");
       await audit("payment-desktop");
+      const beforePayment = await state();
+      const sources = page.locator(".payment-source");
+      assert.equal(
+        await sources.locator("img").count(),
+        beforePayment.prompt.sources.length,
+      );
+      await page.setViewportSize({ width: 1280, height: 800 });
+      const confirm = page.getByRole("button", {
+        name: "Confirm payment",
+        exact: true,
+      });
+      const bounds = await confirm.boundingBox();
+      assert.ok(
+        bounds.y >= 0 && bounds.y + bounds.height <= 800,
+        "Payment footer stays on screen",
+      );
+      await sources.first().click();
+      const selectedText = await page.locator(".payment-summary").innerText();
+      await page.locator(".resource-zoom").first().click();
+      await screenshot("payment-card-inspection");
+      await page.getByRole("button", { name: "Back to payment" }).click();
+      assert.equal(await sources.first().getAttribute("aria-pressed"), "true");
+      assert.equal(
+        await page.locator(".payment-summary").innerText(),
+        selectedText,
+      );
+      await sources.first().click();
+      assert.equal(await confirm.isDisabled(), true);
+      for (let i = 0; i < beforePayment.prompt.sources.length; i++)
+        await sources.nth(i).click();
+      await screenshot("payment-selected-laptop");
+      await audit("payment-selected-laptop");
+      assert.deepEqual(
+        (await state()).hand,
+        beforePayment.hand,
+        "Selecting resources does not mutate the hand",
+      );
+      await confirm.click();
+      const paid = await state();
+      assert.equal(paid.review.title, "Resources spent");
+      assert.equal(
+        paid.review.cards.filter((c) => c.resources).length,
+        beforePayment.prompt.sources.length,
+      );
+      const proceedBounds = await page
+        .getByRole("button", { name: "Proceed", exact: true })
+        .boundingBox();
+      assert.ok(
+        proceedBounds.y >= 0 && proceedBounds.y + proceedBounds.height <= 800,
+        "Proceed stays visible on a laptop",
+      );
+      await screenshot("payment-receipt-laptop");
+      await audit("payment-receipt-laptop");
+      await page.evaluate(() => window.advanceTime(10000));
+      assert.deepEqual(
+        (await state()).review,
+        paid.review,
+        "Time does not advance an action",
+      );
+      await page
+        .getByRole("button", { name: "View table", exact: true })
+        .click();
+      assert.equal(
+        (await state()).review.id,
+        paid.review.id,
+        "Closing the focus window does not proceed",
+      );
+      await page.getByRole("button", { name: "Open action details" }).click();
+      await page.reload();
+      await page.getByRole("button", { name: /Resume mission/ }).click();
+      assert.deepEqual(
+        (await state()).review,
+        paid.review,
+        "Reload preserves the exact payment receipt",
+      );
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      checks.push(
+        "Full resource artwork, enlargement preserves selections, explicit payment, saved receipt and no timed advancement",
+      );
     }
     await settle();
     checks.push(
