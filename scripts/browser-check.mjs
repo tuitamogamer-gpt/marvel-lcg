@@ -194,9 +194,18 @@ try {
     );
   }
   await page.getByRole("button", { name: "Suit up" }).click();
-  assert.ok((await state()).review);
+  assert.equal((await state()).review, null);
   assert.equal((await state()).form, "hero");
-  await screenshot("identity-review");
+  assert.equal(
+    await page.getByRole("button", { name: "Proceed", exact: true }).count(),
+    0,
+  );
+  await screenshot("hero-after-flip");
+  checks.push("Suit up changes form immediately without a Proceed checkpoint");
+  await page.getByRole("button", { name: /^Attack/ }).click();
+  assert.ok((await state()).review);
+  assert.equal((await state()).villain.hp, 42);
+  await screenshot("attack-review");
   await audit("action-review");
   const saved = await state();
   await page.reload();
@@ -206,9 +215,6 @@ try {
   checks.push(
     "Autosave restores all seats and the exact pending Proceed checkpoint",
   );
-  await settle();
-  await page.getByRole("button", { name: /^Attack/ }).click();
-  assert.equal((await state()).villain.hp, 42);
   await clickProceed();
   assert.equal((await state()).villain.hp, 40);
   await screenshot("damage-review");

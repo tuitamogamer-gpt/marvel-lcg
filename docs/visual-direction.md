@@ -2,6 +2,8 @@
 
 The game combines comic-cover composition with a tactical mission table: ivory paper, dark ink outlines, halftone texture, condensed display lettering, red actions, and yellow emphasis. Individual hero and aspect colors remain meaningful selection cues.
 
+Use soft, rounded silhouettes throughout the interface: 20px panel and dialog corners, 12px controls and card containers, and 8px smaller labels and image frames. Grouped controls share a rounded outer frame; separate buttons keep their own rounded edges. Diffuse shadows give panels depth, while the comic lettering, artwork, colors, and tokens preserve the Marvel character.
+
 ## References and artwork
 
 - [Marvel Champions, Fantasy Flight Games](https://www.fantasyflightgames.com/en/products/marvel-champions-the-card-game/): existing official banner artwork, hero identities, card presentation, and the core-set palette. The banner is cached at `public/art/core-banner.jpg`; card scans retain their existing provenance in `src/data/provenance.json`.
@@ -29,6 +31,8 @@ These automated audits complement visual inspection; they do not constitute comp
 ## Desktop hot-seat and action clarity
 
 A cream-and-yellow focus window opens for each action checkpoint. Card faces occupy the main area; the source, explanation, payment receipt or attack calculation, and before → after values stay alongside them. Proceed and the next-step description remain in a fixed footer, including on 1280×800 laptops. View table returns to the persistent side panel without advancing the game. Card inspection also leaves the step pending. Dialogs render above the navigation through a shared portal. The scrollable action/history regions are keyboard accessible.
+
+The explicit Suit up click immediately changes the identity to hero form and records it in the battle log. It does not open a second confirmation. Any ability triggered by the change, such as She-Hulk's damage, still has its own choice or effect review.
 
 The engine separates encounter revelation from its text, each attack boost from its star ability, and payment from the resulting play. Draws and discards show the actual card identities even if the hand count stays unchanged. Face-down encounter cards show a back until they are revealed. Pending reviews, including their card images and receipt details, survive save/resume.
 

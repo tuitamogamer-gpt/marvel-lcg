@@ -20,6 +20,8 @@ Core encounter effects that refer to each player, each hero, the first player, o
 
 Guided mode records an atomic action's visible changes, then stops the effect queue until `PROCEED`. A choice produced by that action remains pending behind its review. Invalid or premature commands are rejected without advancing the state. Pauses, queued actor context, RNG, and all hero zones survive JSON save/reload. Older solo saves are migrated on load.
 
+An explicit change to hero form skips the identity-change review, so Suit up requires only one click. The form change remains logged, and queued abilities triggered by the change retain their own choices and reviews. Changing back to alter-ego retains its existing review.
+
 Reviews include visible card movements and payment receipts, not just zone counts. Encounter reveal, encounter resolution, each attack boost, its star ability, and attack damage use separate queued steps. Klaw's two attack boosts are individually acknowledged. Typed payment validation is shared between the preview and engine; spent hand cards and resource generators retain distinct identities in the saved receipt. Face-down cards and hidden deck order are not exposed by review metadata.
 
 ## Remaining boundaries
@@ -36,7 +38,7 @@ Reviews include visible card movements and payment receipts, not just zone count
 
 `npm test` runs deterministic rule fixtures plus full seeded missions across the five heroes and three villains, checking that missions terminate and every player card remains accounted for. The smoke strategy is deliberately simple; those simulations test progression and invariants, not balance or an optimal policy.
 
-The current suite has 117 tests, including focused transparency tests for pending paid cards, reloadable payment receipts, rejected typed payments, single-use wild requirements, last-counter resource generators, unchanged-count card replacements, hidden encounters, reveal-before-resolution, star-ability timing, and Klaw's individual boosts.
+The current suite has 118 tests, including focused transparency tests for immediate hero form changes with preserved triggered-effect reviews, pending paid cards, reloadable payment receipts, rejected typed payments, single-use wild requirements, last-counter resource generators, unchanged-count card replacements, hidden encounters, reveal-before-resolution, star-ability timing, and Klaw's individual boosts.
 
 `scripts/browser-check.mjs` tests the real UI: hero selection, deck viewer, collection search, card inspection, mulligan, form change, basic attack, paying for a card, villain-phase progression, save/resume, all three hero turns, teammate defense/actions, shared targeting, paused boost/damage resolution, first-player rotation, and checkpoint save/resume. Desktop layouts are checked at 1280, 1440, and 1920 pixels. Screenshots and the result record are written to `output/hotseat/`.
 

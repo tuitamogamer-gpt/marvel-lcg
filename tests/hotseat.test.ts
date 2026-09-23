@@ -113,7 +113,11 @@ function owned(s: GameState, id: string) {
 describe("guided action checkpoints", () => {
   it("pauses basic attack cost and damage separately and rejects out-of-order actions", () => {
     let s = team(1, true);
-    s = proceed(send(s, { type: "FLIP" }));
+    s = send(s, { type: "FLIP" });
+    expect(s.player.form).toBe("hero");
+    expect(s.review).toBeNull();
+    expect(s.prompt).toBeNull();
+    expect(s.log.at(-1)?.text).toContain("Change form to Spider-Man");
     s = send(s, { type: "BASIC", action: "attack" });
     expect(s.review).not.toBeNull();
     expect(s.player.exhausted).toBe(true);
@@ -127,6 +131,25 @@ describe("guided action checkpoints", () => {
     const hp = s.villain.hp;
     s = proceed(s);
     expect(s.villain.hp).toBe(hp);
+  });
+  it("skips the suit-up review but keeps She-Hulk's triggered damage visible", () => {
+    let s = newGame({
+      heroId: "she_hulk",
+      aspect: "aggression",
+      villainId: "rhino",
+      seed: 56,
+      guided: true,
+    });
+    s = settle(send(s, { type: "MULLIGAN", ids: [] }));
+    const hp = s.villain.hp;
+    s = send(s, { type: "FLIP" });
+    expect(s.player.form).toBe("hero");
+    expect(s.villain.hp).toBe(hp - 2);
+    expect(s.review?.title).toBe("Resolve damage");
+    expect(s.review?.changes).toContainEqual(
+      expect.objectContaining({ label: "Rhino HP", before: hp, after: hp - 2 }),
+    );
+    expect(dispatch(s, { type: "END_TURN" }).error).toMatch(/Proceed/);
   });
   it("a saved villain phase pauses on boosts before dealing damage", () => {
     let s = team(2, true);

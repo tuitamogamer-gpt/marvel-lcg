@@ -294,6 +294,9 @@ export function recordReview(
   effect: Effect,
 ) {
   if (!s.guided) return;
+  // Suiting up is already an explicit click. Any triggered ability still
+  // resolves through its own queued decision or review.
+  if (effect.type === "FLIP" && s.player.form === "hero") return;
   const after = boardSnapshot(s);
   const changes: ActionReview["changes"] = [];
   for (const key of new Set([
