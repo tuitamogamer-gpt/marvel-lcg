@@ -7,6 +7,7 @@ export interface Card {
   faction_code: string;
   set_code?: string;
   text?: string;
+  errata?: { reference: string; url: string };
   traits?: string;
   quantity: number;
   cost?: number;
@@ -90,9 +91,13 @@ export interface Prompt {
 }
 export interface Attack {
   targetPlayerId?: string;
+  originalPlayerId?: string;
+  basicDefense?: boolean;
   attacker: string;
   base: number;
   boostCodes: string[];
+  boostIds?: string[];
+  pendingBoosts?: Piece[];
   boostEffects: Effect[];
   defender?: string;
   defense: number;
@@ -146,6 +151,14 @@ export interface GameState {
     acceleration: number;
   };
   removed: Piece[];
+  resolving: Piece[];
+  scheming?: {
+    attacker: string;
+    boostCodes: string[];
+    boostIds: string[];
+    pendingBoosts: Piece[];
+    extra?: string;
+  };
   prompt: Prompt | null;
   queue: Effect[];
   log: {
@@ -198,6 +211,7 @@ export interface ActionReview {
   payment?: { title: string; cost: number; total: number };
   calculation?: {
     label: string;
+    unit?: "damage" | "threat";
     parts: { label: string; value: number }[];
     total: number;
     note: string;

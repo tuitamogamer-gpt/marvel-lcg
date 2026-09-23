@@ -1,7 +1,31 @@
 import playerData from "../data/core-player.json";
 import encounterData from "../data/core-encounter.json";
+import errata from "../data/core-errata.json";
 import type { Aspect, Card, GameState, Piece, Resource } from "./types";
-export const CARDS = [...playerData, ...encounterData] as Card[];
+// Keep the downloaded snapshots intact; official corrections survive data syncs.
+export const CARDS = ([...playerData, ...encounterData] as Card[]).map((c) => {
+  const correction = errata.find((e) => e.code === c.code);
+  if (correction)
+    return {
+      ...c,
+      text: correction.text,
+      errata: { reference: correction.reference, url: correction.url },
+    };
+  const text = c.text?.replace(
+    /(Surge\.? )<i>\([^<]*additional encounter card[^<]*\)<\/i>/,
+    "$1<i>(When revealed, deal yourself 1 facedown encounter card.)</i>",
+  );
+  return text !== c.text
+    ? {
+        ...c,
+        text,
+        errata: {
+          reference: "FFG Rules Reference 1.8, p. 42",
+          url: errata[0].url.replace("#page=65", "#page=42"),
+        },
+      }
+    : c;
+});
 export const DB = Object.fromEntries(CARDS.map((c) => [c.code, c])) as Record<
   string,
   Card
@@ -296,15 +320,15 @@ export function heroStats(s: GameState) {
 }
 export function handSize(s: GameState) {
   return s.player.form === "hero" && s.heroId === "iron_man"
-    ? Math.min(
-        7,
-        1 +
+    ? heroCard(s).hand_size! +
+        Math.min(
+          6,
           s.player.inPlay.filter(
             (p) =>
               card(p).type_code === "upgrade" &&
               card(p).traits?.includes("Tech."),
           ).length,
-      )
+        )
     : heroCard(s).hand_size!;
 }
 export function pieceHP(s: GameState, p: Piece) {

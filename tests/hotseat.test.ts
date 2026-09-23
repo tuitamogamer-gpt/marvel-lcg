@@ -174,6 +174,12 @@ describe("guided action checkpoints", () => {
     expect(s.review?.title).toBe("Reveal attack boosts");
     expect(s.player.hp).toBe(before);
     s = send(JSON.parse(JSON.stringify(s)), { type: "PROCEED" });
+    expect(s.player.hp).toBe(before);
+    expect(s.review?.title).toBe("Boost resolved · discard card");
+    s = send(s, { type: "PROCEED" });
+    expect(s.review?.title).toBe("Prevent damage or resolve the attack");
+    expect(s.player.hp).toBe(before);
+    s = send(s, { type: "PROCEED" });
     expect(s.player.hp).toBeLessThan(before);
     expect(s.review?.title).toBe("Resolve the attack");
   });

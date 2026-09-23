@@ -3,8 +3,8 @@
 ## Sources
 
 - [FFG Learn to Play](https://images-cdn.fantasyflightgames.com/filer_public/ab/be/abbef836-d5ef-4241-b2bd-1062df73f367/mvc01_learn_to_play_eng-compressed.pdf): core setup, sequence, starter deck recipes, basic powers, and ally use.
-- [FFG Rules Reference v1.7](https://images-cdn.fantasyflightgames.com/filer_public/11/9f/119fdb98-cabe-4de3-8be8-4c4dbcae9d7c/mc_rulesreference_v17-web.pdf): guard, status replacement, hit-point modifiers, hand-size handling, and keyword timing.
-- Exact card text and printed values are preserved in `src/data/core-player.json` and `src/data/core-encounter.json`.
+- [FFG Rules Reference v1.8](https://images-cdn.fantasyflightgames.com/filer_public/ee/30/ee304242-73cd-4f70-bcdd-b904a5fecad5/mc_rulesreference_v18_compressed.pdf): guard, status replacement, hit-point modifiers, hand-size handling, and keyword timing.
+- Downloaded card text and printed values are preserved in `src/data/core-player.json` and `src/data/core-encounter.json`. The runtime applies the official Iron Man correction from `src/data/core-errata.json` and updates printed Surge reminders for RRG 1.8. Card inspection links to the applicable rule; artwork retains its original printing.
 
 ## Automated systems
 
@@ -24,6 +24,17 @@ An explicit change to hero form skips the identity-change review, so Suit up req
 
 Reviews include visible card movements and payment receipts, not just zone counts. Encounter reveal, encounter resolution, each attack boost, its star ability, and attack damage use separate queued steps. Klaw's two attack boosts are individually acknowledged. Typed payment validation is shared between the preview and engine; spent hand cards and resource generators retain distinct identities in the saved receipt. Face-down cards and hidden deck order are not exposed by review metadata.
 
+## Rules Reference 1.8 corrections
+
+All 25 groups from the [core audit](rules-audit-2026-09-23.md) have regression coverage in `tests/rules-v18.test.ts`: the original 51 scenarios and 36 additional interaction, completion, and saved-state checks. This does not constitute exhaustive certification of every core combination.
+
+- Entry/exit resets, Toughness, Quickstrike after When Revealed, Guard across attacks, status priority, consequential damage, surviving-character Retaliate, and separate duplicate Spider-Tracer triggers.
+- Ally-limit and lethal-HP checks after modifiers leave play; dynamic Ultron II ATK uses the originally attacked player's drones. A defeated ally defender redirects the remaining attack to its controller.
+- Events/treacheries remain in a serialized resolving zone until their effects finish. Facedown boosts are dealt before defense, revealed individually, discarded after their star abilities, and supported for both attacks and schemes. Final ATK/DEF and SCH/boost calculations pause before damage or threat is applied.
+- Draw continues after reshuffling; discard-until stops at exhaustion. Futurist keeps looked-at cards in the deck until the choice. Black Cat cannot duplicate a card that already reshuffled.
+- Surge deals a facedown encounter to the back of that player's queue. Printed Surge is canceled with the treachery's When Revealed effects. Under Fire retains its separate immediate reveal; the player chooses the order of its two When Revealed abilities.
+- Additional Legal Practice costs, Focused Rage damage costs, exhausted Vision, Superhuman Strength, hero-only targets, shared Enhanced Spider-Sense, I Object timing, Cosmic Flight damage prevention, Crisis Interdiction's full-resolution requirement, and First Aid's character targets.
+
 ## Remaining boundaries
 
 - One human controls 1–3 hero seats on one device. Each has separate owned zones, resources, health, flags, and minion engagement. Turns, end-of-phase discard/refill/ready, villain activations, hazard distribution, encounter reveal order, first-player rotation, and elimination are implemented. The per-player multiplier retains the starting team size.
@@ -38,7 +49,7 @@ Reviews include visible card movements and payment receipts, not just zone count
 
 `npm test` runs deterministic rule fixtures plus full seeded missions across the five heroes and three villains, checking that missions terminate and every player card remains accounted for. The smoke strategy is deliberately simple; those simulations test progression and invariants, not balance or an optimal policy.
 
-The current suite has 118 tests, including focused transparency tests for immediate hero form changes with preserved triggered-effect reviews, pending paid cards, reloadable payment receipts, rejected typed payments, single-use wild requirements, last-counter resource generators, unchanged-count card replacements, hidden encounters, reveal-before-resolution, star-ability timing, and Klaw's individual boosts.
+The current suite has 205 tests, including focused transparency tests for immediate hero form changes with preserved triggered-effect reviews, pending paid cards, reloadable payment receipts, rejected typed payments, single-use wild requirements, last-counter resource generators, unchanged-count card replacements, hidden encounters, reveal-before-resolution, star-ability timing, and Klaw's individual boosts.
 
 `scripts/browser-check.mjs` tests the real UI: hero selection, deck viewer, collection search, card inspection, mulligan, form change, basic attack, paying for a card, villain-phase progression, save/resume, all three hero turns, teammate defense/actions, shared targeting, paused boost/damage resolution, first-player rotation, and checkpoint save/resume. Desktop layouts are checked at 1280, 1440, and 1920 pixels. Screenshots and the result record are written to `output/hotseat/`.
 

@@ -58,6 +58,7 @@ export function controller(s: GameState, id: string) {
   );
 }
 export function upgradeSave(s: GameState): GameState {
+  s.resolving ||= [];
   if (!s.players?.length) {
     s.players = [
       {

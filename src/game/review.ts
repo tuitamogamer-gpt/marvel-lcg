@@ -47,6 +47,16 @@ function cardLocations(s: GameState) {
   }
   put(s.encounter.deck, "Deck", "Encounter", false);
   put(s.encounter.discard, "Discard");
+  put(s.attack?.pendingBoosts || [], "Facedown boost", "Encounter", false);
+  put(s.scheming?.pendingBoosts || [], "Facedown boost", "Encounter", false);
+  for (const p of s.resolving || []) {
+    const owner = s.players.find((seat) => seat.id === p.ownerId);
+    put(
+      [p],
+      "Resolving",
+      owner ? HEROES.find((h) => h.id === owner.heroId)!.name : "Encounter",
+    );
+  }
   for (const p of s.encounter.dealt) {
     const seat = s.players.find(
       (seat) => seat.id === (p.dealtTo || s.activePlayerId),
@@ -196,6 +206,20 @@ const titles: Record<string, string> = {
   allyConsequence: "Ally consequential damage",
   enemyAttack: "Enemy attack begins",
   enemyScheme: "Enemy schemes",
+  revealSchemeBoost: "Reveal scheme boost",
+  finishScheme: "Calculate scheme threat",
+  surge: "Surge · deal an encounter card",
+  finishResolution: "Card resolution complete",
+  completeBoost: "Boost resolved · discard card",
+  prepareAttackBoosts: "Deal facedown boost cards",
+  futurist: "Futurist · keep one card",
+  minionReactions: "Minion engagement abilities",
+  minionResponses: "Responses to a minion entering play",
+  treacheryText: "Resolve When Revealed ability",
+  resolveHandEvent: "Play a reaction card",
+  allyResponse: "Ally response window",
+  discardForLimit: "Discard an ally to meet the limit",
+  declareDefense: "Prepare to defend",
   defender: "Defender declared",
   boostAttack: "Reveal attack boosts",
   revealBoost: "Reveal attack boosts",
@@ -463,12 +487,9 @@ export function recordReview(
           before.attack?.boostCodes.length || 0,
         )
       : [];
-  if (effect.type === "enemyScheme") {
+  if (effect.type === "revealSchemeBoost") {
     for (const p of cards.filter(
-      (c) =>
-        c.kind === "discarded" &&
-        c.code &&
-        card(c.code).faction_code === "encounter",
+      (c) => c.code && card(c.code).faction_code === "encounter",
     ))
       boostCodes.push(p.code!);
   }
@@ -489,7 +510,9 @@ export function recordReview(
   let calculation: ActionReview["calculation"];
   if (
     a &&
-    ["revealBoost", "preventAttack", "finishAttack"].includes(effect.type)
+    ["revealBoost", "preventAttack", "damageWindow", "finishAttack"].includes(
+      effect.type,
+    )
   ) {
     const boost = a.boostCodes.reduce(
       (n, code) => n + (card(code).boost || 0),
@@ -514,6 +537,30 @@ export function recordReview(
           : "Damage has not been applied. Boost abilities, responses and Tough may still change the result.",
     };
   }
+  if (effect.type === "finishScheme" && s.scheming) {
+    const attacker = [s.villain, ...s.minions].find(
+      (p) => p.id === s.scheming!.attacker,
+    );
+    const base =
+      (attacker ? card(attacker).scheme || 0 : 0) +
+      s.attachments
+        .filter((p) => p.attachedTo === attacker?.id)
+        .reduce((n, p) => n + (card(p).scheme || 0), 0);
+    const boost = s.scheming.boostCodes.reduce(
+      (n, code) => n + (card(code).boost || 0),
+      0,
+    );
+    calculation = {
+      label: "Incoming scheme threat",
+      unit: "threat",
+      parts: [
+        { label: "Base SCH", value: base },
+        { label: "Boost", value: boost },
+      ],
+      total: base + boost,
+      note: "Threat has not been placed. Your interrupts may still reduce or prevent it.",
+    };
+  }
   if (!changes.length && !messages.length && !cards.length && !calculation)
     return;
   const p =
@@ -530,10 +577,20 @@ export function recordReview(
       (revealing ? s.lastEncounter : undefined) ||
       p?.code ||
       before.locations[effect.id]?.code ||
-      (["boostAttack", "revealBoost", "finishAttack", "defender"].includes(
+      ([
+        "boostAttack",
+        "revealBoost",
+        "damageWindow",
+        "finishAttack",
+        "defender",
+      ].includes(effect.type)
+        ? [s.villain, ...s.minions].find((p) => p.id === s.attack?.attacker)
+            ?.code
+        : undefined) ||
+      (["enemyScheme", "revealSchemeBoost", "finishScheme"].includes(
         effect.type,
       )
-        ? [s.villain, ...s.minions].find((p) => p.id === s.attack?.attacker)
+        ? [s.villain, ...s.minions].find((p) => p.id === s.scheming?.attacker)
             ?.code
         : undefined) ||
       heroCard(s).code,

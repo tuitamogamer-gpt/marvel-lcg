@@ -1044,6 +1044,20 @@ export default function App() {
                 {plain(card(inspect.code).text) ||
                   "A resource card. Spend it when paying a resource cost."}
               </p>
+              {card(inspect.code).errata && (
+                <p className="hint">
+                  Updated card text ·{" "}
+                  <a
+                    className="text-link"
+                    href={card(inspect.code).errata!.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {card(inspect.code).errata!.reference}
+                  </a>
+                  . The card image shows the original printing.
+                </p>
+              )}
               <div className="inspect-resources">
                 <ResourceIcons items={resources(card(inspect.code))} />
                 <span>{card(inspect.code).traits}</span>
@@ -1744,7 +1758,9 @@ function ReviewDetails({
               <span>{review.calculation.label}</span>
               <b>
                 {review.calculation.total}
-                <small>DAMAGE</small>
+                <small>
+                  {(review.calculation.unit || "damage").toUpperCase()}
+                </small>
               </b>
             </div>
             <div className="calculation-parts">

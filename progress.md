@@ -56,3 +56,18 @@ Original prompt: I want to create fully playable and scripted Marvel Champions L
 - Hero form changes now return control immediately and remain visible in the battle log. Queued triggered abilities retain their separate choices/reviews; a She-Hulk regression verifies her damage review still blocks premature continuation.
 - Added shared radii for panels, dialogs, controls, card frames, labels, and grouped selectors. Rounded the cover-art boundary and softened panel/button shadows while retaining the Marvel typography, artwork, and palette.
 - Local validation: 118 engine tests and the production build passed. The real three-hero UI reaches round 2 through 54 acknowledged steps, explicitly verifies immediate suit-up, and restores a pending attack checkpoint after reload. Ten flow and ten design accessibility audits report zero violations; eight desktop design layouts pass without browser errors. Standard web-game client completed; lobby, tabletop, and selected-payment screenshots were visually inspected.
+
+## Core rules audit — 2026-09-23
+
+- User requested an engine/rules audit focused on keywords, errata, edge cases, and interactions. Reviewed commit `d05b2b15383cf800f4e6e8afbe08f89d63b22452`; no engine/UI edits or deployment were made for this audit.
+- FFG now publishes Rules Reference 1.8 (July 2026); project coverage documentation still cites 1.7. Verified official changes to Surge, Overkill, timing, and Iron Man wording.
+- Existing 118 tests pass. Added an isolated audit harness under ignored `output/rules-audit/`: 51 targeted scenarios yield 12 passes, 39 rule mismatches, and zero fixture errors. This adversarial sample is not an overall correctness percentage.
+- Findings, source pages, engine locations, evidence and repair order are documented in `docs/rules-audit-2026-09-23.md`. Top issues: stale card state on re-entry, Toughness/status handling, missing defender damage, attack/boost timing, premature discards, deck exhaustion, and Surge sequencing/cancellation.
+- Required next work is to repair the audited failures and promote each repaired scenario into the regular regression suite; the findings are not yet fixes. Preserve manual action reviews and the requested immediate hero-form flip.
+
+## Rules Reference 1.8 repairs — 2026-09-23
+
+- User authorized repairing all findings. Fixed all 25 audited groups; promoted all 51 audit scenarios to regular tests and added 36 completion/interaction/save checks. All 205 tests pass locally.
+- Added serialized resolving cards and facedown boost queues; corrected entry/exit state, Toughness, Quickstrike, Guard, Retaliate/consequential damage, ally-limit and HP checks, discard exhaustion, Futurist, Surge sequencing/cancellation, costs, targets, and card-specific fallbacks.
+- Added final attack and scheme calculations before Proceed, with explicit threat units; ordinary suit-up remains immediate. Official Iron Man text and Surge reminders survive future card-data refreshes and link to FFG in card inspection.
+- Final local validation: all 205 tests, production build, formatting and diff checks pass. Three-hero browser flow reaches round 2 through 68 acknowledged steps; 10 accessibility audits report zero violations and no browser errors. Focused browser checks verify Under Fire ordering, hidden Surge/save restoration, visual Legal Practice costs, scheme math before Proceed, and corrected Iron Man text. The standard skill client and screenshots were inspected. Push/deployment verification follows.

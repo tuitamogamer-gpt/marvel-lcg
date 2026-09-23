@@ -238,6 +238,12 @@ describe("visible encounters and boosts", () => {
     expect(s.review?.title).toBe("Resolve boost ability");
     expect(s.player.hp).toBe(hp);
     s = send(s, { type: "PROCEED" });
+    expect(s.review?.title).toBe("Boost resolved · discard card");
+    expect(s.player.hp).toBe(hp);
+    s = send(s, { type: "PROCEED" });
+    expect(s.review?.title).toBe("Prevent damage or resolve the attack");
+    expect(s.player.hp).toBe(hp);
+    s = send(s, { type: "PROCEED" });
     expect(s.player.hp).toBe(hp - 2);
   });
 
@@ -248,6 +254,9 @@ describe("visible encounters and boosts", () => {
     const hp = s.player.hp;
     s = fixture(s, { type: "boostAttack" });
     expect(s.attack?.boostCodes).toHaveLength(1);
+    expect(s.player.hp).toBe(hp);
+    s = send(s, { type: "PROCEED" });
+    expect(s.review?.title).toBe("Boost resolved · discard card");
     expect(s.player.hp).toBe(hp);
     s = send(s, { type: "PROCEED" });
     expect(s.attack?.boostCodes).toHaveLength(2);
