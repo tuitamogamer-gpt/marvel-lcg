@@ -109,6 +109,8 @@ export interface Attack {
   isVillain: boolean;
 }
 export interface GameState {
+  /** Presentation events from the latest command; never used by the rules. */
+  combatEvents?: CombatEvent[];
   version: 1;
   seed: number;
   nextId: number;
@@ -173,6 +175,12 @@ export interface GameState {
   lastEncounter?: string;
   result?: string;
   error?: string;
+}
+export interface CombatEvent {
+  attacker: { code: string; name: string };
+  target: { code: string; name: string };
+  blocked: boolean;
+  enemy: boolean;
 }
 export interface PlayerSeat {
   id: string;

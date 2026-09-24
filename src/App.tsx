@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CardPreview } from "./CardPreview";
+import { CombatCinematic } from "./CombatCinematic";
 import { createPortal } from "react-dom";
 import type { CSSProperties, ReactNode } from "react";
 import {
@@ -81,6 +83,7 @@ import { paymentStatus, paymentSubject } from "./game/payment";
 import { attachmentsFor, attackContext } from "./game/presentation";
 import type {
   ActionReview,
+  CombatEvent,
   Aspect,
   Command,
   GameState,
@@ -138,7 +141,11 @@ function CardImage({
     card(code)?.type_code,
   );
   return (
-    <div className={`card-image ${className}`} onClick={onClick}>
+    <div
+      className={`card-image ${className}`}
+      data-card-preview={code}
+      onClick={onClick}
+    >
       {!failed ? (
         <>
           <img
@@ -351,6 +358,12 @@ const fanCards: Record<string, [string, string]> = {
   she_hulk: ["01021", "01028"],
 };
 export default function App() {
+  const [combat, setCombat] = useState<{
+    id: number;
+    events: CombatEvent[];
+  } | null>(null);
+  const combatId = useRef(0);
+  const finishCombat = useCallback(() => setCombat(null), []);
   const [screen, setScreen] = useState<Screen>("lobby");
   const [game, setGame] = useState<GameState | null>(readSave);
   const [team, setTeam] = useState<{ heroId: string; aspect: Aspect }[]>([
@@ -469,9 +482,12 @@ export default function App() {
       return;
     }
     setGame(next);
+    if (next.combatEvents?.length)
+      setCombat({ id: ++combatId.current, events: next.combatEvents });
     tone();
   }
   function start() {
+    setCombat(null);
     setGame(
       newGame({
         heroId: hero.id,
@@ -685,7 +701,11 @@ export default function App() {
                     aria-label={`Configure hero ${i + 1}: ${h.name}`}
                   >
                     <span className="seat-number">0{i + 1}</span>
-                    <img src={imageFor(h.code)} alt="" />
+                    <img
+                      data-card-preview={h.code}
+                      src={imageFor(h.code)}
+                      alt=""
+                    />
                     <span>
                       <b>{h.name}</b>
                       <small>
@@ -733,7 +753,11 @@ export default function App() {
                     aria-pressed={hero.id === h.id}
                   >
                     <div className="portrait">
-                      <img src={imageFor(h.code)} alt={h.name} />
+                      <img
+                        data-card-preview={h.code}
+                        src={imageFor(h.code)}
+                        alt={h.name}
+                      />
                     </div>
                     {hero.id === h.id && (
                       <span className="selected-check">
@@ -861,7 +885,12 @@ export default function App() {
               </div>
               <div className="mission-preview">
                 <div className="mission-portrait">
-                  <img src={imageFor(villain.codes[0])} alt={villain.name} />
+                  <img
+                    data-card-preview={villain.codes[0]}
+                    tabIndex={0}
+                    src={imageFor(villain.codes[0])}
+                    alt={villain.name}
+                  />
                 </div>
                 <div className="mission-info">
                   <span className="small-label">{villain.location}</span>
@@ -986,6 +1015,66 @@ export default function App() {
                 your unique abilities.
               </p>
             </article>
+          </section>
+          <section
+            className="official-resources"
+            aria-labelledby="official-resources-title"
+          >
+            <div className="official-resources-heading">
+              <BookOpen size={26} weight="duotone" />
+              <div>
+                <span className="small-label">FROM THE ORIGINAL CREATORS</span>
+                <h2 id="official-resources-title">
+                  THE GAME BEHIND THE HEROES.
+                </h2>
+              </div>
+            </div>
+            <nav aria-label="Official Marvel Champions resources">
+              <a
+                href="https://images-cdn.fantasyflightgames.com/filer_public/ab/be/abbef836-d5ef-4241-b2bd-1062df73f367/mvc01_learn_to_play_eng-compressed.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <BookOpen size={21} />
+                <span>
+                  <b>Learn to Play</b>
+                  <small>Official introductory rulebook · PDF</small>
+                </span>
+                <ArrowUpRight size={18} />
+              </a>
+              <a
+                href="https://www.fantasyflightgames.com/en/products/marvel-champions-the-card-game/#support-section"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ListBullets size={21} />
+                <span>
+                  <b>Official rules &amp; updates</b>
+                  <small>Rules Reference and current rulings · FFG</small>
+                </span>
+                <ArrowUpRight size={18} />
+              </a>
+              <a
+                href="https://www.fantasyflightgames.com/en/products/marvel-champions-the-card-game/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Cards size={21} />
+                <span>
+                  <b>Discover the original game</b>
+                  <small>Marvel Champions: The Card Game · FFG</small>
+                </span>
+                <ArrowUpRight size={18} />
+              </a>
+            </nav>
+            <p className="fan-project-note">
+              <strong>An unofficial fan project.</strong> Made out of love for
+              Marvel Champions. This project is not affiliated with, endorsed
+              by, or sponsored by Marvel, Fantasy Flight Games, or Asmodee. Card
+              artwork, characters, names, and game content belong to their
+              respective owners. Support the creators by playing the original
+              tabletop game.
+            </p>
           </section>
           <footer className="footer">
             <span>Built for the love of the game.</span>
@@ -1152,6 +1241,7 @@ export default function App() {
                     .map(([code, n]) => (
                       <button
                         key={code}
+                        data-card-preview={code}
                         onClick={() => {
                           setDeckView(false);
                           setInspect({ code });
@@ -1253,6 +1343,14 @@ export default function App() {
             </div>
           </Modal>
         )}
+      <CardPreview />
+      {screen === "game" && combat && (
+        <CombatCinematic
+          key={combat.id}
+          events={combat.events}
+          onComplete={finishCombat}
+        />
+      )}
       {(toast || storageError) && (
         <div className="toast" role="alert">
           <Info size={20} />
@@ -1648,7 +1746,13 @@ function Decision({
                 aria-pressed={selected.includes(o.id)}
                 onClick={() => toggle(o.id)}
               >
-                {o.image && <img src={imageFor(o.image)} alt="" />}
+                {o.image && (
+                  <img
+                    data-card-preview={o.image}
+                    src={imageFor(o.image)}
+                    alt=""
+                  />
+                )}
                 <span>
                   <strong>{o.label}</strong>
                   <small>{o.detail}</small>
@@ -1682,7 +1786,13 @@ function Decision({
               className="decision-option"
               onClick={() => send({ type: "CHOOSE", id: o.id })}
             >
-              {o.image && <img src={imageFor(o.image)} alt="" />}
+              {o.image && (
+                <img
+                  data-card-preview={o.image}
+                  src={imageFor(o.image)}
+                  alt=""
+                />
+              )}
               <span>
                 <strong>{o.label}</strong>
                 {o.detail && <small>{o.detail}</small>}
@@ -1715,7 +1825,11 @@ function PremiumToken({
 
 function CardBack({ kind }: { kind: "hero" | "encounter" }) {
   return (
-    <span className={`premium-card-back back-${kind}`} aria-hidden="true">
+    <span
+      className={`premium-card-back back-${kind}`}
+      data-card-preview={`back:${kind}`}
+      aria-hidden="true"
+    >
       <span className="card-back-mark">MARVEL</span>
     </span>
   );
@@ -1936,6 +2050,7 @@ function ReviewDetails({
               onClick={() => inspect({ code: review.source! })}
             >
               <img
+                data-card-preview={review.source}
                 src={imageFor(review.source)}
                 alt={card(review.source).name}
               />
@@ -2552,7 +2667,7 @@ function Tabletop({
                 }}
                 aria-label={`View ${h.name}${current ? ", active hero" : ""}`}
               >
-                <img src={imageFor(h.code)} alt="" />
+                <img data-card-preview={h.code} src={imageFor(h.code)} alt="" />
                 <div className="team-seat-copy">
                   <span className="team-seat-state">
                     {seat.eliminated
@@ -2991,7 +3106,11 @@ function Tabletop({
                   className={`identity-resource ${s.flags.scientist ? "used" : ""}`}
                 >
                   <div className="scientist-art" aria-hidden="true">
-                    <img src={imageFor("01001b")} alt="" />
+                    <img
+                      data-card-preview="01001b"
+                      src={imageFor("01001b")}
+                      alt=""
+                    />
                   </div>
                   <div className="scientist-copy">
                     <span className="ability-kicker">
@@ -3525,7 +3644,11 @@ function Tabletop({
                     sendAction({ type: "PLAY", id: p.id });
                   }}
                 >
-                  <img src={imageFor(p.code)} alt="" />
+                  <img
+                    data-card-preview={p.code}
+                    src={imageFor(p.code)}
+                    alt=""
+                  />
                   <span>
                     <strong>Play {card(p).name}</strong>
                     <small>

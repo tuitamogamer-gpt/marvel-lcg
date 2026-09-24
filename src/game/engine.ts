@@ -44,6 +44,7 @@ import {
   mergeReviews,
 } from "./review";
 import { paymentSources, paymentStatus } from "./payment";
+import { combatCharacter, recordCombat } from "./combat";
 export { paymentSources } from "./payment";
 export const SAVE_KEY = "champions.save.v1";
 const E = (type: string, args: Record<string, any> = {}): Effect => ({
@@ -910,7 +911,10 @@ function attackAction(
     log(s, "The attack has no eligible target.");
     return;
   }
+  const attacker = combatCharacter(s, source);
+  const defender = combatCharacter(s, target);
   dealDamage(s, target, n, source, true, overkill, panther);
+  recordCombat(s, attacker, defender, target, false);
   if (source === "hero") {
     const strengths = s.player.inPlay.filter((p) => p.code === "01028");
     for (const st of strengths) {
@@ -2327,6 +2331,8 @@ function finishAttack(s: GameState) {
   if (!a) return;
   const p = find(s, a.attacker);
   const target = a.defender && a.defender !== "none" ? a.defender : "hero";
+  const visualAttacker = combatCharacter(s, a.attacker);
+  const visualTarget = combatCharacter(s, target);
   const damage = Math.max(0, a.base - a.defense - a.prevented);
   const before =
     target === "hero"
@@ -2344,6 +2350,7 @@ function finishAttack(s: GameState) {
   a.damage = wasTough ? 0 : Math.min(before, damage);
   if (a.overkill && target !== "hero" && damage > before && !wasTough)
     dealDamage(s, "hero", damage - before, a.attacker);
+  recordCombat(s, visualAttacker, visualTarget, target, true);
   if (s.phase === "lost" || s.phase === "won") return;
   if (
     target === "hero" &&
@@ -4301,6 +4308,7 @@ function run(s: GameState) {
 }
 export function dispatch(state: GameState, command: Command): GameState {
   const s = upgradeSave(structuredClone(state));
+  s.combatEvents = [];
   delete s.error;
   try {
     if (

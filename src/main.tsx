@@ -17,6 +17,7 @@ import "./tabletop.css";
 import "./action-ui.css";
 import "./premium-tabletop.css";
 import "./champions-theme.css";
+import "./comic-effects.css";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />
