@@ -45,8 +45,8 @@ export function CardPreview() {
       );
     };
     const open = (next: HTMLElement | null) => {
-      clear();
       if (!next) return;
+      clear();
       if (anchor === next && shown) return;
       anchor = next;
       setPreview(null);

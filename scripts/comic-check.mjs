@@ -143,6 +143,10 @@ try {
   await page.getByRole("tooltip").hover();
   await page.waitForTimeout(300);
   assert.equal(await page.getByRole("tooltip").count(), 1);
+  await page.mouse.move(0, 0);
+  await page.waitForTimeout(300);
+  assert.equal(await page.getByRole("tooltip").count(), 0);
+  checks.push("Leaving both the card and its preview dismisses the popup");
   await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 390, height: 844 });
   await preview(
