@@ -111,7 +111,7 @@ function owned(s: GameState, id: string) {
   return pieces.filter((p) => p.ownerId === id && p.code !== "drone");
 }
 describe("guided action checkpoints", () => {
-  it("pauses basic attack cost and damage separately and rejects out-of-order actions", () => {
+  it("groups basic attack cost and damage in one review and rejects out-of-order actions", () => {
     let s = team(1, true);
     s = send(s, { type: "FLIP" });
     expect(s.player.form).toBe("hero");
@@ -121,10 +121,9 @@ describe("guided action checkpoints", () => {
     s = send(s, { type: "BASIC", action: "attack" });
     expect(s.review).not.toBeNull();
     expect(s.player.exhausted).toBe(true);
-    expect(s.villain.hp).toBe(14);
-    expect(dispatch(s, { type: "END_TURN" }).error).toMatch(/Proceed/);
-    s = send(JSON.parse(JSON.stringify(s)), { type: "PROCEED" });
     expect(s.villain.hp).toBe(12);
+    expect(dispatch(s, { type: "END_TURN" }).error).toMatch(/Proceed/);
+    expect(JSON.parse(JSON.stringify(s)).review).toEqual(s.review);
     expect(
       s.review?.changes.some((c) => c.before === 14 && c.after === 12),
     ).toBe(true);
@@ -169,17 +168,10 @@ describe("guided action checkpoints", () => {
     expect(s.prompt?.title).toMatch(/attacks/);
     const before = s.player.hp;
     s = send(s, { type: "CHOOSE", id: "take" });
-    for (let i = 0; i < 20 && s.review?.title !== "Reveal attack boosts"; i++)
-      s = send(s, { type: "PROCEED" });
-    expect(s.review?.title).toBe("Reveal attack boosts");
+    expect(s.review?.title).toBe("Prevent damage or resolve the attack");
+    expect(s.review?.cards?.some((c) => c.kind === "boost")).toBe(true);
     expect(s.player.hp).toBe(before);
     s = send(JSON.parse(JSON.stringify(s)), { type: "PROCEED" });
-    expect(s.player.hp).toBe(before);
-    expect(s.review?.title).toBe("Boost resolved · discard card");
-    s = send(s, { type: "PROCEED" });
-    expect(s.review?.title).toBe("Prevent damage or resolve the attack");
-    expect(s.player.hp).toBe(before);
-    s = send(s, { type: "PROCEED" });
     expect(s.player.hp).toBeLessThan(before);
     expect(s.review?.title).toBe("Resolve the attack");
   });
@@ -266,7 +258,7 @@ describe("hot-seat turn structure", () => {
     let t = team();
     t.sideSchemes.push(makePiece(t, "01107"));
     t.guided = true;
-    t = send(fixture(t, { type: "dealEncounters" }), { type: "PROCEED" });
+    t = fixture(t, { type: "dealEncounters" });
     expect(t.review?.title).toBe("Deal encounter cards");
     expect(t.encounter.dealt.map((p) => p.dealtTo)).toEqual([
       "p1",

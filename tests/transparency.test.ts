@@ -35,7 +35,7 @@ function fixture(s: GameState, ...effects: Effect[]) {
     options: [{ id: "start", label: "Start", effects }],
   };
   s = send(s, { type: "CHOOSE", id: "start" });
-  return send(s, { type: "PROCEED" });
+  return s;
 }
 function attack(s: GameState) {
   s.player.form = "hero";
@@ -61,13 +61,15 @@ describe("visible payments and manual checkpoints", () => {
     s.player.form = "hero";
     s.player.inPlay = [makePiece(s, "01006")];
     s = fixture(s, { type: "enemyAttack", id: s.villain.id });
-    expect(s.review?.cards?.some((p) => p.kind === "drawn")).toBe(true);
-    expect(s.review?.attack?.target).toMatchObject({
+    expect(s.prompt?.context?.cards?.some((p) => p.kind === "drawn")).toBe(
+      true,
+    );
+    expect(s.prompt?.context?.attack?.target).toMatchObject({
       code: "01001a",
       name: "Spider-Man",
       playerId: "p1",
     });
-    expect(s.review?.attack?.attacker.code).toBe(s.villain.code);
+    expect(s.prompt?.context?.attack?.attacker.code).toBe(s.villain.code);
   });
 
   it("keeps a defeated ally in the attack recap with the hero it protected", () => {
@@ -111,7 +113,7 @@ describe("visible payments and manual checkpoints", () => {
     expect(attachmentsFor(s, "missing")).toEqual([]);
   });
 
-  it("shows the exact cards and ability paid, saving the receipt before the purchased card resolves", () => {
+  it("combines the exact payment receipt and played card into one saved review", () => {
     let s = game();
     const target = makePiece(s, "01066"),
       resource = makePiece(s, "01088");
@@ -140,11 +142,11 @@ describe("visible payments and manual checkpoints", () => {
         }),
       ]),
     );
-    expect(s.player.hand.map((p) => p.id)).toContain(target.id);
-    expect(s.player.inPlay.map((p) => p.id)).not.toContain(target.id);
+    expect(s.player.hand.map((p) => p.id)).not.toContain(target.id);
+    expect(s.player.inPlay.map((p) => p.id)).toContain(target.id);
     const saved = JSON.parse(JSON.stringify(s));
     expect(dispatch(saved, { type: "FLIP" }).error).toMatch(/Proceed/);
-    s = send(saved, { type: "PROCEED" });
+    expect(saved.review.payment).toEqual(s.review?.payment);
     expect(s.player.inPlay.map((p) => p.id)).toContain(target.id);
     expect(s.review?.cards).toContainEqual(
       expect.objectContaining({ id: target.id, kind: "played" }),
@@ -178,7 +180,7 @@ describe("visible payments and manual checkpoints", () => {
     ).toBe(true);
     s = send(s, { type: "PAY", ids: [mental.id] });
     expect(s.review?.payment?.total).toBe(2);
-    expect(s.scheme.threat).toBe(0);
+    expect(s.scheme.threat).toBe(1);
   });
 
   it("does not count a single wild twice and identifies a last Web-Shooter counter as an ability", () => {
@@ -294,30 +296,24 @@ describe("visible encounters and boosts", () => {
     expect(s.review?.title).toBe("Resolve boost ability");
     expect(s.player.hp).toBe(hp);
     s = send(s, { type: "PROCEED" });
-    expect(s.review?.title).toBe("Boost resolved · discard card");
-    expect(s.player.hp).toBe(hp);
-    s = send(s, { type: "PROCEED" });
     expect(s.review?.title).toBe("Prevent damage or resolve the attack");
     expect(s.player.hp).toBe(hp);
     s = send(s, { type: "PROCEED" });
     expect(s.player.hp).toBe(hp - 2);
   });
 
-  it("reveals Klaw's two boosts separately before applying damage", () => {
+  it("shows both ordinary Klaw boosts in one calculation before applying damage", () => {
     let s = game("klaw");
     attack(s);
-    s.encounter.deck.unshift(makePiece(s, "01099"), makePiece(s, "01103"));
+    s.encounter.deck.unshift(makePiece(s, "01101"), makePiece(s, "01103"));
     const hp = s.player.hp;
     s = fixture(s, { type: "boostAttack" });
-    expect(s.attack?.boostCodes).toHaveLength(1);
-    expect(s.player.hp).toBe(hp);
-    s = send(s, { type: "PROCEED" });
-    expect(s.review?.title).toBe("Boost resolved · discard card");
-    expect(s.player.hp).toBe(hp);
-    s = send(s, { type: "PROCEED" });
     expect(s.attack?.boostCodes).toHaveLength(2);
-    expect(s.review?.cards?.filter((c) => c.kind === "boost")).toHaveLength(1);
-    expect(s.review?.calculation?.total).toBe(6);
+    expect(s.review?.cards?.filter((c) => c.kind === "boost")).toHaveLength(2);
+    expect(s.review?.title).toBe("Prevent damage or resolve the attack");
     expect(s.player.hp).toBe(hp);
+    const total = s.review!.calculation!.total;
+    s = send(JSON.parse(JSON.stringify(s)), { type: "PROCEED" });
+    expect(s.player.hp).toBe(hp - total);
   });
 });

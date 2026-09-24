@@ -204,7 +204,7 @@ try {
   checks.push("Suit up changes form immediately without a Proceed checkpoint");
   await page.getByRole("button", { name: /^Attack/ }).click();
   assert.ok((await state()).review);
-  assert.equal((await state()).villain.hp, 42);
+  assert.equal((await state()).villain.hp, 40);
   await screenshot("attack-review");
   await audit("action-review");
   const saved = await state();
@@ -220,7 +220,7 @@ try {
   await screenshot("damage-review");
   await settle();
   checks.push(
-    "Basic attack pauses before damage and reports 42 → 40 villain HP",
+    "Basic attack combines exhaustion and 42 → 40 villain HP in one saved review",
   );
   await page.getByRole("button", { name: /View Captain Marvel/ }).click();
   assert.match(await page.locator(".identity-info h2").innerText(), /Carol/);
@@ -285,7 +285,7 @@ try {
       );
       await confirm.click();
       const paid = await state();
-      assert.equal(paid.review.title, "Resources spent");
+      assert.ok(paid.review.payment);
       assert.equal(
         paid.review.cards.filter((c) => c.resources).length,
         beforePayment.prompt.sources.length,
@@ -371,7 +371,7 @@ try {
   await page.locator(".decision-option").nth(other).click();
   for (let n = 0; n < 15; n++) {
     const s = await state();
-    if (s.review?.title === "Reveal attack boosts") break;
+    if (s.review?.calculation) break;
     await clickProceed();
   }
   const boostImage = page.locator(".review-focus .review-card img").first();

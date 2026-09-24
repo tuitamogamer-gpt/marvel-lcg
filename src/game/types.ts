@@ -74,6 +74,7 @@ export interface Option {
   effects: Effect[];
 }
 export interface Prompt {
+  context?: ActionReview;
   kind: "choice" | "payment" | "select";
   title: string;
   text: string;
@@ -224,6 +225,7 @@ export interface ActionReview {
   };
   messages: string[];
   changes: {
+    key?: string;
     label: string;
     before: string | number;
     after: string | number;

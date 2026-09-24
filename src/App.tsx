@@ -32,6 +32,10 @@ import {
   Warning,
   X,
   MagnifyingGlass,
+  Atom,
+  Spiral,
+  StarFour,
+  ShootingStar,
   Brain,
   Star,
   SpeakerHigh,
@@ -90,9 +94,9 @@ type Inspect = {
 };
 const resIcon = {
   energy: Lightning,
-  mental: Brain,
+  mental: Atom,
   physical: Fist,
-  wild: Star,
+  wild: StarFour,
 };
 const aspectStyle = (color: string) => ({ "--accent": color }) as CSSProperties;
 function ResourceIcons({ items }: { items: Resource[] }) {
@@ -275,35 +279,49 @@ function Status({
 }: {
   piece: { tough?: boolean; stunned?: boolean; confused?: boolean };
 }) {
+  const statuses = [
+    {
+      key: "tough",
+      name: "Tough",
+      Icon: ShieldCheck,
+      hint: "Prevent next damage",
+      rule: "Prevents the next instance of damage, then discard this status.",
+    },
+    {
+      key: "stunned",
+      name: "Stunned",
+      Icon: ShootingStar,
+      hint: "Skip next attack",
+      rule: "Your next attack removes this status instead of attacking. Pay its costs as usual.",
+    },
+    {
+      key: "confused",
+      name: "Confused",
+      Icon: Spiral,
+      hint: "Skip next THW / SCH",
+      rule: "Your next thwart or scheme removes this status instead. Pay its costs as usual.",
+    },
+  ] as const;
   return (
     <span className="statuses">
-      {piece.tough && (
-        <span
-          className="tough"
-          title="Prevents the next instance of damage, then discard this status."
-        >
-          <ShieldCheck size={13} weight="fill" />
-          Tough
-        </span>
-      )}
-      {piece.stunned && (
-        <span
-          className="stunned"
-          title="Your next attack removes this status instead of attacking."
-        >
-          <Lightning size={13} weight="fill" />
-          Stunned
-        </span>
-      )}
-      {piece.confused && (
-        <span
-          className="confused"
-          title="Your next thwart or scheme removes this status instead."
-        >
-          <Brain size={13} weight="fill" />
-          Confused
-        </span>
-      )}
+      {statuses
+        .filter(({ key }) => piece[key])
+        .map(({ key, name, Icon, hint, rule }) => (
+          <span
+            className={`status-card ${key}`}
+            key={key}
+            title={rule}
+            aria-label={`${name}: ${rule}`}
+          >
+            <span className="status-emblem">
+              <Icon size={23} weight="bold" />
+            </span>
+            <span className="status-copy">
+              <b>{name}</b>
+              <small>{hint}</small>
+            </span>
+          </span>
+        ))}
     </span>
   );
 }
@@ -1015,6 +1033,7 @@ export default function App() {
           key={`${game.prompt.title}-${game.prompt.kind}-${game.nextId}`}
           game={game}
           send={send}
+          inspect={setInspect}
         />
       )}
       {endTurn && game && (
@@ -1380,7 +1399,7 @@ function PaymentDecision({
         </span>
         <ChevronRight size={14} />
         <span>
-          <b>3</b> Review & proceed
+          <b>3</b> Resolve action
         </span>
       </div>
       <div className="payment-workspace">
@@ -1414,8 +1433,8 @@ function PaymentDecision({
             </div>
           )}
           <p>
-            The card’s effect waits until you review the payment and click
-            Proceed.
+            Confirm payment to play the card. Your resources and the result
+            appear together in the action summary.
           </p>
         </aside>
         <section
@@ -1584,9 +1603,11 @@ function PaymentDecision({
 function Decision({
   game: s,
   send,
+  inspect,
 }: {
   game: GameState;
   send: (c: Command) => void;
+  inspect: (c: Inspect) => void;
 }) {
   const p = s.prompt!;
   const [selected, setSelected] = useState<string[]>([]);
@@ -1600,6 +1621,7 @@ function Decision({
   return (
     <Modal
       title={p.title}
+      className={s.attack ? "attack-decision" : ""}
       eyebrow={
         s.phase === "villain"
           ? `${HEROES.find((h) => h.id === s.heroId)!.name.toUpperCase()} · YOUR RESPONSE`
@@ -1608,7 +1630,11 @@ function Decision({
       onClose={p.cancelable ? () => send({ type: "CANCEL" }) : undefined}
     >
       <p className="modal-intro">{p.text}</p>
-      <AttackParticipants attack={attackContext(s)} />
+      {p.context ? (
+        <ReviewDetails review={p.context} inspect={inspect} decision />
+      ) : (
+        <AttackParticipants attack={attackContext(s)} inspect={inspect} />
+      )}
       {p.kind === "select" ? (
         <>
           <div className="decision-options">
@@ -1742,8 +1768,10 @@ function AttackParticipants({
 function ReviewDetails({
   review,
   inspect,
+  decision = false,
 }: {
   review: ActionReview;
+  decision?: boolean;
   inspect: (c: Inspect) => void;
 }) {
   const participantSource =
@@ -1758,11 +1786,27 @@ function ReviewDetails({
     <div
       className={`review-details ${review.cards?.length ? "has-cards" : ""} ${review.cards?.length === 1 ? "one-card" : ""} ${review.attack ? "attack-review" : ""}`}
     >
-      <div className="review-explanation">
-        <div className="resolution-paused" role="status">
-          <Clock size={14} /> Step {review.id} · waiting for your Proceed
+      {review.attack && (
+        <div className="review-combat">
+          <AttackParticipants attack={review.attack} inspect={inspect} />
+          {messages.length > 0 && (
+            <ul className="review-messages">
+              {messages.map((m, i) => (
+                <li key={i}>{m}</li>
+              ))}
+            </ul>
+          )}
         </div>
-        <AttackParticipants attack={review.attack} inspect={inspect} />
+      )}
+      <div className="review-explanation">
+        {!decision && (
+          <div className="resolution-paused" role="status">
+            <CheckCircle size={14} />{" "}
+            {review.calculation?.label.startsWith("Incoming")
+              ? "Review before resolving"
+              : "Action summary"}
+          </div>
+        )}
         {review.source && !participantSource && (
           <div className="review-source">
             <button
@@ -1786,7 +1830,7 @@ function ReviewDetails({
             </span>
           </div>
         )}
-        {messages.length > 0 && (
+        {!review.attack && messages.length > 0 && (
           <ul className="review-messages">
             {messages.map((m, i) => (
               <li key={i}>{m}</li>
@@ -1800,9 +1844,7 @@ function ReviewDetails({
               <b>
                 {review.payment.total} / {review.payment.cost} resources paid
               </b>
-              <small>
-                Payment complete. The card effect waits for Proceed.
-              </small>
+              <small>Payment confirmed · included in this action.</small>
             </span>
           </div>
         )}
@@ -1864,7 +1906,7 @@ function ReviewDetails({
       {!!review.cards?.length && (
         <div className="review-card-section">
           <div className="change-heading">
-            <span>CARDS IN THIS STEP</span>
+            <span>RELATED CARDS</span>
             <span>
               {review.cards.length}{" "}
               {review.cards.length === 1 ? "CARD" : "CARDS"}
@@ -2767,33 +2809,6 @@ function Tabletop({
                 </div>
                 <Status piece={s.player} />
                 <p className="identity-power">{plain(heroCard(s).text)}</p>
-                {s.heroId === "spider_man" && (
-                  <div
-                    className={`identity-resource ${s.flags.scientist ? "used" : ""}`}
-                  >
-                    <b>
-                      <Brain size={14} /> Scientist · 1 mental
-                    </b>
-                    <small>
-                      {s.flags.scientist
-                        ? "Used this round · refreshes next round"
-                        : s.player.form === "hero"
-                          ? "Available as Peter Parker · once per round"
-                          : "Available · once per round · no exhaust"}
-                    </small>
-                    <button
-                      className="ability-button"
-                      disabled={
-                        !canUseAction ||
-                        s.player.form !== "alter" ||
-                        !!s.flags.scientist
-                      }
-                      onClick={() => setResourceHelp(true)}
-                    >
-                      Use Scientist…
-                    </button>
-                  </div>
-                )}
                 {abilityActive && (
                   <button
                     className="ability-button"
@@ -2824,7 +2839,46 @@ function Tabletop({
                   </small>
                 </button>
               </div>
-            </div>
+              {s.heroId === "spider_man" && (
+                <div
+                  className={`identity-resource ${s.flags.scientist ? "used" : ""}`}
+                >
+                  <div className="scientist-art" aria-hidden="true">
+                    <img src={imageFor("01001b")} alt="" />
+                  </div>
+                  <div className="scientist-copy">
+                    <span className="ability-kicker">
+                      PETER PARKER · RESOURCE
+                    </span>
+                    <b>
+                      Scientist{" "}
+                      <span className="scientist-output">
+                        <ResourceIcons items={["mental"]} />
+                        <span>+1</span>
+                      </span>
+                    </b>
+                    <small>
+                      {s.flags.scientist
+                        ? "Used · returns next round"
+                        : s.player.form === "hero"
+                          ? "Available in alter-ego form"
+                          : "Once per round · no exhaust"}
+                    </small>
+                    <button
+                      className="ability-button"
+                      disabled={
+                        !canUseAction ||
+                        s.player.form !== "alter" ||
+                        !!s.flags.scientist
+                      }
+                      onClick={() => setResourceHelp(true)}
+                    >
+                      Use Scientist… <ArrowUpRight size={15} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>{" "}
             <div className="in-play-area">
               <div className="zone-label">
                 <span>
@@ -2925,6 +2979,13 @@ function Tabletop({
                                   })
                                 }
                               >
+                                {a.id === "attack" ? (
+                                  <Fist size={13} weight="fill" />
+                                ) : a.id === "thwart" ? (
+                                  <Target size={13} weight="bold" />
+                                ) : (
+                                  <Sparkle size={13} />
+                                )}
                                 {a.label}
                               </button>
                             ))}
@@ -3075,10 +3136,13 @@ function Tabletop({
                     disabled={!acting || s.player.exhausted}
                     onClick={() => send({ type: "BASIC", action: "attack" })}
                   >
-                    <Fist size={20} />
-                    <span>
-                      Attack <b>{stats.attack}</b>
+                    <span className="action-emblem">
+                      <Fist size={25} weight="fill" />
                     </span>
+                    <span className="action-copy">
+                      Attack <small>Deal damage</small>
+                    </span>
+                    <b className="action-value">{stats.attack}</b>
                   </button>
                   <button
                     className="thwart-action"
@@ -3086,10 +3150,13 @@ function Tabletop({
                     disabled={!acting || s.player.exhausted}
                     onClick={() => send({ type: "BASIC", action: "thwart" })}
                   >
-                    <Target size={20} />
-                    <span>
-                      Thwart <b>{stats.thwart}</b>
+                    <span className="action-emblem">
+                      <Target size={25} weight="bold" />
                     </span>
+                    <span className="action-copy">
+                      Thwart <small>Remove threat</small>
+                    </span>
+                    <b className="action-value">{stats.thwart}</b>
                   </button>
                   <span className="defense-reminder">
                     <Shield size={18} />
@@ -3522,7 +3589,7 @@ function Help({ onClose }: { onClose: () => void }) {
           {
             icon: BookOpen,
             title: "Read. React. Repeat.",
-            text: "The action panel explains every step. Click Proceed to continue; nothing advances on a timer. Choose defenders before boosts. Any ready hero or ally can defend for a teammate.",
+            text: "The action panel groups each action into one summary. Click Proceed to continue; nothing advances on a timer. Choose defenders before boosts. Any ready hero or ally can defend for a teammate.",
           },
         ].map(({ icon: Icon, title, text }, i) => (
           <div className="help-step" key={title}>

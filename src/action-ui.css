@@ -1,0 +1,572 @@
+/* Physical status cards and clear, illustrated hero controls. */
+.statuses:empty {
+  display: none;
+}
+.statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.statuses > .status-card {
+  --status-paper: #f8c35e;
+  --status-ink: #49320e;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px 5px 5px;
+  border: 2px solid var(--status-ink);
+  border-radius: 6px;
+  background: var(--status-paper);
+  color: var(--status-ink);
+  box-shadow:
+    0 2px 0 #060f18,
+    inset 0 0 0 1px #fff7;
+  text-transform: none;
+  min-height: 43px;
+}
+.statuses > .stunned {
+  --status-paper: #f0df72;
+  --status-ink: #383510;
+}
+.statuses > .confused {
+  --status-paper: #cab0ea;
+  --status-ink: #36234d;
+}
+.status-emblem {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  background: #fff4;
+}
+.status-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.status-copy b {
+  font:
+    italic 800 17px/1 "Barlow Condensed",
+    sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.status-copy small {
+  font:
+    700 8px/1.3 Manrope,
+    sans-serif;
+}
+.resource {
+  box-shadow:
+    inset 0 0 0 1px #fff5,
+    0 1px 2px #0004;
+}
+.resource.mental {
+  background: #1657a6;
+  color: #fff;
+  border-color: #80b7e5;
+}
+.resource.physical {
+  background: #a72e34;
+  color: #fff;
+  border-color: #efa6a7;
+}
+.resource.energy {
+  background: #f0cf56;
+  color: #332705;
+  border-color: #ffeb9c;
+}
+.resource.wild {
+  background: #276947;
+  color: #fff;
+  border-color: #8dccaa;
+}
+.identity-resource {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 9px;
+  padding: 8px;
+  margin: 12px 0;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid #80adc5;
+  border-radius: 9px;
+  background: #e8eff0;
+  color: #183341;
+  box-shadow:
+    0 3px 0 #06192370,
+    inset 0 0 0 3px #fff5;
+}
+.scientist-art {
+  position: relative;
+  overflow: hidden;
+  border-radius: 5px;
+  background: #123847;
+  min-height: 85px;
+}
+.scientist-art img {
+  position: absolute;
+  width: 148px;
+  max-width: none;
+  left: -46px;
+  top: -10px;
+}
+.scientist-copy {
+  min-width: 0;
+}
+.ability-kicker {
+  display: block;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+.identity-resource .scientist-copy > b {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  font:
+    700 24px/1.3 "Barlow Condensed",
+    sans-serif;
+}
+.scientist-output {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font:
+    800 14px Manrope,
+    sans-serif;
+}
+.scientist-output .resource {
+  width: 24px;
+  height: 24px;
+}
+.scientist-output .resource svg {
+  width: 19px;
+  height: 19px;
+}
+.identity-resource small {
+  margin-top: 1px;
+  font-size: 8px;
+  color: #395260;
+}
+.physical-table .identity-resource .ability-button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  color: #fff;
+  background: #204f68;
+  border: 0;
+  padding: 6px 8px;
+  margin-top: 7px;
+  font-size: 9px;
+  border-radius: 5px;
+}
+.identity-resource.used {
+  background: #dce4e4;
+  border-color: #8a9d9f;
+}
+.identity-resource .ability-button:disabled {
+  background: #bdcbd0;
+  color: #364f5a;
+  opacity: 1;
+}
+.physical-table .basic-actions {
+  gap: 10px;
+}
+.physical-table .basic-actions > .attack-action,
+.physical-table .basic-actions > .thwart-action {
+  --action-accent: #9d313a;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: #f5ede0;
+  color: #222a34;
+  border: 1px solid #a29378;
+  border-left: 4px solid var(--action-accent);
+  border-radius: 9px;
+  min-width: 175px;
+  min-height: 62px;
+  padding: 8px 13px 8px 9px;
+  box-shadow: 0 3px 0 #0004;
+}
+.physical-table .basic-actions > .thwart-action {
+  --action-accent: #226190;
+}
+.action-emblem {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  background: var(--action-accent);
+  color: #fff;
+  border-radius: 50%;
+}
+.physical-table .basic-actions > button .action-emblem svg {
+  width: 23px;
+  height: 23px;
+}
+.action-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  font:
+    700 23px/1 "Barlow Condensed",
+    sans-serif;
+  text-transform: uppercase;
+}
+.action-copy small {
+  margin-top: 5px;
+  font:
+    600 8px/1.2 Manrope,
+    sans-serif;
+  text-transform: none;
+  color: #585447;
+}
+.physical-table .basic-actions > button b.action-value {
+  margin-left: auto;
+  font:
+    700 35px/1 "Barlow Condensed",
+    sans-serif;
+  color: var(--action-accent);
+}
+.physical-table .basic-actions > button:hover:not(:disabled) {
+  background: #fff9ec;
+  border-color: var(--action-accent);
+  transform: translateY(-2px);
+}
+.physical-table .basic-actions > button:disabled {
+  opacity: 0.57;
+}
+.in-play-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+/* Attack workspace: all essential information shares one horizontal sightline. */
+.modal.review-focus.with-attack,
+.modal.attack-decision {
+  width: min(1320px, 100%);
+}
+.modal.attack-decision {
+  padding-bottom: 20px;
+}
+.review-focus.with-attack .modal-heading,
+.attack-decision .modal-heading {
+  padding-top: 15px;
+  padding-bottom: 15px;
+}
+.review-focus.with-attack .modal-heading h2,
+.attack-decision .modal-heading h2 {
+  font-size: 32px;
+}
+.review-focus.with-attack .review-focus-body {
+  padding: 20px 24px;
+}
+.review-focus .review-details.attack-review,
+.attack-decision .review-details.attack-review {
+  display: grid;
+  grid-template-columns: minmax(270px, 0.95fr) minmax(280px, 1.15fr) minmax(
+      190px,
+      0.8fr
+    );
+  gap: 22px;
+  align-items: start;
+}
+.attack-review > .attack-participants {
+  grid-column: 1;
+  grid-row: 1;
+}
+.review-focus .attack-review .review-explanation,
+.attack-decision .attack-review .review-explanation {
+  grid-column: 2;
+  grid-row: 1;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.review-focus .attack-review .review-card-section,
+.attack-decision .attack-review .review-card-section {
+  grid-column: 3;
+  grid-row: 1;
+  padding: 0 0 0 18px;
+  border-top: 0;
+  border-left: 1px solid #c8c1b0;
+  min-width: 0;
+}
+.attack-review:not(.has-cards) {
+  grid-template-columns: minmax(270px, 1fr) minmax(300px, 1.4fr) !important;
+}
+.attack-participants {
+  background: #e8e3d6;
+  border: 1px solid #c0b6a0;
+  padding: 12px;
+  margin: 0;
+  gap: 9px;
+  border-radius: 9px;
+}
+.attack-participant {
+  gap: 5px;
+}
+.attack-participant > small {
+  color: #554c3d;
+  font-size: 8px;
+  margin-bottom: 3px;
+  letter-spacing: 0.6px;
+}
+.attack-participant .card-image {
+  width: clamp(85px, 9vw, 140px);
+  max-width: 100%;
+  box-shadow: 0 4px 6px #28201130;
+}
+.attack-participant b {
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 20px;
+  margin: 3px 0 0;
+}
+.attack-participant > span {
+  font-size: 9px;
+  margin: 0;
+}
+.review-focus .attack-review .review-cards,
+.attack-decision .attack-review .review-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+.review-focus .attack-review .review-card,
+.attack-decision .attack-review .review-card {
+  max-width: 130px;
+  min-width: 0;
+}
+.attack-review .review-card > b {
+  font-size: 11px;
+}
+.attack-review .review-card > small {
+  font-size: 9px;
+}
+.attack-review .review-card-label {
+  font-size: 8px;
+  padding: 4px;
+}
+.attack-review .review-calculation {
+  margin: 12px 0;
+  border-radius: 9px;
+  overflow: hidden;
+}
+.attack-review .calculation-heading {
+  padding: 11px 13px;
+}
+.attack-review .calculation-heading > b {
+  font-size: 40px;
+}
+.attack-review .calculation-parts {
+  gap: 5px;
+  padding: 10px;
+}
+.attack-review .calculation-parts b {
+  font-size: 21px;
+}
+.attack-review .review-calculation > p {
+  font-size: 10px;
+  line-height: 1.45;
+  padding: 0 12px 10px;
+}
+.attack-review .review-messages {
+  margin: 0 0 10px;
+  padding-left: 15px;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.attack-review .review-messages li + li {
+  margin-top: 4px;
+}
+.attack-review .review-changes {
+  margin-top: 10px;
+}
+.attack-review .change-row {
+  min-height: 28px;
+  padding: 5px 0;
+  font-size: 10px;
+}
+.attack-review .change-heading {
+  margin-bottom: 7px;
+  font-size: 8px;
+}
+.attack-review .resolution-paused {
+  margin-bottom: 11px;
+  font-size: 9px;
+}
+.with-attack .review-focus-footer {
+  padding: 13px 24px;
+}
+.attack-decision > .modal-intro {
+  margin-bottom: 16px;
+}
+.attack-decision > .decision-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+  margin-top: 20px;
+  border-top: 1px solid #c8c1b0;
+  padding-top: 16px;
+}
+.attack-decision .decision-option {
+  min-height: 64px;
+  padding: 10px 14px;
+}
+.attack-decision .decision-option img {
+  width: 36px;
+  height: 50px;
+}
+.attack-decision .decision-option strong {
+  font-size: 13px;
+}
+.attack-decision .decision-option small {
+  font-size: 10px;
+}
+.attack-decision > .attack-participants {
+  max-width: 400px;
+  margin-inline: auto;
+}
+@media (min-width: 1000px) and (max-height: 800px) {
+  .modal-backdrop {
+    padding: 16px;
+  }
+  .modal.review-focus.with-attack,
+  .modal.attack-decision {
+    max-height: calc(100dvh - 32px);
+  }
+  .review-focus.with-attack .review-focus-body {
+    padding: 14px 20px;
+  }
+  .attack-review .attack-participant .card-image {
+    width: 110px;
+  }
+  .attack-review .review-card .card-image {
+    max-height: 150px;
+  }
+  .attack-review .review-card .card-image img {
+    max-height: 150px;
+    object-fit: contain;
+  }
+  .attack-review .review-calculation {
+    margin-block: 8px;
+  }
+  .attack-review .review-messages {
+    font-size: 10px;
+  }
+}
+@media (max-width: 999px) {
+  .review-focus .review-details.attack-review,
+  .attack-decision .review-details.attack-review {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    gap: 15px;
+  }
+  .review-focus .attack-review .review-card-section,
+  .attack-decision .attack-review .review-card-section {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    border: 0;
+    padding: 0;
+  }
+  .review-focus .attack-review .review-cards,
+  .attack-decision .attack-review .review-cards {
+    grid-template-columns: repeat(auto-fit, minmax(85px, 110px));
+  }
+}
+@media (max-width: 600px) {
+  .review-focus .review-details.attack-review,
+  .attack-decision .review-details.attack-review {
+    display: flex;
+    flex-direction: column;
+  }
+  .attack-review > * {
+    width: 100%;
+  }
+  .attack-participant .card-image {
+    width: 95px;
+  }
+  .review-focus.with-attack .review-focus-body {
+    padding: 14px;
+  }
+  .physical-table .basic-actions {
+    flex-wrap: wrap;
+  }
+  .physical-table .basic-actions > .attack-action,
+  .physical-table .basic-actions > .thwart-action {
+    min-width: 130px;
+    flex: 1;
+    gap: 7px;
+    padding: 7px;
+  }
+  .action-copy {
+    font-size: 20px;
+  }
+  .action-copy small {
+    font-size: 7px;
+  }
+  .physical-table .basic-actions > button b.action-value {
+    font-size: 28px;
+  }
+}
+.physical-table .identity-area {
+  flex-wrap: wrap;
+}
+.physical-table .identity-resource {
+  flex: 0 0 100%;
+  grid-template-columns: 58px minmax(0, 1fr);
+  margin: 4px 0 0;
+}
+.physical-table .identity-resource .ability-kicker {
+  white-space: nowrap;
+}
+.physical-table .identity-resource .scientist-copy > b {
+  font-size: 26px;
+}
+.physical-table .identity-resource small {
+  font-size: 9px;
+}
+.scientist-art {
+  min-height: 90px;
+  max-height: 110px;
+}
+.attack-review > .review-combat {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+.attack-review .review-combat > .review-messages {
+  margin-top: 16px;
+  padding-inline: 15px 4px;
+}
+.attack-review .review-calculation {
+  padding: 0;
+}
+.attack-review .calculation-parts {
+  margin: 0 12px;
+}
+.attack-review .review-calculation > p {
+  margin-top: 8px;
+}
+@media (min-width: 1000px) and (max-height: 800px) {
+  .review-focus .attack-review .review-card .card-image {
+    max-height: none;
+    width: 106px;
+  }
+  .review-focus .attack-review .review-card .card-image img {
+    max-height: none;
+  }
+}
+.statuses .status-card .status-copy small {
+  color: var(--status-ink);
+}
+.physical-table .statuses .status-emblem svg {
+  width: 22px;
+  height: 22px;
+}

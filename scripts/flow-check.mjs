@@ -130,7 +130,7 @@ try {
   const paid = await saved();
   assert.equal(paid.flags.scientist, true);
   assert.equal(paid.player.exhausted, false);
-  assert.equal(paid.player.hand.length, beforePay.player.hand.length);
+  assert.equal(paid.player.hand.length, beforePay.player.hand.length - 1);
   assert.equal(paid.player.discard.length, beforePay.player.discard.length);
   checks.push(
     "Scientist is first in payment, cancel is free, confirmed use pays 1 mental without discarding or exhausting Peter",
@@ -193,8 +193,8 @@ try {
   await page
     .getByRole("button", { name: "Begin villain phase", exact: true })
     .click();
-  await proceedTo((s) => s.review?.title === "Enemy attack begins");
-  assert.equal((await saved()).review.attack.target.name, "Spider-Man");
+  await proceedTo((s) => !s.review && s.prompt?.title.includes("attacks"));
+  assert.equal((await saved()).prompt.context.attack.target.name, "Spider-Man");
   assert.equal(
     await page
       .getByRole("dialog")
@@ -209,9 +209,42 @@ try {
   await capture("choose-defender");
   const defenseState = await saved();
   await page.getByRole("button", { name: /Defend with Spider-Man/ }).click();
-  await proceedTo((s) => s.review?.title === "Defender declared");
-  assert.equal((await saved()).review.attack.label, "HERO DEFENDING");
+  await proceedTo((s) => !!(s.review || s.prompt?.context)?.calculation);
+  assert.equal(
+    ((await saved()).review || (await saved()).prompt.context).attack.label,
+    "HERO DEFENDING",
+  );
   await capture("hero-defends");
+  for (const [width, height] of [
+    [1280, 720],
+    [1366, 768],
+    [1440, 900],
+    [1920, 1080],
+  ]) {
+    await page.setViewportSize({ width, height });
+    const layout = await page.getByRole("dialog").evaluate((dialog) => {
+      const body = dialog.querySelector(".review-focus-body") || dialog;
+      const bounds = dialog.getBoundingClientRect();
+      return {
+        scroll: body.scrollHeight - body.clientHeight,
+        width: body.scrollWidth - body.clientWidth,
+        bottom: bounds.bottom,
+        top: bounds.top,
+      };
+    });
+    assert.ok(
+      layout.scroll <= 1 &&
+        layout.width <= 1 &&
+        layout.bottom <= height &&
+        layout.top >= 0,
+      `Attack fits without scrolling at ${width}x${height}: ${JSON.stringify(layout)}`,
+    );
+    await capture(`attack-${width}x${height}`);
+  }
+  await audit("attack-summary");
+  checks.push(
+    "Attack participants, boost cards, calculation, changes and controls fit without scrolling at 1280x720 through 1920x1080",
+  );
   await page.setViewportSize({ width: 390, height: 844 });
   await capture("hero-defends-mobile");
   const proceedFits = await page.getByRole("dialog").evaluate((dialog) => {
@@ -240,11 +273,48 @@ try {
   await page.reload();
   await page.getByRole("button", { name: /Resume mission/ }).click();
   await page.getByRole("button", { name: /Defend with Mockingbird/ }).click();
-  await proceedTo((s) => s.review?.title === "Defender declared");
-  assert.equal((await saved()).review.attack.target.name, "Mockingbird");
+  await proceedTo((s) => !!(s.review || s.prompt?.context)?.calculation);
+  assert.equal(
+    ((await saved()).review || (await saved()).prompt.context).attack.target
+      .name,
+    "Mockingbird",
+  );
   await capture("ally-defends");
   checks.push(
     "Choosing an ally switches the defender card and retains the protected hero label",
+  );
+  await page.evaluate(async (s) => {
+    const { makePiece } = await import("/src/game/engine.ts");
+    s.player.hand.push(makePiece(s, "01003"));
+    s.attack.base = 5;
+    localStorage.setItem("champions.save.v1", JSON.stringify(s));
+  }, defenseState);
+  await page.reload();
+  await page.getByRole("button", { name: /Resume mission/ }).click();
+  await page.getByRole("button", { name: /Take the attack/ }).click();
+  await proceedTo((s) => !s.review && s.prompt?.title === "Incoming attack");
+  await page.setViewportSize({ width: 1280, height: 720 });
+  assert.equal(
+    await page.getByRole("button", { name: "Proceed", exact: true }).count(),
+    0,
+  );
+  assert.ok(
+    await page
+      .getByRole("dialog")
+      .evaluate((dialog) => dialog.scrollHeight <= dialog.clientHeight + 1),
+    "Damage prevention fits without scrolling on a laptop",
+  );
+  await capture("prevention-1280x720");
+  await audit("damage-prevention");
+  const beforePrevention = (await saved()).player.hp;
+  await page
+    .getByRole("button", { name: /Backflip · prevent all damage/ })
+    .click();
+  assert.notEqual((await saved()).review?.title, "Decision confirmed");
+  await proceedTo((s) => !s.attack);
+  assert.equal((await saved()).player.hp, beforePrevention);
+  checks.push(
+    "Prevention choices open directly with attack math, fit on a laptop, and Backflip prevents damage",
   );
   assert.equal(errors.length, 0, JSON.stringify(errors));
   assert.equal(

@@ -37,7 +37,12 @@ import {
   syncSeat,
   upgradeSave,
 } from "./team";
-import { boardSnapshot, recordReview } from "./review";
+import {
+  boardSnapshot,
+  recordReview,
+  continuesReview,
+  mergeReviews,
+} from "./review";
 import { paymentSources, paymentStatus } from "./payment";
 export { paymentSources } from "./payment";
 export const SAVE_KEY = "champions.save.v1";
@@ -4220,6 +4225,8 @@ function resolve(s: GameState, e: Effect) {
   }
 }
 function run(s: GameState) {
+  let pending = s.review;
+  s.review = null;
   let n = 0;
   while (
     !s.review &&
@@ -4253,6 +4260,24 @@ function run(s: GameState) {
     check(s);
     syncSeat(s);
     recordReview(s, before, e);
+    if (s.review) pending = mergeReviews(pending, s.review);
+    s.review = null;
+    if (s.prompt) break;
+    if (pending && !continuesReview(s, e)) {
+      s.review = pending;
+      pending = null;
+      break;
+    }
+  }
+  if (s.prompt && pending) s.prompt.context = pending;
+  else if (!s.review && pending) {
+    // Cleanup alone is already visible in the log and previous action card.
+    const meaningful =
+      pending.changes.some((c) => c.kind !== "cards") ||
+      pending.cards?.some((c) => !["discarded", "moved"].includes(c.kind)) ||
+      pending.payment ||
+      pending.calculation;
+    if (meaningful) s.review = pending;
   }
   if (!s.review && !s.prompt && !s.queue.length && s.phase === "player") {
     const turn = s.players.find((p) => p.id === s.turnPlayerId);
@@ -4492,7 +4517,13 @@ export function dispatch(state: GameState, command: Command): GameState {
     check(s);
     syncSeat(s);
     recordReview(s, before, command);
-    if (!s.review) run(s);
+    // A click on a choice/payment/basic power is already confirmation. Resolve
+    // to the next real decision or result, carrying its receipt into that view.
+    if (["CHOOSE", "SELECT"].includes(command.type) && before.prompt?.context)
+      s.review = s.review
+        ? mergeReviews(before.prompt.context, s.review)
+        : before.prompt.context;
+    run(s);
     syncSeat(s);
     return s;
   } catch (error) {
@@ -4579,6 +4610,7 @@ export function summarize(s: GameState) {
           kind: s.prompt.kind,
           title: s.prompt.title,
           text: s.prompt.text,
+          context: s.prompt.context,
           cost: s.prompt.cost,
           min: s.prompt.min,
           max: s.prompt.max,

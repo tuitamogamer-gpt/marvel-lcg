@@ -315,6 +315,71 @@ export function effectTitle(e?: Effect) {
         "Resolve card effect"
     : "Your next action";
 }
+
+// These steps prepare an action or clean up its cards. Keep their information
+// in the next meaningful review instead of asking the player to approve plumbing.
+export function continuesReview(s: GameState, e: Effect) {
+  if (["revealBoost", "revealSchemeBoost"].includes(e.type))
+    return s.queue[0]?.type !== "boostEffect";
+  return new Set([
+    "target",
+    "optional",
+    "payRequest",
+    "defender",
+    "completeBoost",
+    "prepareAttackBoosts",
+    "boostAttack",
+    "finishResolution",
+    "endScheme",
+    "resolveHandEvent",
+    "nextMulligan",
+    "endDiscard",
+    "refill",
+    "allReady",
+    "beginVillain",
+    "villainActivate",
+    "minionActivations",
+    "defensePrompt",
+    "enemyAttack",
+    "declareDefense",
+    "defenseResponses",
+    "allyLimit",
+    "play",
+  ]).has(e.type);
+}
+
+export function mergeReviews(
+  previous: ActionReview | null,
+  next: ActionReview,
+): ActionReview {
+  if (!previous) return next;
+  const changes = previous.changes.map((c) => ({ ...c }));
+  for (const change of next.changes) {
+    const existing = changes.find((c) =>
+      c.key && change.key
+        ? c.key === change.key
+        : c.label === change.label && c.kind === change.kind,
+    );
+    if (existing) existing.after = change.after;
+    else changes.push({ ...change });
+  }
+  const cards = [...(previous.cards || [])];
+  for (const c of next.cards || []) {
+    const index = cards.findIndex((p) => p.id === c.id);
+    if (index < 0) cards.push(c);
+    // Preserve the useful identity of a boost/payment after mechanical disposal.
+    else if (!["boost", "spent"].includes(cards[index].kind)) cards[index] = c;
+  }
+  return {
+    ...next,
+    messages: [...new Set([...previous.messages, ...next.messages])],
+    changes: changes.filter((c) => c.before !== c.after),
+    cards,
+    payment: next.payment || previous.payment,
+    calculation: next.calculation || previous.calculation,
+    attack: next.attack || previous.attack,
+  };
+}
 export function recordReview(
   s: GameState,
   before: ReturnType<typeof boardSnapshot>,
@@ -361,6 +426,7 @@ export function recordReview(
       continue;
     if (old !== next)
       changes.push({
+        key,
         label: (b || a).label,
         before: old,
         after: next,
@@ -510,9 +576,13 @@ export function recordReview(
   }
   for (const [i, code] of boostCodes.entries()) {
     const existing = cards.findIndex((c) => c.code === code);
+    const boostId = existing >= 0 ? cards[existing].id : undefined;
     if (existing >= 0) cards.splice(existing, 1);
     cards.unshift({
-      id: `boost-${i}`,
+      id:
+        s.attack?.boostIds?.at(-boostCodes.length + i) ||
+        boostId ||
+        `boost-${s.reviewCount}-${i}`,
       code,
       name: card(code).name,
       label: `+${card(code).boost || 0} boost`,
