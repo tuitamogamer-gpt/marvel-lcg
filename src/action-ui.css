@@ -47,16 +47,12 @@
   gap: 2px;
 }
 .status-copy b {
-  font:
-    italic 800 17px/1 "Barlow Condensed",
-    sans-serif;
+  font: italic 800 17px/1 var(--display);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 .status-copy small {
-  font:
-    700 8px/1.3 Manrope,
-    sans-serif;
+  font: 700 8px/1.3 var(--body);
 }
 .resource {
   box-shadow:
@@ -126,17 +122,13 @@
   display: flex;
   justify-content: space-between;
   gap: 4px;
-  font:
-    700 24px/1.3 "Barlow Condensed",
-    sans-serif;
+  font: 700 24px/1.3 var(--display);
 }
 .scientist-output {
   display: flex;
   align-items: center;
   gap: 3px;
-  font:
-    800 14px Manrope,
-    sans-serif;
+  font: 800 14px var(--body);
 }
 .scientist-output .resource {
   width: 24px;
@@ -212,24 +204,18 @@
   display: flex;
   flex-direction: column;
   align-items: start;
-  font:
-    700 23px/1 "Barlow Condensed",
-    sans-serif;
+  font: 700 23px/1 var(--display);
   text-transform: uppercase;
 }
 .action-copy small {
   margin-top: 5px;
-  font:
-    600 8px/1.2 Manrope,
-    sans-serif;
+  font: 600 8px/1.2 var(--body);
   text-transform: none;
   color: #585447;
 }
 .physical-table .basic-actions > button b.action-value {
   margin-left: auto;
-  font:
-    700 35px/1 "Barlow Condensed",
-    sans-serif;
+  font: 700 35px/1 var(--display);
   color: var(--action-accent);
 }
 .physical-table .basic-actions > button:hover:not(:disabled) {
@@ -324,7 +310,7 @@
   box-shadow: 0 4px 6px #28201130;
 }
 .attack-participant b {
-  font-family: "Barlow Condensed", sans-serif;
+  font-family: var(--display);
   font-size: 20px;
   margin: 3px 0 0;
 }

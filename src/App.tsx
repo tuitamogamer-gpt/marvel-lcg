@@ -1700,12 +1700,24 @@ function PremiumToken({
 }: {
   kind: "health" | "threat" | "defense" | "counter";
 }) {
-  return <span className={`premium-token token-${kind}`} aria-hidden="true" />;
+  const Icon = {
+    health: Heart,
+    threat: Warning,
+    defense: Shield,
+    counter: Star,
+  }[kind];
+  return (
+    <span className={`premium-token token-${kind}`} aria-hidden="true">
+      <Icon weight="fill" />
+    </span>
+  );
 }
 
 function CardBack({ kind }: { kind: "hero" | "encounter" }) {
   return (
-    <span className={`premium-card-back back-${kind}`} aria-hidden="true" />
+    <span className={`premium-card-back back-${kind}`} aria-hidden="true">
+      <span className="card-back-mark">MARVEL</span>
+    </span>
   );
 }
 
@@ -1721,7 +1733,7 @@ function TableStylePicker({
   return (
     <Modal
       title="Make the table yours."
-      eyebrow="THE COLLECTOR’S TABLE"
+      eyebrow="YOUR PLAY AREA"
       className="table-style-modal"
       wide
       onClose={onClose}
@@ -1760,15 +1772,13 @@ function TableStylePicker({
             <CardBack kind="encounter" />
           </div>
           <div>
-            <span className="accessory-eyebrow">FOIL CARD BACKS</span>
+            <span className="accessory-eyebrow">PLAYER & ENCOUNTER DECKS</span>
             <h3>Two sides. One battle.</h3>
-            <p>
-              Sapphire for your heroes. Burnished copper for the encounter deck.
-            </p>
+            <p>Blue for your heroes. Orange for the encounter deck.</p>
           </div>
         </div>
         <div className="token-collection">
-          <span className="accessory-eyebrow">METAL & ENAMEL</span>
+          <span className="accessory-eyebrow">TOKENS & COUNTERS</span>
           <h3>Every point matters.</h3>
           <div className="token-collection-row">
             {(
@@ -2559,7 +2569,9 @@ function Tabletop({
                         className="first-player-token"
                         title="First player this round"
                       >
-                        <PremiumToken kind="counter" />
+                        <span className="first-player-mark" aria-hidden="true">
+                          !!!
+                        </span>
                         1ST
                       </span>
                     )}
@@ -2632,7 +2644,7 @@ function Tabletop({
             <span className="table-finish-name">
               <span className="table-finish-dot" />
               {playmat.name}
-              <small>COLLECTOR’S PLAYMAT</small>
+              <small>PLAYMAT</small>
             </span>
             <button
               className="table-customize-button"

@@ -1,0 +1,420 @@
+/* Core-set print language: Exo 2 section titles, cyan rules panels, dark ink,
+   bright red actions and cardboard components. The playmat stays illustrated.
+   These CSS components are adaptations, not scans of official components. */
+:root {
+  --ink: #15243d;
+  --paper: #faf8f2;
+  --red: #c91f32;
+  --yellow: #ffe04d;
+  --champions-blue: #24568a;
+  --champions-cyan: #b7e2f0;
+}
+
+.app:not(.playing) {
+  background:
+    radial-gradient(#cf71351c 0.7px, transparent 0.9px) 0 0 / 5px 5px,
+    #f6f4ed;
+}
+.topbar {
+  border-top: 5px solid var(--red);
+  box-shadow: 0 3px 0 #15243d12;
+}
+.brand-title {
+  font-size: 24px;
+  font-style: italic;
+  letter-spacing: -0.8px;
+  line-height: 1.1;
+}
+.brand-title small {
+  font-style: normal;
+  letter-spacing: 2.4px;
+}
+.hero-banner {
+  background-color: var(--paper);
+  border-color: var(--ink);
+}
+.banner-copy h1 {
+  font-size: clamp(48px, 5.6vw, 82px);
+  line-height: 1.02;
+  letter-spacing: -2px;
+}
+.banner-copy h1 span {
+  text-shadow:
+    2px 2px 0 #fff,
+    4px 4px 0 var(--ink);
+}
+.cover-tag b {
+  font-size: 25px;
+  line-height: 1.15;
+}
+.cover-tag > span {
+  font-size: 16px;
+  line-height: 1.2;
+}
+.setup-heading h2,
+.collection-title h1,
+.section-heading h2 {
+  font-style: italic;
+  line-height: 1.15;
+}
+.setup-heading h2 {
+  font-size: clamp(25px, 2.8vw, 38px);
+}
+.section-heading h2 {
+  font-size: 24px;
+}
+.primary-button,
+.secondary-button {
+  font-family: var(--display);
+  font-weight: 700;
+}
+.modal {
+  border-color: var(--ink);
+}
+.modal-heading {
+  background:
+    radial-gradient(#ffffff20 0.65px, transparent 0.9px) 0 0 / 4px 4px,
+    #173657;
+}
+.modal-heading h2 {
+  font-style: italic;
+  line-height: 1.15;
+}
+.modal-eyebrow {
+  color: #b7e2f0;
+}
+
+/* Headers behave like the blue section strips in the printed rules. */
+.app.playing {
+  background: #101d2d;
+}
+.playing .topbar {
+  background: #132a45;
+  border-bottom: 2px solid #54799d;
+}
+.playing .brand-title {
+  font-size: 21px;
+}
+.physical-table .mission-brief h1 {
+  font-size: 26px;
+  line-height: 1.15;
+}
+.physical-table .illustrated-playmat {
+  border: 2px solid #749ac0;
+  border-radius: 9px;
+  box-shadow:
+    inset 0 0 0 3px #081c31,
+    4px 5px 0 #070f1c;
+}
+.physical-table .illustrated-playmat::before {
+  border-color: #99c4e54d;
+  border-radius: 4px;
+}
+.table-finish-bar {
+  background: #153455e8;
+  border-bottom: 2px solid #668cb2;
+  border-radius: 3px 3px 0 0;
+}
+.table-finish-name {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+.table-finish-dot {
+  background: #95d5f3;
+  box-shadow: none;
+}
+.table-customize-button {
+  background: #102842;
+  border-color: #7eacd0;
+  color: #fff;
+}
+.physical-table .playmat > .zone-label {
+  color: #fff;
+  padding-block: 8px;
+  background: linear-gradient(90deg, #a52335d9, #60233866 48%, transparent);
+}
+.physical-table .illustrated-playmat .battle-divider {
+  background: #24568a99;
+  border-block: 1px solid #78a5cc70;
+}
+.physical-table .team-seat {
+  border-radius: 5px;
+  border-color: #577da2;
+  background: #19324c;
+}
+.physical-table .team-seat.viewing {
+  background: #244666;
+  border-color: #91c6eb;
+  box-shadow: inset 3px 0 0 #91c6eb;
+}
+.physical-table .identity-info h2,
+.physical-table .villain-info h2 {
+  font-style: italic;
+}
+.physical-table .identity-info h2 {
+  font-size: 20px;
+  line-height: 1.2;
+}
+.physical-table .action-director {
+  background: var(--paper);
+  border: 2px solid #294d75;
+  border-radius: 6px;
+  box-shadow: 3px 4px 0 #060f1d;
+}
+.physical-table .director-top {
+  background:
+    radial-gradient(#ffffff38 0.7px, transparent 0.9px) 0 0 / 4px 4px,
+    var(--champions-cyan);
+  border-bottom: 2px solid #294d75;
+  color: #152f50;
+}
+.physical-table .director-top > span {
+  font-size: 14px;
+  font-style: italic;
+  line-height: 1.2;
+}
+.physical-table .director-top > b {
+  font-size: 7px;
+  border-color: #294d75;
+}
+.physical-table .director-body h2 {
+  font-size: 22px;
+  line-height: 1.2;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+.physical-table .director-footer {
+  background: #e4eff4;
+  border-top-color: #a7bdcc;
+}
+.physical-table .battle-log {
+  border-color: #557da4;
+  border-radius: 6px;
+  background: #132b43;
+}
+.physical-table .log-heading {
+  background: #244d76;
+  border-bottom-color: #7298ba;
+}
+.physical-table .log-heading > span:first-child {
+  font-size: 14px;
+  font-style: italic;
+}
+
+/* Blue player backs and orange encounter backs follow the core-set coding.
+   Existing official banner art forms the comic-print texture. */
+.premium-card-back {
+  --back-color: #096299;
+  display: grid;
+  place-items: center;
+  background-color: var(--back-color);
+  background-image:
+    repeating-linear-gradient(135deg, transparent 0 22px, #0003 23px 25px),
+    url("/art/core-banner.jpg");
+  background-blend-mode: multiply, luminosity;
+  background-size:
+    auto,
+    auto 100%;
+  border: 3px solid #102740;
+  box-shadow: inset 0 0 0 1px #65b4dd;
+}
+.back-encounter {
+  --back-color: #d36a25;
+  border-color: #3e281c;
+  box-shadow: inset 0 0 0 1px #f2b760;
+}
+.premium-card-back::after {
+  background: radial-gradient(ellipse at center, transparent, #031c3455);
+  box-shadow: none;
+}
+.card-back-mark {
+  z-index: 1;
+  background: #d91c30;
+  color: #fff;
+  font:
+    800 18px/1 "Barlow Condensed",
+    sans-serif;
+  padding: 2px 3px 3px;
+  letter-spacing: -0.5px;
+}
+.review-card-back .card-back-mark,
+.sleeve-pair .card-back-mark {
+  font-size: 24px;
+}
+.physical-table .dealt-encounters .card-back-mark {
+  font-size: 6px;
+  padding: 1px;
+  letter-spacing: -0.2px;
+}
+.physical-table .hero-pile .pile-face,
+.physical-table .encounter-pile .pile-face {
+  border-color: #91abc1;
+}
+.physical-table .pile-count {
+  background: #faf8ed;
+  color: #15243d;
+  border-color: #15243d;
+  box-shadow: 1px 2px 0 #06101f;
+  font-size: 15px;
+}
+
+/* Ink-edged cardboard replaces the metal atlas; each color retains an icon. */
+.premium-token {
+  display: inline-grid;
+  place-items: center;
+  background-image: radial-gradient(#ffffff38 0.6px, transparent 0.85px);
+  background-size: 3px 3px;
+  border: 2px solid #101b2b;
+  box-shadow:
+    inset 0 0 0 1px #ffffff6b,
+    1px 2px 0 #050b16;
+  filter: none;
+  color: #fff;
+}
+.premium-token svg {
+  width: 64%;
+  height: 64%;
+  filter: drop-shadow(1px 1px 0 #142033);
+}
+.token-health {
+  background-color: #c72b3b;
+}
+.token-threat {
+  background-color: #ffd548;
+  color: #172033;
+  border-radius: 5px;
+}
+.token-threat svg {
+  filter: none;
+}
+.token-defense {
+  background-color: #267cb1;
+}
+.token-counter {
+  background-color: #629f37;
+  border-radius: 6px;
+}
+.physical-table .stat-token.attack .token-emblem {
+  background: #c53932;
+  border-color: #121d2b;
+  color: #fff;
+  box-shadow:
+    inset 0 0 0 1px #fff6,
+    1px 2px 0 #07111f;
+}
+.physical-table .health-dial {
+  border: 2px solid #f9f7ee;
+  background:
+    repeating-conic-gradient(
+      from 0deg,
+      #ffffff13 0deg 3deg,
+      transparent 3deg 10deg
+    ),
+    #c24d35;
+  box-shadow:
+    0 0 0 1px #b62d33,
+    2px 4px 0 #050f1a;
+  color: #fff;
+}
+.physical-table .health-dial.villain-dial {
+  background:
+    repeating-conic-gradient(
+      from 0deg,
+      #ffffff16 0deg 3deg,
+      transparent 3deg 10deg
+    ),
+    #30343b;
+}
+.physical-table .health-dial > strong {
+  font-size: 25px;
+  font-style: italic;
+  letter-spacing: 1px;
+  color: #fff;
+  background: #2277a2;
+  border: 2px solid #f5f7f4;
+  box-shadow: 1px 2px 0 #13253d;
+  padding: 2px 3px;
+}
+.physical-table .villain-dial > strong {
+  background: #b92637;
+}
+.physical-table .health-dial.low {
+  outline: 2px solid #ff9c80;
+  outline-offset: 2px;
+}
+.physical-table .main-scheme > .stat-token {
+  background: #ffe04d;
+  color: #172033;
+  border: 2px solid #172033;
+  border-radius: 6px;
+  box-shadow: 2px 3px 0 #07111f;
+}
+.physical-table .main-scheme > .stat-token .token-value small {
+  color: #344053;
+}
+.physical-table .mini-token,
+.physical-table .threat-chip {
+  background: #faf7ed;
+  color: #15243d;
+  border: 2px solid #15243d;
+  box-shadow: 1px 2px 0 #070f1c;
+}
+.physical-table .first-player-token {
+  background: #c32a3a;
+  border-color: #f5f7f1;
+  color: #fff;
+}
+.first-player-mark {
+  margin: 0 3px;
+  font: italic 800 13px/1 var(--display);
+  letter-spacing: -1px;
+}
+.statuses > .status-card {
+  border-width: 2px;
+  border-radius: 4px;
+}
+.status-copy b {
+  font-size: 13px;
+  line-height: 1.15;
+}
+.physical-table .basic-actions .action-copy {
+  font-size: 18px;
+  line-height: 1.15;
+}
+.modal.table-style-modal {
+  background: var(--paper);
+}
+.table-style-modal .modal-eyebrow {
+  color: #b7e2f0;
+}
+.playmat-option.selected {
+  border-color: #24568a;
+  box-shadow: 0 0 0 2px #72b9d96b;
+}
+.playmat-option-art > svg {
+  color: #b7e2f0;
+}
+.accessory-eyebrow {
+  color: #24568a;
+}
+
+@media (max-width: 700px) {
+  .brand-title,
+  .playing .brand-title {
+    font-size: 17px;
+  }
+  .banner-copy h1 {
+    font-size: clamp(39px, 8vw, 56px);
+    letter-spacing: -1.3px;
+  }
+  .physical-table .mission-brief h1 {
+    font-size: 21px;
+  }
+  .table-finish-name {
+    font-size: 11px;
+  }
+  .table-finish-name small {
+    display: none;
+  }
+}

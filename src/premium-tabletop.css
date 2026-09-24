@@ -54,9 +54,7 @@
 .table-finish-name small {
   margin-left: 6px;
   color: #bac7d5;
-  font:
-    700 7px/1.4 "Manrope",
-    sans-serif;
+  font: 700 7px/1.4 var(--body);
   letter-spacing: 1.2px;
 }
 .table-finish-dot {

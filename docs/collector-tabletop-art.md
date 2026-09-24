@@ -1,5 +1,7 @@
 # Collector tabletop artwork
 
+Update, 2026-09-24: the three generated playmats remain active. The original-game visual direction now uses CSS blue/orange comic backs and flat icon tokens instead of the generated foil backs and metal atlas below. Those assets and their provenance are retained. See [visual direction](visual-direction.md).
+
 Generated on 2026-09-24 using the built-in `image_gen` tool (not the API/CLI fallback). These are original decorative assets; existing card scans and their attribution remain in `src/data/provenance.json`.
 
 Web-ready assets are in `public/art/tabletop/`. Selected original PNGs are preserved locally in `output/premium/source/` (ignored by Git). WebP exports only resize and encode the generated output. The token atlas keeps its four generated quadrants; CSS selects each face. All game values and labels are rendered separately as accessible text.

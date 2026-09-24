@@ -1,15 +1,24 @@
 # Visual direction
 
-The lobby, collection, and decision windows use comic-cover composition: ivory paper, dark ink outlines, halftone texture, condensed display lettering, red actions, and yellow emphasis. Gameplay uses a physical card table informed by the official mid-game layout and photographs of real play: a textured playmat, complete card faces, blue/orange draw piles, face-up discards, health dials, and sideways exhausted cards. See [tabletop design research](tabletop-design-research.md) for the sources and the physical-to-digital decisions. Individual hero and aspect colors remain meaningful selection cues.
+The original Marvel Champions core set is the visual reference for the whole interface, including typography. Use the printed cards, components, and Learn to Play book to guide decisions. The lobby, collection, and decision windows use paper backgrounds, ink outlines, halftone texture, bold italic headings, cyan rules panels, red actions, and yellow emphasis. Gameplay uses a physical card table: an illustrated playmat, complete card faces, blue/orange draw piles, face-up discards, health dials, and sideways exhausted cards. See [tabletop design research](tabletop-design-research.md) for the sources and the physical-to-digital decisions. Individual hero and aspect colors remain meaningful selection cues.
 
-Use soft, rounded silhouettes throughout the interface: 20px panel and dialog corners, 12px controls and card containers, and 8px smaller labels and image frames. Grouped controls share a rounded outer frame; separate buttons keep their own rounded edges. Diffuse shadows give panels depth, while the comic lettering, artwork, colors, and tokens preserve the Marvel character.
+Use compact printed frames: 8px panel and dialog corners, 7px card containers, 5px controls, and 3px small labels. Dark offset shadows suggest layered cardboard. Preserve rounded playing-card corners and curved HP dials. Metallic trim, engraved fantasy ornament, and foil tokens are superseded by the core-set print direction. The final visual layer is `src/champions-theme.css`; shared typography and radius tokens are in `src/styles.css`.
+
+## Typography and component reference — 2026-09-24
+
+The [official Learn to Play PDF](https://images-cdn.fantasyflightgames.com/filer_public/ab/be/abbef836-d5ef-4241-b2bd-1062df73f367/mvc01_learn_to_play_eng-compressed.pdf) was inspected visually and its PDF font names were read. It contains Exo 2 (including modified/scaled styles), Avenir, Avenir Next Condensed, Komika Title, Komika Text Tight, and other fonts in embedded card artwork.
+
+- Section and action headings use locally bundled **Exo 2**, including its real bold italic face. This is the same family used in the rulebook, not a claim of an exact match to every proprietary or modified card font. The package is [OFL licensed](https://fontsource.org/fonts/exo-2/about).
+- Body copy prefers system **Avenir Next / Avenir**, with locally bundled **Source Sans 3** as the cross-platform fallback. No proprietary fonts are copied out of the PDF. Latin and extended Latin subsets support B/H/S characters. Manrope is removed; Barlow Condensed is retained only for the existing MARVEL wordmark approximation.
+- Pages 3–5 guide the orange player HP dial, dark villain dial, colored number windows, flat colored tokens, yellow/purple/orange status cards, and red first-player emphasis. Values remain accessible live text. Symbols help distinguish tokens without relying on color alone.
+- Card backs are CSS adaptations with the existing attributed banner artwork, a blue or orange tint, and the MARVEL wordmark. They do not reveal deck contents and are not exact scans of official backs. The generated playmat choices and saved preferences remain available.
 
 ## References and artwork
 
 - [Marvel Champions, Fantasy Flight Games](https://www.fantasyflightgames.com/en/products/marvel-champions-the-card-game/): existing official banner artwork, hero identities, card presentation, and the core-set palette. The banner is cached at `public/art/core-banner.jpg`; card scans retain their existing provenance in `src/data/provenance.json`.
-- [Marvel Rivals hero presentation](https://www.marvelrivals.com/heroes/): reference for putting character identity, abilities, and hero selection at the center of a game interface. The implementation does not copy its UI or import its artwork.
+- [Marvel Champions Learn to Play](https://images-cdn.fantasyflightgames.com/filer_public/ab/be/abbef836-d5ef-4241-b2bd-1062df73f367/mvc01_learn_to_play_eng-compressed.pdf): primary reference for lettering, panel colors, printed frames, and physical components. General superhero videogame interfaces are secondary to the original card game.
 
-The lobby banner uses the existing official artwork, framed with CSS. `public/favicon.svg` is a native vector monogram. Gameplay now includes three imagegen playmats (Midnight Manhattan, Helicarrier, Cosmic Rift), sapphire and copper card backs, and a metal/enamel token atlas. Selected playmats persist independently of the mission save. See [collector tabletop artwork](collector-tabletop-art.md) for asset paths, generation method, and the complete final prompts.
+The lobby banner uses the existing official artwork, framed with CSS. `public/favicon.svg` is a native vector monogram. Gameplay includes three imagegen playmats (Midnight Manhattan, Helicarrier, Cosmic Rift), with selection saved independently of the mission. The earlier generated foil backs and token atlas remain archived in the project; the active interface uses the printed component adaptations described above. See [collector tabletop artwork](collector-tabletop-art.md) for the historical assets and prompts.
 
 ## Decisions that affect play
 
