@@ -43,7 +43,10 @@ import {
   CaretRight,
   Cards,
   Info,
+  Palette,
 } from "@phosphor-icons/react";
+import { PLAYMATS, TABLE_STYLE_KEY, readPlaymat } from "./tabletop-assets";
+import type { PlaymatId } from "./tabletop-assets";
 import {
   ASPECTS,
   CARDS,
@@ -1692,6 +1695,110 @@ function Decision({
     </Modal>
   );
 }
+function PremiumToken({
+  kind,
+}: {
+  kind: "health" | "threat" | "defense" | "counter";
+}) {
+  return <span className={`premium-token token-${kind}`} aria-hidden="true" />;
+}
+
+function CardBack({ kind }: { kind: "hero" | "encounter" }) {
+  return (
+    <span className={`premium-card-back back-${kind}`} aria-hidden="true" />
+  );
+}
+
+function TableStylePicker({
+  selected,
+  onSelect,
+  onClose,
+}: {
+  selected: PlaymatId;
+  onSelect: (id: PlaymatId) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      title="Make the table yours."
+      eyebrow="THE COLLECTOR’S TABLE"
+      className="table-style-modal"
+      wide
+      onClose={onClose}
+    >
+      <p className="table-style-intro">
+        Pick the backdrop for your next great battle.
+      </p>
+      <div
+        className="playmat-options"
+        role="group"
+        aria-label="Choose a playmat"
+      >
+        {PLAYMATS.map((mat, i) => (
+          <button
+            key={mat.id}
+            className={`playmat-option ${selected === mat.id ? "selected" : ""}`}
+            aria-pressed={selected === mat.id}
+            onClick={() => onSelect(mat.id)}
+          >
+            <span className="playmat-option-art">
+              <img src={mat.image} alt="" width={640} height={360} />
+              <span className="playmat-edition">0{i + 1}</span>
+              {selected === mat.id && <CheckCircle size={23} weight="fill" />}
+            </span>
+            <span className="playmat-option-copy">
+              <strong>{mat.name}</strong>
+              <small>{mat.detail}</small>
+            </span>
+          </button>
+        ))}
+      </div>
+      <div className="table-accessories">
+        <div className="sleeve-collection">
+          <div className="sleeve-pair" aria-hidden="true">
+            <CardBack kind="hero" />
+            <CardBack kind="encounter" />
+          </div>
+          <div>
+            <span className="accessory-eyebrow">FOIL CARD BACKS</span>
+            <h3>Two sides. One battle.</h3>
+            <p>
+              Sapphire for your heroes. Burnished copper for the encounter deck.
+            </p>
+          </div>
+        </div>
+        <div className="token-collection">
+          <span className="accessory-eyebrow">METAL & ENAMEL</span>
+          <h3>Every point matters.</h3>
+          <div className="token-collection-row">
+            {(
+              [
+                ["health", "Health"],
+                ["threat", "Threat"],
+                ["defense", "Defense"],
+                ["counter", "Counters"],
+              ] as const
+            ).map(([kind, label]) => (
+              <span key={kind}>
+                <PremiumToken kind={kind} />
+                <small>{label}</small>
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="table-style-footer">
+        <span>
+          <Check size={14} /> Your table, remembered on this device.
+        </span>
+        <button className="primary-button" onClick={onClose}>
+          Back to the game <ArrowRight size={17} />
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 function StatToken({
   kind,
   value,
@@ -1718,8 +1825,12 @@ function StatToken({
       className={`stat-token ${kind} ${compact ? "compact" : ""}`}
       aria-label={`${label}: ${value}${max !== undefined ? ` of ${max}` : ""}`}
     >
-      <span className="token-emblem">
-        <Icon size={compact ? 15 : 22} weight="fill" />
+      <span className="token-emblem" aria-hidden="true">
+        {kind === "attack" ? (
+          <Icon size={compact ? 15 : 22} weight="fill" />
+        ) : (
+          <PremiumToken kind={kind} />
+        )}
       </span>
       <span className="token-value">
         <strong>{value}</strong>
@@ -1927,7 +2038,7 @@ function ReviewDetails({
                   </button>
                 ) : (
                   <div className="review-card-back">
-                    <Shield size={30} weight="duotone" />
+                    <CardBack kind="encounter" />
                     <span>FACE DOWN</span>
                   </div>
                 )}
@@ -2154,7 +2265,7 @@ function HealthDial({
       aria-valuemax={max}
       aria-valuenow={Math.max(0, value)}
     >
-      <Heart size={13} weight="fill" aria-hidden="true" />
+      <PremiumToken kind="health" />
       <strong>{String(Math.max(0, value)).padStart(2, "0")}</strong>
       <span>
         <b>HP</b>
@@ -2183,19 +2294,10 @@ function TablePile({
           <CardImage code={top.code} />
         ) : kind === "discard" ? (
           <Trash size={23} weight="thin" />
+        ) : count === 0 ? (
+          <Stack size={23} weight="thin" />
         ) : (
-          <>
-            <span className="deck-back-mark">
-              <b>MARVEL</b>
-              <strong>CHAMPIONS</strong>
-              <small>THE CARD GAME</small>
-            </span>
-            {kind === "hero" ? (
-              <Shield size={24} weight="duotone" />
-            ) : (
-              <Skull size={24} weight="duotone" />
-            )}
-          </>
+          <CardBack kind={kind} />
         )}
         <b className="pile-count">{count}</b>
       </span>
@@ -2216,7 +2318,7 @@ function TablePile({
   ) : (
     <div
       className={`table-pile ${kind}-pile`}
-      aria-label={`${label}, ${count} cards, face down`}
+      aria-label={`${label}, ${count} cards${count ? ", face down" : ", empty"}`}
     >
       {face}
     </div>
@@ -2307,6 +2409,17 @@ function Tabletop({
   onHelp: () => void;
 }) {
   const [viewId, setViewId] = useState(game.activePlayerId);
+  const [playmatId, setPlaymatId] = useState(readPlaymat);
+  const [tableStyleOpen, setTableStyleOpen] = useState(false);
+  const playmat = PLAYMATS.find((mat) => mat.id === playmatId)!;
+  const selectPlaymat = (id: PlaymatId) => {
+    setPlaymatId(id);
+    try {
+      localStorage.setItem(TABLE_STYLE_KEY, id);
+    } catch {
+      // A blocked storage API must not prevent table customization or play.
+    }
+  };
   const s = seatView(
     game,
     game.players.some((p) => p.id === viewId) ? viewId : game.activePlayerId,
@@ -2446,7 +2559,7 @@ function Tabletop({
                         className="first-player-token"
                         title="First player this round"
                       >
-                        <Star size={11} weight="fill" />
+                        <PremiumToken kind="counter" />
                         1ST
                       </span>
                     )}
@@ -2505,7 +2618,29 @@ function Tabletop({
         </div>
       )}
       <div className="table-layout with-director">
-        <div className="playmat">
+        <div
+          className="playmat illustrated-playmat"
+          data-playmat={playmat.id}
+          style={
+            {
+              "--playmat-art": `url("${playmat.image}")`,
+              "--playmat-accent": playmat.accent,
+            } as CSSProperties
+          }
+        >
+          <div className="table-finish-bar">
+            <span className="table-finish-name">
+              <span className="table-finish-dot" />
+              {playmat.name}
+              <small>COLLECTOR’S PLAYMAT</small>
+            </span>
+            <button
+              className="table-customize-button"
+              onClick={() => setTableStyleOpen(true)}
+            >
+              <Palette size={15} /> Customize table
+            </button>
+          </div>
           <div className="zone-label">
             <span>
               <Skull size={17} weight="fill" /> VILLAIN PLAY AREA
@@ -2635,7 +2770,7 @@ function Tabletop({
                   </button>
                   <div className="side-scheme-counter">
                     <span className="threat-chip">
-                      <Target size={13} />
+                      <PremiumToken kind="threat" />
                       <b>{p.counters}</b>
                     </span>
                     <span>
@@ -2935,13 +3070,13 @@ function Tabletop({
 
                             {card(p).type_code === "ally" && (
                               <span className="mini-token">
-                                <Heart size={10} weight="fill" />
+                                <PremiumToken kind="health" />
                                 {pieceHP(s, p) - p.damage}
                               </span>
                             )}
                             {p.counters > 0 && (
                               <span className="mini-token counter-token">
-                                <Lightning size={12} weight="fill" />
+                                <PremiumToken kind="counter" />
                                 {p.counters}
                                 <small>
                                   {p.code === "01066"
@@ -3038,7 +3173,7 @@ function Tabletop({
                   className="dealt-encounters"
                   aria-label="Facedown encounters"
                 >
-                  <Skull size={14} />
+                  <CardBack kind="encounter" />
                   <span>
                     {
                       s.encounter.dealt.filter(
@@ -3346,6 +3481,13 @@ function Tabletop({
           )}
         </aside>
       </div>
+      {tableStyleOpen && (
+        <TableStylePicker
+          selected={playmatId}
+          onSelect={selectPlaymat}
+          onClose={() => setTableStyleOpen(false)}
+        />
+      )}
       {resourceHelp && (
         <Modal
           title="Use Peter Parker’s Scientist"

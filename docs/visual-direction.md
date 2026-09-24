@@ -9,7 +9,7 @@ Use soft, rounded silhouettes throughout the interface: 20px panel and dialog co
 - [Marvel Champions, Fantasy Flight Games](https://www.fantasyflightgames.com/en/products/marvel-champions-the-card-game/): existing official banner artwork, hero identities, card presentation, and the core-set palette. The banner is cached at `public/art/core-banner.jpg`; card scans retain their existing provenance in `src/data/provenance.json`.
 - [Marvel Rivals hero presentation](https://www.marvelrivals.com/heroes/): reference for putting character identity, abilities, and hero selection at the center of a game interface. The implementation does not copy its UI or import its artwork.
 
-The attempted generated illustration was rejected by the image tool. No generated image is included or claimed. The hero banner uses the existing official artwork, framed with CSS. `public/favicon.svg` is a native vector monogram.
+The lobby banner uses the existing official artwork, framed with CSS. `public/favicon.svg` is a native vector monogram. Gameplay now includes three imagegen playmats (Midnight Manhattan, Helicarrier, Cosmic Rift), sapphire and copper card backs, and a metal/enamel token atlas. Selected playmats persist independently of the mission save. See [collector tabletop artwork](collector-tabletop-art.md) for asset paths, generation method, and the complete final prompts.
 
 ## Decisions that affect play
 

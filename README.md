@@ -43,6 +43,7 @@ Run the same browser checks against a deployment with `BASE_URL=https://your-pro
 - Visual resource payment: full card faces, enlarged inspection, resource icons, selected discard/ability labels, typed-cost validation, and a payment receipt. Paying pauses before the purchased card resolves.
 - Encounter cards and individual attack boosts are revealed before their effects resolve, with separate acknowledgements for boost abilities and damage. Drawn/discarded cards are shown by image; unrevealed encounter cards stay face down.
 - Local autosave, including a pending Proceed checkpoint, mid-payment and mid-encounter decisions. Resume from the lobby after a reload.
+- **Customize table** switches between three illustrated playmats and remembers your choice. Foil-style hero/encounter backs, metal health/threat/defense/counter tokens, stitched borders, and layered deck edges give the table a collector finish. [Artwork and prompts](docs/collector-tabletop-art.md).
 
 ## Card API and artwork
 

@@ -13,6 +13,7 @@ import App from "./App";
 import "./styles.css";
 import "./tabletop.css";
 import "./action-ui.css";
+import "./premium-tabletop.css";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />

@@ -25,6 +25,26 @@ async function capture(name) {
   await page.evaluate(async () => {
     await document.fonts.ready;
     await Promise.all(Array.from(document.images).map((img) => img.decode()));
+    const backgrounds = new Set(
+      [
+        ...document.querySelectorAll(
+          ".playmat, .premium-token, .premium-card-back",
+        ),
+      ]
+        .flatMap((el) => [
+          ...getComputedStyle(el).backgroundImage.matchAll(
+            /url\(["']?([^"')]+)["']?\)/g,
+          ),
+        ])
+        .map((match) => match[1]),
+    );
+    await Promise.all(
+      [...backgrounds].map((src) => {
+        const image = new Image();
+        image.src = src;
+        return image.decode();
+      }),
+    );
     window.scrollTo(0, 0);
   });
   await page.screenshot({ path: `${root}/${name}.png`, fullPage: true });
@@ -69,6 +89,85 @@ try {
   );
   await page.keyboard.press("Escape");
   checks.push("An empty discard opens an accurate empty-pile dialog");
+
+  const missionBeforeStyling = await page.evaluate(() =>
+    localStorage.getItem("champions.save.v1"),
+  );
+  await page.getByRole("button", { name: "Customize table" }).click();
+  await capture("collector-picker");
+  await audit("collector-picker-desktop");
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 850 });
+    assert.ok(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 1,
+      ),
+    );
+    const dialog = page.getByRole("dialog");
+    assert.ok(
+      await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+    );
+    await capture(`collector-picker-${width}`);
+    if (width === 390) await audit("collector-picker-mobile");
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole("button", { name: "Back to the game" }).focus();
+  await page.keyboard.press("Tab");
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Close dialog" })
+      .evaluate((el) => document.activeElement === el),
+    true,
+  );
+  await page.keyboard.press("Escape");
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Customize table" })
+      .evaluate((el) => document.activeElement === el),
+    true,
+  );
+  for (const [id, name] of [
+    ["midnight-city", "Midnight Manhattan"],
+    ["helicarrier", "Helicarrier"],
+    ["cosmic-rift", "Cosmic Rift"],
+  ]) {
+    await page.getByRole("button", { name: "Customize table" }).click();
+    const choice = page.getByRole("button", { name: new RegExp(name) });
+    await choice.click();
+    assert.equal(await choice.getAttribute("aria-pressed"), "true");
+    await page.getByRole("button", { name: "Back to the game" }).click();
+    assert.equal(
+      await page.locator(".playmat").getAttribute("data-playmat"),
+      id,
+    );
+    await capture(`playmat-${id}`);
+    await audit(`playmat-${id}`);
+  }
+  assert.equal(
+    await page.evaluate(() => localStorage.getItem("champions.save.v1")),
+    missionBeforeStyling,
+  );
+  await page.reload();
+  await page.getByRole("button", { name: /Resume mission/ }).click();
+  assert.equal(
+    await page.locator(".playmat").getAttribute("data-playmat"),
+    "cosmic-rift",
+  );
+  await page.evaluate(() =>
+    localStorage.setItem("champions.playmat.v1", "removed-theme"),
+  );
+  await page.reload();
+  await page.getByRole("button", { name: /Resume mission/ }).click();
+  assert.equal(
+    await page.locator(".playmat").getAttribute("data-playmat"),
+    "midnight-city",
+  );
+  checks.push(
+    "All generated playmats load, selection survives reload, invalid preferences fall back, and mission state is unchanged",
+  );
+  checks.push(
+    "Table customization fits small screens, traps focus, and restores focus after Escape",
+  );
 
   const expected = await page.evaluate(() => {
     const state = JSON.parse(localStorage.getItem("champions.save.v1"));
