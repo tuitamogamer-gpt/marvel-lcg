@@ -7,6 +7,7 @@ import {
 } from "../src/game/engine";
 import { paymentStatus } from "../src/game/payment";
 import { boardSnapshot, recordReview } from "../src/game/review";
+import { attachmentsFor } from "../src/game/presentation";
 import type { Command, Effect, GameState } from "../src/game/types";
 
 function send(s: GameState, command: Command) {
@@ -55,6 +56,61 @@ function attack(s: GameState) {
 }
 
 describe("visible payments and manual checkpoints", () => {
+  it("keeps the attacked identity visible even when Spider-Sense draws another card", () => {
+    let s = game();
+    s.player.form = "hero";
+    s.player.inPlay = [makePiece(s, "01006")];
+    s = fixture(s, { type: "enemyAttack", id: s.villain.id });
+    expect(s.review?.cards?.some((p) => p.kind === "drawn")).toBe(true);
+    expect(s.review?.attack?.target).toMatchObject({
+      code: "01001a",
+      name: "Spider-Man",
+      playerId: "p1",
+    });
+    expect(s.review?.attack?.attacker.code).toBe(s.villain.code);
+  });
+
+  it("keeps a defeated ally in the attack recap with the hero it protected", () => {
+    const s = game();
+    attack(s);
+    const ally = makePiece(s, "01083");
+    s.player.inPlay = [ally];
+    s.attack!.defender = ally.id;
+    const before = boardSnapshot(s);
+    s.player.inPlay = [];
+    s.player.discard.push(ally);
+    s.attack = null;
+    recordReview(s, before, { type: "finishAttack" });
+    expect(s.review?.attack?.target.code).toBe(ally.code);
+    expect(s.review?.attack?.identity.name).toBe("Spider-Man");
+    expect(s.review?.attack?.label).toBe("ALLY DEFENDING");
+  });
+
+  it("records attachment selection as a visible step and groups cards with their host", () => {
+    let s = game();
+    const bomber = makePiece(s, "01110");
+    const tracer = makePiece(s, "01007");
+    const web = makePiece(s, "01009");
+    const charge = makePiece(s, "01099");
+    web.attachedTo = charge.attachedTo = s.villain.id;
+    s.minions = [bomber];
+    s.player.inPlay = [tracer, web];
+    s.attachments = [charge];
+    s = fixture(s, { type: "attachPlayer", id: tracer.id, target: bomber.id });
+    expect(s.review?.cards).toContainEqual(
+      expect.objectContaining({
+        id: tracer.id,
+        label: "Attached to Hydra Bomber",
+      }),
+    );
+    expect(attachmentsFor(s, bomber.id).map((p) => p.code)).toEqual(["01007"]);
+    expect(attachmentsFor(s, s.villain.id).map((p) => p.code)).toEqual([
+      "01009",
+      "01099",
+    ]);
+    expect(attachmentsFor(s, "missing")).toEqual([]);
+  });
+
   it("shows the exact cards and ability paid, saving the receipt before the purchased card resolves", () => {
     let s = game();
     const target = makePiece(s, "01066"),

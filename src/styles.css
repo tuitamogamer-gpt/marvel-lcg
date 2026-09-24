@@ -6089,3 +6089,129 @@ option {
     padding-right: 16px;
   }
 }
+
+/* Keep the participants prominent while drawn and boost cards remain inspectable. */
+.modal.review-focus.with-attack {
+  width: min(750px, 100%);
+}
+.attack-participants {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  position: relative;
+  background: #ece8dc;
+  border: 1px solid #c0b9a5;
+  border-radius: 8px;
+  padding: 14px;
+  margin-bottom: 18px;
+}
+.attack-participant {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 0;
+  grid-row: 1;
+}
+.attack-target {
+  grid-column: 3;
+}
+.attack-participant > small {
+  font-size: 9px;
+  font-weight: 800;
+  color: #4d4b44;
+  margin-bottom: 8px;
+}
+.attack-participant > button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.attack-participant .card-image {
+  width: 100%;
+  max-width: 125px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.attack-participant b {
+  font-size: 12px;
+  margin-top: 7px;
+}
+.attack-participant > span {
+  font-size: 10px;
+  margin-top: 4px;
+}
+.attack-direction {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  color: #913b36;
+}
+.review-focus .review-details.attack-review {
+  display: block;
+}
+.review-focus .attack-review .review-explanation {
+  padding-left: 0;
+  border-left: 0;
+}
+.review-focus .attack-review .review-cards {
+  grid-template-columns: repeat(auto-fill, minmax(105px, 140px));
+  justify-content: start;
+}
+.review-focus .attack-review .review-card-section {
+  border-top: 1px solid #c0b9a5;
+  padding-top: 16px;
+}
+.ability-sources .payment-sources {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+}
+.ability-sources .resource-option {
+  max-width: none;
+}
+.ability-sources .payment-source {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  align-items: center;
+  background: #edf3f5;
+}
+.ability-sources .payment-source-caption {
+  padding-right: 25px;
+}
+.ability-sources .payment-art {
+  width: 68px;
+}
+.ability-sources .resource-zoom {
+  top: 5px;
+  right: 5px;
+}
+@media (max-width: 500px) {
+  .review-focus-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px;
+  }
+  .review-focus-footer > div:last-child {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .review-focus-footer .primary-button {
+    min-width: 0;
+  }
+  .review-focus-footer .next-step {
+    min-width: 0;
+  }
+  .attack-participants {
+    gap: 8px;
+    padding: 10px;
+  }
+  .attack-participant > small {
+    font-size: 8px;
+  }
+  .ability-sources .payment-sources {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -207,6 +207,12 @@ export interface ActionReview {
   actor: string;
   phase: string;
   source?: string;
+  attack?: {
+    attacker: { code: string; name: string };
+    target: { code: string; name: string; playerId: string };
+    identity: { code: string; name: string };
+    label: string;
+  };
   cards?: ReviewCard[];
   payment?: { title: string; cost: number; total: number };
   calculation?: {

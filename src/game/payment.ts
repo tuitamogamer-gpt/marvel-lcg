@@ -48,7 +48,7 @@ export function paymentSources(
       name: "Scientist",
       code: heroCard(s).code,
       resources: ["mental"],
-      description: "Use once this round · keep identity",
+      description: "Generate 1 mental resource · once per round · no exhaust",
       kind: "ability",
     });
   for (const p of s.player.inPlay.filter((p) => !p.exhausted)) {

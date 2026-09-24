@@ -12,7 +12,8 @@
     "test:ui": "node scripts/browser-check.mjs",
     "format:check": "prettier --check \"src/**/*.ts\" \"src/**/*.tsx\" \"src/*.css\" \"tests/**/*.ts\" \"scripts/*.mjs\" vite.config.ts",
     "test:design": "node scripts/design-check.mjs",
-    "test:tabletop": "node scripts/tabletop-check.mjs"
+    "test:tabletop": "node scripts/tabletop-check.mjs",
+    "test:flow": "node scripts/flow-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

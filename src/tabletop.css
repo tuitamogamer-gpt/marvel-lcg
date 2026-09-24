@@ -1666,3 +1666,122 @@ button.table-pile:hover .pile-face {
 .physical-table .hand-card {
   margin-left: -8px;
 }
+
+/* Attachments are physically grouped with the card they modify. */
+.host-card-stack {
+  width: var(--table-card-width);
+  flex: 0 0 var(--table-card-width);
+}
+.attached-cards {
+  margin-top: 7px;
+  padding: 7px 0 0 9px;
+  border-left: 2px solid #d4b66d;
+  text-align: left;
+}
+.attachment-connection {
+  display: block;
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  color: #ead79e;
+  margin-bottom: 6px;
+}
+.attached-card-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.attached-piece {
+  width: 58px;
+}
+.attached-card {
+  display: block;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  color: #e7eeeb;
+}
+.attached-card .card-image {
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #d4b66d;
+}
+.attached-card > span,
+.attached-piece > small {
+  display: block;
+  font-size: 8px;
+  line-height: 1.4;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.attached-piece > small {
+  color: #b8cbc5;
+}
+.attached-piece .text-button {
+  font-size: 9px;
+  min-height: 28px;
+  color: #ead79e;
+}
+.enemy-unit {
+  max-width: 235px;
+}
+.physical-table .enemy-unit .attached-cards {
+  margin-left: 10px;
+}
+.identity-resource {
+  margin: 9px 0;
+  padding: 8px;
+  border: 1px solid #728c9d;
+  border-radius: 5px;
+  background: #1c3542;
+  color: #dcebf4;
+}
+.identity-resource b {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  font-size: 10px;
+}
+.identity-resource small {
+  display: block;
+  font-size: 9px;
+  line-height: 1.5;
+  margin-top: 5px;
+}
+.identity-resource.used {
+  background: #263239;
+}
+.physical-table .identity-resource .ability-button {
+  margin: 7px 0 0;
+  min-height: 30px;
+  color: #edf5f9;
+}
+.identity-card-space.under-attack {
+  background: #4d30303b;
+  outline: 1px solid #e1ab7d;
+  border-radius: 7px;
+  padding-block: 8px;
+}
+.attack-identity-label {
+  color: #f5d8ac;
+  font-size: 8px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+.teammate-card-stack {
+  width: 58px;
+  flex: 0 0 58px;
+}
+.teammate-card-stack > button {
+  width: 38px;
+  padding: 0;
+}
+.teammate-card-stack > button.spent {
+  transform: rotate(90deg);
+  margin: 8px;
+}
+.teammate-card-stack .attached-piece {
+  width: 42px;
+}

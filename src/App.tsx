@@ -71,6 +71,7 @@ import {
 import { seatView, upgradeSave } from "./game/team";
 import { effectTitle } from "./game/review";
 import { paymentStatus, paymentSubject } from "./game/payment";
+import { attachmentsFor, attackContext } from "./game/presentation";
 import type {
   ActionReview,
   Aspect,
@@ -1434,11 +1435,14 @@ function PaymentDecision({
               {sources.filter((x) => x.kind === "card").length} CARDS AVAILABLE
             </span>
           </div>
-          {(["card", "ability"] as const).map((kind) => {
+          {(["ability", "card"] as const).map((kind) => {
             const group = sources.filter((x) => x.kind === kind);
             if (!group.length) return null;
             return (
-              <div className="payment-source-group" key={kind}>
+              <div
+                className={`payment-source-group ${kind}-sources`}
+                key={kind}
+              >
                 <div className="payment-group-heading">
                   {kind === "card" ? (
                     <Trash size={14} />
@@ -1473,7 +1477,11 @@ function PaymentDecision({
                           </span>
                         </span>
                         <span className="payment-source-caption">
-                          <b>{x.name}</b>
+                          <b>
+                            {x.id === "scientist"
+                              ? "Peter Parker · Scientist"
+                              : x.name}
+                          </b>
                           <small>{x.description}</small>
                           <span className="payment-selection-label">
                             {selected.includes(x.id)
@@ -1600,6 +1608,7 @@ function Decision({
       onClose={p.cancelable ? () => send({ type: "CANCEL" }) : undefined}
     >
       <p className="modal-intro">{p.text}</p>
+      <AttackParticipants attack={attackContext(s)} />
       {p.kind === "select" ? (
         <>
           <div className="decision-options">
@@ -1694,6 +1703,42 @@ function StatToken({
     </div>
   );
 }
+function AttackParticipants({
+  attack,
+  inspect,
+}: {
+  attack?: ActionReview["attack"];
+  inspect?: (c: Inspect) => void;
+}) {
+  if (!attack) return null;
+  return (
+    <div className="attack-participants" aria-label="Current attack">
+      {[attack.attacker, attack.target].map((participant, i) => (
+        <div
+          className={`attack-participant ${i ? "attack-target" : "attack-enemy"}`}
+          key={i}
+        >
+          <small>{i ? attack.label : "ATTACKER"}</small>
+          {inspect ? (
+            <button
+              aria-label={`Inspect ${participant.name} · ${i ? "attack target" : "attacker"}`}
+              onClick={() => inspect({ code: participant.code })}
+            >
+              <CardImage code={participant.code} />
+            </button>
+          ) : (
+            <CardImage code={participant.code} />
+          )}
+          <b>{participant.name}</b>
+          {i === 1 && attack.target.code !== attack.identity.code && (
+            <span>Protecting {attack.identity.name}</span>
+          )}
+        </div>
+      ))}
+      <ArrowRight className="attack-direction" size={22} aria-hidden="true" />
+    </div>
+  );
+}
 function ReviewDetails({
   review,
   inspect,
@@ -1701,15 +1746,24 @@ function ReviewDetails({
   review: ActionReview;
   inspect: (c: Inspect) => void;
 }) {
+  const participantSource =
+    !!review.attack &&
+    [review.attack.attacker.code, review.attack.target.code].includes(
+      review.source || "",
+    );
+  const messages = participantSource
+    ? review.messages
+    : review.messages.slice(1);
   return (
     <div
-      className={`review-details ${review.cards?.length ? "has-cards" : ""} ${review.cards?.length === 1 ? "one-card" : ""}`}
+      className={`review-details ${review.cards?.length ? "has-cards" : ""} ${review.cards?.length === 1 ? "one-card" : ""} ${review.attack ? "attack-review" : ""}`}
     >
       <div className="review-explanation">
         <div className="resolution-paused" role="status">
           <Clock size={14} /> Step {review.id} · waiting for your Proceed
         </div>
-        {review.source && (
+        <AttackParticipants attack={review.attack} inspect={inspect} />
+        {review.source && !participantSource && (
           <div className="review-source">
             <button
               className="review-source-image"
@@ -1732,9 +1786,9 @@ function ReviewDetails({
             </span>
           </div>
         )}
-        {review.messages.length > 1 && (
+        {messages.length > 0 && (
           <ul className="review-messages">
-            {review.messages.slice(1).map((m, i) => (
+            {messages.map((m, i) => (
               <li key={i}>{m}</li>
             ))}
           </ul>
@@ -1993,7 +2047,7 @@ function ActionDirector({
           key={review.id}
           title={review.title}
           wide={!!review.cards?.length}
-          className={`review-focus ${review.cards?.length ? "with-cards" : ""}`}
+          className={`review-focus ${review.cards?.length ? "with-cards" : ""} ${review.attack ? "with-attack" : ""}`}
           eyebrow={`STEP ${String(review.id).padStart(2, "0")} · ${review.actor.toUpperCase()} · ${review.phase === "villain" ? "VILLAIN PHASE" : "HERO PHASE"}`}
           onClose={() => setCollapsedId(review.id)}
         >
@@ -2126,6 +2180,73 @@ function TablePile({
     </div>
   );
 }
+function AttachedCards({
+  game,
+  host,
+  inspect,
+  send,
+}: {
+  game: GameState;
+  host: Piece;
+  inspect: (c: Inspect) => void;
+  send?: (c: Command) => void;
+}) {
+  const attachments = attachmentsFor(game, host.id);
+  if (!attachments.length) return null;
+  return (
+    <div
+      className="attached-cards"
+      aria-label={`Attached to ${card(host).name}`}
+    >
+      <span className="attachment-connection">
+        ATTACHED · {attachments.length}
+      </span>
+      <div className="attached-card-list">
+        {attachments.map((p) => (
+          <div className="attached-piece" key={p.id}>
+            <button
+              className="attached-card"
+              onClick={() => inspect({ code: p.code, piece: p })}
+              aria-label={`Inspect ${card(p).name}, attached to ${card(host).name}`}
+            >
+              <CardImage code={p.code} />
+              <span>{card(p).name}</span>
+            </button>
+            {game.playerCount > 1 && p.ownerId && (
+              <small>
+                {
+                  HEROES.find(
+                    (h) =>
+                      h.id ===
+                      game.players.find((seat) => seat.id === p.ownerId)
+                        ?.heroId,
+                  )?.name
+                }
+              </small>
+            )}
+            {[
+              "01100",
+              "01118",
+              "01119",
+              "01141",
+              "01142",
+              "01152",
+              "01153",
+            ].includes(p.code) && (
+              <button
+                className="text-button"
+                disabled={!send}
+                onClick={() => send?.({ type: "ABILITY", id: p.id })}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 function Tabletop({
   game,
   send,
@@ -2174,6 +2295,8 @@ function Tabletop({
         : c,
     );
   const [handFilter, setHandFilter] = useState<"all" | "playable">("all");
+  const [resourceHelp, setResourceHelp] = useState(false);
+  const combat = attackContext(game);
   const playableHand = s.player.hand.filter((p) => !playable(s, p));
   const visibleHand = handFilter === "playable" ? playableHand : s.player.hand;
   const threatLimit = schemeLimit(s);
@@ -2352,15 +2475,27 @@ function Tabletop({
           </div>
           <section className="opposition">
             <div className="villain-area">
-              <button
-                className="table-card villain-card"
-                onClick={() => inspect({ code: s.villain.code })}
-              >
-                <CardImage code={s.villain.code} />
-                <span className="inspect-hint">
-                  <Eye size={13} /> Inspect
-                </span>
-              </button>
+              <div className="host-card-stack">
+                <button
+                  className="table-card villain-card"
+                  onClick={() => inspect({ code: s.villain.code })}
+                >
+                  <CardImage code={s.villain.code} />
+                  <span className="inspect-hint">
+                    <Eye size={13} /> Inspect
+                  </span>
+                </button>
+                <AttachedCards
+                  game={s}
+                  host={s.villain}
+                  inspect={inspect}
+                  send={
+                    canUseAction && s.player.form === "hero"
+                      ? sendAction
+                      : undefined
+                  }
+                />
+              </div>
               <div className="villain-info">
                 <span className="small-label">
                   VILLAIN · STAGE {["", "I", "II", "III"][s.villain.stage]}
@@ -2400,39 +2535,6 @@ function Tabletop({
                   Before boosts & triggered abilities
                 </span>
                 <Status piece={s.villain} />
-                {s.attachments
-                  .filter((p) => p.attachedTo === s.villain.id)
-                  .map((p) => (
-                    <div className="attachment-row" key={p.id}>
-                      <button
-                        className="attachment-card"
-                        onClick={() => inspect({ code: p.code })}
-                        aria-label={`Inspect ${card(p).name}`}
-                      >
-                        <CardImage code={p.code} />
-                        <span>{card(p).name}</span>
-                      </button>
-                      {[
-                        "01100",
-                        "01118",
-                        "01119",
-                        "01141",
-                        "01142",
-                        "01152",
-                        "01153",
-                      ].includes(p.code) && (
-                        <button
-                          className="text-button"
-                          disabled={!canUseAction || s.player.form !== "hero"}
-                          onClick={() =>
-                            sendAction({ type: "ABILITY", id: p.id })
-                          }
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                  ))}
               </div>
             </div>
             <div className="scheme-area">
@@ -2544,41 +2646,44 @@ function Tabletop({
             <div className="encounter-field" aria-label="Engaged minions">
               <span className="table-group-label">ENGAGED MINIONS</span>
               {s.minions.map((p) => (
-                <button
-                  className="enemy-tile"
-                  key={p.id}
-                  onClick={() => inspect({ code: p.code })}
-                >
-                  <CardImage code={p.code} />
-                  <span>
-                    <strong>{card(p).name}</strong>
-                    <span className="engagement-label">
-                      Engaged with{" "}
-                      {
-                        HEROES.find(
-                          (h) =>
-                            h.id ===
-                            game.players.find(
-                              (seat) =>
-                                seat.id ===
-                                (p.engagedWith || game.activePlayerId),
-                            )?.heroId,
-                        )?.name
-                      }
+                <div className="enemy-unit" key={p.id}>
+                  <button
+                    className="enemy-tile"
+                    key={p.id}
+                    onClick={() => inspect({ code: p.code })}
+                  >
+                    <CardImage code={p.code} />
+                    <span>
+                      <strong>{card(p).name}</strong>
+                      <span className="engagement-label">
+                        Engaged with{" "}
+                        {
+                          HEROES.find(
+                            (h) =>
+                              h.id ===
+                              game.players.find(
+                                (seat) =>
+                                  seat.id ===
+                                  (p.engagedWith || game.activePlayerId),
+                              )?.heroId,
+                          )?.name
+                        }
+                      </span>
+                      <small>
+                        <Heart size={12} />
+                        {pieceHP(s, p) - p.damage} HP <Fist size={12} />
+                        {p.code === "drone"
+                          ? pieceHP(s, p)
+                          : p.code === "01162"
+                            ? pieceHP(s, p) - p.damage
+                            : card(p).attack}{" "}
+                        ATK{card(p).text?.includes("Guard.") && <b>GUARD</b>}
+                      </small>
+                      <Status piece={p} />
                     </span>
-                    <small>
-                      <Heart size={12} />
-                      {pieceHP(s, p) - p.damage} HP <Fist size={12} />
-                      {p.code === "drone"
-                        ? pieceHP(s, p)
-                        : p.code === "01162"
-                          ? pieceHP(s, p) - p.damage
-                          : card(p).attack}{" "}
-                      ATK{card(p).text?.includes("Guard.") && <b>GUARD</b>}
-                    </small>
-                    <Status piece={p} />
-                  </span>
-                </button>
+                  </button>
+                  <AttachedCards game={s} host={p} inspect={inspect} />
+                </div>
               ))}
             </div>
           )}
@@ -2594,7 +2699,16 @@ function Tabletop({
           </div>
           <section className="player-area">
             <div className="identity-area">
-              <div className="identity-card-space">
+              <div
+                className={`identity-card-space ${combat?.target.playerId === s.activePlayerId ? "under-attack" : ""}`}
+              >
+                {combat?.target.playerId === s.activePlayerId && (
+                  <span className="attack-identity-label">
+                    {combat.target.code === combat.identity.code
+                      ? combat.label
+                      : "ALLY DEFENDING"}
+                  </span>
+                )}
                 <button
                   className={`table-card identity-card ${s.player.exhausted ? "is-exhausted" : ""}`}
                   onClick={() => inspect({ code: heroCard(s).code })}
@@ -2653,6 +2767,33 @@ function Tabletop({
                 </div>
                 <Status piece={s.player} />
                 <p className="identity-power">{plain(heroCard(s).text)}</p>
+                {s.heroId === "spider_man" && (
+                  <div
+                    className={`identity-resource ${s.flags.scientist ? "used" : ""}`}
+                  >
+                    <b>
+                      <Brain size={14} /> Scientist · 1 mental
+                    </b>
+                    <small>
+                      {s.flags.scientist
+                        ? "Used this round · refreshes next round"
+                        : s.player.form === "hero"
+                          ? "Available as Peter Parker · once per round"
+                          : "Available · once per round · no exhaust"}
+                    </small>
+                    <button
+                      className="ability-button"
+                      disabled={
+                        !canUseAction ||
+                        s.player.form !== "alter" ||
+                        !!s.flags.scientist
+                      }
+                      onClick={() => setResourceHelp(true)}
+                    >
+                      Use Scientist…
+                    </button>
+                  </div>
+                )}
                 {abilityActive && (
                   <button
                     className="ability-button"
@@ -2712,7 +2853,7 @@ function Tabletop({
                     key: "setup",
                     title: "UPGRADES & SUPPORTS",
                     pieces: s.player.inPlay.filter(
-                      (p) => card(p).type_code !== "ally",
+                      (p) => card(p).type_code !== "ally" && !p.attachedTo,
                     ),
                     empty: "Build your hero’s setup",
                   },
@@ -2758,6 +2899,7 @@ function Tabletop({
                               </span>
                             )}
                           </button>
+                          <AttachedCards game={s} host={p} inspect={inspect} />
                           <span className="in-play-name">{card(p).name}</span>
                           {p.exhausted && (
                             <span className="card-spent-label">EXHAUSTED</span>
@@ -2889,22 +3031,31 @@ function Tabletop({
                         <ArrowRight size={14} />
                       </button>
                       <div className="teammate-cards">
-                        {view.player.inPlay.map((p) => (
-                          <button
-                            key={p.id}
-                            className={p.exhausted ? "spent" : ""}
-                            onClick={() =>
-                              inspect({
-                                code: p.code,
-                                piece: p,
-                                playerId: seat.id,
-                              })
-                            }
-                            aria-label={`Inspect ${teammate.name}’s ${card(p).name}`}
-                          >
-                            <CardImage code={p.code} />
-                          </button>
-                        ))}
+                        {view.player.inPlay
+                          .filter((p) => !p.attachedTo)
+                          .map((p) => (
+                            <div className="teammate-card-stack" key={p.id}>
+                              <button
+                                key={p.id}
+                                className={p.exhausted ? "spent" : ""}
+                                onClick={() =>
+                                  inspect({
+                                    code: p.code,
+                                    piece: p,
+                                    playerId: seat.id,
+                                  })
+                                }
+                                aria-label={`Inspect ${teammate.name}’s ${card(p).name}`}
+                              >
+                                <CardImage code={p.code} />
+                              </button>
+                              <AttachedCards
+                                game={game}
+                                host={p}
+                                inspect={inspect}
+                              />
+                            </div>
+                          ))}
                         {!view.player.inPlay.length && (
                           <small>No cards in play yet</small>
                         )}
@@ -3128,6 +3279,58 @@ function Tabletop({
           )}
         </aside>
       </div>
+      {resourceHelp && (
+        <Modal
+          title="Use Peter Parker’s Scientist"
+          eyebrow="RESOURCE ABILITY · ONCE PER ROUND"
+          onClose={() => setResourceHelp(false)}
+        >
+          <p className="modal-intro">
+            Choose a card to play, then select Scientist in the payment window
+            to generate 1 mental resource. Scientist does not exhaust Peter. The
+            ability is used only when you confirm payment.
+          </p>
+          <div className="decision-options">
+            {playableHand
+              .filter(
+                (p) => (card(p).cost || 0) > Number(s.flags.discount || 0),
+              )
+              .map((p) => (
+                <button
+                  className="decision-option"
+                  key={p.id}
+                  onClick={() => {
+                    setResourceHelp(false);
+                    sendAction({ type: "PLAY", id: p.id });
+                  }}
+                >
+                  <img src={imageFor(p.code)} alt="" />
+                  <span>
+                    <strong>Play {card(p).name}</strong>
+                    <small>
+                      Pay{" "}
+                      {Math.max(
+                        0,
+                        (card(p).cost || 0) - Number(s.flags.discount || 0),
+                      )}{" "}
+                      resources · Scientist can provide 1 mental
+                    </small>
+                  </span>
+                  <ArrowRight size={18} />
+                </button>
+              ))}
+          </div>
+          {!playableHand.some(
+            (p) => (card(p).cost || 0) > Number(s.flags.discount || 0),
+          ) && (
+            <p className="modal-intro">
+              No card in your hand can use this resource right now. Scientist is
+              also available when another ability asks you to pay a resource
+              cost.
+            </p>
+          )}
+        </Modal>
+      )}
       {pile && (
         <Modal title={pile.title} wide onClose={() => setPile(null)}>
           {pile.cards.length ? (

@@ -1,6 +1,7 @@
 import { card, heroCard, heroStats, HEROES } from "./cards";
 import { allInPlay, seatView } from "./team";
 import { paymentSources, paymentStatus, paymentSubject } from "./payment";
+import { attackContext } from "./presentation";
 import type {
   ActionReview,
   Effect,
@@ -17,6 +18,7 @@ type LocatedCard = {
   visible: boolean;
   exhausted: boolean;
   counters: number;
+  attachedTo?: string;
 };
 function cardLocations(s: GameState) {
   const located: Record<string, LocatedCard> = {};
@@ -35,6 +37,7 @@ function cardLocations(s: GameState) {
         visible,
         exhausted: p.exhausted,
         counters: p.counters,
+        attachedTo: p.attachedTo,
       };
   };
   for (const seat of s.players) {
@@ -377,7 +380,8 @@ export function recordReview(
       a?.zone === b?.zone &&
       a?.owner === b?.owner &&
       a?.exhausted === b?.exhausted &&
-      a?.counters === b?.counters
+      a?.counters === b?.counters &&
+      a?.attachedTo === b?.attachedTo
     )
       continue;
     // Hidden decks stay hidden, including their order after a reshuffle.
@@ -417,6 +421,15 @@ export function recordReview(
       label = "Played";
       kind = "played";
     }
+    const host =
+      b?.attachedTo &&
+      [s.villain, ...s.minions, ...allInPlay(s)].find(
+        (piece) => piece.id === b.attachedTo,
+      );
+    if (host && a?.attachedTo !== b?.attachedTo) {
+      label = `Attached to ${card(host).name}`;
+      kind = "moved";
+    }
     cards.push({
       id,
       code: p.visible ? p.code : undefined,
@@ -427,7 +440,9 @@ export function recordReview(
           : "Facedown card",
       label,
       kind,
-      detail: `${p.owner}${a?.zone !== b?.zone ? ` · ${a?.zone || "Deck"} → ${b?.zone || "Revealed"}` : ""}`,
+      detail: host
+        ? `${p.owner} · Attached to ${card(host).name}`
+        : `${p.owner}${a?.zone !== b?.zone ? ` · ${a?.zone || "Deck"} → ${b?.zone || "Revealed"}` : ""}`,
     });
   }
   const prompt = before.prompt;
@@ -599,5 +614,6 @@ export function recordReview(
     cards,
     payment,
     calculation,
+    attack: attackContext(s, a),
   };
 }

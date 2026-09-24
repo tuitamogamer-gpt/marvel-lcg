@@ -377,10 +377,21 @@ try {
   const boostImage = page.locator(".review-focus .review-card img").first();
   const boostBounds = await boostImage.boundingBox();
   assert.ok(
-    boostBounds.width > 200 && boostBounds.height > 250,
-    "A cold boost image reserves its full card dimensions",
+    boostBounds.width >= 100 && boostBounds.height / boostBounds.width > 1.35,
+    "A cold boost image reserves a complete portrait card frame",
   );
   await screenshot("villain-boost-review");
+  const decodedBounds = await boostImage.boundingBox();
+  assert.equal(
+    decodedBounds.width,
+    boostBounds.width,
+    "Loading boost artwork must not shift card width",
+  );
+  assert.equal(
+    decodedBounds.height,
+    boostBounds.height,
+    "Loading boost artwork must not shift card height",
+  );
   assert.equal(
     await boostImage.evaluate((img) => img.complete && img.naturalWidth > 0),
     true,
