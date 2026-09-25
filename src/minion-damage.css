@@ -1,0 +1,149 @@
+/* A printed damage counter rests on the card; HP beside it is health left. */
+.physical-table .encounter-field .enemy-unit {
+  max-width: 100%;
+  padding-bottom: 8px;
+}
+.physical-table .encounter-field .enemy-tile {
+  grid-template-columns: 104px minmax(0, 142px);
+  gap: 22px;
+  width: 268px;
+  min-width: 0;
+  max-width: 100%;
+}
+.minion-card-face {
+  display: block;
+  position: relative;
+  isolation: isolate;
+}
+.physical-table .minion-card-face > .card-image {
+  display: block;
+  width: 100%;
+  border-radius: 6px;
+  box-shadow:
+    0 2px 0 #06101a,
+    2px 5px 9px #0009;
+}
+.physical-table .enemy-tile .minion-damage {
+  position: absolute;
+  right: -13px;
+  bottom: -9px;
+  width: 70px;
+  height: 70px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #fff9e8;
+  filter: drop-shadow(1px 3px 2px #000b);
+  pointer-events: none;
+  animation: minion-damage-place 260ms ease-out both;
+}
+.minion-damage > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+}
+.physical-table .enemy-tile .minion-damage > b {
+  font: 800 28px/1 var(--display);
+  text-shadow: 0 2px 1px #5f0b0b;
+  font-variant-numeric: tabular-nums;
+}
+.physical-table .enemy-tile .minion-damage > span {
+  font: 800 8px/1.4 var(--body);
+  letter-spacing: 0.3px;
+}
+.physical-table .enemy-tile .minion-info > strong {
+  font: 800 16px/1.15 var(--display);
+  color: #fff5e2;
+  text-shadow: 0 2px 3px #06101a;
+}
+.physical-table .enemy-tile .engagement-label {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #eed89e;
+}
+.minion-stats {
+  display: flex;
+  align-items: stretch;
+  gap: 7px;
+  margin-top: 10px;
+}
+.minion-health,
+.minion-attack {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 43px;
+  padding: 4px 7px;
+  border: 1px solid #a9bec97d;
+  border-radius: 4px;
+  background: #0c1d2ee8;
+  box-shadow: 0 2px 0 #050d16;
+  color: #fff5e2;
+}
+.minion-health > b,
+.minion-attack > b {
+  font: 800 25px/1 var(--display);
+  font-variant-numeric: tabular-nums;
+}
+.minion-health > span {
+  font: 600 12px/1.2 var(--body);
+  color: #e5edf3;
+}
+.physical-table .enemy-tile .minion-stats small {
+  display: block;
+  margin: 2px 0 0;
+  font: 800 8px/1.2 var(--body);
+  white-space: nowrap;
+  color: #e5edf3;
+}
+.minion-attack {
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  min-width: 36px;
+  background: #5c2422ed;
+  border-color: #e88469;
+}
+.minion-attack > b {
+  font-size: 20px;
+}
+.minion-keyword {
+  display: inline-block;
+  margin-top: 8px;
+  color: #ffe397;
+  font: 800 10px/1.2 var(--display);
+  letter-spacing: 0.5px;
+}
+@keyframes minion-damage-place {
+  from {
+    transform: scale(1.3) rotate(-12deg);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) rotate(-5deg);
+    opacity: 1;
+  }
+}
+@media (max-width: 480px) {
+  .physical-table .encounter-field .enemy-tile {
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: 18px;
+    width: 242px;
+  }
+  .physical-table .enemy-tile .minion-damage {
+    width: 64px;
+    height: 64px;
+    right: -10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .physical-table .enemy-tile .minion-damage {
+    animation: none;
+    transform: rotate(-5deg);
+  }
+}

@@ -109,6 +109,7 @@ export interface Attack {
   isVillain: boolean;
 }
 export interface GameState {
+  accountMission?: { id: string; startedAt: string };
   /** Presentation events from the latest command; never used by the rules. */
   combatEvents?: CombatEvent[];
   version: 1;
@@ -183,6 +184,7 @@ export interface CombatEvent {
   enemy: boolean;
 }
 export interface PlayerSeat {
+  deckCards?: string[];
   id: string;
   heroId: string;
   aspect: Aspect;

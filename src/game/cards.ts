@@ -1,6 +1,6 @@
-import playerData from "../data/core-player.json";
-import encounterData from "../data/core-encounter.json";
-import errata from "../data/core-errata.json";
+import playerData from "../data/core-player.json" with { type: "json" };
+import encounterData from "../data/core-encounter.json" with { type: "json" };
+import errata from "../data/core-errata.json" with { type: "json" };
 import type { Aspect, Card, GameState, Piece, Resource } from "./types";
 // Keep the downloaded snapshots intact; official corrections survive data syncs.
 export const CARDS = ([...playerData, ...encounterData] as Card[]).map((c) => {

@@ -1,0 +1,7 @@
+# Minion damage counter
+
+Generated with the built-in imagegen tool on 2026-09-25 for the engaged-minion cards. Runtime asset: `public/art/tabletop/damage-counter.png` (192 × 192, transparent PNG). Numbers and the DAMAGE label are rendered from live game state, not baked into the image. A zero-damage minion has no damage counter. The neighboring HP display shows remaining / maximum health.
+
+## Final prompt
+
+Use case: product-mockup. Asset type: transparent raster game piece for a Marvel Champions style physical card table. Create ONE isolated red damage counter, straight overhead orthographic view, perfectly centered, square image. The counter is a chunky die-cut cardboard comic-book impact burst with 10 broad angular points, a thick near-black ink outline, narrow warm ivory inner rim, saturated vermilion and crimson printed face, subtle halftone printing at the perimeter, tiny paper fibers and a visible dark cardboard edge. Real tactile board-game component photographed in clean studio light; authentic printed comic tabletop aesthetic. Main central 55% must be a simple flat dark-red empty number area so the web app can overlay a large white damage numeral and small DAMAGE label. Overall silhouette occupies 92% of image width and height. Genuine transparent alpha background all around, clean cutout, no ground plane or cast shadow outside the silhouette. No text, no numbers, no heart, no symbols, no metal, no glossy medallion, no extra objects, no watermark.

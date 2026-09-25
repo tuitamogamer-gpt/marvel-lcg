@@ -556,3 +556,261 @@
   width: 22px;
   height: 22px;
 }
+
+/* Hover previews carry the full card text; action windows stay close to the table. */
+.modal-backdrop:has(.review-focus, .action-decision, .payment-modal) {
+  background: #07122494;
+  backdrop-filter: blur(2px);
+}
+.modal.review-focus {
+  width: min(580px, 100%);
+}
+.modal.review-focus.with-cards {
+  width: min(760px, 100%);
+}
+.modal.review-focus.with-attack,
+.modal.attack-decision {
+  width: min(1040px, 100%);
+}
+.modal:is(.review-focus, .action-decision, .payment-modal) {
+  border-width: 1px;
+  box-shadow: 0 16px 48px #03081566;
+}
+.modal:is(.review-focus, .action-decision, .payment-modal) .modal-heading {
+  padding: 12px 18px;
+  border-bottom-width: 2px;
+}
+.modal:is(.review-focus, .action-decision, .payment-modal) .modal-heading h2 {
+  font-size: 24px;
+}
+.modal:is(.review-focus, .action-decision, .payment-modal) .modal-eyebrow {
+  margin-bottom: 4px;
+  letter-spacing: 0.8px;
+}
+.modal:is(.review-focus, .action-decision, .payment-modal)
+  .modal-heading
+  .icon-button {
+  width: 32px;
+  height: 32px;
+}
+.review-focus .review-focus-body {
+  padding: 16px 18px;
+}
+.review-focus .review-details.has-cards:not(.attack-review) {
+  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: 20px;
+}
+.review-focus .has-cards:not(.attack-review) .review-explanation {
+  grid-column: 1;
+  border: 0;
+  padding: 0;
+}
+.review-focus .has-cards:not(.attack-review) .review-card-section {
+  grid-column: 2;
+  border-left: 1px solid #d4d0c5;
+  padding-left: 16px;
+}
+.modal:is(.review-focus, .action-decision) .review-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch;
+  gap: 12px;
+  margin: 0;
+}
+.modal:is(.review-focus, .action-decision) .review-card {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-rows: auto auto auto 1fr;
+  align-items: start;
+  gap: 2px 10px;
+  max-width: none;
+}
+.modal:is(.review-focus, .action-decision) .review-card > button,
+.modal:is(.review-focus, .action-decision) .review-card > .review-card-back {
+  grid-column: 1;
+  grid-row: 1 / 5;
+  width: 58px;
+  margin: 0;
+}
+.modal:is(.review-focus, .action-decision) .review-card .card-image {
+  width: 100%;
+  max-height: none;
+}
+.modal:is(.review-focus, .action-decision) .review-card .card-image img {
+  max-height: none;
+}
+.modal:is(.review-focus, .action-decision) .review-card-label {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: start;
+  margin: 0;
+  padding: 2px 5px;
+  font-size: 8px;
+}
+.modal:is(.review-focus, .action-decision) .review-card > b {
+  grid-column: 2;
+  grid-row: 2;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.modal:is(.review-focus, .action-decision) .review-card > .resources {
+  grid-column: 2;
+  grid-row: 3;
+  margin: 2px 0;
+}
+.modal:is(.review-focus, .action-decision) .review-card .resource {
+  width: 20px;
+  height: 20px;
+}
+.modal:is(.review-focus, .action-decision) .review-card > small {
+  grid-column: 2;
+  grid-row: 4;
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.modal:is(.review-focus, .action-decision) .review-card-back {
+  font-size: 7px;
+  border-width: 1px;
+}
+.modal:is(.review-focus, .action-decision) .review-source {
+  gap: 10px;
+  padding-bottom: 10px;
+}
+.modal:is(.review-focus, .action-decision) .review-source-image img {
+  width: 44px;
+  height: auto;
+}
+.modal:is(.review-focus, .action-decision) .review-source b {
+  margin-bottom: 4px;
+}
+.modal:is(.review-focus, .action-decision) .review-source > span > span,
+.modal:is(.review-focus, .action-decision) .review-messages {
+  font-size: 12px;
+  line-height: 1.5;
+}
+.modal:is(.review-focus, .action-decision) .resolution-paused {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0 0 10px;
+  color: #536477;
+}
+.modal:is(.review-focus, .action-decision) .review-payment {
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.modal:is(.review-focus, .action-decision) .review-payment small {
+  margin-top: 2px;
+}
+.modal:is(.review-focus, .action-decision) .change-row {
+  padding: 6px 0;
+  min-height: 0;
+  font-size: 11px;
+}
+.review-focus .review-focus-footer {
+  padding: 10px 18px;
+  gap: 12px;
+  border-top: 1px solid #c7c6bd;
+  background: #f0ede4;
+}
+.review-focus .review-focus-footer > div:last-child {
+  gap: 8px;
+}
+.review-focus .review-focus-footer button {
+  padding: 9px 14px;
+  min-height: 40px;
+  font-size: 12px;
+  box-shadow: 0 2px 0 var(--ink);
+}
+.review-focus .review-focus-footer .primary-button {
+  min-width: 125px;
+}
+.review-focus .review-details.attack-review,
+.attack-decision .review-details.attack-review {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.9fr);
+  gap: 16px;
+}
+.modal:is(.review-focus, .action-decision) .attack-review:not(.has-cards) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) !important;
+}
+.modal:is(.review-focus, .action-decision) .attack-participants {
+  padding: 10px;
+}
+.modal:is(.review-focus, .action-decision) .attack-participant .card-image {
+  width: 80px;
+}
+.modal:is(.review-focus, .action-decision) .attack-participant b {
+  font-size: 14px;
+}
+.modal.action-decision {
+  padding: 0 18px 16px;
+}
+.action-decision .modal-heading {
+  margin: 0 -18px 14px;
+}
+.action-decision > .modal-intro {
+  margin-bottom: 12px;
+}
+.action-decision > .decision-options {
+  margin-top: 12px;
+  gap: 8px;
+}
+@media (min-width: 761px) {
+  .modal.payment-modal {
+    width: min(980px, 100%);
+  }
+  .payment-modal .payment-workspace {
+    grid-template-columns: 172px minmax(0, 1fr);
+  }
+  .payment-modal .payment-target,
+  .payment-modal .payment-pool {
+    padding: 16px;
+  }
+  .payment-modal .payment-steps {
+    padding: 10px 18px;
+  }
+  .payment-modal .payment-pool-heading {
+    margin-bottom: 14px;
+  }
+  .payment-modal .payment-sources {
+    grid-template-columns: repeat(auto-fill, minmax(106px, 1fr));
+    gap: 10px;
+  }
+  .payment-modal .ability-sources .payment-sources {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  }
+  .payment-modal .payment-source-group + .payment-source-group {
+    margin-top: 16px;
+    padding-top: 12px;
+  }
+}
+@media (max-width: 999px) and (min-width: 601px) {
+  .modal:is(.review-focus, .action-decision) .attack-review .review-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .review-focus .review-details.has-cards:not(.attack-review) {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .review-focus .has-cards:not(.attack-review) > * {
+    width: 100%;
+  }
+  .review-focus .has-cards:not(.attack-review) .review-card-section {
+    padding: 12px 0 0;
+    border-left: 0;
+    border-top: 1px solid #d4d0c5;
+  }
+  .review-focus .review-focus-body {
+    padding: 14px;
+  }
+  .review-focus .review-focus-footer {
+    padding: 10px 14px;
+  }
+  .review-focus .review-focus-footer .primary-button {
+    min-width: 0;
+  }
+}

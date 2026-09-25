@@ -1,0 +1,106 @@
+/* Bespoke enamel shields, with live values kept as readable HTML. */
+.defense-crest {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 2px 1px #0006);
+}
+.premium-token.token-defense {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+}
+.premium-token.token-defense .defense-crest,
+.physical-table .stat-row .token-emblem .defense-crest {
+  width: 100%;
+  height: 112%;
+  filter: drop-shadow(0 1px 1px #0006);
+}
+.physical-table .basic-actions > .defense-plaque {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: 9px;
+  min-height: 62px;
+  padding: 3px 13px 3px 6px;
+  border: 1px solid #83aaca;
+  border-left: 3px solid #b8d9eb;
+  border-radius: 8px;
+  background: linear-gradient(120deg, #1b3e5a, #12283e 80%);
+  box-shadow:
+    inset 0 1px 0 #f4e7bc30,
+    inset 0 -1px 0 #071421,
+    0 3px 0 #0004;
+  color: #eff6fb;
+  cursor: default;
+}
+.defense-plaque-value {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 54px;
+}
+.defense-plaque-value > .defense-crest {
+  position: absolute;
+  inset: 0;
+}
+.defense-plaque-value > b {
+  position: relative;
+  margin-top: -2px;
+  color: #fff9e8;
+  font: 800 27px/1 var(--display);
+  font-variant-numeric: tabular-nums;
+  text-shadow:
+    0 2px 0 #071729,
+    0 0 5px #051425;
+}
+.defense-plaque-copy {
+  display: grid;
+  gap: 5px;
+}
+.defense-plaque-copy > strong {
+  font: 800 18px/1 var(--display);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.physical-table .defense-plaque-copy > small {
+  font: 600 10px/1.25 var(--body);
+  color: #c4dbee;
+}
+.physical-table .basic-actions > .defense-plaque[data-exhausted="true"] {
+  background: linear-gradient(120deg, #263344, #192536);
+  border-color: #7c8c9e;
+}
+.defense-plaque[data-exhausted="true"] .defense-crest {
+  filter: saturate(0.3) drop-shadow(0 2px 1px #0006);
+}
+@media (max-width: 600px) {
+  .physical-table .basic-actions > .defense-plaque {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    min-height: 56px;
+    padding: 3px 12px;
+  }
+  .defense-plaque-value {
+    flex-basis: 42px;
+    width: 42px;
+    height: 47px;
+  }
+  .defense-plaque-value > b {
+    font-size: 24px;
+  }
+  .defense-plaque-copy {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px 10px;
+  }
+  .defense-plaque-copy > strong {
+    font-size: 16px;
+  }
+}

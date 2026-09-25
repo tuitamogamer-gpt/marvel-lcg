@@ -11,6 +11,9 @@ npm install
 npm run dev
 ```
 
+Use Node.js **22.13+**. The development server includes the account API and
+creates its private SQLite database in `.accounts/accounts.sqlite` (ignored by Git).
+
 Open the local address printed by Vite. In the current workspace the preview runs at **http://localhost:5174** (5173 was already occupied).
 
 ```sh
@@ -25,12 +28,15 @@ npm run test:tabletop # crowded physical table, exhaustion, piles, and responsiv
 
 ## Deploy
 
-`vercel.json` configures the Vite production build. Import the GitHub repository into Vercel or run `vercel --prod` from the linked project. No environment variables are needed. Local Vercel account/project metadata is excluded from Git.
+`vercel.json` configures the Vite production build. Import the GitHub repository into Vercel or run `vercel --prod` from the linked project. Guest play needs no environment variables. Player accounts require a durable Upstash Redis database and server-only `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` variables in Vercel (the `KV_REST_API_URL` / `KV_REST_API_TOKEN` aliases also work). See [account setup and verification](docs/player-accounts.md). Local Vercel account/project metadata is excluded from Git.
 
 Run the same browser checks against a deployment with `BASE_URL=https://your-project.vercel.app npm run test:ui`.
 
 ## Included
 
+- Player registration/sign-in with a username and password, a one-time recovery code, private account sessions, and sign-out.
+- A player profile with up to 30 saved Core Set decks, editing and deck validation, direct use at mission setup, up to 5 resumable missions, and the last 100 completed results with win statistics.
+- Account autosave preserves opening hands, decisions, payments, and action reviews. Guest progress stays separate; an unfinished guest mission can be explicitly added to an account.
 - Spider-Man, Captain Marvel, Iron Man, Black Panther, and She-Hulk.
 - Four selectable aspects with the official core starter-deck recipes: 15 hero + 14 aspect + 11 basic cards.
 - Rhino, Klaw, and Ultron; Standard I/II or Expert II/III.
@@ -59,7 +65,7 @@ The rules engine is a serializable state machine in `src/game/engine.ts`. Comman
 
 This is the first playable implementation, **not a claim of exhaustive rules certification**. Tests cover all proactive core event handlers, all core encounter handlers, key rule interactions, and complete seeded missions for all 15 hero/villain pairings. See [rules coverage](docs/rules-coverage.md) for remaining limitations and validation boundaries.
 
-Online co-op, custom deck construction/import, campaigns, and expansions are not included. Current layout verification prioritizes desktop (1280–1920px); dedicated mobile polish is deferred. One save slot is stored in the current browser. Starting a new mission asks before replacing an unfinished one.
+Online co-op, external deck import, campaigns, and expansions are not included. Custom decks use the supported Core Set card pool. Gameplay layout verification prioritizes desktop (1280–1920px); account pages are also checked at 390px and 320px. Guests have one save slot in the current browser. Signed-in players save missions to their account. Starting a new mission asks before replacing the currently open table; account missions remain in the profile until completed or explicitly deleted.
 
 The lobby, archive, and decision dialogs use a comic-book visual system. The battlefield recreates a physical card table with a textured playmat, health dials, full card faces, separate draw/discard piles, sideways exhausted cards, and visible teammate tableaus. See [tabletop design research](docs/tabletop-design-research.md) for the real-world references and [visual direction](docs/visual-direction.md) for the broader interface and verification scope.
 

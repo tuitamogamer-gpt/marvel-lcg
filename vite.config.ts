@@ -1,8 +1,25 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { accountsPlugin } from "./server/vite-accounts";
 export default defineConfig({
-  plugins: [react()],
-  server: { port: 5174, strictPort: true, host: "0.0.0.0" },
+  plugins: [react(), accountsPlugin()],
+  server: {
+    port: 5174,
+    strictPort: true,
+    host: "0.0.0.0",
+    fs: {
+      deny: [
+        ".env",
+        ".env.*",
+        "**/.git/**",
+        "**/.vercel/**",
+        "**/.accounts/**",
+        "**/accounts.sqlite*",
+        "*.pem",
+        "*.crt",
+      ],
+    },
+  },
   build: {
     rollupOptions: {
       output: {

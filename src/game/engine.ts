@@ -45,6 +45,7 @@ import {
 } from "./review";
 import { paymentSources, paymentStatus } from "./payment";
 import { combatCharacter, recordCombat } from "./combat";
+import { deckErrors } from "./decks";
 export { paymentSources } from "./payment";
 export const SAVE_KEY = "champions.save.v1";
 const E = (type: string, args: Record<string, any> = {}): Effect => ({
@@ -1013,7 +1014,7 @@ export function newGame(config: {
   difficulty?: "standard" | "expert";
   module?: string;
   seed?: number;
-  heroes?: { heroId: string; aspect: Aspect }[];
+  heroes?: { heroId: string; aspect: Aspect; deckCards?: string[] }[];
   guided?: boolean;
 }): GameState {
   const team = config.heroes || [
@@ -1028,6 +1029,12 @@ export function newGame(config: {
     team.every((p) => HEROES.some((h) => h.id === p.heroId)),
     "Unknown hero.",
   );
+  for (const seat of team) {
+    if (seat.deckCards) {
+      const errors = deckErrors(seat.heroId, seat.aspect, seat.deckCards);
+      need(!errors.length, errors[0]);
+    }
+  }
   const v = VILLAINS.find((v) => v.id === config.villainId) || VILLAINS[0];
   const difficulty = config.difficulty || "standard",
     stage = difficulty === "expert" ? 2 : 1;
@@ -1103,7 +1110,9 @@ export function newGame(config: {
     activateSeat(s, seat.id);
     s.player.deck = shuffle(
       s,
-      deckCodes(seat.heroId, seat.aspect).map((c) => makePiece(s, c)),
+      (seat.deckCards || deckCodes(seat.heroId, seat.aspect)).map((c) =>
+        makePiece(s, c),
+      ),
     );
     draw(s, handSize(s));
   }

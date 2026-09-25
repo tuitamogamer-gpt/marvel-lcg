@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CardPreview } from "./CardPreview";
+import { AccountPage } from "./account/AccountPage";
+import { useAccount, useMissionSync } from "./account/useAccount";
+import type { SavedDeck, MissionRecord } from "./account/types";
 import { CombatCinematic } from "./CombatCinematic";
+import { HeroEmblem } from "./HeroEmblem";
+import { DefenseCrest, DefensePlaque } from "./DefenseCrest";
+import "./minion-damage.css";
 import { createPortal } from "react-dom";
 import type { CSSProperties, ReactNode } from "react";
 import {
@@ -47,8 +53,13 @@ import {
   Info,
   Palette,
 } from "@phosphor-icons/react";
-import { PLAYMATS, TABLE_STYLE_KEY, readPlaymat } from "./tabletop-assets";
-import type { PlaymatId } from "./tabletop-assets";
+import {
+  PLAYMATS,
+  TABLE_STYLE_KEY,
+  readPlaymat,
+  playmatForHero,
+} from "./tabletop-assets";
+import type { PlaymatPreference } from "./tabletop-assets";
 import {
   ASPECTS,
   CARDS,
@@ -91,7 +102,7 @@ import type {
   Resource,
 } from "./game/types";
 
-type Screen = "lobby" | "game" | "collection";
+type Screen = "lobby" | "game" | "collection" | "account";
 type Inspect = {
   code: string;
   piece?: Piece;
@@ -358,6 +369,7 @@ const fanCards: Record<string, [string, string]> = {
   she_hulk: ["01021", "01028"],
 };
 export default function App() {
+  const account = useAccount();
   const [combat, setCombat] = useState<{
     id: number;
     events: CombatEvent[];
@@ -366,9 +378,16 @@ export default function App() {
   const finishCombat = useCallback(() => setCombat(null), []);
   const [screen, setScreen] = useState<Screen>("lobby");
   const [game, setGame] = useState<GameState | null>(readSave);
-  const [team, setTeam] = useState<{ heroId: string; aspect: Aspect }[]>([
-    { heroId: HEROES[0].id, aspect: "justice" },
-  ]);
+  const [gameOwner, setGameOwner] = useState<string | null>(null);
+  const missionSync = useMissionSync(account, game, gameOwner);
+  const [team, setTeam] = useState<
+    {
+      heroId: string;
+      aspect: Aspect;
+      deckCards?: string[];
+      deckName?: string;
+    }[]
+  >([{ heroId: HEROES[0].id, aspect: "justice" }]);
   const [setupSeat, setSetupSeat] = useState(0);
   const hero = HEROES.find((h) => h.id === team[setupSeat].heroId)!;
   const aspect = team[setupSeat].aspect;
@@ -379,7 +398,9 @@ export default function App() {
       ),
     );
   const setAspect = (aspect: Aspect) =>
-    setTeam((a) => a.map((p, i) => (i === setupSeat ? { ...p, aspect } : p)));
+    setTeam((a) =>
+      a.map((p, i) => (i === setupSeat ? { heroId: p.heroId, aspect } : p)),
+    );
   function setTeamSize(size: number) {
     setTeam((prev) => {
       const next = prev.slice(0, size);
@@ -413,14 +434,26 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [screen]);
   useEffect(() => {
-    if (game)
+    if (game && !gameOwner)
       try {
         localStorage.setItem(SAVE_KEY, JSON.stringify(game));
         setStorageError(false);
       } catch {
         setStorageError(true);
       }
-  }, [game]);
+  }, [game, gameOwner]);
+  useEffect(() => {
+    if (
+      gameOwner &&
+      account.session &&
+      account.session.user?.id !== gameOwner
+    ) {
+      setGame(readSave());
+      setGameOwner(null);
+      setScreen("account");
+      missionSync.reset();
+    }
+  }, [account.session?.user?.id, gameOwner]);
   useEffect(() => {
     if (!toast) return;
     const id = setTimeout(() => setToast(""), 5000);
@@ -486,19 +519,48 @@ export default function App() {
       setCombat({ id: ++combatId.current, events: next.combatEvents });
     tone();
   }
-  function start() {
+  async function start(replay = false) {
+    await missionSync.flush();
+    if (missionSync.hasUnsaved()) {
+      setToast(
+        "Save the current mission before starting another. Use Retry save or open your profile.",
+      );
+      return;
+    }
     setCombat(null);
-    setGame(
-      newGame({
-        heroId: hero.id,
-        aspect,
-        heroes: team,
-        guided: true,
-        villainId: villain.id,
-        difficulty,
-        module,
-      }),
-    );
+    missionSync.reset();
+    setGameOwner(account.session?.user?.id || null);
+    setGame({
+      ...newGame(
+        replay && game
+          ? {
+              heroId: game.players[0].heroId,
+              aspect: game.players[0].aspect,
+              heroes: game.players.map((p) => ({
+                heroId: p.heroId,
+                aspect: p.aspect,
+                deckCards: p.deckCards,
+              })),
+              villainId: game.villainId,
+              difficulty: game.difficulty,
+              module: game.module,
+              guided: true,
+            }
+          : {
+              heroId: hero.id,
+              aspect,
+              heroes: team,
+              guided: true,
+              villainId: villain.id,
+              difficulty,
+              module,
+            },
+      ),
+      accountMission: {
+        id: crypto.randomUUID(),
+        startedAt: new Date().toISOString(),
+      },
+    });
     setScreen("game");
     setRestart(false);
     tone();
@@ -506,6 +568,79 @@ export default function App() {
   function startRequest() {
     if (game && !["won", "lost"].includes(game.phase)) setRestart(true);
     else start();
+  }
+  function useSavedDeck(deck: SavedDeck) {
+    const existing = team.findIndex((p) => p.heroId === deck.heroId);
+    const seat = existing >= 0 ? existing : setupSeat;
+    setTeam((a) =>
+      a.map((p, i) =>
+        i === seat
+          ? {
+              heroId: deck.heroId,
+              aspect: deck.aspect,
+              deckCards: [...deck.cards],
+              deckName: deck.name,
+            }
+          : p,
+      ),
+    );
+    setSetupSeat(seat);
+    setScreen("lobby");
+    setToast(
+      `${deck.name} loaded for ${HEROES.find((h) => h.id === deck.heroId)?.name}. Choose a villain and start your mission.`,
+    );
+  }
+  async function resumeAccountMission(record: MissionRecord) {
+    if (!record.state) return;
+    await missionSync.flush();
+    if (
+      missionSync.hasUnsaved() &&
+      !window.confirm(
+        "There are unsaved changes at this table. Discard them and load the selected saved mission?",
+      )
+    )
+      return;
+    missionSync.adopt(record);
+    setGameOwner(account.session!.user!.id);
+    setGame(
+      upgradeSave({
+        ...structuredClone(record.state),
+        accountMission: { id: record.id, startedAt: record.startedAt },
+      }),
+    );
+    setCombat(null);
+    setScreen("game");
+  }
+  async function signOut() {
+    await missionSync.flush();
+    if (missionSync.hasUnsaved())
+      throw Error(
+        "Your mission has unsaved changes. Retry saving before signing out.",
+      );
+    await account.request("logout");
+    setGame(readSave());
+    setGameOwner(null);
+    missionSync.reset();
+  }
+  async function saveSetupDeck() {
+    if (!account.session?.user) {
+      setDeckView(false);
+      setScreen("account");
+      return;
+    }
+    try {
+      await account.request("deck.save", {
+        name:
+          team[setupSeat].deckName ||
+          `${hero.name} / ${ASPECTS.find((a) => a.id === aspect)!.name}`,
+        heroId: hero.id,
+        aspect,
+        cards: team[setupSeat].deckCards || deckCodes(hero.id, aspect),
+      });
+      setToast("Deck saved to your profile.");
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Could not save deck.");
+    }
   }
   const active = game && !["won", "lost"].includes(game.phase);
   return (
@@ -544,6 +679,18 @@ export default function App() {
           </button>
         </nav>
         <div className="top-tools">
+          <button
+            className="account-nav"
+            aria-label={
+              account.session?.user
+                ? "Open player profile"
+                : "Sign in or create account"
+            }
+            onClick={() => setScreen("account")}
+          >
+            <User size={18} />
+            <span>{account.session?.user?.displayName || "Sign in"}</span>
+          </button>
           <span className="edition">
             <span>CORE SET</span>
             <b>01</b>
@@ -570,6 +717,70 @@ export default function App() {
           )}
         </div>
       </header>
+      {gameOwner && (
+        <div
+          className={`account-sync ${missionSync.status === "error" ? "error" : ""}`}
+          role="status"
+        >
+          <ShieldCheck size={15} />
+          {missionSync.status === "error"
+            ? missionSync.error
+            : missionSync.status === "saving"
+              ? "Saving mission to your account…"
+              : missionSync.status === "saved"
+                ? "Mission saved to your account"
+                : "Account autosave is ready"}
+          {missionSync.status === "error" && (
+            <>
+              <button onClick={missionSync.retry}>Retry save</button>
+              <button onClick={() => setScreen("account")}>Open profile</button>
+            </>
+          )}
+        </div>
+      )}
+      {screen === "account" && (
+        <AccountPage
+          key={account.session?.user?.id || "guest"}
+          account={account}
+          onUseDeck={useSavedDeck}
+          onResume={resumeAccountMission}
+          onSignOut={signOut}
+          onMissionDeleted={(id) => {
+            if (gameOwner && game?.accountMission?.id === id) {
+              setGame(null);
+              setGameOwner(null);
+              missionSync.reset();
+            }
+          }}
+          onImportGuest={
+            game &&
+            !gameOwner &&
+            account.session?.user &&
+            !["won", "lost"].includes(game.phase)
+              ? async () => {
+                  const snapshot = {
+                    ...structuredClone(game),
+                    accountMission: {
+                      id: crypto.randomUUID(),
+                      startedAt: new Date().toISOString(),
+                    },
+                  };
+                  const response = await account.request("mission.save", {
+                    ...snapshot.accountMission,
+                    revision: 0,
+                    state: snapshot,
+                  });
+                  const record = response.library.missions.find(
+                    (m) => m.id === snapshot.accountMission.id,
+                  )!;
+                  missionSync.adopt(record);
+                  setGame(snapshot);
+                  setGameOwner(response.user!.id);
+                }
+              : undefined
+          }
+        />
+      )}
       {screen === "lobby" && (
         <main id="main-content" className="lobby page-width">
           <div className="lobby-kicker">
@@ -825,7 +1036,8 @@ export default function App() {
                   className="text-button"
                   onClick={() => setDeckView(true)}
                 >
-                  View 40-card deck <ArrowUpRight size={15} />
+                  View {team[setupSeat].deckCards?.length || 40}-card deck{" "}
+                  <ArrowUpRight size={15} />
                 </button>
               </div>
               <div className="aspect-grid">
@@ -858,8 +1070,31 @@ export default function App() {
               </div>
               <p className="aspect-description">
                 {ASPECTS.find((a) => a.id === aspect)!.description}{" "}
-                <span>A complete starter deck is ready to play.</span>
+                <span>
+                  {team[setupSeat].deckName
+                    ? `${team[setupSeat].deckName} is ready to play.`
+                    : "A complete starter deck is ready to play."}
+                </span>
               </p>
+              <div className="account-setup-deck">
+                <span>
+                  {team[setupSeat].deckName || `${hero.name} starter deck`}
+                </span>
+                <div>
+                  <button
+                    className="text-button"
+                    onClick={() => void saveSetupDeck()}
+                  >
+                    <Cards size={16} /> Save deck
+                  </button>
+                  <button
+                    className="text-button"
+                    onClick={() => setScreen("account")}
+                  >
+                    My decks <ArrowRight size={15} />
+                  </button>
+                </div>
+              </div>
             </section>
             <section className="mission-panel">
               <div className="section-heading">
@@ -945,8 +1180,8 @@ export default function App() {
                     <span>
                       <b>{HEROES.find((h) => h.id === p.heroId)!.name}</b>
                       <small>
-                        {ASPECTS.find((a) => a.id === p.aspect)?.name} · 40-card
-                        deck
+                        {ASPECTS.find((a) => a.id === p.aspect)?.name} ·{" "}
+                        {p.deckCards?.length || 40}-card deck
                       </small>
                     </span>
                     <CheckCircle size={19} weight="fill" />
@@ -1097,6 +1332,17 @@ export default function App() {
       {screen === "game" && game && (
         <Tabletop
           game={game}
+          saveLabel={
+            gameOwner
+              ? missionSync.status === "saved"
+                ? "Progress saved to your account"
+                : missionSync.status === "error"
+                  ? "Account save needs attention"
+                  : "Saving to your account…"
+              : storageError
+                ? "Device save needs attention"
+                : "Progress saved on this device"
+          }
           send={send}
           inspect={setInspect}
           logOpen={logOpen}
@@ -1224,12 +1470,15 @@ export default function App() {
           onClose={() => setDeckView(false)}
         >
           <p className="modal-intro">
-            40 cards · 15 hero cards + 14 aspect cards + 11 basic cards. Based
-            on the core-set starter deck lists.
+            {team[setupSeat].deckCards?.length || 40} cards ·{" "}
+            {team[setupSeat].deckName || "Core Set starter deck"}. Includes all
+            15 required hero cards.
           </p>
           <div className="deck-list">
             {(["hero", aspect, "basic"] as const).map((f) => {
-              const counts = deckCodes(hero.id, aspect).reduce(
+              const counts = (
+                team[setupSeat].deckCards || deckCodes(hero.id, aspect)
+              ).reduce(
                 (a, c) => ({ ...a, [c]: (a[c] || 0) + 1 }),
                 {} as Record<string, number>,
               );
@@ -1255,14 +1504,24 @@ export default function App() {
               );
             })}
           </div>
+          <div className="modal-actions">
+            <button
+              className="primary-button"
+              onClick={() => void saveSetupDeck()}
+            >
+              <Cards size={18} /> Save to my decks
+            </button>
+          </div>
         </Modal>
       )}
       {help && <Help onClose={() => setHelp(false)} />}
       {restart && (
         <Modal title="Start a new mission?" onClose={() => setRestart(false)}>
           <p className="modal-intro">
-            Your current {HEROES.find((h) => h.id === game?.heroId)?.name}{" "}
-            mission will be replaced by {hero.name} vs. {villain.name}.
+            {gameOwner
+              ? "Your current mission will remain in your profile. Open a new table for "
+              : "Your current guest mission will be replaced by "}
+            {hero.name} vs. {villain.name}.
           </p>
           <div className="modal-actions">
             <button
@@ -1274,7 +1533,7 @@ export default function App() {
             >
               Resume current mission
             </button>
-            <button className="primary-button" onClick={start}>
+            <button className="primary-button" onClick={() => void start()}>
               Start new mission <ArrowRight size={18} />
             </button>
           </div>
@@ -1320,22 +1579,7 @@ export default function App() {
                 </button>
                 <button
                   className="primary-button"
-                  onClick={() =>
-                    setGame(
-                      newGame({
-                        heroId: game.players[0].heroId,
-                        heroes: game.players.map((p) => ({
-                          heroId: p.heroId,
-                          aspect: p.aspect,
-                        })),
-                        guided: true,
-                        aspect: game.aspect,
-                        villainId: game.villainId,
-                        difficulty: game.difficulty,
-                        module: game.module,
-                      }),
-                    )
-                  }
+                  onClick={() => void start(true)}
                 >
                   <ArrowsClockwise size={17} /> Play again
                 </button>
@@ -1722,7 +1966,7 @@ function Decision({
   return (
     <Modal
       title={p.title}
-      className={s.attack ? "attack-decision" : ""}
+      className={`action-decision ${s.attack ? "attack-decision" : ""}`}
       eyebrow={
         s.phase === "villain"
           ? `${HEROES.find((h) => h.id === s.heroId)!.name.toUpperCase()} · YOUR RESPONSE`
@@ -1818,7 +2062,7 @@ function PremiumToken({
   }[kind];
   return (
     <span className={`premium-token token-${kind}`} aria-hidden="true">
-      <Icon weight="fill" />
+      {kind === "defense" ? <DefenseCrest /> : <Icon weight="fill" />}
     </span>
   );
 }
@@ -1837,11 +2081,13 @@ function CardBack({ kind }: { kind: "hero" | "encounter" }) {
 
 function TableStylePicker({
   selected,
+  heroId,
   onSelect,
   onClose,
 }: {
-  selected: PlaymatId;
-  onSelect: (id: PlaymatId) => void;
+  selected: PlaymatPreference;
+  heroId: string;
+  onSelect: (id: PlaymatPreference) => void;
   onClose: () => void;
 }) {
   return (
@@ -1853,14 +2099,38 @@ function TableStylePicker({
       onClose={onClose}
     >
       <p className="table-style-intro">
-        Pick the backdrop for your next great battle.
+        A home for every hero. Follow your team, or keep a favorite on the
+        table.
       </p>
+      <button
+        className={`playmat-auto ${selected === "match-hero" ? "selected" : ""}`}
+        aria-pressed={selected === "match-hero"}
+        onClick={() => onSelect("match-hero")}
+      >
+        <span className="playmat-auto-emblem">
+          <HeroEmblem heroId={heroId} />
+        </span>
+        <span>
+          <strong>Match your hero</strong>
+          <small>
+            Follows the play area you’re viewing · {playmatForHero(heroId).name}
+          </small>
+        </span>
+        {selected === "match-hero" ? (
+          <CheckCircle size={24} weight="fill" />
+        ) : (
+          <ArrowsClockwise size={24} />
+        )}
+      </button>
       <div
         className="playmat-options"
         role="group"
         aria-label="Choose a playmat"
       >
-        {PLAYMATS.map((mat, i) => (
+        {[
+          ...PLAYMATS.filter((mat) => mat.heroId),
+          ...PLAYMATS.filter((mat) => !mat.heroId),
+        ].map((mat) => (
           <button
             key={mat.id}
             className={`playmat-option ${selected === mat.id ? "selected" : ""}`}
@@ -1869,12 +2139,15 @@ function TableStylePicker({
           >
             <span className="playmat-option-art">
               <img src={mat.image} alt="" width={640} height={360} />
-              <span className="playmat-edition">0{i + 1}</span>
+              <span className="playmat-edition">{mat.hero}</span>
               {selected === mat.id && <CheckCircle size={23} weight="fill" />}
             </span>
             <span className="playmat-option-copy">
               <strong>{mat.name}</strong>
               <small>{mat.detail}</small>
+              {mat.heroId === heroId && (
+                <span className="playmat-match">YOUR HERO’S PLAYMAT</span>
+              )}
             </span>
           </button>
         ))}
@@ -2518,6 +2791,7 @@ function AttachedCards({
 }
 function Tabletop({
   game,
+  saveLabel,
   send,
   inspect,
   logOpen,
@@ -2526,6 +2800,7 @@ function Tabletop({
   onHelp,
 }: {
   game: GameState;
+  saveLabel: string;
   send: (c: Command) => void;
   inspect: (c: Inspect) => void;
   logOpen: boolean;
@@ -2536,8 +2811,7 @@ function Tabletop({
   const [viewId, setViewId] = useState(game.activePlayerId);
   const [playmatId, setPlaymatId] = useState(readPlaymat);
   const [tableStyleOpen, setTableStyleOpen] = useState(false);
-  const playmat = PLAYMATS.find((mat) => mat.id === playmatId)!;
-  const selectPlaymat = (id: PlaymatId) => {
+  const selectPlaymat = (id: PlaymatPreference) => {
     setPlaymatId(id);
     try {
       localStorage.setItem(TABLE_STYLE_KEY, id);
@@ -2554,6 +2828,10 @@ function Tabletop({
     setHandFilter("all");
   }, [game.activePlayerId, game.review?.id]);
   const h = HEROES.find((h) => h.id === s.heroId)!;
+  const playmat =
+    playmatId === "match-hero"
+      ? playmatForHero(s.heroId)
+      : PLAYMATS.find((mat) => mat.id === playmatId)!;
   const v = VILLAINS.find((v) => v.id === s.villainId)!;
   const stats = heroStats(s);
   const acting =
@@ -2956,8 +3234,26 @@ function Tabletop({
                     key={p.id}
                     onClick={() => inspect({ code: p.code })}
                   >
-                    <CardImage code={p.code} />
-                    <span>
+                    <span className="minion-card-face">
+                      <CardImage code={p.code} />
+                      {p.damage > 0 && (
+                        <span
+                          className="minion-damage"
+                          key={p.damage}
+                          aria-label={`${p.damage} damage`}
+                        >
+                          <img
+                            src="/art/tabletop/damage-counter.png"
+                            alt=""
+                            width={192}
+                            height={192}
+                          />
+                          <b aria-hidden="true">{p.damage}</b>
+                          <span aria-hidden="true">DAMAGE</span>
+                        </span>
+                      )}
+                    </span>
+                    <span className="minion-info">
                       <strong>{card(p).name}</strong>
                       <span className="engagement-label">
                         Engaged with{" "}
@@ -2973,16 +3269,31 @@ function Tabletop({
                           )?.name
                         }
                       </span>
-                      <small>
-                        <Heart size={12} />
-                        {pieceHP(s, p) - p.damage} HP <Fist size={12} />
-                        {p.code === "drone"
-                          ? pieceHP(s, p)
-                          : p.code === "01162"
-                            ? pieceHP(s, p) - p.damage
-                            : card(p).attack}{" "}
-                        ATK{card(p).text?.includes("Guard.") && <b>GUARD</b>}
-                      </small>
+                      <span className="minion-stats">
+                        <span
+                          className="minion-health"
+                          aria-label={`${pieceHP(s, p) - p.damage} of ${pieceHP(s, p)} hit points remaining`}
+                        >
+                          <b>{pieceHP(s, p) - p.damage}</b>
+                          <span>
+                            / {pieceHP(s, p)}
+                            <small>HP LEFT</small>
+                          </span>
+                        </span>
+                        <span className="minion-attack">
+                          <b>
+                            {p.code === "drone"
+                              ? pieceHP(s, p)
+                              : p.code === "01162"
+                                ? pieceHP(s, p) - p.damage
+                                : card(p).attack}
+                          </b>
+                          <small>ATK</small>
+                        </span>
+                      </span>
+                      {card(p).text?.includes("Guard.") && (
+                        <span className="minion-keyword">GUARD</span>
+                      )}
                       <Status piece={p} />
                     </span>
                   </button>
@@ -3088,17 +3399,28 @@ function Tabletop({
                   </button>
                 )}
                 <button
-                  className="flip-button"
+                  className="flip-button hero-form-button"
+                  data-form={s.player.form}
+                  style={{ "--hero-accent": h.color } as CSSProperties}
                   disabled={!acting || s.player.flipped}
                   onClick={() => send({ type: "FLIP" })}
                 >
-                  <ArrowsClockwise size={14} />
-                  {s.player.form === "hero"
-                    ? `Become ${h.identity}`
-                    : "Suit up"}
-                  <small>
-                    {s.player.flipped ? "Used this turn" : "Once per turn"}
-                  </small>
+                  <span className="hero-form-emblem">
+                    <HeroEmblem heroId={s.heroId} />
+                    <span className="hero-form-switch">
+                      <ArrowsClockwise size={12} weight="bold" />
+                    </span>
+                  </span>
+                  <span className="hero-form-copy">
+                    <strong>
+                      {s.player.form === "hero"
+                        ? `Become ${h.identity}`
+                        : "Suit up"}
+                    </strong>
+                    <small>
+                      {s.player.flipped ? "Used this turn" : "Once per turn"}
+                    </small>
+                  </span>
                 </button>
               </div>
               {s.heroId === "spider_man" && (
@@ -3424,10 +3746,10 @@ function Tabletop({
                     </span>
                     <b className="action-value">{stats.thwart}</b>
                   </button>
-                  <span className="defense-reminder">
-                    <Shield size={18} />
-                    {stats.defense} DEF <small>during attacks</small>
-                  </span>
+                  <DefensePlaque
+                    value={stats.defense}
+                    exhausted={s.player.exhausted}
+                  />
                 </>
               ) : (
                 <button
@@ -3606,7 +3928,7 @@ function Tabletop({
                 ))}
               </div>
               <div className="log-footer">
-                <ShieldCheck size={14} /> Progress saved on this device
+                <ShieldCheck size={14} /> {saveLabel}
               </div>
             </section>
           )}
@@ -3615,6 +3937,7 @@ function Tabletop({
       {tableStyleOpen && (
         <TableStylePicker
           selected={playmatId}
+          heroId={s.heroId}
           onSelect={selectPlaymat}
           onClose={() => setTableStyleOpen(false)}
         />
@@ -3893,8 +4216,9 @@ function Help({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <p className="help-scope">
-        Core-set missions support 1–3 heroes controlled by you. Online co-op and
-        custom deck building are not included.
+        Core-set missions support 1–3 heroes controlled by you. Create a player
+        account to build and save decks, resume missions, and keep your results.
+        Online co-op is not included.
       </p>
     </Modal>
   );

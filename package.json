@@ -10,6 +10,7 @@
     "test": "vitest run",
     "sync:cards": "node scripts/sync-cards.mjs",
     "test:ui": "node scripts/browser-check.mjs",
+    "test:accounts": "node scripts/accounts-check.mjs",
     "format:check": "prettier --check \"src/**/*.ts\" \"src/**/*.tsx\" \"src/*.css\" \"tests/**/*.ts\" \"scripts/*.mjs\" vite.config.ts",
     "test:design": "node scripts/design-check.mjs",
     "test:tabletop": "node scripts/tabletop-check.mjs",
