@@ -59,6 +59,8 @@ export function controller(s: GameState, id: string) {
 }
 export function upgradeSave(s: GameState): GameState {
   s.resolving ||= [];
+  s.pacing ||= "guided";
+  s.timeline ||= [];
   if (!s.players?.length) {
     s.players = [
       {

@@ -24,11 +24,15 @@ npm run sync:cards
 npm run test:ui   # with the dev server running at localhost:5174
 npm run test:design # desktop layouts, keyboard behavior, and axe audits
 npm run test:tabletop # crowded physical table, exhaustion, piles, and responsive layouts
+npm run test:flow     # action flow, payments, defense, attachments and dialog containment
+node scripts/make-icons.mjs   # regenerate the PWA icons from public/favicon.svg
 ```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs the tests, the production build, the formatting check and the Chromium action-flow suite on every push and pull request. Node `22.13+` is pinned in `.nvmrc` and `package.json`.
 
 ## Deploy
 
-`vercel.json` configures the Vite production build. Import the GitHub repository into Vercel or run `vercel --prod` from the linked project. Guest play needs no environment variables. Player accounts require a durable Upstash Redis database and server-only `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` variables in Vercel (the `KV_REST_API_URL` / `KV_REST_API_TOKEN` aliases also work). See [account setup and verification](docs/player-accounts.md). Local Vercel account/project metadata is excluded from Git.
+`vercel.json` configures the Vite production build, long-lived cache headers for `/cards`, `/art`, `/icons` and `/assets`, and the security headers (CSP, frame denial, referrer policy). Import the GitHub repository into Vercel or run `vercel --prod` from the linked project. Guest play needs no environment variables. Player accounts require a durable Upstash Redis database and server-only `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` variables in Vercel (the `KV_REST_API_URL` / `KV_REST_API_TOKEN` aliases also work). Until that database is connected the interface hides the sign-in and deck-saving controls; guest play is unaffected. See [account setup and verification](docs/player-accounts.md). Local Vercel account/project metadata is excluded from Git.
 
 Run the same browser checks against a deployment with `BASE_URL=https://your-project.vercel.app npm run test:ui`.
 
@@ -44,11 +48,13 @@ Run the same browser checks against a deployment with `BASE_URL=https://your-pro
 - Mulligan, payments with typed and wild resources, identity abilities, basic actions, allies, upgrades/supports, encounter/boost cards, defense and interrupt windows, nemeses, obligations, status cards, scheme and villain transitions, and victory/defeat.
 - Card inspection, searchable 209-face collection, deck inspection, discard inspection, battle log, optional sound, responsive layouts, keyboard focus, reduced-motion support, and fullscreen with `F`.
 - A desktop team strip, individual hands/decks/health, player-order turns, per-hero villain activations, engaged minions, teammate defense, shared card targets, and hero elimination. Scenario values scale with the starting team size.
-- A full action review with card artwork, before/after stats, attack calculations, and a permanently visible **Proceed** button. **View table** closes the review without advancing the game; reopen it from the side panel. No automatic playback or timers.
+- A full action review with card artwork, before/after stats, attack calculations, and a permanently visible **Proceed** button. **View table** closes the review without advancing the game; reopen it from the side panel. No automatic playback or timers. Enter or Space also acknowledges the current step.
+- **Tempo** (mission setup and the action panel): _Guided_ pauses after every resolved step; _Brisk_ pauses only for decisions, damage or status on your side, revealed encounters, placed threat and villain stage changes; _Expert_ pauses only for decisions and damage or status on your side. Steps that resolve without a pause stay in the log and in the **Recent steps** timeline, where each can be opened in full. The rules never change with the tempo; only where the game waits for you.
 - Suiting up changes to hero form immediately, without a redundant Proceed checkpoint. Abilities triggered by that change still expose their own choices and effect reviews.
 - Visual resource payment: full card faces, enlarged inspection, resource icons, selected discard/ability labels, typed-cost validation, and a payment receipt. Paying pauses before the purchased card resolves.
 - Encounter cards and individual attack boosts are revealed before their effects resolve, with separate acknowledgements for boost abilities and damage. Drawn/discarded cards are shown by image; unrevealed encounter cards stay face down.
-- Local autosave, including a pending Proceed checkpoint, mid-payment and mid-encounter decisions. Resume from the lobby after a reload.
+- Local autosave, including a pending Proceed checkpoint, mid-payment and mid-encounter decisions. Resume from the lobby after a reload. A rendering error shows a recovery screen with reload and clear-save actions instead of a blank page.
+- Installable as a web app with offline card art: a service worker caches card faces, playmats and build assets after first use, while pages and the account API always use the network first. Card art and hashed assets are served with one-year immutable cache headers.
 - **Customize table** switches between three illustrated playmats and remembers your choice. Foil-style hero/encounter backs, metal health/threat/defense/counter tokens, stitched borders, and layered deck edges give the table a collector finish. [Artwork and prompts](docs/collector-tabletop-art.md).
 
 ## Card API and artwork

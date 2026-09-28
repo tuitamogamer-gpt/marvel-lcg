@@ -52,6 +52,8 @@ import {
   Cards,
   Info,
   Palette,
+  FastForward,
+  ClockCounterClockwise,
 } from "@phosphor-icons/react";
 import {
   PLAYMATS,
@@ -98,6 +100,7 @@ import type {
   Aspect,
   Command,
   GameState,
+  Pacing,
   Piece,
   Resource,
 } from "./game/types";
@@ -116,6 +119,82 @@ const resIcon = {
   wild: StarFour,
 };
 const aspectStyle = (color: string) => ({ "--accent": color }) as CSSProperties;
+const PACING_KEY = "champions.pacing";
+const PACINGS: { id: Pacing; name: string; text: string }[] = [
+  {
+    id: "guided",
+    name: "Guided",
+    text: "Pause after every resolved step. Best while learning the game.",
+  },
+  {
+    id: "brisk",
+    name: "Brisk",
+    text: "Pause for decisions, damage to your side, revealed encounters, placed threat and villain stage changes.",
+  },
+  {
+    id: "expert",
+    name: "Expert",
+    text: "Pause only for decisions and damage to your side. Everything else flows into the recent-steps timeline.",
+  },
+];
+/** One line for a resolved step: the most consequential change, else its first message. */
+function timelineSummary(entry: ActionReview) {
+  const change =
+    entry.changes.find((c) => c.kind === "health" || c.kind === "threat") ||
+    entry.changes[0];
+  return change
+    ? `${change.label}: ${change.before} → ${change.after}`
+    : entry.messages[0] || entry.actor;
+}
+function readPacing(): Pacing {
+  try {
+    const value = localStorage.getItem(PACING_KEY);
+    return PACINGS.some((p) => p.id === value) ? (value as Pacing) : "guided";
+  } catch {
+    return "guided";
+  }
+}
+function TempoMenu({
+  value,
+  onChange,
+}: {
+  value: Pacing;
+  onChange: (pacing: Pacing) => void;
+}) {
+  const details = useRef<HTMLDetailsElement>(null);
+  const current = PACINGS.find((p) => p.id === value) || PACINGS[0];
+  return (
+    <details className="tempo-menu" ref={details}>
+      <summary
+        aria-label={`Tempo: ${current.name}. Change how often the game pauses`}
+      >
+        <FastForward size={14} weight="fill" />
+        TEMPO · {current.name.toUpperCase()}
+        <CaretDown size={12} />
+      </summary>
+      <div className="tempo-options" role="radiogroup" aria-label="Tempo">
+        {PACINGS.map((p) => (
+          <button
+            key={p.id}
+            role="radio"
+            aria-checked={p.id === value}
+            className={p.id === value ? "selected" : ""}
+            onClick={() => {
+              onChange(p.id);
+              if (details.current) details.current.open = false;
+            }}
+          >
+            <b>{p.name}</b>
+            <small>{p.text}</small>
+          </button>
+        ))}
+        <p>
+          Decisions always pause. Skipped steps stay in the log and timeline.
+        </p>
+      </div>
+    </details>
+  );
+}
 function ResourceIcons({ items }: { items: Resource[] }) {
   return (
     <span
@@ -140,10 +219,12 @@ function CardImage({
   code,
   className = "",
   onClick,
+  lazy = false,
 }: {
   code: string;
   className?: string;
   onClick?: () => void;
+  lazy?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
   const [loadedCode, setLoadedCode] = useState<string | null>(null);
@@ -161,6 +242,8 @@ function CardImage({
         <>
           <img
             draggable={false}
+            loading={lazy ? "lazy" : undefined}
+            decoding="async"
             width={landscape ? 419 : 300}
             height={landscape ? 300 : 419}
             src={imageFor(code)}
@@ -427,9 +510,24 @@ export default function App() {
   const [sound, setSound] = useState(
     () => localStorage.getItem("champions.sound") === "on",
   );
+  const [pacing, setPacingState] = useState<Pacing>(readPacing);
+  function choosePacing(next: Pacing) {
+    setPacingState(next);
+    try {
+      localStorage.setItem(PACING_KEY, next);
+    } catch {
+      // Blocked storage only loses the preference for the next visit.
+    }
+    if (game && game.pacing !== next && !["won", "lost"].includes(game.phase)) {
+      const updated = dispatch(game, { type: "SET_PACING", pacing: next });
+      if (!updated.error) setGame(updated);
+    }
+  }
   const [storageError, setStorageError] = useState(false);
   const gameRef = useRef(game);
   gameRef.current = game;
+  const sendRef = useRef<(command: Command) => void>(() => {});
+  sendRef.current = send;
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [screen]);
@@ -474,6 +572,31 @@ export default function App() {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, []);
+  useEffect(() => {
+    // Enter or Space acknowledges the current step when focus is not on a control.
+    const key = (e: KeyboardEvent) => {
+      if (
+        (e.key !== "Enter" && e.key !== " ") ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey
+      )
+        return;
+      const target = e.target as HTMLElement;
+      if (
+        ["INPUT", "SELECT", "TEXTAREA", "BUTTON", "A", "SUMMARY"].includes(
+          target.tagName,
+        ) ||
+        target.isContentEditable
+      )
+        return;
+      if (screen !== "game" || !gameRef.current?.review) return;
+      e.preventDefault();
+      sendRef.current({ type: "PROCEED" });
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [screen]);
   useEffect(() => {
     (window as any).render_game_to_text = () =>
       JSON.stringify(
@@ -545,6 +668,7 @@ export default function App() {
               difficulty: game.difficulty,
               module: game.module,
               guided: true,
+              pacing,
             }
           : {
               heroId: hero.id,
@@ -554,6 +678,7 @@ export default function App() {
               villainId: villain.id,
               difficulty,
               module,
+              pacing,
             },
       ),
       accountMission: {
@@ -643,6 +768,8 @@ export default function App() {
     }
   }
   const active = game && !["won", "lost"].includes(game.phase);
+  // Without a configured database the account features would only show an apology.
+  const accountsAvailable = account.session?.storage !== "unavailable";
   return (
     <div
       className={`app ${screen === "game" ? "playing" : ""}`}
@@ -679,18 +806,20 @@ export default function App() {
           </button>
         </nav>
         <div className="top-tools">
-          <button
-            className="account-nav"
-            aria-label={
-              account.session?.user
-                ? "Open player profile"
-                : "Sign in or create account"
-            }
-            onClick={() => setScreen("account")}
-          >
-            <User size={18} />
-            <span>{account.session?.user?.displayName || "Sign in"}</span>
-          </button>
+          {accountsAvailable && (
+            <button
+              className="account-nav"
+              aria-label={
+                account.session?.user
+                  ? "Open player profile"
+                  : "Sign in or create account"
+              }
+              onClick={() => setScreen("account")}
+            >
+              <User size={18} />
+              <span>{account.session?.user?.displayName || "Sign in"}</span>
+            </button>
+          )}
           <span className="edition">
             <span>CORE SET</span>
             <b>01</b>
@@ -1076,25 +1205,27 @@ export default function App() {
                     : "A complete starter deck is ready to play."}
                 </span>
               </p>
-              <div className="account-setup-deck">
-                <span>
-                  {team[setupSeat].deckName || `${hero.name} starter deck`}
-                </span>
-                <div>
-                  <button
-                    className="text-button"
-                    onClick={() => void saveSetupDeck()}
-                  >
-                    <Cards size={16} /> Save deck
-                  </button>
-                  <button
-                    className="text-button"
-                    onClick={() => setScreen("account")}
-                  >
-                    My decks <ArrowRight size={15} />
-                  </button>
+              {accountsAvailable && (
+                <div className="account-setup-deck">
+                  <span>
+                    {team[setupSeat].deckName || `${hero.name} starter deck`}
+                  </span>
+                  <div>
+                    <button
+                      className="text-button"
+                      onClick={() => void saveSetupDeck()}
+                    >
+                      <Cards size={16} /> Save deck
+                    </button>
+                    <button
+                      className="text-button"
+                      onClick={() => setScreen("account")}
+                    >
+                      My decks <ArrowRight size={15} />
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </section>
             <section className="mission-panel">
               <div className="section-heading">
@@ -1160,6 +1291,26 @@ export default function App() {
                   ))}
                 </div>
               </div>
+              <div className="setting-line tempo-line">
+                <span>Tempo</span>
+                <div className="segmented">
+                  {PACINGS.map((p) => (
+                    <button
+                      key={p.id}
+                      className={pacing === p.id ? "selected" : ""}
+                      aria-pressed={pacing === p.id}
+                      title={p.text}
+                      onClick={() => choosePacing(p.id)}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="setting-help">
+                {PACINGS.find((p) => p.id === pacing)!.text} Decisions always
+                pause.
+              </p>
               <label className="module-label">
                 Modular encounter
                 <select
@@ -1351,6 +1502,8 @@ export default function App() {
           }
           onHome={() => setScreen("lobby")}
           onHelp={() => setHelp(true)}
+          pacing={pacing}
+          onPacing={choosePacing}
         />
       )}
       {game?.error && <span className="sr-only">{game.error}</span>}
@@ -1514,7 +1667,9 @@ export default function App() {
           </div>
         </Modal>
       )}
-      {help && <Help onClose={() => setHelp(false)} />}
+      {help && (
+        <Help onClose={() => setHelp(false)} accounts={accountsAvailable} />
+      )}
       {restart && (
         <Modal title="Start a new mission?" onClose={() => setRestart(false)}>
           <p className="modal-intro">
@@ -2456,16 +2611,22 @@ function ActionDirector({
   game: s,
   send,
   inspect,
+  pacing,
+  onPacing,
 }: {
   game: GameState;
   send: (c: Command) => void;
   inspect: (c: Inspect) => void;
+  pacing: Pacing;
+  onPacing: (pacing: Pacing) => void;
 }) {
   const review = s.review;
   const button = useRef<HTMLButtonElement>(null);
   const focusButton = useRef<HTMLButtonElement>(null);
   const director = useRef<HTMLElement>(null);
   const [collapsedId, setCollapsedId] = useState<number | null>(null);
+  const [timelineOpen, setTimelineOpen] = useState<ActionReview | null>(null);
+  const timeline = (s.timeline || []).slice(-5).reverse();
   const focused = !!review && collapsedId !== review.id;
   const next = s.prompt
     ? s.prompt.title
@@ -2517,9 +2678,10 @@ function ActionDirector({
             <Eye size={17} />
             ACTION RESOLUTION
           </span>
-          <b>
-            {review ? `STEP ${String(review.id).padStart(2, "0")}` : "GUIDED"}
-          </b>
+          <div className="director-tools">
+            {review && <b>{`STEP ${String(review.id).padStart(2, "0")}`}</b>}
+            <TempoMenu value={pacing} onChange={onPacing} />
+          </div>
         </div>
         <div
           className="director-body"
@@ -2551,13 +2713,34 @@ function ActionDirector({
             <div className="director-idle">
               <ShieldCheck size={34} weight="duotone" />
               <p>
-                Play a card, use an ability, or change form. Every resolved
-                action will appear here.
+                {pacing === "guided"
+                  ? "Play a card, use an ability, or change form. Every resolved action will appear here."
+                  : "Play a card, use an ability, or change form. Steps that need no pause are listed below as recent steps."}
               </p>
               <span>
                 <CheckCircle size={14} />
                 No timers. You control the pace.
               </span>
+              {timeline.length > 0 && (
+                <div className="director-timeline">
+                  <div className="change-heading">
+                    <span>
+                      <ClockCounterClockwise size={13} /> RECENT STEPS
+                    </span>
+                    <span>NO PAUSE NEEDED</span>
+                  </div>
+                  {timeline.map((entry) => (
+                    <button
+                      key={entry.id}
+                      className="timeline-item"
+                      onClick={() => setTimelineOpen(entry)}
+                    >
+                      <b>{entry.title}</b>
+                      <small>{timelineSummary(entry)}</small>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -2593,6 +2776,45 @@ function ActionDirector({
           )}
         </div>
       </section>
+      {timelineOpen && (
+        <Modal
+          key={`timeline-${timelineOpen.id}`}
+          title={timelineOpen.title}
+          wide={!!timelineOpen.cards?.length}
+          className={`review-focus ${timelineOpen.cards?.length ? "with-cards" : ""} ${timelineOpen.attack ? "with-attack" : ""}`}
+          eyebrow={`RECENT STEP ${String(timelineOpen.id).padStart(2, "0")} · ${timelineOpen.actor.toUpperCase()} · ALREADY RESOLVED`}
+          onClose={() => setTimelineOpen(null)}
+        >
+          <div
+            className="review-focus-body"
+            tabIndex={0}
+            role="region"
+            aria-label="Resolved step details and cards"
+          >
+            <ReviewDetails
+              review={timelineOpen}
+              inspect={(c) => {
+                setTimelineOpen(null);
+                inspect(c);
+              }}
+            />
+          </div>
+          <div className="review-focus-footer">
+            <div className="next-step">
+              <small>THIS STEP</small>
+              <span>Already resolved · nothing to confirm</span>
+            </div>
+            <div>
+              <button
+                className="primary-button"
+                onClick={() => setTimelineOpen(null)}
+              >
+                Back to the table
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {focused && review && (
         <Modal
           key={review.id}
@@ -2798,6 +3020,8 @@ function Tabletop({
   onEnd,
   onHome,
   onHelp,
+  pacing,
+  onPacing,
 }: {
   game: GameState;
   saveLabel: string;
@@ -2807,6 +3031,8 @@ function Tabletop({
   onEnd: () => void;
   onHome: () => void;
   onHelp: () => void;
+  pacing: Pacing;
+  onPacing: (pacing: Pacing) => void;
 }) {
   const [viewId, setViewId] = useState(game.activePlayerId);
   const [playmatId, setPlaymatId] = useState(readPlaymat);
@@ -2866,6 +3092,22 @@ function Tabletop({
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [s.log.length]);
+  useEffect(() => {
+    // Warm the browser cache for the cards this hero is about to look at.
+    const codes = new Set([
+      s.villain.code,
+      s.scheme.code,
+      ...s.player.hand.map((p) => p.code),
+      ...s.player.inPlay.map((p) => p.code),
+      ...s.minions.map((p) => p.code),
+      ...s.sideSchemes.map((p) => p.code),
+    ]);
+    for (const code of codes) {
+      const img = new Image();
+      img.decoding = "async";
+      img.src = imageFor(code);
+    }
+  }, [s.round, s.activePlayerId, s.player.hand.length]);
   const abilityActive =
     (s.player.form === "alter" &&
       ((s.heroId === "iron_man" && !s.flags.futurist) ||
@@ -3896,7 +4138,13 @@ function Tabletop({
           </section>
         </div>
         <aside className="mission-rail">
-          <ActionDirector game={game} send={send} inspect={inspect} />
+          <ActionDirector
+            game={game}
+            send={send}
+            inspect={inspect}
+            pacing={pacing}
+            onPacing={onPacing}
+          />
           {logOpen && (
             <section className="battle-log">
               <div className="log-heading">
@@ -4123,7 +4371,7 @@ function Collection({ onInspect }: { onInspect: (code: string) => void }) {
               className="collection-card"
               onClick={() => onInspect(c.code)}
             >
-              <CardImage code={c.code} />
+              <CardImage code={c.code} lazy />
               <strong>{c.name}</strong>
               <span>
                 {c.type_code.replace("_", " ")}
@@ -4152,7 +4400,13 @@ function Collection({ onInspect }: { onInspect: (code: string) => void }) {
     </main>
   );
 }
-function Help({ onClose }: { onClose: () => void }) {
+function Help({
+  onClose,
+  accounts = true,
+}: {
+  onClose: () => void;
+  accounts?: boolean;
+}) {
   return (
     <Modal title="YOUR FIRST MISSION" wide onClose={onClose}>
       <p className="modal-intro">
@@ -4189,7 +4443,7 @@ function Help({ onClose }: { onClose: () => void }) {
           {
             icon: BookOpen,
             title: "Read. React. Repeat.",
-            text: "The action panel groups each action into one summary. Click Proceed to continue; nothing advances on a timer. Choose defenders before boosts. Any ready hero or ally can defend for a teammate.",
+            text: "The action panel groups each action into one summary. Click Proceed (or press Enter) to continue; nothing advances on a timer. Set the Tempo to Brisk or Expert to pause only when something costs you.",
           },
         ].map(({ icon: Icon, title, text }, i) => (
           <div className="help-step" key={title}>
@@ -4216,8 +4470,10 @@ function Help({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <p className="help-scope">
-        Core-set missions support 1–3 heroes controlled by you. Create a player
-        account to build and save decks, resume missions, and keep your results.
+        Core-set missions support 1–3 heroes controlled by you.
+        {accounts
+          ? " Create a player account to build and save decks, resume missions, and keep your results."
+          : ""}{" "}
         Online co-op is not included.
       </p>
     </Modal>

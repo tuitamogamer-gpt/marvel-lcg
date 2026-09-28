@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    name: Test, build and format
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm run format:check
+
+  browser:
+    name: Browser flow (Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Start the development server
+        run: |
+          ACCOUNTS_DB_PATH=.accounts/ci.sqlite npm run dev -- --host 127.0.0.1 > output-dev.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:5174 > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "Dev server did not start"; cat output-dev.log; exit 1
+      - run: npm run test:flow
+        env:
+          BASE_URL: http://127.0.0.1:5174
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-output
+          path: output/
+          if-no-files-found: ignore

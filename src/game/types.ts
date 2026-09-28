@@ -1,5 +1,7 @@
 export type Aspect = "justice" | "aggression" | "leadership" | "protection";
 export type Resource = "energy" | "mental" | "physical" | "wild";
+/** How often guided play pauses for Proceed. Decisions always pause. */
+export type Pacing = "guided" | "brisk" | "expert";
 export interface Card {
   code: string;
   name: string;
@@ -128,6 +130,9 @@ export interface GameState {
   turnPlayerId: string;
   playerCount: number;
   guided: boolean;
+  pacing?: Pacing;
+  /** Meaningful results that resolved without a pause in the faster tempos. */
+  timeline?: ActionReview[];
   review: ActionReview | null;
   reviewCount: number;
   player: {
@@ -253,4 +258,5 @@ export type Command =
   | { type: "FLIP" }
   | { type: "ABILITY"; id: string; action?: string; playerId?: string }
   | { type: "END_TURN"; discard?: string[] }
-  | { type: "CANCEL" };
+  | { type: "CANCEL" }
+  | { type: "SET_PACING"; pacing: Pacing };

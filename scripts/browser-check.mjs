@@ -376,8 +376,9 @@ try {
   }
   const boostImage = page.locator(".review-focus .review-card img").first();
   const boostBounds = await boostImage.boundingBox();
+  // Related cards are compact thumbnails since the 25 September action windows.
   assert.ok(
-    boostBounds.width >= 100 && boostBounds.height / boostBounds.width > 1.35,
+    boostBounds.width >= 40 && boostBounds.height / boostBounds.width > 1.3,
     "A cold boost image reserves a complete portrait card frame",
   );
   await screenshot("villain-boost-review");

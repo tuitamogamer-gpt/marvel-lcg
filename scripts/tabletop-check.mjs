@@ -132,7 +132,10 @@ try {
     ["cosmic-rift", "Cosmic Rift"],
   ]) {
     await page.getByRole("button", { name: "Customize table" }).click();
-    const choice = page.getByRole("button", { name: new RegExp(name) });
+    // Scope to the dialog: a hand card with the same name (Helicarrier) is also a button.
+    const choice = page
+      .getByRole("dialog")
+      .getByRole("button", { name: new RegExp(name) });
     await choice.click();
     assert.equal(await choice.getAttribute("aria-pressed"), "true");
     await page.getByRole("button", { name: "Back to the game" }).click();

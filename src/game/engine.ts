@@ -23,6 +23,7 @@ import type {
   Effect,
   GameState,
   Option,
+  Pacing,
   Piece,
   Prompt,
   Resource,
@@ -41,7 +42,10 @@ import {
   boardSnapshot,
   recordReview,
   continuesReview,
+  isMeaningful,
   mergeReviews,
+  pacingOf,
+  stopsFor,
 } from "./review";
 import { paymentSources, paymentStatus } from "./payment";
 import { combatCharacter, recordCombat } from "./combat";
@@ -1016,6 +1020,7 @@ export function newGame(config: {
   seed?: number;
   heroes?: { heroId: string; aspect: Aspect; deckCards?: string[] }[];
   guided?: boolean;
+  pacing?: Pacing;
 }): GameState {
   const team = config.heroes || [
     { heroId: config.heroId, aspect: config.aspect },
@@ -1077,6 +1082,8 @@ export function newGame(config: {
     turnPlayerId: "p1",
     playerCount: team.length,
     guided: config.guided ?? false,
+    pacing: config.pacing || "guided",
+    timeline: [],
     review: null,
     reviewCount: 0,
     player: players[0].player,
@@ -4276,24 +4283,23 @@ function run(s: GameState) {
     check(s);
     syncSeat(s);
     recordReview(s, before, e);
-    if (s.review) pending = mergeReviews(pending, s.review);
+    const current = s.review;
+    if (current) pending = mergeReviews(pending, current);
     s.review = null;
     if (s.prompt) break;
-    if (pending && !continuesReview(s, e)) {
+    if (pending && !continuesReview(s, e, current)) {
       s.review = pending;
       pending = null;
       break;
     }
   }
   if (s.prompt && pending) s.prompt.context = pending;
-  else if (!s.review && pending) {
+  else if (!s.review && pending && isMeaningful(pending)) {
     // Cleanup alone is already visible in the log and previous action card.
-    const meaningful =
-      pending.changes.some((c) => c.kind !== "cards") ||
-      pending.cards?.some((c) => !["discarded", "moved"].includes(c.kind)) ||
-      pending.payment ||
-      pending.calculation;
-    if (meaningful) s.review = pending;
+    const ended = ["won", "lost"].includes(s.phase);
+    if (ended || stopsFor(s, pending, pacingOf(s))) s.review = pending;
+    // The faster tempos keep the player's own resolved actions in a short timeline.
+    else s.timeline = [...(s.timeline || []), pending].slice(-8);
   }
   if (!s.review && !s.prompt && !s.queue.length && s.phase === "player") {
     const turn = s.players.find((p) => p.id === s.turnPlayerId);
@@ -4345,6 +4351,15 @@ export function dispatch(state: GameState, command: Command): GameState {
           !["attack", "thwart"].includes(command.action || ""),
         "Basic powers and ally attacks or thwarts require that hero’s own turn.",
       );
+    }
+    if (command.type === "SET_PACING") {
+      need(
+        ["guided", "brisk", "expert"].includes(command.pacing),
+        "Unknown tempo.",
+      );
+      s.pacing = command.pacing;
+      syncSeat(s);
+      return s;
     }
     const before = boardSnapshot(s);
     if (command.type === "PROCEED") {
@@ -4574,6 +4589,8 @@ export function summarize(s: GameState) {
       eliminated: p.eliminated,
     })),
     review: s.review,
+    pacing: pacingOf(s),
+    timeline: (s.timeline || []).map((r) => r.title),
     round: s.round,
     identity: heroCard(s).name,
     heroHP: s.player.hp,

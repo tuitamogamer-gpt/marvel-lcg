@@ -814,3 +814,139 @@
     min-width: 0;
   }
 }
+
+/* Tempo menu and recent-steps timeline in the action director */
+.director-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tempo-menu {
+  position: relative;
+}
+.tempo-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-heading, "Exo 2", sans-serif);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 4px 8px;
+  border-radius: var(--radius-control, 8px);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+}
+.tempo-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.tempo-menu > summary:hover,
+.tempo-menu[open] > summary {
+  background: rgba(255, 255, 255, 0.18);
+}
+.tempo-menu > summary:focus-visible {
+  outline: 2px solid #f2c94c;
+  outline-offset: 2px;
+}
+.tempo-options {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  width: min(320px, 86vw);
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  background: #fbfaf6;
+  color: #141a2b;
+  border: 1.5px solid #141a2b;
+  border-radius: var(--radius-panel, 12px);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
+  text-align: left;
+}
+.tempo-options button {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--radius-control, 8px);
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.tempo-options button:hover,
+.tempo-options button:focus-visible {
+  background: #eef0f6;
+  outline: none;
+}
+.tempo-options button.selected {
+  border-color: #cf2330;
+  background: #fff1f0;
+}
+.tempo-options button b {
+  font-family: var(--font-heading, "Exo 2", sans-serif);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.tempo-options button small {
+  font-size: 12px;
+  line-height: 1.35;
+  color: #4a5063;
+}
+.tempo-options p {
+  margin: 2px 4px 0;
+  font-size: 11px;
+  color: #5a6072;
+}
+.setting-help {
+  margin: -6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #b8c1d6;
+}
+.director-timeline {
+  width: 100%;
+  margin-top: 14px;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+}
+.director-timeline .change-heading span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.timeline-item {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: var(--radius-control, 8px);
+  border: 1px solid rgba(20, 26, 43, 0.14);
+  background: rgba(255, 255, 255, 0.55);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.timeline-item:hover,
+.timeline-item:focus-visible {
+  border-color: #cf2330;
+  outline: none;
+}
+.timeline-item b {
+  font-size: 13px;
+}
+.timeline-item small {
+  font-size: 12px;
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

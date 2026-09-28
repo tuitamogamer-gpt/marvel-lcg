@@ -24,6 +24,10 @@ An explicit change to hero form skips the identity-change review, so Suit up req
 
 Reviews include visible card movements and payment receipts, not just zone counts. Encounter reveal, encounter resolution, each attack boost, its star ability, and attack damage use separate queued steps. Klaw's two attack boosts are individually acknowledged. Typed payment validation is shared between the preview and engine; spent hand cards and resource generators retain distinct identities in the saved receipt. Face-down cards and hidden deck order are not exposed by review metadata.
 
+## Tempo
+
+Guided mode records every resolved action; the tempo only decides where the effect queue waits for `PROCEED`. _Guided_ keeps the original behaviour. _Brisk_ and _Expert_ judge each resolved effect by its own review (`stopsFor` in `src/game/review.ts`): a hero losing hit points or gaining Stunned/Confused, a friendly character taking damage or leaving play, a villain stage change, or a card discarded from hand during the villain phase always pause; _Brisk_ additionally pauses for a revealed encounter card, placed threat and an enemy entering play. Prompts (payments, targets, defenders, choices) pause in every tempo, and the final review of a mission is always shown. Reviews that resolve without a pause are kept in `timeline` (last eight) so nothing is hidden. Turn hand-offs (`beginTurn`) and an empty stage setup no longer pause in any tempo. `tests/pacing.test.ts` checks that the faster tempos need fewer acknowledgements than Guided, that every pause has one of the reasons above, that decisions still pause, and that the click budget per round holds for solo and three-hero missions.
+
 ## Rules Reference 1.8 corrections
 
 All 25 groups from the [core audit](rules-audit-2026-09-23.md) have regression coverage in `tests/rules-v18.test.ts`: the original 51 scenarios and 36 additional interaction, completion, and saved-state checks. This does not constitute exhaustive certification of every core combination.

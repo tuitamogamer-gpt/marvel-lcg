@@ -12,6 +12,7 @@ import "@fontsource/exo-2/latin-ext-800.css";
 import "@fontsource/exo-2/latin-ext-800-italic.css";
 import "@fontsource/barlow-condensed/latin-800.css";
 import App from "./App";
+import { ErrorBoundary } from "./ErrorBoundary";
 import "./styles.css";
 import "./tabletop.css";
 import "./action-ui.css";
@@ -22,6 +23,15 @@ import "./hero-table.css";
 import "./defense-token.css";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>,
 );
+// Offline card art and installability. Development keeps the plain network
+// path so Vite's module graph is never served from a stale cache.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}

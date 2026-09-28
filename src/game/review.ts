@@ -1,4 +1,4 @@
-import { card, heroCard, heroStats, HEROES } from "./cards";
+import { CARDS, card, heroCard, heroStats, HEROES } from "./cards";
 import { allInPlay, seatView } from "./team";
 import { paymentSources, paymentStatus, paymentSubject } from "./payment";
 import { attackContext } from "./presentation";
@@ -6,6 +6,7 @@ import type {
   ActionReview,
   Effect,
   GameState,
+  Pacing,
   Piece,
   ReviewCard,
 } from "./types";
@@ -318,34 +319,133 @@ export function effectTitle(e?: Effect) {
 
 // These steps prepare an action or clean up its cards. Keep their information
 // in the next meaningful review instead of asking the player to approve plumbing.
-export function continuesReview(s: GameState, e: Effect) {
+const plumbing = new Set([
+  "target",
+  "optional",
+  "payRequest",
+  "defender",
+  "completeBoost",
+  "prepareAttackBoosts",
+  "boostAttack",
+  "finishResolution",
+  "endScheme",
+  "resolveHandEvent",
+  "nextMulligan",
+  "endDiscard",
+  "refill",
+  "allReady",
+  "beginVillain",
+  "villainActivate",
+  "minionActivations",
+  "defensePrompt",
+  "enemyAttack",
+  "declareDefense",
+  "defenseResponses",
+  "allyLimit",
+  "play",
+  // A turn hand-off or an empty scenario setup only restates what the table shows.
+  "beginTurn",
+  "stageSetup",
+]);
+export function pacingOf(s: GameState): Pacing {
+  return s.pacing || "guided";
+}
+/** A review worth showing on its own: something beyond card bookkeeping changed. */
+export function isMeaningful(review: ActionReview) {
+  return (
+    review.changes.some((c) => c.kind !== "cards") ||
+    (review.cards || []).some(
+      (c) =>
+        !["discarded", "moved"].includes(c.kind) ||
+        c.label === "Entered play" ||
+        c.label.startsWith("Attached to"),
+    ) ||
+    !!review.payment ||
+    !!review.calculation
+  );
+}
+function sideOf(s: GameState, id: string, label: string) {
+  if (
+    id === s.villain.id ||
+    [...s.minions, ...s.sideSchemes, ...s.attachments].some((p) => p.id === id)
+  )
+    return "enemy";
+  for (const seat of s.players) {
+    const p = seatView(s, seat).player;
+    if ([...p.inPlay, ...p.discard, ...p.hand].some((x) => x.id === id))
+      return "friendly";
+  }
+  if (s.encounter.discard.some((p) => p.id === id)) return "enemy";
+  // A departed piece is only known by its printed name.
+  const name = label.replace(/ (damage|tokens)$/, "");
+  const printed = CARDS.find((c) => c.name === name);
+  return !printed ||
+    printed.faction_code === "encounter" ||
+    name === "Ultron Drone"
+    ? "enemy"
+    : "friendly";
+}
+/**
+ * In the faster tempos only outcomes that cost the player something interrupt
+ * the flow. Brisk also pauses to read revealed encounters and placed threat.
+ * Decisions always pause, whatever the tempo.
+ */
+export function stopsFor(s: GameState, review: ActionReview, pacing: Pacing) {
+  if (pacing === "guided") return true;
+  const num = (v: string | number) => Number(v) || 0;
+  for (const c of review.changes) {
+    const key = c.key || "";
+    const id = key.split(":")[0];
+    if (/^p\d+:hp$/.test(key) && num(c.after) < num(c.before)) return true;
+    if (/^p\d+:(stunned|confused)$/.test(key) && c.after === "Active")
+      return true;
+    if (key === "stage") return true;
+    if (
+      key.endsWith(":damage") &&
+      num(c.after) > num(c.before) &&
+      sideOf(s, id, c.label) === "friendly"
+    )
+      return true;
+    if (
+      key.endsWith(":zone") &&
+      c.after === "Left play" &&
+      sideOf(s, id, c.label) === "friendly"
+    )
+      return true;
+    if (pacing === "brisk") {
+      if (c.kind === "threat" && num(c.after) > num(c.before)) return true;
+      if (
+        key.endsWith(":zone") &&
+        c.after === "In play" &&
+        sideOf(s, id, c.label) === "enemy"
+      )
+        return true;
+    }
+  }
+  const cards = review.cards || [];
+  if (
+    pacing === "brisk" &&
+    cards.some((c) => c.kind === "revealed" && c.label === "Encounter revealed")
+  )
+    return true;
+  if (
+    s.phase === "villain" &&
+    cards.some((c) => c.kind === "discarded" && c.detail.includes("Hand →"))
+  )
+    return true;
+  return false;
+}
+/** `current` is the review of this effect alone; the faster tempos judge each step by its own consequences. */
+export function continuesReview(
+  s: GameState,
+  e: Effect,
+  current: ActionReview | null,
+) {
+  const pacing = pacingOf(s);
+  if (pacing !== "guided") return !current || !stopsFor(s, current, pacing);
   if (["revealBoost", "revealSchemeBoost"].includes(e.type))
     return s.queue[0]?.type !== "boostEffect";
-  return new Set([
-    "target",
-    "optional",
-    "payRequest",
-    "defender",
-    "completeBoost",
-    "prepareAttackBoosts",
-    "boostAttack",
-    "finishResolution",
-    "endScheme",
-    "resolveHandEvent",
-    "nextMulligan",
-    "endDiscard",
-    "refill",
-    "allReady",
-    "beginVillain",
-    "villainActivate",
-    "minionActivations",
-    "defensePrompt",
-    "enemyAttack",
-    "declareDefense",
-    "defenseResponses",
-    "allyLimit",
-    "play",
-  ]).has(e.type);
+  return plumbing.has(e.type);
 }
 
 export function mergeReviews(
