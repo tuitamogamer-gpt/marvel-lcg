@@ -54,6 +54,10 @@ import {
   Palette,
   FastForward,
   ClockCounterClockwise,
+  ArrowCounterClockwise,
+  Copy,
+  DiceFive,
+  CalendarBlank,
 } from "@phosphor-icons/react";
 import {
   PLAYMATS,
@@ -92,7 +96,9 @@ import {
 } from "./game/engine";
 import { seatView, upgradeSave } from "./game/team";
 import { effectTitle } from "./game/review";
-import { paymentStatus, paymentSubject } from "./game/payment";
+import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
+import type { PaymentSource } from "./game/payment";
+import { dailySeedText, parseSeed } from "./game/seed";
 import { attachmentsFor, attackContext } from "./game/presentation";
 import type {
   ActionReview,
@@ -145,6 +151,53 @@ function timelineSummary(entry: ActionReview) {
   return change
     ? `${change.label}: ${change.before} → ${change.after}`
     : entry.messages[0] || entry.actor;
+}
+const HISTORY_KEY = "champions.history.v1";
+type GuestRecord = {
+  id: string;
+  date: string;
+  heroes: { heroId: string; aspect: Aspect }[];
+  villainId: string;
+  difficulty: "standard" | "expert";
+  heroic: number;
+  round: number;
+  outcome: "won" | "lost";
+  seed: number;
+};
+function readHistory(): GuestRecord[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    return Array.isArray(list) ? list.filter((r) => r && r.id) : [];
+  } catch {
+    return [];
+  }
+}
+function writeHistory(list: GuestRecord[]) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+  } catch {
+    // Blocked storage only loses the guest history.
+  }
+}
+function missionSummary(g: GameState) {
+  const heroes = g.players
+    .map(
+      (p) =>
+        `${HEROES.find((h) => h.id === p.heroId)!.name} (${ASPECTS.find((a) => a.id === p.aspect)!.name})`,
+    )
+    .join(", ");
+  const villain = VILLAINS.find((v) => v.id === g.villainId)!.name;
+  const st = g.stats;
+  return [
+    `Marvel Champions · ${heroes} vs ${villain} · ${g.difficulty}${g.heroic ? ` · Heroic ${g.heroic}` : ""}`,
+    `${g.phase === "won" ? "Victory" : "Defeat"} in ${g.round} round${g.round === 1 ? "" : "s"}`,
+    st
+      ? `Damage dealt ${st.damageDealt} · taken ${st.damageTaken} · threat removed ${st.threatRemoved} · placed ${st.threatPlaced} · cards played ${st.cardsPlayed} · enemies defeated ${st.enemiesDefeated}`
+      : "",
+    `Seed ${g.startSeed || "?"} · https://marvel-lcg.vercel.app`,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 function readPacing(): Pacing {
   try {
@@ -511,6 +564,15 @@ export default function App() {
     () => localStorage.getItem("champions.sound") === "on",
   );
   const [pacing, setPacingState] = useState<Pacing>(readPacing);
+  const [heroic, setHeroic] = useState(0);
+  const [seedText, setSeedText] = useState("");
+  const history = useRef<GameState[]>([]);
+  const [undoDepth, setUndoDepth] = useState(0);
+  const [guestHistory, setGuestHistory] = useState<GuestRecord[]>(readHistory);
+  const clearHistory = () => {
+    history.current = [];
+    setUndoDepth(0);
+  };
   function choosePacing(next: Pacing) {
     setPacingState(next);
     try {
@@ -528,6 +590,8 @@ export default function App() {
   gameRef.current = game;
   const sendRef = useRef<(command: Command) => void>(() => {});
   sendRef.current = send;
+  const undoRef = useRef<() => void>(() => {});
+  undoRef.current = undo;
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [screen]);
@@ -598,6 +662,55 @@ export default function App() {
     return () => window.removeEventListener("keydown", key);
   }, [screen]);
   useEffect(() => {
+    // Ctrl/Cmd+Z takes back the last action of the current hero phase.
+    const key = (e: KeyboardEvent) => {
+      if (
+        e.key.toLowerCase() !== "z" ||
+        !(e.metaKey || e.ctrlKey) ||
+        e.shiftKey
+      )
+        return;
+      const target = e.target as HTMLElement;
+      if (
+        ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName) ||
+        target.isContentEditable ||
+        screen !== "game"
+      )
+        return;
+      e.preventDefault();
+      undoRef.current();
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [screen]);
+  useEffect(() => {
+    // Guests keep a local record of finished missions; accounts record theirs on the server.
+    if (
+      !game ||
+      gameOwner ||
+      !["won", "lost"].includes(game.phase) ||
+      !game.accountMission
+    )
+      return;
+    const record: GuestRecord = {
+      id: game.accountMission.id,
+      date: new Date().toISOString(),
+      heroes: game.players.map((p) => ({ heroId: p.heroId, aspect: p.aspect })),
+      villainId: game.villainId,
+      difficulty: game.difficulty,
+      heroic: game.heroic || 0,
+      round: game.round,
+      outcome: game.phase as "won" | "lost",
+      seed: game.startSeed || 0,
+    };
+    setGuestHistory((list) => {
+      if (list.some((r) => r.id === record.id)) return list;
+      const next = [record, ...list].slice(0, 30);
+      writeHistory(next);
+      return next;
+    });
+  }, [game?.phase, game?.accountMission?.id, gameOwner]);
+  useEffect(() => {
     (window as any).render_game_to_text = () =>
       JSON.stringify(
         gameRef.current && screen === "game"
@@ -637,12 +750,72 @@ export default function App() {
       setToast(next.error);
       return;
     }
+    // Undo is fair only while no hidden card has been revealed since the state
+    // being restored, and only within the current hero phase.
+    if (
+      next.hiddenInfo !== game.hiddenInfo ||
+      next.phase !== "player" ||
+      game.phase !== "player"
+    )
+      history.current = [];
+    else if (!["PROCEED", "SET_PACING"].includes(command.type))
+      history.current = [...history.current.slice(-19), game];
+    setUndoDepth(history.current.length);
     setGame(next);
     if (next.combatEvents?.length)
       setCombat({ id: ++combatId.current, events: next.combatEvents });
     tone();
   }
-  async function start(replay = false) {
+  function undo() {
+    const previous = history.current.pop();
+    if (!previous) return;
+    setUndoDepth(history.current.length);
+    setCombat(null);
+    setGame(previous);
+  }
+  function randomizeSetup() {
+    const pick = <T,>(list: readonly T[]) =>
+      list[Math.floor(Math.random() * list.length)];
+    const free = HEROES.filter(
+      (h) => !team.some((p, i) => i !== setupSeat && p.heroId === h.id),
+    );
+    const h = pick(free);
+    const a = pick(ASPECTS).id;
+    const v = pick(VILLAINS);
+    setTeam((list) =>
+      list.map((p, i) => (i === setupSeat ? { heroId: h.id, aspect: a } : p)),
+    );
+    setVillain(v);
+    setModule(pick(MODULES).id);
+  }
+  function dailySetup() {
+    const text = dailySeedText();
+    const n = parseSeed(text)!;
+    const h = HEROES[n % HEROES.length];
+    const a = ASPECTS[(n >>> 3) % ASPECTS.length].id;
+    const v = VILLAINS[(n >>> 5) % VILLAINS.length];
+    setTeam([{ heroId: h.id, aspect: a }]);
+    setSetupSeat(0);
+    setVillain(v);
+    setModule(MODULES[(n >>> 8) % MODULES.length].id);
+    setDifficulty("standard");
+    setHeroic(0);
+    setSeedText(text);
+    setToast(
+      `Today's mission: ${h.name} (${ASPECTS.find((x) => x.id === a)!.name}) vs ${v.name}. Everyone playing the daily seed sees the same shuffles.`,
+    );
+  }
+  async function copyResult() {
+    if (!game) return;
+    const summary = missionSummary(game);
+    try {
+      await navigator.clipboard.writeText(summary);
+      setToast("Result copied. Paste it anywhere.");
+    } catch {
+      setToast(summary);
+    }
+  }
+  async function start(replay = false, sameSeed = false) {
     await missionSync.flush();
     if (missionSync.hasUnsaved()) {
       setToast(
@@ -651,6 +824,7 @@ export default function App() {
       return;
     }
     setCombat(null);
+    clearHistory();
     missionSync.reset();
     setGameOwner(account.session?.user?.id || null);
     setGame({
@@ -669,6 +843,8 @@ export default function App() {
               module: game.module,
               guided: true,
               pacing,
+              heroic: game.heroic || 0,
+              seed: sameSeed ? game.startSeed || undefined : undefined,
             }
           : {
               heroId: hero.id,
@@ -679,6 +855,8 @@ export default function App() {
               difficulty,
               module,
               pacing,
+              heroic,
+              seed: parseSeed(seedText),
             },
       ),
       accountMission: {
@@ -726,6 +904,7 @@ export default function App() {
     )
       return;
     missionSync.adopt(record);
+    clearHistory();
     setGameOwner(account.session!.user!.id);
     setGame(
       upgradeSave({
@@ -745,6 +924,7 @@ export default function App() {
     await account.request("logout");
     setGame(readSave());
     setGameOwner(null);
+    clearHistory();
     missionSync.reset();
   }
   async function saveSetupDeck() {
@@ -1311,6 +1491,54 @@ export default function App() {
                 {PACINGS.find((p) => p.id === pacing)!.text} Decisions always
                 pause.
               </p>
+              <div className="setting-line heroic-line">
+                <span>Heroic</span>
+                <div className="segmented">
+                  {[0, 1, 2, 3].map((n) => (
+                    <button
+                      key={n}
+                      className={heroic === n ? "selected" : ""}
+                      aria-pressed={heroic === n}
+                      title={
+                        n
+                          ? `Each hero is dealt ${n} extra encounter card${n === 1 ? "" : "s"} every villain phase.`
+                          : "Standard dealing: one encounter card per hero."
+                      }
+                      onClick={() => setHeroic(n)}
+                    >
+                      {n === 0 ? "Off" : n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="seed-line">
+                <label>
+                  Seed
+                  <input
+                    id="mission-seed"
+                    value={seedText}
+                    maxLength={40}
+                    placeholder="Optional · same seed, same shuffles"
+                    onChange={(e) => setSeedText(e.target.value)}
+                  />
+                </label>
+                <div className="seed-actions">
+                  <button
+                    className="text-button"
+                    title="Same hero, villain and shuffles for everyone today"
+                    onClick={dailySetup}
+                  >
+                    <CalendarBlank size={15} /> Daily mission
+                  </button>
+                  <button
+                    className="text-button"
+                    title="Random hero, aspect, villain and modular set for this seat"
+                    onClick={randomizeSetup}
+                  >
+                    <DiceFive size={15} /> Surprise me
+                  </button>
+                </div>
+              </div>
               <label className="module-label">
                 Modular encounter
                 <select
@@ -1365,6 +1593,58 @@ export default function App() {
               </span>
             </section>
           </div>
+          {!account.session?.user && guestHistory.length > 0 && (
+            <section className="recent-missions" aria-label="Recent missions">
+              <div>
+                <span className="small-label">ON THIS DEVICE</span>
+                <h2>
+                  RECENT MISSIONS{" "}
+                  <span>
+                    {guestHistory.filter((r) => r.outcome === "won").length} /{" "}
+                    {guestHistory.length} won
+                  </span>
+                </h2>
+              </div>
+              <ol>
+                {guestHistory.slice(0, 5).map((r) => (
+                  <li key={r.id} className={r.outcome}>
+                    <b>{r.outcome === "won" ? "WIN" : "LOSS"}</b>
+                    <span>
+                      {r.heroes
+                        .map((p) => HEROES.find((h) => h.id === p.heroId)?.name)
+                        .join(", ")}{" "}
+                      vs {VILLAINS.find((v) => v.id === r.villainId)?.name}
+                      <small>
+                        {r.difficulty}
+                        {r.heroic ? ` · Heroic ${r.heroic}` : ""} · {r.round}{" "}
+                        rounds · {new Date(r.date).toLocaleDateString()}
+                      </small>
+                    </span>
+                    <button
+                      className="text-button"
+                      title="Load this mission's seed and setup"
+                      onClick={() => {
+                        setTeam(r.heroes.map((p) => ({ ...p })));
+                        setSetupSeat(0);
+                        setVillain(
+                          VILLAINS.find((v) => v.id === r.villainId) ||
+                            VILLAINS[0],
+                        );
+                        setDifficulty(r.difficulty);
+                        setHeroic(r.heroic);
+                        setSeedText(r.seed ? String(r.seed) : "");
+                        setToast(
+                          "Setup and seed loaded. Start the mission to replay it.",
+                        );
+                      }}
+                    >
+                      Replay <ArrowRight size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
           <section className="field-guide">
             <div>
               <BookOpen size={29} />
@@ -1504,6 +1784,8 @@ export default function App() {
           onHelp={() => setHelp(true)}
           pacing={pacing}
           onPacing={choosePacing}
+          canUndo={undoDepth > 0}
+          onUndo={undo}
         />
       )}
       {game?.error && <span className="sr-only">{game.error}</span>}
@@ -1720,10 +2002,33 @@ export default function App() {
                   : "Rise. And try again."}
               </h3>
               <p>{game.result}</p>
+              {game.stats && (
+                <dl className="result-stats">
+                  {(
+                    [
+                      ["Damage dealt", game.stats.damageDealt],
+                      ["Damage taken", game.stats.damageTaken],
+                      ["Threat removed", game.stats.threatRemoved],
+                      ["Threat placed", game.stats.threatPlaced],
+                      ["Cards played", game.stats.cardsPlayed],
+                      ["Enemies defeated", game.stats.enemiesDefeated],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <div key={label}>
+                      <dd>{value}</dd>
+                      <dt>{label}</dt>
+                    </div>
+                  ))}
+                </dl>
+              )}
               <span className="result-rounds">
                 {game.round} rounds ·{" "}
-                {HEROES.find((h) => h.id === game.heroId)!.name} ·{" "}
-                {game.difficulty}
+                {game.players
+                  .map((p) => HEROES.find((h) => h.id === p.heroId)!.name)
+                  .join(", ")}{" "}
+                · {game.difficulty}
+                {game.heroic ? ` · Heroic ${game.heroic}` : ""}
+                {game.startSeed ? ` · seed ${game.startSeed}` : ""}
               </span>
               <div className="modal-actions">
                 <button
@@ -1731,6 +2036,19 @@ export default function App() {
                   onClick={() => setScreen("lobby")}
                 >
                   Choose a mission
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={() => void copyResult()}
+                >
+                  <Copy size={16} /> Copy result
+                </button>
+                <button
+                  className="secondary-button"
+                  title="Same setup and the same shuffles"
+                  onClick={() => void start(true, true)}
+                >
+                  <ArrowCounterClockwise size={16} /> Replay this seed
                 </button>
                 <button
                   className="primary-button"
@@ -1859,6 +2177,18 @@ function PaymentDecision({
   const sources = paymentSources(s, p.card?.id, p.paymentTarget);
   const status = paymentStatus(sources, selected, p.cost || 0, p.requirements);
   const subject = paymentSubject(s, p);
+  // Spend the least valuable resources first: Scientist and printed resource
+  // cards, then cards that cannot be played this turn, then playable cards by cost.
+  const rank = (x: PaymentSource) => {
+    if (x.id === "scientist") return 0;
+    const piece = s.player.hand.find((h) => h.id === x.id);
+    if (!piece) return x.name === "Pepper Potts" ? 1.5 : 4;
+    const c = card(piece);
+    if (c.type_code === "resource") return 1;
+    const open = { ...s, prompt: null, review: null };
+    return (playable(open, piece) ? 2 : 3) + (c.cost || 0) / 100;
+  };
+  const suggestion = suggestPayment(sources, p.cost || 0, p.requirements, rank);
   const discards = status.selected.filter((x) => x.kind === "card").length;
   const abilities = status.selected.length - discards;
   const toggle = (id: string) =>
@@ -2087,6 +2417,18 @@ function PaymentDecision({
                 Cancel
               </button>
             )}
+            <button
+              className="secondary-button"
+              disabled={!suggestion}
+              title={
+                suggestion
+                  ? "Select the least valuable resources that pay this cost. You can still change them."
+                  : "Your available resources cannot pay this cost."
+              }
+              onClick={() => suggestion && setSelected(suggestion)}
+            >
+              <Sparkle size={15} /> Suggest resources
+            </button>
             <button
               className="primary-button"
               disabled={!status.ready}
@@ -3022,6 +3364,8 @@ function Tabletop({
   onHelp,
   pacing,
   onPacing,
+  canUndo,
+  onUndo,
 }: {
   game: GameState;
   saveLabel: string;
@@ -3033,6 +3377,8 @@ function Tabletop({
   onHelp: () => void;
   pacing: Pacing;
   onPacing: (pacing: Pacing) => void;
+  canUndo: boolean;
+  onUndo: () => void;
 }) {
   const [viewId, setViewId] = useState(game.activePlayerId);
   const [playmatId, setPlaymatId] = useState(readPlaymat);
@@ -3141,6 +3487,21 @@ function Tabletop({
         <span className="table-game-meta">
           {s.difficulty} <span>·</span>{" "}
           {MODULES.find((m) => m.id === s.module)?.name}
+          {s.heroic ? (
+            <>
+              {" "}
+              <span>·</span> Heroic {s.heroic}
+            </>
+          ) : null}
+          {s.startSeed ? (
+            <>
+              {" "}
+              <span>·</span>{" "}
+              <span title="Mission seed: replay it from the result screen or the lobby">
+                #{s.startSeed}
+              </span>
+            </>
+          ) : null}
         </span>
       </div>
       <div
@@ -4018,6 +4379,14 @@ function Tabletop({
                     : "Choose your next move"}
               </span>
               <button
+                className="secondary-button undo-button"
+                disabled={!canUndo || s.phase !== "player"}
+                title="Take back your last action (Ctrl+Z or ⌘Z). Not available once a hidden card was revealed."
+                onClick={onUndo}
+              >
+                <ArrowCounterClockwise size={15} /> Undo
+              </button>
+              <button
                 className="primary-button"
                 disabled={!acting}
                 onClick={onEnd}
@@ -4070,44 +4439,58 @@ function Tabletop({
                 {visibleHand.map((p, i) => {
                   const disabled = playable(s, p);
                   return (
-                    <button
-                      className={`hand-card ${!disabled ? "playable" : ""}`}
+                    <div
+                      className={`hand-slot ${!disabled ? "playable" : ""}`}
                       style={
                         {
                           "--tilt": `${(i - (visibleHand.length - 1) / 2) * 1.2}deg`,
                         } as CSSProperties
                       }
                       key={p.id}
-                      onClick={() =>
-                        inspect({
-                          code: p.code,
-                          piece: p,
-                          hand: true,
-                          playerId: s.activePlayerId,
-                        })
-                      }
-                      aria-label={`Inspect ${card(p).name}`}
-                      title={disabled || `Play ${card(p).name}`}
                     >
-                      <CardImage code={p.code} />
-                      <span className="hand-card-name">{card(p).name}</span>
-                      <span className="hand-card-footer">
-                        <ResourceIcons items={resources(card(p))} />
-                        {!disabled ? (
-                          <span>
-                            PLAY <CaretRight size={12} weight="fill" />
-                          </span>
-                        ) : card(p).type_code === "resource" ? (
-                          <span>RESOURCE</span>
-                        ) : reactionCardsUI.includes(p.code) ? (
-                          <span>REACTION</span>
-                        ) : (
-                          <span>
-                            <Eye size={12} />
-                          </span>
-                        )}
-                      </span>
-                    </button>
+                      <button
+                        className={`hand-card ${!disabled ? "playable" : ""}`}
+                        onClick={() =>
+                          inspect({
+                            code: p.code,
+                            piece: p,
+                            hand: true,
+                            playerId: s.activePlayerId,
+                          })
+                        }
+                        aria-label={`Inspect ${card(p).name}`}
+                        title={disabled || `Read ${card(p).name}`}
+                      >
+                        <CardImage code={p.code} />
+                        <span className="hand-card-name">{card(p).name}</span>
+                        <span className="hand-card-footer">
+                          <ResourceIcons items={resources(card(p))} />
+                          {!disabled ? (
+                            <span className="hand-card-cost">
+                              COST {card(p).cost ?? 0}
+                            </span>
+                          ) : card(p).type_code === "resource" ? (
+                            <span>RESOURCE</span>
+                          ) : reactionCardsUI.includes(p.code) ? (
+                            <span>REACTION</span>
+                          ) : (
+                            <span>
+                              <Eye size={12} />
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                      {!disabled && (
+                        <button
+                          className="hand-play"
+                          aria-label={`Play now: ${card(p).name}`}
+                          title={`Play ${card(p).name} · cost ${card(p).cost ?? 0}`}
+                          onClick={() => sendAction({ type: "PLAY", id: p.id })}
+                        >
+                          PLAY <CaretRight size={11} weight="fill" />
+                        </button>
+                      )}
+                    </div>
                   );
                 })}
                 {!visibleHand.length && (

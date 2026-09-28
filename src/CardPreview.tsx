@@ -23,6 +23,9 @@ export function CardPreview() {
     let openTimer: ReturnType<typeof setTimeout> | undefined;
     let closeTimer: ReturnType<typeof setTimeout> | undefined;
     let shown = false;
+    // A dialog opening under a resting pointer must not pop a preview; only
+    // real pointer movement does.
+    let lastMove = 0;
     const clear = () => {
       clearTimeout(openTimer);
       clearTimeout(closeTimer);
@@ -94,7 +97,15 @@ export function CardPreview() {
         clear();
         return;
       }
+      if (event instanceof PointerEvent && performance.now() - lastMove > 200)
+        return;
       open(candidate(event.target));
+    };
+    const move = (event: PointerEvent) => {
+      lastMove = performance.now();
+      if (event.pointerType === "touch" || insidePopup(event.target)) return;
+      const next = candidate(event.target);
+      if (next && next !== anchor) open(next);
     };
     const leave = (event: PointerEvent | FocusEvent) => {
       if (insidePopup(event.relatedTarget)) {
@@ -124,6 +135,7 @@ export function CardPreview() {
     });
     observer.observe(document.body, { childList: true, subtree: true });
     document.addEventListener("pointerover", enter);
+    document.addEventListener("pointermove", move, { passive: true });
     document.addEventListener("pointerout", leave);
     document.addEventListener("focusin", enter);
     document.addEventListener("focusout", leave);
@@ -136,6 +148,7 @@ export function CardPreview() {
       clear();
       observer.disconnect();
       document.removeEventListener("pointerover", enter);
+      document.removeEventListener("pointermove", move);
       document.removeEventListener("pointerout", leave);
       document.removeEventListener("focusin", enter);
       document.removeEventListener("focusout", leave);

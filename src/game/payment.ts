@@ -74,6 +74,41 @@ export function paymentSources(
   return sources.filter((x) => x.resources.length);
 }
 
+/**
+ * Proposes a payment: cheapest sources first (by `rank`, lower spends first),
+ * typed requirements satisfied before the total, then any overpayment trimmed.
+ * Returns null when the available sources cannot pay.
+ */
+export function suggestPayment(
+  sources: PaymentSource[],
+  cost: number,
+  requirements: Resource[] = [],
+  rank: (source: PaymentSource) => number = () => 0,
+) {
+  const ordered = [...sources].sort((a, b) => rank(a) - rank(b));
+  const chosen: string[] = [];
+  const status = () => paymentStatus(sources, chosen, cost, requirements);
+  for (let guard = 0; guard < 32 && !status().ready; guard++) {
+    const missing = status().missing;
+    const next = ordered.find(
+      (x) =>
+        !chosen.includes(x.id) &&
+        (!missing.length ||
+          x.resources.some((r) => r === "wild" || missing.includes(r))),
+    );
+    if (!next) break;
+    chosen.push(next.id);
+  }
+  if (!status().ready) return null;
+  // Drop the most valuable selections that are not needed for the total.
+  for (const id of [...chosen].reverse()) {
+    const trial = chosen.filter((x) => x !== id);
+    if (paymentStatus(sources, trial, cost, requirements).ready)
+      chosen.splice(chosen.indexOf(id), 1);
+  }
+  return chosen;
+}
+
 /** Shared by the engine and the payment preview; each wild covers one requirement. */
 export function paymentStatus(
   sources: PaymentSource[],

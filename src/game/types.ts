@@ -45,6 +45,15 @@ export interface Card {
   threat_fixed?: boolean;
   escalation_threat_fixed?: boolean;
 }
+/** Running mission totals for the result screen; never used by the rules. */
+export interface MissionStats {
+  damageDealt: number;
+  damageTaken: number;
+  threatRemoved: number;
+  threatPlaced: number;
+  cardsPlayed: number;
+  enemiesDefeated: number;
+}
 export interface Piece {
   id: string;
   code: string;
@@ -116,6 +125,8 @@ export interface GameState {
   combatEvents?: CombatEvent[];
   version: 1;
   seed: number;
+  /** The seed the mission started with; `seed` itself advances with every shuffle. */
+  startSeed?: number;
   nextId: number;
   heroId: string;
   aspect: Aspect;
@@ -133,6 +144,11 @@ export interface GameState {
   pacing?: Pacing;
   /** Meaningful results that resolved without a pause in the faster tempos. */
   timeline?: ActionReview[];
+  /** Heroic mode: additional encounter cards dealt to each player every villain phase. */
+  heroic?: number;
+  /** Increases whenever hidden information is revealed or the RNG advances; undo stops there. */
+  hiddenInfo?: number;
+  stats?: MissionStats;
   review: ActionReview | null;
   reviewCount: number;
   player: {

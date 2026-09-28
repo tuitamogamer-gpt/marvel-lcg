@@ -22,6 +22,7 @@ import type {
   Command,
   Effect,
   GameState,
+  MissionStats,
   Option,
   Pacing,
   Piece,
@@ -66,6 +67,22 @@ const option = (
 const need = (condition: unknown, message: string) => {
   if (!condition) throw Error(message);
 };
+export const emptyStats = (): MissionStats => ({
+  damageDealt: 0,
+  damageTaken: 0,
+  threatRemoved: 0,
+  threatPlaced: 0,
+  cardsPlayed: 0,
+  enemiesDefeated: 0,
+});
+function track(s: GameState, key: keyof MissionStats, n: number) {
+  if (n <= 0) return;
+  (s.stats ||= emptyStats())[key] += n;
+}
+/** Hidden information came into view (or the RNG advanced): earlier states can no longer be restored fairly. */
+function revealHidden(s: GameState) {
+  s.hiddenInfo = (s.hiddenInfo || 0) + 1;
+}
 export function log(
   s: GameState,
   text: string,
@@ -83,6 +100,7 @@ export function log(
   if (s.log.length > 350) s.log.shift();
 }
 function random(s: GameState) {
+  revealHidden(s);
   let x = s.seed | 0;
   x ^= x << 13;
   x ^= x >>> 17;
@@ -225,7 +243,10 @@ function recyclePlayer(s: GameState) {
 function takePlayer(s: GameState) {
   recyclePlayer(s);
   const p = s.player.deck.shift();
-  if (p) recyclePlayer(s);
+  if (p) {
+    revealHidden(s);
+    recyclePlayer(s);
+  }
   return p;
 }
 function draw(s: GameState, n: number) {
@@ -245,6 +266,7 @@ function mill(s: GameState, n: number) {
   for (let i = 0; i < available; i++) {
     const p = s.player.deck.shift();
     if (p) {
+      revealHidden(s);
       a.push(p);
       s.player.discard.push(p);
     }
@@ -262,6 +284,7 @@ function recycleEncounter(s: GameState) {
 function drawEncounter(s: GameState) {
   recycleEncounter(s);
   const p = s.encounter.deck.shift();
+  if (p) revealHidden(s);
   recycleEncounter(s);
   return p;
 }
@@ -519,6 +542,7 @@ function applyDamage(
   }
   if (target === "hero") {
     s.player.hp -= n;
+    track(s, "damageTaken", n);
     log(s, `You take ${n} damage.`, "bad");
     check(s);
     return;
@@ -535,11 +559,13 @@ function applyDamage(
     const armor = villainAt(s, "01098")[0];
     if (armor) {
       armor.damage += n;
+      track(s, "damageDealt", n);
       log(s, `Armored Rhino Suit absorbs ${n} damage.`);
       if (armor.damage >= 5) discardPiece(s, armor.id);
       return;
     }
     s.villain.hp -= n;
+    track(s, "damageDealt", n);
     log(s, `${card(s.villain).name} takes ${n} damage.`, "good");
     if (s.villain.hp <= 0) {
       advanceVillain(s);
@@ -559,6 +585,11 @@ function applyDamage(
   }
   const remain = pieceHP(s, m) - m.damage;
   m.damage += n;
+  track(
+    s,
+    s.minions.some((x) => x.id === m.id) ? "damageDealt" : "damageTaken",
+    n,
+  );
   log(s, `${card(m).name} takes ${n} damage.`, "good");
   if (m.damage >= pieceHP(s, m)) {
     const defeated = defeatCharacter(s, m, source, attack);
@@ -584,6 +615,7 @@ function defeatCharacter(s: GameState, m: Piece, source = "", attack = false) {
   discardPiece(s, m.id);
   log(s, `${name} is defeated.`, "good");
   if (minion) {
+    track(s, "enemiesDefeated", 1);
     s.flags.defeatedMinion = true;
     if (source === "hero" && attack) s.flags.heroKill = true;
     for (const tracer of tracers)
@@ -723,6 +755,7 @@ function threat(
   }
   if (target === "main") {
     s.scheme.threat += n;
+    track(s, "threatPlaced", n);
     log(s, `+${n} threat on ${card(s.scheme.code).name}.`, "bad");
     if (s.scheme.threat >= schemeLimit(s)) {
       const v = VILLAINS.find((v) => v.id === s.villainId)!;
@@ -749,7 +782,10 @@ function threat(
     }
   } else {
     const p = s.sideSchemes.find((p) => p.id === target);
-    if (p) p.counters += n;
+    if (p) {
+      p.counters += n;
+      track(s, "threatPlaced", n);
+    }
   }
 }
 function thwart(s: GameState, target: string, n: number) {
@@ -763,6 +799,7 @@ function thwart(s: GameState, target: string, n: number) {
     }
     const removed = Math.min(n, s.scheme.threat);
     s.scheme.threat -= removed;
+    track(s, "threatRemoved", removed);
     log(s, `Remove ${removed} threat from the main scheme.`, "good");
     return removed;
   } else {
@@ -770,6 +807,7 @@ function thwart(s: GameState, target: string, n: number) {
     if (!p) return 0;
     const removed = Math.min(n, p.counters);
     p.counters = Math.max(0, p.counters - n);
+    track(s, "threatRemoved", removed);
     log(s, `Remove ${removed} threat from ${card(p).name}.`, "good");
     if (!p.counters) {
       log(s, `${card(p).name} is defeated.`, "good");
@@ -1021,6 +1059,7 @@ export function newGame(config: {
   heroes?: { heroId: string; aspect: Aspect; deckCards?: string[] }[];
   guided?: boolean;
   pacing?: Pacing;
+  heroic?: number;
 }): GameState {
   const team = config.heroes || [
     { heroId: config.heroId, aspect: config.aspect },
@@ -1033,6 +1072,10 @@ export function newGame(config: {
   need(
     team.every((p) => HEROES.some((h) => h.id === p.heroId)),
     "Unknown hero.",
+  );
+  need(
+    [0, 1, 2, 3].includes(config.heroic ?? 0),
+    "Heroic mode adds 0 to 3 encounter cards per player.",
   );
   for (const seat of team) {
     if (seat.deckCards) {
@@ -1068,6 +1111,7 @@ export function newGame(config: {
   const s: GameState = {
     version: 1,
     seed: config.seed || Date.now() >>> 0 || 1,
+    startSeed: 0,
     nextId: 1,
     heroId: team[0].heroId,
     aspect: team[0].aspect,
@@ -1084,6 +1128,9 @@ export function newGame(config: {
     guided: config.guided ?? false,
     pacing: config.pacing || "guided",
     timeline: [],
+    heroic: config.heroic || 0,
+    hiddenInfo: 0,
+    stats: emptyStats(),
     review: null,
     reviewCount: 0,
     player: players[0].player,
@@ -1113,6 +1160,7 @@ export function newGame(config: {
     flags: players[0].flags,
     attack: null,
   };
+  s.startSeed = s.seed;
   for (const seat of players) {
     activateSeat(s, seat.id);
     s.player.deck = shuffle(
@@ -1260,6 +1308,7 @@ function play(s: GameState, p: Piece, paid: Resource[] = []) {
   need(i >= 0, "Card is no longer in hand.");
   s.player.hand.splice(i, 1);
   s.flags.discount = 0;
+  track(s, "cardsPlayed", 1);
   log(s, `Play ${c.name}.`, "good");
   s.flags.basicAttack = false;
   s.flags.heroKill = false;
@@ -3203,6 +3252,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "futurist": {
+      revealHidden(s);
       for (const id of e.ids as string[]) {
         const i = s.player.deck.findIndex((p) => p.id === id);
         if (i >= 0) {
@@ -3214,6 +3264,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "searchDeck": {
+      revealHidden(s);
       const opts = s.player.deck
         .filter(
           (p) =>
@@ -3852,6 +3903,7 @@ function resolve(s: GameState, e: Effect) {
     }
     case "findMinion":
     case "findEncounter": {
+      revealHidden(s);
       const max = s.encounter.deck.length;
       for (let i = 0; i < max; i++) {
         const p = s.encounter.deck.shift();
@@ -4086,7 +4138,8 @@ function resolve(s: GameState, e: Effect) {
     }
     case "dealEncounters": {
       const order = playerOrder(s);
-      for (const seat of order) dealEncounter(s, seat.id);
+      for (const seat of order)
+        for (let i = 0; i <= (s.heroic || 0); i++) dealEncounter(s, seat.id);
       const hazard = s.sideSchemes.reduce(
         (n, p) => n + (card(p).scheme_hazard || 0),
         0,
@@ -4095,7 +4148,7 @@ function resolve(s: GameState, e: Effect) {
         dealEncounter(s, order[i % order.length].id);
       log(
         s,
-        `Deal 1 encounter card to each hero${hazard ? ` and ${hazard} additional hazard card(s) in player order` : ""}.`,
+        `Deal ${1 + (s.heroic || 0)} encounter card${s.heroic ? "s" : ""} to each hero${s.heroic ? ` (Heroic ${s.heroic})` : ""}${hazard ? ` and ${hazard} additional hazard card(s) in player order` : ""}.`,
         "bad",
       );
       add(s, ...eachPlayer(s, E("revealDealt")));
@@ -4591,6 +4644,10 @@ export function summarize(s: GameState) {
     review: s.review,
     pacing: pacingOf(s),
     timeline: (s.timeline || []).map((r) => r.title),
+    heroic: s.heroic || 0,
+    seed: s.startSeed,
+    hiddenInfo: s.hiddenInfo || 0,
+    missionStats: s.stats,
     round: s.round,
     identity: heroCard(s).name,
     heroHP: s.player.hp,

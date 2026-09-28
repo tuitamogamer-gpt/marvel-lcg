@@ -61,6 +61,16 @@ export function upgradeSave(s: GameState): GameState {
   s.resolving ||= [];
   s.pacing ||= "guided";
   s.timeline ||= [];
+  s.heroic ||= 0;
+  s.hiddenInfo ||= 0;
+  s.stats ||= {
+    damageDealt: 0,
+    damageTaken: 0,
+    threatRemoved: 0,
+    threatPlaced: 0,
+    cardsPlayed: 0,
+    enemiesDefeated: 0,
+  };
   if (!s.players?.length) {
     s.players = [
       {

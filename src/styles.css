@@ -6276,3 +6276,223 @@ option {
   font-size: 13px;
   color: #a7adbd;
 }
+
+/* Hand slots: the card opens its inspection, the pill plays it directly. */
+.hand-slot {
+  position: relative;
+  flex: 1 0 93px;
+  max-width: 130px;
+  min-width: 0;
+  transform: rotate(var(--tilt, 0deg));
+}
+.hand-slot:hover,
+.hand-slot:focus-within {
+  transform: translateY(-9px) rotate(0);
+  z-index: 2;
+}
+.hand-slot > .hand-card,
+.hand-slot > .hand-card:hover,
+.hand-slot > .hand-card:focus-visible {
+  flex: none;
+  width: 100%;
+  max-width: none;
+  margin-left: 0;
+  transform: none;
+  z-index: auto;
+}
+.physical-table .hand-slot {
+  flex: 0 0 116px;
+  max-width: 116px;
+  margin-left: -12px;
+  transform-origin: 50% 100%;
+}
+.physical-table .hand-slot:first-child {
+  margin-left: 0;
+}
+.physical-table .hand-slot:hover,
+.physical-table .hand-slot:focus-within {
+  transform: translateY(-9px) rotate(0);
+  z-index: 3;
+}
+.hand-play {
+  position: absolute;
+  right: 4px;
+  bottom: 22px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #f4d56a;
+  color: #1b1400;
+  border: 1px solid #1b1400;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  box-shadow: 2px 2px 0 #040e1d;
+  cursor: pointer;
+  transition:
+    background 120ms var(--ease),
+    transform 120ms var(--ease);
+}
+.hand-play:hover,
+.hand-play:focus-visible {
+  background: #fff0a8;
+  transform: translateY(-1px);
+  outline: none;
+}
+.hand-card-cost {
+  font-size: 7px;
+  font-weight: 800;
+  color: #f4d56a;
+}
+.turn-action .undo-button {
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.turn-action .undo-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Mission result statistics */
+.result-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px auto 0;
+  max-width: 480px;
+}
+.result-stats > div {
+  display: grid;
+  gap: 2px;
+  padding: 10px 8px;
+  border: 1px solid #d5d0c4;
+  border-radius: var(--radius-small);
+  background: #fbfaf6;
+}
+.result-stats dd {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 26px;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.result-stats dt {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #687382;
+}
+.result-banner .modal-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Lobby: heroic level, seed and recent guest missions */
+.seed-line {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.seed-line label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  flex: 1 1 180px;
+}
+.seed-line input {
+  min-height: 34px;
+  padding: 6px 10px;
+  border-radius: var(--radius-control);
+  border: 1px solid #667287;
+  background: #0d1728;
+  color: var(--paper);
+  font: inherit;
+  font-size: 12px;
+}
+.seed-line input:focus-visible {
+  outline: 2px solid var(--yellow);
+  outline-offset: 1px;
+}
+.seed-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 6px;
+}
+.recent-missions {
+  margin-top: 34px;
+  display: grid;
+  gap: 14px;
+}
+.recent-missions h2 {
+  font-size: 24px;
+  text-transform: uppercase;
+  font-style: italic;
+}
+.recent-missions h2 span {
+  font-size: 12px;
+  font-style: normal;
+  color: #687382;
+  margin-left: 10px;
+  letter-spacing: 0;
+}
+.recent-missions ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.recent-missions li {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: var(--paper, #fbfaf6);
+  border: 1.5px solid var(--ink, #172033);
+  border-radius: var(--radius-small);
+}
+.recent-missions li b {
+  font-family: var(--display);
+  font-size: 16px;
+  color: #a52b37;
+}
+.recent-missions li.won b {
+  color: #1f7a4d;
+}
+.recent-missions li span {
+  display: grid;
+  gap: 2px;
+  font-weight: 700;
+  min-width: 0;
+}
+.recent-missions li small {
+  font-weight: 500;
+  font-size: 11px;
+  color: #687382;
+  text-transform: capitalize;
+}
+@media (max-width: 600px) {
+  .result-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .recent-missions li {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+  .recent-missions li .text-button {
+    grid-column: 2;
+  }
+}
