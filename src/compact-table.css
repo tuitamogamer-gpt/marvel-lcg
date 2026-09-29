@@ -1,0 +1,257 @@
+/* Compact desktop table: on laptop-height screens the villain, the hero and
+   the hand stay in view together; the action bar and hand stick to the bottom. */
+@media (min-width: 1000px) and (max-height: 960px) {
+  .app .physical-table.tabletop {
+    padding-top: 4px;
+  }
+  .app .physical-table .tabletop-top {
+    min-height: 26px;
+  }
+  .app .physical-table .mission-brief {
+    margin: 2px 0 5px;
+  }
+  .app .physical-table .mission-brief h1 {
+    font-size: 21px;
+  }
+  .app .physical-table .team-strip {
+    margin-bottom: 5px;
+  }
+  .app .physical-table .team-strip-note {
+    display: none;
+  }
+  .app .physical-table .table-finish-bar {
+    padding: 3px 9px;
+    margin: 0 7px;
+  }
+  .app .physical-table .table-finish-name {
+    font-size: 11px;
+  }
+  .app .physical-table .table-customize-button {
+    min-height: 24px;
+    padding: 3px 8px;
+    font-size: 9px;
+  }
+  .app .physical-table .playmat > .zone-label {
+    padding: 4px 16px;
+  }
+  .app .physical-table .opposition {
+    padding: 8px 16px 6px;
+  }
+  .app .physical-table .battle-divider {
+    padding: 3px 16px;
+  }
+  .app .physical-table .player-area {
+    padding: 8px 16px 6px;
+  }
+  .app .physical-table .identity-card-space {
+    min-height: 150px;
+    padding-top: 2px;
+  }
+  .app .physical-table .identity-info h2 {
+    font-size: 18px;
+    margin: 2px 0 4px;
+  }
+  .app .physical-table .identity-stats {
+    margin-top: 5px;
+  }
+  .app .physical-table .hero-form-button {
+    min-height: 44px;
+    margin-top: 6px;
+    padding: 5px 7px;
+  }
+  .app .physical-table .identity-resource {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 6px 8px;
+    margin-top: 2px;
+  }
+  .app .physical-table .identity-resource .scientist-art {
+    display: none;
+  }
+  .app .physical-table .identity-resource .scientist-copy > b {
+    font-size: 18px;
+  }
+  /* overflow: hidden on the playmat would trap the sticky bottom; clip keeps the rounded corners. */
+  .app .physical-table .illustrated-playmat,
+  .app .physical-table .playmat {
+    overflow: clip;
+  }
+  .app .physical-table .table-bottom {
+    position: sticky;
+    bottom: 0;
+    z-index: 6;
+    background: #0f2430;
+    box-shadow: 0 -10px 24px #00000059;
+  }
+  .app .physical-table .action-bar {
+    padding: 4px 15px;
+    min-height: 40px;
+  }
+  .app .physical-table .basic-actions > button {
+    min-height: 30px;
+  }
+  .app .physical-table .hand-section {
+    padding: 4px 18px 0;
+  }
+  .app .physical-table .hand-tools {
+    margin: 0;
+  }
+  .app .physical-table .hand-cards {
+    padding: 8px 14px 6px;
+  }
+  .app .physical-table .hand-slot {
+    flex-basis: 92px;
+    max-width: 92px;
+  }
+  .app .physical-table .hand-card-name {
+    display: none;
+  }
+  .app .physical-table .hand-card-footer {
+    margin-top: 2px;
+    min-height: 15px;
+  }
+  .app .physical-table .hand-play {
+    bottom: 17px;
+  }
+  .app .physical-table .empty-hand {
+    min-height: 90px;
+  }
+}
+
+@media (min-width: 1000px) and (max-height: 960px) {
+  /* A wider identity column keeps the stats and the form button on single rows. */
+  .app .physical-table .player-area {
+    grid-template-columns: 340px minmax(0, 1fr) 150px;
+    gap: 12px;
+  }
+  .app .physical-table .identity-area {
+    gap: 8px 10px;
+  }
+  .app .physical-table .identity-stats {
+    flex-wrap: nowrap;
+  }
+  .app .physical-table .hero-form-button {
+    min-height: 40px;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 4px 6px;
+  }
+  .app .physical-table .hero-form-copy small {
+    font-size: 7px;
+  }
+  .app .physical-table .identity-resource .scientist-copy {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 3px 10px;
+  }
+  .app .physical-table .identity-resource .ability-kicker {
+    display: none;
+  }
+  .app .physical-table .identity-resource .scientist-copy > b {
+    font-size: 14px;
+  }
+  .app .physical-table .identity-resource small {
+    font-size: 8px;
+  }
+  .app .physical-table .identity-resource .ability-button {
+    margin: 0;
+    padding: 4px 8px;
+    min-height: 26px;
+    font-size: 9px;
+  }
+  .app .physical-table .basic-actions > button {
+    min-height: 30px;
+    padding: 4px 9px;
+  }
+  .app .physical-table .basic-actions > button b.action-value {
+    font-size: 20px;
+  }
+  .app .physical-table .basic-actions .defense-plaque {
+    zoom: 0.72;
+  }
+  .app .physical-table .hand-section {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 12px;
+  }
+  .app .physical-table .hand-section > .zone-label {
+    grid-column: 1;
+  }
+  .app .physical-table .hand-section > .hand-tools {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .app .physical-table .hand-section > .hand-layout {
+    grid-column: 1 / -1;
+  }
+  .app .physical-table .hand-cards {
+    padding: 6px 14px 4px;
+  }
+  .app .physical-table .hand-slot {
+    flex-basis: 86px;
+    max-width: 86px;
+  }
+}
+
+@media (min-width: 1000px) and (max-height: 960px) {
+  /* Slightly smaller cards and headings buy the last rows of space on 900 px screens. */
+  .app .physical-table.tabletop {
+    --table-card-width: 96px;
+    --table-card-height: 134px;
+  }
+  .app .physical-table .identity-card-space {
+    min-height: 140px;
+    flex-basis: 138px;
+    width: 138px;
+  }
+  .app .physical-table .identity-info h2 {
+    font-size: 16px;
+    margin: 0 0 3px;
+  }
+  .app .physical-table .identity-info .health-dial {
+    zoom: 0.85;
+  }
+  .app .physical-table .villain-info .health-dial {
+    zoom: 0.85;
+  }
+  .app .physical-table .team-seat {
+    padding: 4px 8px;
+    gap: 8px;
+  }
+  .app .physical-table .team-seat img {
+    width: 30px;
+    height: 42px;
+  }
+  .app .physical-table .team-seat .seat-health-bar {
+    display: none;
+  }
+  .app .physical-table .hand-slot {
+    flex-basis: 80px;
+    max-width: 80px;
+  }
+}
+
+@media (min-width: 1000px) and (max-height: 960px) {
+  .app .physical-table .identity-stats {
+    gap: 4px;
+  }
+  .app .physical-table .identity-stats .stat-token.compact {
+    gap: 2px;
+  }
+  .app .physical-table .hero-form-copy strong {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 10px;
+  }
+  .app .physical-table .identity-resource {
+    padding: 4px 8px;
+  }
+}
+
+@media (min-width: 1000px) and (max-height: 960px) {
+  .app .physical-table .identity-resource small {
+    display: none;
+  }
+}

@@ -21,6 +21,7 @@ import "./champions-theme.css";
 import "./comic-effects.css";
 import "./hero-table.css";
 import "./defense-token.css";
+import "./compact-table.css";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>

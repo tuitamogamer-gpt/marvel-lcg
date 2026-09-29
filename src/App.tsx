@@ -4317,208 +4317,212 @@ function Tabletop({
                 })}
             </section>
           )}
-          <div className="action-bar">
-            <div className="basic-actions">
-              {s.player.form === "hero" ? (
-                <>
+          <div className="table-bottom">
+            <div className="action-bar">
+              <div className="basic-actions">
+                {s.player.form === "hero" ? (
+                  <>
+                    <button
+                      className="attack-action"
+                      title="Attack an enemy. Exhaust your identity."
+                      disabled={!acting || s.player.exhausted}
+                      onClick={() => send({ type: "BASIC", action: "attack" })}
+                    >
+                      <span className="action-emblem">
+                        <Fist size={25} weight="fill" />
+                      </span>
+                      <span className="action-copy">
+                        Attack <small>Deal damage</small>
+                      </span>
+                      <b className="action-value">{stats.attack}</b>
+                    </button>
+                    <button
+                      className="thwart-action"
+                      title="Remove threat from a scheme. Exhaust your identity."
+                      disabled={!acting || s.player.exhausted}
+                      onClick={() => send({ type: "BASIC", action: "thwart" })}
+                    >
+                      <span className="action-emblem">
+                        <Target size={25} weight="bold" />
+                      </span>
+                      <span className="action-copy">
+                        Thwart <small>Remove threat</small>
+                      </span>
+                      <b className="action-value">{stats.thwart}</b>
+                    </button>
+                    <DefensePlaque
+                      value={stats.defense}
+                      exhausted={s.player.exhausted}
+                    />
+                  </>
+                ) : (
                   <button
-                    className="attack-action"
-                    title="Attack an enemy. Exhaust your identity."
-                    disabled={!acting || s.player.exhausted}
-                    onClick={() => send({ type: "BASIC", action: "attack" })}
+                    className="recover-action"
+                    title="Heal your identity. Exhaust your identity."
+                    disabled={
+                      !acting || s.player.exhausted || s.player.hp >= maxHP(s)
+                    }
+                    onClick={() => send({ type: "BASIC", action: "recover" })}
                   >
-                    <span className="action-emblem">
-                      <Fist size={25} weight="fill" />
+                    <Heart size={20} />
+                    <span>
+                      Recover <b>{stats.recover}</b>
                     </span>
-                    <span className="action-copy">
-                      Attack <small>Deal damage</small>
-                    </span>
-                    <b className="action-value">{stats.attack}</b>
                   </button>
-                  <button
-                    className="thwart-action"
-                    title="Remove threat from a scheme. Exhaust your identity."
-                    disabled={!acting || s.player.exhausted}
-                    onClick={() => send({ type: "BASIC", action: "thwart" })}
-                  >
-                    <span className="action-emblem">
-                      <Target size={25} weight="bold" />
-                    </span>
-                    <span className="action-copy">
-                      Thwart <small>Remove threat</small>
-                    </span>
-                    <b className="action-value">{stats.thwart}</b>
-                  </button>
-                  <DefensePlaque
-                    value={stats.defense}
-                    exhausted={s.player.exhausted}
-                  />
-                </>
-              ) : (
+                )}
+              </div>
+              <div className="turn-action">
+                <span>
+                  {s.phase === "villain"
+                    ? "The villain is acting"
+                    : s.player.exhausted
+                      ? "Your identity is exhausted"
+                      : "Choose your next move"}
+                </span>
                 <button
-                  className="recover-action"
-                  title="Heal your identity. Exhaust your identity."
-                  disabled={
-                    !acting || s.player.exhausted || s.player.hp >= maxHP(s)
-                  }
-                  onClick={() => send({ type: "BASIC", action: "recover" })}
+                  className="secondary-button undo-button"
+                  disabled={!canUndo || s.phase !== "player"}
+                  title="Take back your last action (Ctrl+Z or ⌘Z). Not available once a hidden card was revealed."
+                  onClick={onUndo}
                 >
-                  <Heart size={20} />
-                  <span>
-                    Recover <b>{stats.recover}</b>
-                  </span>
-                </button>
-              )}
-            </div>
-            <div className="turn-action">
-              <span>
-                {s.phase === "villain"
-                  ? "The villain is acting"
-                  : s.player.exhausted
-                    ? "Your identity is exhausted"
-                    : "Choose your next move"}
-              </span>
-              <button
-                className="secondary-button undo-button"
-                disabled={!canUndo || s.phase !== "player"}
-                title="Take back your last action (Ctrl+Z or ⌘Z). Not available once a hidden card was revealed."
-                onClick={onUndo}
-              >
-                <ArrowCounterClockwise size={15} /> Undo
-              </button>
-              <button
-                className="primary-button"
-                disabled={!acting}
-                onClick={onEnd}
-              >
-                {s.playerCount > 1 ? "End hero turn" : "End hero phase"}{" "}
-                <ArrowRight size={17} />
-              </button>
-            </div>
-          </div>
-          <section className="hand-section">
-            <div className="zone-label">
-              <span>
-                YOUR HAND <b>{s.player.hand.length}</b>
-              </span>
-              <span>
-                Select a card to read or play{" "}
-                <button
-                  className="icon-button"
-                  aria-label="Open rules"
-                  onClick={onHelp}
-                >
-                  <Info size={14} />
-                </button>
-              </span>
-            </div>
-            <div className="hand-tools">
-              <div className="hand-filter" aria-label="Filter hand">
-                <button
-                  className={handFilter === "all" ? "selected" : ""}
-                  aria-pressed={handFilter === "all"}
-                  onClick={() => setHandFilter("all")}
-                >
-                  All cards <b>{s.player.hand.length}</b>
+                  <ArrowCounterClockwise size={15} /> Undo
                 </button>
                 <button
-                  className={handFilter === "playable" ? "selected" : ""}
-                  aria-pressed={handFilter === "playable"}
-                  onClick={() => setHandFilter("playable")}
+                  className="primary-button"
+                  disabled={!acting}
+                  onClick={onEnd}
                 >
-                  Ready to play <b>{playableHand.length}</b>
+                  {s.playerCount > 1 ? "End hero turn" : "End hero phase"}{" "}
+                  <ArrowRight size={17} />
                 </button>
               </div>
-              <span>
-                <Lightning size={15} /> Other cards in hand can pay resource
-                costs.
-              </span>
             </div>
-            <div className="hand-layout">
-              <div className="hand-cards">
-                {visibleHand.map((p, i) => {
-                  const disabled = playable(s, p);
-                  return (
-                    <div
-                      className={`hand-slot ${!disabled ? "playable" : ""}`}
-                      style={
-                        {
-                          "--tilt": `${(i - (visibleHand.length - 1) / 2) * 1.2}deg`,
-                        } as CSSProperties
-                      }
-                      key={p.id}
-                    >
-                      <button
-                        className={`hand-card ${!disabled ? "playable" : ""}`}
-                        onClick={() =>
-                          inspect({
-                            code: p.code,
-                            piece: p,
-                            hand: true,
-                            playerId: s.activePlayerId,
-                          })
+            <section className="hand-section">
+              <div className="zone-label">
+                <span>
+                  YOUR HAND <b>{s.player.hand.length}</b>
+                </span>
+                <span>
+                  Select a card to read or play{" "}
+                  <button
+                    className="icon-button"
+                    aria-label="Open rules"
+                    onClick={onHelp}
+                  >
+                    <Info size={14} />
+                  </button>
+                </span>
+              </div>
+              <div className="hand-tools">
+                <div className="hand-filter" aria-label="Filter hand">
+                  <button
+                    className={handFilter === "all" ? "selected" : ""}
+                    aria-pressed={handFilter === "all"}
+                    onClick={() => setHandFilter("all")}
+                  >
+                    All cards <b>{s.player.hand.length}</b>
+                  </button>
+                  <button
+                    className={handFilter === "playable" ? "selected" : ""}
+                    aria-pressed={handFilter === "playable"}
+                    onClick={() => setHandFilter("playable")}
+                  >
+                    Ready to play <b>{playableHand.length}</b>
+                  </button>
+                </div>
+                <span>
+                  <Lightning size={15} /> Other cards in hand can pay resource
+                  costs.
+                </span>
+              </div>
+              <div className="hand-layout">
+                <div className="hand-cards">
+                  {visibleHand.map((p, i) => {
+                    const disabled = playable(s, p);
+                    return (
+                      <div
+                        className={`hand-slot ${!disabled ? "playable" : ""}`}
+                        style={
+                          {
+                            "--tilt": `${(i - (visibleHand.length - 1) / 2) * 1.2}deg`,
+                          } as CSSProperties
                         }
-                        aria-label={`Inspect ${card(p).name}`}
-                        title={disabled || `Read ${card(p).name}`}
+                        key={p.id}
                       >
-                        <CardImage code={p.code} />
-                        <span className="hand-card-name">{card(p).name}</span>
-                        <span className="hand-card-footer">
-                          <ResourceIcons items={resources(card(p))} />
-                          {!disabled ? (
-                            <span className="hand-card-cost">
-                              COST {card(p).cost ?? 0}
-                            </span>
-                          ) : card(p).type_code === "resource" ? (
-                            <span>RESOURCE</span>
-                          ) : reactionCardsUI.includes(p.code) ? (
-                            <span>REACTION</span>
-                          ) : (
-                            <span>
-                              <Eye size={12} />
-                            </span>
-                          )}
-                        </span>
-                      </button>
-                      {!disabled && (
                         <button
-                          className="hand-play"
-                          aria-label={`Play now: ${card(p).name}`}
-                          title={`Play ${card(p).name} · cost ${card(p).cost ?? 0}`}
-                          onClick={() => sendAction({ type: "PLAY", id: p.id })}
+                          className={`hand-card ${!disabled ? "playable" : ""}`}
+                          onClick={() =>
+                            inspect({
+                              code: p.code,
+                              piece: p,
+                              hand: true,
+                              playerId: s.activePlayerId,
+                            })
+                          }
+                          aria-label={`Inspect ${card(p).name}`}
+                          title={disabled || `Read ${card(p).name}`}
                         >
-                          PLAY <CaretRight size={11} weight="fill" />
+                          <CardImage code={p.code} />
+                          <span className="hand-card-name">{card(p).name}</span>
+                          <span className="hand-card-footer">
+                            <ResourceIcons items={resources(card(p))} />
+                            {!disabled ? (
+                              <span className="hand-card-cost">
+                                COST {card(p).cost ?? 0}
+                              </span>
+                            ) : card(p).type_code === "resource" ? (
+                              <span>RESOURCE</span>
+                            ) : reactionCardsUI.includes(p.code) ? (
+                              <span>REACTION</span>
+                            ) : (
+                              <span>
+                                <Eye size={12} />
+                              </span>
+                            )}
+                          </span>
+                        </button>
+                        {!disabled && (
+                          <button
+                            className="hand-play"
+                            aria-label={`Play now: ${card(p).name}`}
+                            title={`Play ${card(p).name} · cost ${card(p).cost ?? 0}`}
+                            onClick={() =>
+                              sendAction({ type: "PLAY", id: p.id })
+                            }
+                          >
+                            PLAY <CaretRight size={11} weight="fill" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {!visibleHand.length && (
+                    <div className="empty-hand">
+                      <Cards size={30} />
+                      <strong>
+                        {handFilter === "playable"
+                          ? "No cards ready to play"
+                          : "Your hand is empty"}
+                      </strong>
+                      <span>
+                        {handFilter === "playable"
+                          ? "You can still use basic powers, change form, or activate cards in play."
+                          : "End your hero phase to draw a new hand."}
+                      </span>
+                      {handFilter === "playable" && (
+                        <button
+                          className="text-button"
+                          onClick={() => setHandFilter("all")}
+                        >
+                          Show all cards <ArrowRight size={16} />
                         </button>
                       )}
                     </div>
-                  );
-                })}
-                {!visibleHand.length && (
-                  <div className="empty-hand">
-                    <Cards size={30} />
-                    <strong>
-                      {handFilter === "playable"
-                        ? "No cards ready to play"
-                        : "Your hand is empty"}
-                    </strong>
-                    <span>
-                      {handFilter === "playable"
-                        ? "You can still use basic powers, change form, or activate cards in play."
-                        : "End your hero phase to draw a new hand."}
-                    </span>
-                    {handFilter === "playable" && (
-                      <button
-                        className="text-button"
-                        onClick={() => setHandFilter("all")}
-                      >
-                        Show all cards <ArrowRight size={16} />
-                      </button>
-                    )}
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          </div>
         </div>
         <aside className="mission-rail">
           <ActionDirector

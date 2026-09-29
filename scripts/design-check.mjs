@@ -152,6 +152,32 @@ try {
     await capture(`game-${width}`);
   }
   await audit("battlefield-desktop");
+  for (const [width, height] of [
+    [1440, 900],
+    [1366, 768],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await page.evaluate(() => scrollTo(0, 0));
+    const fits = await page.evaluate(() => {
+      const box = (s) => document.querySelector(s)?.getBoundingClientRect();
+      const hand = box(".hand-cards");
+      const bar = box(".action-bar");
+      const villain = box(".villain-card");
+      return {
+        hand: !!hand && hand.top >= 0 && hand.bottom <= innerHeight + 1,
+        bar: !!bar && bar.top >= 0 && bar.bottom <= innerHeight + 1,
+        villain: !!villain && villain.top >= 0 && villain.bottom <= innerHeight,
+      };
+    });
+    assert.ok(
+      fits.hand && fits.bar && fits.villain,
+      `${width}x${height}: villain, actions and hand must be visible without scrolling (${JSON.stringify(fits)})`,
+    );
+    await capture(`laptop-fit-${width}x${height}`);
+  }
+  checks.push(
+    "Villain, action bar and hand are visible together at 1440×900 and 1366×768",
+  );
   if (await page.locator(".hand-card.playable").count()) {
     await page.locator(".hand-card.playable").first().click();
     await audit("card-inspection");

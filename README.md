@@ -46,6 +46,7 @@ Run the same browser checks against a deployment with `BASE_URL=https://your-pro
 - Rhino, Klaw, and Ultron; Standard I/II or Expert II/III.
 - Bomb Scare, Masters of Evil, Under Attack, Legions of Hydra, and The Doomsday Chair.
 - Mulligan, payments with typed and wild resources, identity abilities, basic actions, allies, upgrades/supports, encounter/boost cards, defense and interrupt windows, nemeses, obligations, status cards, scheme and villain transitions, and victory/defeat.
+- On laptop-height screens (below 960 px) the table switches to a compact layout: villain, hero tableau, action bar and hand stay in view together, with the actions and hand pinned to the bottom of the window.
 - Card inspection, searchable 209-face collection, deck inspection, discard inspection, battle log, optional sound, responsive layouts, keyboard focus, reduced-motion support, and fullscreen with `F`.
 - A desktop team strip, individual hands/decks/health, player-order turns, per-hero villain activations, engaged minions, teammate defense, shared card targets, and hero elimination. Scenario values scale with the starting team size.
 - A full action review with card artwork, before/after stats, attack calculations, and a permanently visible **Proceed** button. **View table** closes the review without advancing the game; reopen it from the side panel. No automatic playback or timers. Enter or Space also acknowledges the current step.
