@@ -48,7 +48,7 @@ import {
   pacingOf,
   stopsFor,
 } from "./review";
-import { paymentSources, paymentStatus } from "./payment";
+import { paymentSources, paymentStatus, suggestPayment } from "./payment";
 import { combatCharacter, recordCombat } from "./combat";
 import { deckErrors } from "./decks";
 export { paymentSources } from "./payment";
@@ -984,6 +984,21 @@ function thwartAction(
   }
   thwart(s, target, n);
 }
+/** Whether the hero's hand and resource abilities can meet a cost right now. */
+export function canPay(
+  s: GameState,
+  cost: number,
+  requirements: Resource[] = [],
+  excludeId?: string,
+  targetCode?: string,
+) {
+  if (cost === 0 && !requirements.length) return true;
+  return !!suggestPayment(
+    paymentSources(s, excludeId, targetCode),
+    cost,
+    requirements,
+  );
+}
 function requestPayment(
   s: GameState,
   title: string,
@@ -996,6 +1011,14 @@ function requestPayment(
 ) {
   if (cost === 0 && !requirements.length) {
     add(s, ...after.map((e) => ({ ...e, paid: [] })));
+    return;
+  }
+  // A cost that cannot be paid must not open a dialog with no way out.
+  if (
+    !canPay(s, cost, requirements, piece?.id, targetCode || piece?.code) &&
+    !affordable(s, cost, requirements, piece?.id)
+  ) {
+    log(s, `${title}: not enough resources to pay the cost.`);
     return;
   }
   s.prompt = {
@@ -4488,6 +4511,10 @@ export function dispatch(state: GameState, command: Command): GameState {
         const cost = Math.max(
           0,
           (card(p!).cost || 0) - Number(s.flags.discount || 0),
+        );
+        need(
+          canPay(s, cost, [], p!.id, p!.code),
+          `You cannot pay ${cost} for ${card(p!).name} right now.`,
         );
         requestPayment(
           s,

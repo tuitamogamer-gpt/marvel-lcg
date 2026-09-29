@@ -58,6 +58,7 @@ import {
   Copy,
   DiceFive,
   CalendarBlank,
+  Lightbulb,
 } from "@phosphor-icons/react";
 import {
   PLAYMATS,
@@ -99,6 +100,9 @@ import { effectTitle } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
 import type { PaymentSource } from "./game/payment";
 import { dailySeedText, parseSeed } from "./game/seed";
+import { advisePrompt } from "./game/advisor";
+import type { Advice } from "./game/advisor";
+import { planAction } from "./game/lookahead";
 import { attachmentsFor, attackContext } from "./game/presentation";
 import type {
   ActionReview,
@@ -2460,6 +2464,7 @@ function Decision({
         : [...selected, id],
     );
   if (p.kind === "payment") return <PaymentDecision game={s} send={send} />;
+  const hint = advisePrompt(s);
   return (
     <Modal
       title={p.title}
@@ -2472,6 +2477,17 @@ function Decision({
       onClose={p.cancelable ? () => send({ type: "CANCEL" }) : undefined}
     >
       <p className="modal-intro">{p.text}</p>
+      {hint && (
+        <div className="advisor-hint" role="note">
+          <Lightbulb size={16} weight="fill" />
+          <span>
+            <b>Advisor: {hint.title}.</b> <small>{hint.reason}</small>
+          </span>
+          <button className="text-button" onClick={() => send(hint.command)}>
+            Choose this <ArrowRight size={14} />
+          </button>
+        </div>
+      )}
       {p.context ? (
         <ReviewDetails review={p.context} inspect={inspect} decision />
       ) : (
@@ -2955,12 +2971,14 @@ function ActionDirector({
   inspect,
   pacing,
   onPacing,
+  onEnd,
 }: {
   game: GameState;
   send: (c: Command) => void;
   inspect: (c: Inspect) => void;
   pacing: Pacing;
   onPacing: (pacing: Pacing) => void;
+  onEnd: () => void;
 }) {
   const review = s.review;
   const button = useRef<HTMLButtonElement>(null);
@@ -2969,6 +2987,30 @@ function ActionDirector({
   const [collapsedId, setCollapsedId] = useState<number | null>(null);
   const [timelineOpen, setTimelineOpen] = useState<ActionReview | null>(null);
   const timeline = (s.timeline || []).slice(-5).reverse();
+  const [suggestion, setSuggestion] = useState<Advice | null>(null);
+  const [thinking, setThinking] = useState(false);
+  const canAct =
+    s.phase === "player" &&
+    !s.prompt &&
+    !s.review &&
+    s.activePlayerId === s.turnPlayerId;
+  useEffect(() => {
+    setSuggestion(null);
+  }, [s.nextId, s.log.length, s.review?.id, s.prompt?.title, s.turnPlayerId]);
+  const think = () => {
+    setThinking(true);
+    // Let the button repaint before the planner runs its rollouts.
+    setTimeout(() => {
+      const advice = planAction(s, { rollouts: 3 }) || {
+        command: { type: "END_TURN" } as Command,
+        title: "End the hero phase",
+        reason:
+          "Nothing left in hand or in play is clearly better than ending the turn now.",
+      };
+      setSuggestion(advice);
+      setThinking(false);
+    }, 30);
+  };
   const focused = !!review && collapsedId !== review.id;
   const next = s.prompt
     ? s.prompt.title
@@ -3063,6 +3105,44 @@ function ActionDirector({
                 <CheckCircle size={14} />
                 No timers. You control the pace.
               </span>
+              <div className="advisor-box">
+                {suggestion ? (
+                  <>
+                    <span className="advisor-title">
+                      <Lightbulb size={15} weight="fill" /> {suggestion.title}
+                    </span>
+                    <p>{suggestion.reason}</p>
+                    <div className="advisor-actions">
+                      <button
+                        className="primary-button"
+                        onClick={() => {
+                          if (suggestion.command.type === "END_TURN") onEnd();
+                          else send(suggestion.command);
+                          setSuggestion(null);
+                        }}
+                      >
+                        Do it <ArrowRight size={16} />
+                      </button>
+                      <button
+                        className="text-button"
+                        onClick={() => setSuggestion(null)}
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    className="secondary-button advisor-button"
+                    disabled={thinking || !canAct}
+                    title="The advisor plays the round out on a copy of the table with the hidden cards reshuffled, then suggests the move that scored best."
+                    onClick={think}
+                  >
+                    <Lightbulb size={15} weight="fill" />{" "}
+                    {thinking ? "Thinking…" : "Suggest a move"}
+                  </button>
+                )}
+              </div>
               {timeline.length > 0 && (
                 <div className="director-timeline">
                   <div className="change-heading">
@@ -4531,6 +4611,7 @@ function Tabletop({
             inspect={inspect}
             pacing={pacing}
             onPacing={onPacing}
+            onEnd={onEnd}
           />
           {logOpen && (
             <section className="battle-log">

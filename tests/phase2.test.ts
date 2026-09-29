@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { card } from "../src/game/cards";
-import { dispatch, newGame, paymentSources } from "../src/game/engine";
+import {
+  dispatch,
+  makePiece,
+  newGame,
+  paymentSources,
+} from "../src/game/engine";
 import { suggestPayment, paymentStatus } from "../src/game/payment";
 import type { PaymentSource } from "../src/game/payment";
 import { dailySeedText, parseSeed } from "../src/game/seed";
@@ -229,5 +234,43 @@ describe("heroic mode and seeds", () => {
     );
     expect(parseSeed("Rhino")).toBeGreaterThan(0);
     expect(dailySeedText(new Date(2026, 8, 29))).toBe("daily-2026-09-29");
+  });
+});
+
+describe("costs that cannot be paid", () => {
+  it("skips an ability cost with an empty hand instead of opening a dead-end payment", () => {
+    let s = newGame({
+      heroId: "captain_marvel",
+      aspect: "leadership",
+      villainId: "rhino",
+      seed: 5,
+    });
+    s = dispatch(s, { type: "MULLIGAN", ids: [] });
+    s = dispatch(s, { type: "FLIP" });
+    const vision = makePiece(s, "01068");
+    s.player.inPlay.push(vision);
+    s.player.hand = [];
+    s = dispatch(s, { type: "ABILITY", id: vision.id, action: "special" });
+    expect(s.error).toBeUndefined();
+    expect(s.prompt?.title).toBe("Density Control");
+    s = dispatch(s, { type: "CHOOSE", id: "attack" });
+    expect(s.error).toBeUndefined();
+    expect(s.prompt).toBeNull();
+    expect(s.log.at(-1)?.text).toContain("not enough resources");
+  });
+  it("rejects playing a card the hand cannot pay for, with a clear message", () => {
+    let s = newGame({
+      heroId: "spider_man",
+      aspect: "justice",
+      villainId: "rhino",
+      seed: 5,
+    });
+    s = dispatch(s, { type: "MULLIGAN", ids: [] });
+    s = dispatch(s, { type: "FLIP" });
+    const kick = makePiece(s, "01002");
+    s.player.hand = [kick];
+    const attempt = dispatch(s, { type: "PLAY", id: kick.id });
+    expect(attempt.error).toMatch(/cannot pay|Not enough resources/);
+    expect(attempt.prompt).toBeNull();
   });
 });

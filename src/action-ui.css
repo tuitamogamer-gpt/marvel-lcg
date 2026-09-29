@@ -950,3 +950,75 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Advisor suggestions in the action panel and decision dialogs */
+.advisor-box {
+  width: 100%;
+  margin-top: 12px;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+}
+.advisor-box .advisor-button {
+  width: 100%;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.advisor-box .advisor-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.advisor-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-heading, "Exo 2", sans-serif);
+  font-weight: 800;
+  font-size: 13px;
+  color: #8a5a00;
+}
+.advisor-box p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.advisor-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.advisor-actions .primary-button {
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 10px;
+}
+.advisor-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid #e0c56a;
+  border-left: 4px solid #e0b93a;
+  border-radius: var(--radius-control, 8px);
+  background: #fff7dc;
+  color: #2a2410;
+  font-size: 12px;
+}
+.advisor-hint > svg {
+  color: #b8860b;
+  flex: none;
+}
+.advisor-hint > span {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.advisor-hint small {
+  display: block;
+  color: #5a5030;
+}
