@@ -66,6 +66,32 @@ describe("payment suggestion", () => {
     expect(suggestPayment(sources, 2, ["energy"])).toBeNull();
     expect(suggestPayment(sources, 4)).toBeNull();
   });
+  it("finds an exact payment outside the first greedy selection", () => {
+    const sources = [
+      src("double-energy", ["energy", "energy"]),
+      src("double-mental", ["mental", "mental"]),
+      src("single", ["physical"]),
+    ];
+    const ids = suggestPayment(sources, 3)!;
+    expect(paymentStatus(sources, ids, 3).total).toBe(3);
+    expect(ids).toContain("single");
+    const typed = suggestPayment(sources, 3, ["mental"])!;
+    expect(typed).toEqual(["double-mental", "single"]);
+  });
+  it("handles mixed wild requirements and hands with more than 32 sources", () => {
+    const sources = [
+      src("wild", ["wild"]),
+      src("physical", ["physical"]),
+      src("energy", ["energy"]),
+    ];
+    const ids = suggestPayment(sources, 2, ["mental", "physical"])!;
+    expect(ids).toEqual(["wild", "physical"]);
+    expect(paymentStatus(sources, ids, 2, ["mental", "physical"]).ready).toBe(
+      true,
+    );
+    const large = Array.from({ length: 40 }, (_, i) => src(`${i}`, ["energy"]));
+    expect(suggestPayment(large, 40)).toHaveLength(40);
+  });
   it("proposes a real payment from an actual hand", () => {
     let s = base();
     s = dispatch(s, { type: "FLIP" });
@@ -90,6 +116,27 @@ describe("payment suggestion", () => {
 });
 
 describe("undo boundary and mission statistics", () => {
+  it("blocks undo as soon as Futurist reveals its choices", () => {
+    let s = newGame({
+      heroId: "iron_man",
+      aspect: "aggression",
+      villainId: "rhino",
+      seed: 31337,
+    });
+    s = dispatch(s, { type: "MULLIGAN", ids: [] });
+    const hiddenBefore = s.hiddenInfo || 0;
+    const looked = dispatch(s, { type: "ABILITY", id: "identity" });
+    expect(looked.error).toBeUndefined();
+    expect(looked.prompt?.title).toBe("Futurist");
+    expect(looked.prompt?.options).toHaveLength(3);
+    expect(looked.hiddenInfo).toBeGreaterThan(hiddenBefore);
+    const chosen = dispatch(looked, {
+      type: "CHOOSE",
+      id: looked.prompt!.options[0].id,
+    });
+    expect(chosen.error).toBeUndefined();
+    expect(chosen.hiddenInfo).toBe(looked.hiddenInfo);
+  });
   it("a basic attack reveals nothing, while drawing, shuffling and encounters do", () => {
     let s = base();
     s = dispatch(s, { type: "FLIP" });

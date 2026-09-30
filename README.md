@@ -25,6 +25,7 @@ npm run test:ui   # with the dev server running at localhost:5174
 npm run test:design # desktop layouts, keyboard behavior, and axe audits
 npm run test:tabletop # crowded physical table, exhaustion, piles, and responsive layouts
 npm run test:flow     # action flow, payments, defense, attachments and dialog containment
+npm run test:onboarding # first mission, payments, saved coaching, glossary and shortcuts
 node scripts/make-icons.mjs   # regenerate the PWA icons from public/favicon.svg
 ```
 
@@ -46,7 +47,8 @@ Run the same browser checks against a deployment with `BASE_URL=https://your-pro
 - Rhino, Klaw, and Ultron; Standard I/II or Expert II/III.
 - Bomb Scare, Masters of Evil, Under Attack, Legions of Hydra, and The Doomsday Chair.
 - Mulligan, payments with typed and wild resources, identity abilities, basic actions, allies, upgrades/supports, encounter/boost cards, defense and interrupt windows, nemeses, obligations, status cards, scheme and villain transitions, and victory/defeat.
-- On laptop-height screens (below 960 px) the table switches to a compact layout: villain, hero tableau, action bar and hand stay in view together, with the actions and hand pinned to the bottom of the window.
+- **Play your first mission** launches a fixed Spider-Man versus Rhino table with a seven-lesson coach that follows the actual game state and remembers progress after reload. Optional lessons can be skipped and the coach can be dismissed while you keep playing. Card inspection includes expandable keyword explanations; hand cards show a short reason when they cannot be played.
+- On laptop-height screens (below 960 px) the table switches to a compact layout: villain, identity controls, action bar and hand stay in view together. Crowded tables and shorter windows use ordinary scrolling so controls remain reachable.
 - Card inspection, searchable 209-face collection, deck inspection, discard inspection, battle log, optional sound, responsive layouts, keyboard focus, reduced-motion support, and fullscreen with `F`.
 - **Advisor:** *Suggest a move* in the action panel tries every legal action on a copy of the table with the hidden cards reshuffled, plays the round out, and proposes the move that scores best, with a short reason and a *Do it* button; every decision dialog shows the advisor's pick with *Choose this*. It is a helpful hint, not a strong player. **Undo** (Ctrl/Cmd+Z) takes back the last action of the current hero phase until a hidden card is revealed.
 - A desktop team strip, individual hands/decks/health, player-order turns, per-hero villain activations, engaged minions, teammate defense, shared card targets, and hero elimination. Scenario values scale with the starting team size.

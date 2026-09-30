@@ -1,5 +1,14 @@
 Original prompt: I want to create fully playable and scripted Marvel Champions LCG. Check if there is API for cards and start building it. It need to be very beautiful designed and functional. Start with core set.
 
+## Post-Claude project review — 2026-09-30
+
+- User authorized a new full project pass, improvements, commit, push and deploy. Started from clean `12d267b` and preserved the existing physical-table identity and explicit decision pacing.
+- Repaired Futurist's hidden-information Undo boundary, exact-resource suggestions and large-hand affordability, fair advisor sampling across facedown encounters/boosts/drones, identity/status advice, stale UI advice, recovery-code retention, account snapshot validation/start dates and first-visit offline loading.
+- Completed first-mission coaching, saved tutorial progress, keyboard-accessible keyword explanations, visible hand-card disabled reasons and modal shortcut/focus isolation. Added `test:onboarding` to scripts and CI.
+- Fixed laptop identity controls hidden behind the pinned hand; short/narrow/populated tables scroll normally. Added actual-control hit tests to design and crowded-table regressions. Advisor controls sit outside the scrolling body.
+- Local rules suite: 276 tests pass, one opt-in slow advisor measurement skipped. Build, TypeScript, formatting and existing flow/hot-seat/account/design/tabletop browser checks pass without browser/accessibility errors. Built-app first offline reload restores the exact hand and pending queue and continues the guest mission (36 primed entries, zero errors/failed offline requests).
+- Final local onboarding flow passes all seven checks and three accessibility audits, including Tab/Enter glossary expansion at 320px and blocking gameplay shortcuts behind help. Combined browser suites report 42 accessibility audits with no violations/errors. Standard web-game client completed and its opening-hand screenshot was inspected. Review and validation boundaries: `docs/review-2026-09-30.md`; authorized release verification follows. No new asset generation, account database provisioning or expansion scope was needed.
+
 ## Compact action windows — 2026-09-25
 
 - User requested smaller, subtler action windows now that hover previews provide readable card details. Scoped changes to action reviews, decisions and payments; related cards use 58px thumbnail rows, summaries cap at 760px, attacks at 1040px, and payments at 980px. Reduced header/footer spacing, border weight and backdrop opacity/blur. Explicit Proceed, card inspection and the saved review remain intact.

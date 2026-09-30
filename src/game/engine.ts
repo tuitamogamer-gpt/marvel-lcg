@@ -48,7 +48,7 @@ import {
   pacingOf,
   stopsFor,
 } from "./review";
-import { paymentSources, paymentStatus, suggestPayment } from "./payment";
+import { paymentSources, paymentStatus } from "./payment";
 import { combatCharacter, recordCombat } from "./combat";
 import { deckErrors } from "./decks";
 export { paymentSources } from "./payment";
@@ -993,11 +993,13 @@ export function canPay(
   targetCode?: string,
 ) {
   if (cost === 0 && !requirements.length) return true;
-  return !!suggestPayment(
-    paymentSources(s, excludeId, targetCode),
+  const sources = paymentSources(s, excludeId, targetCode);
+  return paymentStatus(
+    sources,
+    sources.map((p) => p.id),
     cost,
     requirements,
-  );
+  ).ready;
 }
 function requestPayment(
   s: GameState,
@@ -1014,10 +1016,7 @@ function requestPayment(
     return;
   }
   // A cost that cannot be paid must not open a dialog with no way out.
-  if (
-    !canPay(s, cost, requirements, piece?.id, targetCode || piece?.code) &&
-    !affordable(s, cost, requirements, piece?.id)
-  ) {
+  if (!canPay(s, cost, requirements, piece?.id, targetCode || piece?.code)) {
     log(s, `${title}: not enough resources to pay the cost.`);
     return;
   }
@@ -1769,6 +1768,7 @@ function ability(s: GameState, id: string, action = "special") {
         need(s.player.deck.length, "There are no cards to look at.");
         s.flags.futurist = true;
         const looked = s.player.deck.slice(0, 3);
+        revealHidden(s);
         const options = looked.map((p) =>
           option(
             p.id,
@@ -3275,7 +3275,6 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "futurist": {
-      revealHidden(s);
       for (const id of e.ids as string[]) {
         const i = s.player.deck.findIndex((p) => p.id === id);
         if (i >= 0) {

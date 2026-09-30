@@ -431,9 +431,7 @@ export function AccountPage({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [removing, setRemoving] = useState<string | null>(null);
-  const [recoveryCode, setRecoveryCode] = useState(
-    account.session?.recoveryCode || "",
-  );
+  const recoveryCode = account.session?.recoveryCode;
   const user = account.session?.user;
   const library = account.session?.library;
   async function run(task: () => Promise<unknown>, success = "") {
@@ -516,7 +514,10 @@ export function AccountPage({
             >
               Download recovery code
             </button>
-            <button className="text-button" onClick={() => setRecoveryCode("")}>
+            <button
+              className="text-button"
+              onClick={account.dismissRecoveryCode}
+            >
               I have saved my code
             </button>
           </div>

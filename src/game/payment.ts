@@ -75,8 +75,8 @@ export function paymentSources(
 }
 
 /**
- * Proposes a payment: cheapest sources first (by `rank`, lower spends first),
- * typed requirements satisfied before the total, then any overpayment trimmed.
+ * Proposes a payment with the least overpayment, then the lowest total `rank`,
+ * then the fewest sources. Printed types and wilds satisfy the requirements.
  * Returns null when the available sources cannot pay.
  */
 export function suggestPayment(
@@ -85,28 +85,52 @@ export function suggestPayment(
   requirements: Resource[] = [],
   rank: (source: PaymentSource) => number = () => 0,
 ) {
-  const ordered = [...sources].sort((a, b) => rank(a) - rank(b));
-  const chosen: string[] = [];
-  const status = () => paymentStatus(sources, chosen, cost, requirements);
-  for (let guard = 0; guard < 32 && !status().ready; guard++) {
-    const missing = status().missing;
-    const next = ordered.find(
-      (x) =>
-        !chosen.includes(x.id) &&
-        (!missing.length ||
-          x.resources.some((r) => r === "wild" || missing.includes(r))),
-    );
-    if (!next) break;
-    chosen.push(next.id);
+  type Selection = { ids: string[]; printed: Resource[]; value: number };
+  const types: Resource[] = ["energy", "mental", "physical", "wild"];
+  const caps = types.map((type) =>
+    type === "wild"
+      ? requirements.length
+      : requirements.filter((r) => r === type).length,
+  );
+  // Keep one cheapest selection for each total and relevant resource mix.
+  // Capping typed counts avoids enumerating every subset of a large hand.
+  const key = (printed: Resource[]) =>
+    [
+      printed.length,
+      ...types.map((type, i) =>
+        Math.min(caps[i], printed.filter((r) => r === type).length),
+      ),
+    ].join(":");
+  const cheaper = (a: Selection, b: Selection) =>
+    a.value < b.value || (a.value === b.value && a.ids.length < b.ids.length);
+  const states = new Map<string, Selection>([
+    [key([]), { ids: [], printed: [], value: 0 }],
+  ]);
+  for (const source of sources) {
+    for (const current of [...states.values()]) {
+      const next = {
+        ids: [...current.ids, source.id],
+        printed: [...current.printed, ...source.resources],
+        value: current.value + rank(source),
+      };
+      const k = key(next.printed);
+      const previous = states.get(k);
+      if (!previous || cheaper(next, previous)) states.set(k, next);
+    }
   }
-  if (!status().ready) return null;
-  // Drop the most valuable selections that are not needed for the total.
-  for (const id of [...chosen].reverse()) {
-    const trial = chosen.filter((x) => x !== id);
-    if (paymentStatus(sources, trial, cost, requirements).ready)
-      chosen.splice(chosen.indexOf(id), 1);
+  let best: Selection | undefined;
+  for (const selection of states.values()) {
+    if (!paymentStatus(sources, selection.ids, cost, requirements).ready)
+      continue;
+    if (
+      !best ||
+      selection.printed.length < best.printed.length ||
+      (selection.printed.length === best.printed.length &&
+        cheaper(selection, best))
+    )
+      best = selection;
   }
-  return chosen;
+  return best?.ids ?? null;
 }
 
 /** Shared by the engine and the payment preview; each wild covers one requirement. */

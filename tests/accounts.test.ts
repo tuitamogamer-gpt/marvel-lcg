@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createAccountHandler } from "../server/account";
+import { createAccountHandler, validateGame } from "../server/account";
 import { sqliteStore } from "../server/storage";
 import type { Store } from "../server/storage";
 import { deckCodes, HEROES, ASPECTS } from "../src/game/cards";
 import { countsFor, deckErrors } from "../src/game/decks";
 import { newGame, dispatch } from "../src/game/engine";
+import { paymentSources } from "../src/game/payment";
 
 let store: Store;
 beforeEach(async () => {
@@ -250,6 +251,61 @@ describe("private player accounts", () => {
       (await call(undefined, a.cookie)).data.library.missions,
     ).toHaveLength(1);
   });
+  it("preserves the actual mission start across delayed first saves and updates", async () => {
+    const a = await register();
+    const payload = {
+      action: "mission.save",
+      id: "delayed-mission",
+      startedAt: "2026-09-23T14:30:00+02:00",
+      revision: 0,
+      state: game(),
+      accountId: a.data.user.id,
+    };
+    const saved = await call(payload, a.cookie);
+    expect(saved.status).toBe(200);
+    expect(saved.data.library.missions[0].startedAt).toBe(
+      "2026-09-23T12:30:00.000Z",
+    );
+    const updated = await call(
+      { ...payload, revision: 1, startedAt: new Date().toISOString() },
+      a.cookie,
+    );
+    expect(updated.data.library.missions[0].startedAt).toBe(
+      saved.data.library.missions[0].startedAt,
+    );
+  });
+  it("rejects card and presentation shapes that would crash a resumed table", async () => {
+    const a = await register();
+    const s = dispatch(game(), { type: "MULLIGAN", ids: [] });
+    const payload = {
+      action: "mission.save",
+      id: "validated-mission",
+      startedAt: new Date().toISOString(),
+      state: s,
+      accountId: a.data.user.id,
+    };
+    const corruptions = [
+      {
+        ...s,
+        player: {
+          ...s.player,
+          hand: [{ ...s.player.hand[0], code: "__proto__" }],
+        },
+      },
+      { ...s, review: { ...s.review, actor: undefined } },
+      { ...s, review: { ...s.review, source: "not-a-card" } },
+      { ...s, review: { ...s.review, messages: [{ unexpected: true }] } },
+      { ...s, timeline: [null] },
+      { ...s, stats: { ...s.stats, damageDealt: "ten" } },
+      { ...s, heroic: 999 },
+    ];
+    for (const state of corruptions)
+      expect((await call({ ...payload, state }, a.cookie)).status).toBe(400);
+    expect((await call(undefined, a.cookie)).data.library.missions).toEqual([]);
+    const valid = await call(payload, a.cookie);
+    expect(valid.status).toBe(200);
+    expect(valid.data.library.missions[0].state.review).toEqual(s.review);
+  });
   it("rejects malformed snapshots and caps unfinished missions without deleting progress", async () => {
     const a = await register();
     const payload = {
@@ -272,6 +328,49 @@ describe("private player accounts", () => {
     expect(
       (await call(undefined, a.cookie)).data.library.missions,
     ).toHaveLength(5);
+  });
+  it("accepts real hot-seat decisions and reviews at every supported tempo", () => {
+    for (const pacing of ["guided", "brisk", "expert"] as const) {
+      let s = newGame({
+        heroId: "spider_man",
+        aspect: "justice",
+        villainId: "klaw",
+        difficulty: "expert",
+        pacing,
+        heroic: 3,
+        seed: 12345,
+        guided: true,
+        heroes: [
+          { heroId: "spider_man", aspect: "justice" },
+          { heroId: "captain_marvel", aspect: "aggression" },
+          { heroId: "iron_man", aspect: "leadership" },
+        ],
+      });
+      for (let step = 0; step < 60; step++) {
+        expect(() => validateGame(JSON.parse(JSON.stringify(s)))).not.toThrow();
+        if (s.review) s = dispatch(s, { type: "PROCEED" });
+        else if (s.prompt?.kind === "choice")
+          s = dispatch(s, { type: "CHOOSE", id: s.prompt.options[0].id });
+        else if (s.prompt?.kind === "select")
+          s = dispatch(s, {
+            type: "SELECT",
+            ids: s.prompt.options.slice(0, s.prompt.min || 0).map((o) => o.id),
+          });
+        else if (s.prompt?.kind === "payment")
+          s = dispatch(s, {
+            type: "PAY",
+            ids: paymentSources(
+              s,
+              s.prompt.card?.id,
+              s.prompt.paymentTarget,
+            ).map((p) => p.id),
+          });
+        else if (s.phase === "mulligan")
+          s = dispatch(s, { type: "MULLIGAN", ids: [] });
+        else if (s.phase === "player") s = dispatch(s, { type: "END_TURN" });
+        else break;
+      }
+    }
   });
   it("rotates recovery codes and revokes every old session after reset", async () => {
     const a = await register();

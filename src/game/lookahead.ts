@@ -1,13 +1,14 @@
 import { card, maxHP, pieceHP } from "./cards";
 import {
   abilityOptions,
+  canPay,
   dispatch,
   playable,
   schemeLimit,
   targets,
 } from "./engine";
-import { seatView } from "./team";
-import type { Command, GameState } from "./types";
+import { seatView, syncSeat } from "./team";
+import type { Command, GameState, Piece } from "./types";
 import { advise, adviseAction, advisePrompt, endTurnDiscards } from "./advisor";
 import type { Advice } from "./advisor";
 
@@ -32,14 +33,53 @@ function shuffleWith<T>(list: T[], random: () => number) {
     [list[i], list[j]] = [list[j], list[i]];
   }
 }
-/** A copy of the game in which every hidden pile is in an unknown order. */
+/** A copy with unknown cards sampled across every facedown slot. */
 export function fairClone(s: GameState, random: () => number): GameState {
   const c = structuredClone(s);
-  shuffleWith(c.encounter.deck, random);
-  for (const seat of c.players) shuffleWith(seat.player.deck, random);
-  if (c.activePlayerId) {
-    const seat = c.players.find((p) => p.id === c.activePlayerId);
-    if (seat) c.player = seat.player;
+  syncSeat(c);
+  const unknownEncounter = [
+    ...c.encounter.deck,
+    ...c.encounter.dealt,
+    ...(c.attack?.pendingBoosts || []),
+    ...(c.scheming?.pendingBoosts || []),
+  ].map((piece) => {
+    const p = { ...piece };
+    delete p.dealtTo;
+    return p;
+  });
+  // Start from a stable inventory, so the real hidden ordering cannot affect
+  // a suggestion even when the planner uses only a few samples.
+  unknownEncounter.sort((a, b) => a.id.localeCompare(b.id));
+  shuffleWith(unknownEncounter, random);
+  let encounterIndex = 0;
+  const takeEncounter = () => unknownEncounter[encounterIndex++];
+  c.encounter.deck = c.encounter.deck.map(takeEncounter);
+  c.encounter.dealt = c.encounter.dealt.map((slot) => ({
+    ...takeEncounter(),
+    dealtTo: slot.dealtTo,
+  }));
+  if (c.attack?.pendingBoosts)
+    c.attack.pendingBoosts = c.attack.pendingBoosts.map(takeEncounter);
+  if (c.scheming)
+    c.scheming.pendingBoosts = c.scheming.pendingBoosts.map(takeEncounter);
+  const lookedAt = new Set<string>(
+    c.prompt?.options.flatMap((o) =>
+      o.effects.flatMap((e) => (e.type === "futurist" ? e.ids : [])),
+    ) || [],
+  );
+  for (const seat of c.players) {
+    const drones = c.minions.filter((p) => p.droneCard?.ownerId === seat.id);
+    const known = seat.id === c.activePlayerId ? lookedAt : new Set<string>();
+    const hidden: Piece[] = [
+      ...seat.player.deck.filter((p) => !known.has(p.id)),
+      ...drones.map((p) => p.droneCard!),
+    ].sort((a, b) => a.id.localeCompare(b.id));
+    shuffleWith(hidden, random);
+    let index = 0;
+    seat.player.deck = seat.player.deck.map((p) =>
+      known.has(p.id) ? p : hidden[index++],
+    );
+    for (const drone of drones) drone.droneCard = hidden[index++];
   }
   c.seed = Math.floor(random() * 4294967295) || 1;
   return c;
@@ -84,8 +124,18 @@ export function candidates(s: GameState): Command[] {
   for (const p of s.player.inPlay) {
     const options = abilityOptions(s, p).filter((o) => !o.disabled);
     for (const o of options)
-      if (o.id !== "special" || !["01020"].includes(p.code))
+      if (o.id !== "special" || !["01020"].includes(p.code)) {
+        const required = {
+          "01018": "energy",
+          "01026": "mental",
+          "01039": "mental",
+          "01068": "energy",
+          "01093": "physical",
+        }[p.code] as "energy" | "mental" | "physical" | undefined;
+        if (o.id === "special" && required && !canPay(s, 1, [required]))
+          continue;
         list.push({ type: "ABILITY", id: p.id, action: o.id });
+      }
   }
   const hero = s.player.form === "hero";
   if (!s.player.exhausted) {
@@ -100,7 +150,11 @@ export function candidates(s: GameState): Command[] {
   if (
     (s.heroId === "iron_man" && !hero && !s.flags.futurist) ||
     (s.heroId === "captain_marvel" && !hero && !s.flags.commander) ||
-    (s.heroId === "captain_marvel" && hero && !s.flags.rechannel)
+    (s.heroId === "captain_marvel" &&
+      hero &&
+      !s.flags.rechannel &&
+      s.player.hp < maxHP(s) &&
+      canPay(s, 1, ["energy"]))
   )
     list.push({ type: "ABILITY", id: "identity" });
   list.push({
@@ -149,7 +203,7 @@ function rollout(start: GameState, random: () => number, maxCommands = 400) {
   return evaluate(s);
 }
 export interface PlanOptions {
-  /** Independent reshuffles per candidate; more is steadier and slower. */
+  /** Independent samples reused across candidates; more is steadier and slower. */
   rollouts?: number;
   seed?: number;
   /** Tests only: play with the real deck order to check that a scenario can be won at all. */
@@ -164,13 +218,13 @@ export function planAction(
   if (!list.length) return null;
   const random = rng(options.seed ?? Math.floor(Math.random() * 1e9));
   const rollouts = options.rollouts ?? 2;
+  const samples = Array.from({ length: rollouts }, () =>
+    options.omniscient ? structuredClone(s) : fairClone(s, random),
+  );
   const scoreOf = (command: Command) => {
     let total = 0;
     for (let r = 0; r < rollouts; r++) {
-      const clone = options.omniscient
-        ? structuredClone(s)
-        : fairClone(s, random);
-      const applied = dispatch(clone, command);
+      const applied = dispatch(samples[r], command);
       if (applied.error) return -Infinity;
       // An action whose only outcome is a cost that cannot be paid is no action.
       if (applied.prompt) {
@@ -190,7 +244,8 @@ export function planAction(
     if (!best || score > best.score) best = { command, score };
   }
   // Only act when acting is clearly better than ending the turn as it stands.
-  if (!best || best.score < baseline + 0.5) return null;
+  if (!best || !Number.isFinite(best.score) || best.score < baseline + 0.5)
+    return null;
   const heuristic = adviseAction(s);
   const same =
     heuristic &&
@@ -213,14 +268,14 @@ export function planPrompt(
   if (p.kind !== "choice" || p.options.length > 8) return advisePrompt(s);
   const random = rng(options.seed ?? Math.floor(Math.random() * 1e9));
   const rollouts = options.rollouts ?? 2;
+  const samples = Array.from({ length: rollouts }, () =>
+    options.omniscient ? structuredClone(s) : fairClone(s, random),
+  );
   let best: { id: string; score: number } | null = null;
   for (const o of p.options) {
     let total = 0;
     for (let r = 0; r < rollouts; r++) {
-      const clone = options.omniscient
-        ? structuredClone(s)
-        : fairClone(s, random);
-      const applied = dispatch(clone, { type: "CHOOSE", id: o.id });
+      const applied = dispatch(samples[r], { type: "CHOOSE", id: o.id });
       if (applied.error) {
         total = -Infinity;
         break;
@@ -230,7 +285,7 @@ export function planPrompt(
     const score = total / rollouts;
     if (!best || score > best.score) best = { id: o.id, score };
   }
-  if (!best) return advisePrompt(s);
+  if (!best || !Number.isFinite(best.score)) return advisePrompt(s);
   const heuristic = advisePrompt(s);
   const option = p.options.find((o) => o.id === best!.id)!;
   return {

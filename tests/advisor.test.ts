@@ -6,7 +6,14 @@ import {
   cardValue,
   endTurnDiscards,
 } from "../src/game/advisor";
-import { autoplaySmart, candidates, evaluate } from "../src/game/lookahead";
+import {
+  autoplaySmart,
+  candidates,
+  evaluate,
+  fairClone,
+  planAction,
+  planPrompt,
+} from "../src/game/lookahead";
 import { card } from "../src/game/cards";
 import { dispatch, makePiece, newGame } from "../src/game/engine";
 import type { GameState } from "../src/game/types";
@@ -45,6 +52,65 @@ describe("advisor", () => {
     expect(adviseAction(pressed)?.command).toEqual({
       type: "BASIC",
       action: "thwart",
+    });
+  });
+  it("can thwart while Stunned and spends a basic action to clear a status", () => {
+    let s = dispatch(fresh(), { type: "FLIP" });
+    s.player.hand = [];
+    s.player.stunned = true;
+    s.scheme.threat = 5;
+    expect(adviseAction(s)?.command).toEqual({
+      type: "BASIC",
+      action: "thwart",
+    });
+    const thwarted = dispatch(s, adviseAction(s)!.command);
+    expect(thwarted.error).toBeUndefined();
+    expect(thwarted.scheme.threat).toBe(4);
+    expect(thwarted.player.stunned).toBe(true);
+    s.scheme.threat = 0;
+    expect(adviseAction(s)?.title).toBe("Clear Stunned");
+    const cleared = dispatch(s, adviseAction(s)!.command);
+    expect(cleared.error).toBeUndefined();
+    expect(cleared.player.stunned).toBe(false);
+    expect(cleared.villain.hp).toBe(s.villain.hp);
+  });
+  it("suggests Rechannel with a payable energy resource and no Energy Channel", () => {
+    const s = dispatch(fresh("captain_marvel"), { type: "FLIP" });
+    s.player.hp -= 1;
+    s.player.hand = [makePiece(s, "01088")];
+    expect(adviseAction(s)?.command).toEqual({
+      type: "ABILITY",
+      id: "identity",
+    });
+    const activated = dispatch(s, adviseAction(s)!.command);
+    expect(activated.prompt?.title).toBe("Rechannel");
+    const paid = dispatch(activated, advisePrompt(activated)!.command);
+    expect(paid.error).toBeUndefined();
+    expect(paid.player.hp).toBe(s.player.hp + 1);
+    expect(paid.player.hand).toHaveLength(1);
+    s.player.hand = [makePiece(s, "01089")];
+    expect(candidates(s)).not.toContainEqual({
+      type: "ABILITY",
+      id: "identity",
+    });
+    expect(adviseAction(s)?.command).not.toEqual({
+      type: "ABILITY",
+      id: "identity",
+    });
+  });
+  it("does not repeatedly suggest a support whose typed cost cannot be paid", () => {
+    const s = fresh("she_hulk");
+    s.player.exhausted = true;
+    s.player.flipped = true;
+    s.player.hand = [];
+    s.scheme.threat = 4;
+    const law = makePiece(s, "01026");
+    s.player.inPlay.push(law);
+    expect(adviseAction(s)).toBeNull();
+    expect(candidates(s)).not.toContainEqual({
+      type: "ABILITY",
+      id: law.id,
+      action: "special",
     });
   });
   it("prefers playing an ally over a basic action and values allies above resource cards", () => {
@@ -153,4 +219,69 @@ describe("advisor", () => {
     },
     600_000,
   );
+});
+
+describe("fair lookahead samples", () => {
+  const sample = (s: GameState) => fairClone(s, () => 0);
+  it("resamples facedown dealt encounters and pending boosts while retaining their slots", () => {
+    let s = dispatch(fresh(), { type: "FLIP" });
+    s.player.hand = [];
+    s = dispatch(s, { type: "END_TURN", discard: [] });
+    expect(s.attack?.pendingBoosts).toHaveLength(1);
+    const dealt = s.encounter.deck.pop()!;
+    dealt.dealtTo = "p1";
+    s.encounter.dealt = [dealt];
+    const copy = structuredClone(s);
+    [copy.encounter.deck[0], copy.encounter.dealt[0]] = [
+      copy.encounter.dealt[0],
+      copy.encounter.deck[0],
+    ];
+    copy.encounter.dealt[0].dealtTo = "p1";
+    const left = sample(s),
+      right = sample(copy);
+    expect(left.encounter).toEqual(right.encounter);
+    expect(left.attack?.pendingBoosts).toEqual(right.attack?.pendingBoosts);
+    expect(left.encounter.dealt[0].dealtTo).toBe("p1");
+    expect(left.encounter.deck.every((p) => !p.dealtTo)).toBe(true);
+    expect(left.encounter.deck).not.toBe(s.encounter.deck);
+    expect(s.encounter.dealt).toEqual([dealt]);
+    const adviceLeft = planPrompt(s, { seed: 17, rollouts: 1 });
+    const adviceRight = planPrompt(copy, { seed: 17, rollouts: 1 });
+    expect(adviceLeft).toEqual(adviceRight);
+  });
+  it("resamples hidden drone cards with the owning deck and retains known Futurist cards", () => {
+    const s = fresh("iron_man");
+    const drone = makePiece(s, "drone");
+    drone.droneCard = s.player.deck.pop()!;
+    drone.engagedWith = "p1";
+    s.minions.push(drone);
+    const swapped = structuredClone(s);
+    [swapped.player.deck[0], swapped.minions[0].droneCard] = [
+      swapped.minions[0].droneCard!,
+      swapped.player.deck[0],
+    ];
+    const left = sample(s),
+      right = sample(swapped);
+    expect(left.player.deck).toEqual(right.player.deck);
+    expect(left.minions[0].droneCard).toEqual(right.minions[0].droneCard);
+    const looked = dispatch(s, { type: "ABILITY", id: "identity" });
+    const cloned = sample(looked);
+    expect(cloned.player.deck.slice(0, 3)).toEqual(
+      looked.player.deck.slice(0, 3),
+    );
+    expect(cloned.prompt?.options).toEqual(looked.prompt?.options);
+  });
+  it("uses the active player snapshot after a JSON reload and ignores hidden ordering", () => {
+    const s = JSON.parse(JSON.stringify(fresh())) as GameState;
+    const piece = makePiece(s, "01088");
+    s.player.hand = [piece];
+    const cloned = sample(s);
+    expect(cloned.player.hand).toEqual([piece]);
+    expect(cloned.player).toBe(cloned.players[0].player);
+    const reversed = structuredClone(s);
+    reversed.player.deck.reverse();
+    expect(planAction(s, { seed: 44, rollouts: 1 })).toEqual(
+      planAction(reversed, { seed: 44, rollouts: 1 }),
+    );
+  });
 });

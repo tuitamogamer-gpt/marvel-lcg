@@ -9,6 +9,7 @@ import {
 } from "./cards";
 import {
   abilityOptions,
+  canPay,
   dispatch,
   escalation,
   paymentSources,
@@ -224,6 +225,7 @@ function usefulAbility(s: GameState): Advice | null {
     const options = abilityOptions(s, p).filter((o) => !o.disabled);
     const special = options.find((o) => o.id === "special");
     if (!special) continue;
+    if (p.code === "01026" && !canPay(s, 1, ["mental"])) continue;
     if (
       (p.code === "01080" || p.code === "01006") &&
       s.player.hp < maxHP(s) - 1
@@ -247,7 +249,10 @@ function usefulAbility(s: GameState): Advice | null {
       return {
         command: { type: "ABILITY", id: p.id, action: "special" },
         title: special.label,
-        reason: "A card ability that costs no cards.",
+        reason:
+          p.code === "01026"
+            ? "Spend a mental resource to remove 2 threat."
+            : "A card ability that costs no cards.",
       };
   }
   return null;
@@ -269,13 +274,13 @@ function identityAbility(s: GameState): Advice | null {
   } else if (
     s.heroId === "captain_marvel" &&
     !s.flags.rechannel &&
-    s.player.hp < maxHP(s) - 1 &&
-    s.player.inPlay.some((p) => p.code === "01018" && p.counters > 0)
+    s.player.hp < maxHP(s) &&
+    canPay(s, 1, ["energy"])
   )
     return {
       command: { type: "ABILITY", id: "identity" },
       title: "Use Rechannel",
-      reason: "Energy counters turn into hit points.",
+      reason: "Spend an energy resource to heal 1 damage and draw a card.",
     };
   return null;
 }
@@ -327,20 +332,24 @@ export function adviseAction(s: GameState): Advice | null {
   if (play) return play;
   const ally = allyAction(s);
   if (ally) return ally;
-  if (!s.player.exhausted && !s.player.stunned) {
+  if (!s.player.exhausted) {
     const schemes = targets(s, "scheme");
     const enemies = targets(s, "enemy", true);
-    if ((pressed || s.player.confused) && schemes.length && !s.player.confused)
+    if (pressed && (schemes.length || s.player.confused))
       return {
         command: { type: "BASIC", action: "thwart" },
-        title: `Thwart ${stats.thwart}`,
-        reason: "The main scheme is close to completing; remove threat now.",
+        title: s.player.confused ? "Clear Confused" : `Thwart ${stats.thwart}`,
+        reason: s.player.confused
+          ? "Use a thwart to remove Confused so you can control threat next turn."
+          : "The main scheme is close to completing; remove threat now.",
       };
-    if (enemies.length)
+    if (enemies.length || s.player.stunned)
       return {
         command: { type: "BASIC", action: "attack" },
-        title: `Attack ${stats.attack}`,
-        reason: "Threat is under control, so press the attack.",
+        title: s.player.stunned ? "Clear Stunned" : `Attack ${stats.attack}`,
+        reason: s.player.stunned
+          ? "Use an attack to remove Stunned so your next attack can deal damage."
+          : "Threat is under control, so press the attack.",
       };
     if (schemes.length)
       return {

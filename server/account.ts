@@ -181,6 +181,72 @@ async function readBody(req: IncomingMessage & { body?: unknown }) {
     throw new ApiError(400, "Invalid request.");
   }
 }
+const object = (value: unknown): value is Record<string, any> =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+const knownCard = (code: unknown) =>
+  typeof code === "string" && card(code)?.code === code;
+const list = (value: unknown, accepts: (item: any) => boolean, max = 1000) =>
+  Array.isArray(value) && value.length <= max && value.every(accepts);
+const scalar = (value: unknown) =>
+  typeof value === "string" || Number.isFinite(value);
+const effects = (value: unknown) =>
+  list(value, (e) => object(e) && typeof e.type === "string");
+function validReview(value: unknown): boolean {
+  if (!object(value)) return false;
+  const person = (p: unknown) =>
+    object(p) && knownCard(p.code) && typeof p.name === "string";
+  return (
+    Number.isInteger(value.id) &&
+    typeof value.title === "string" &&
+    typeof value.actor === "string" &&
+    typeof value.phase === "string" &&
+    (value.source === undefined || knownCard(value.source)) &&
+    list(value.messages, (m) => typeof m === "string") &&
+    list(
+      value.changes,
+      (c) =>
+        object(c) &&
+        typeof c.label === "string" &&
+        scalar(c.before) &&
+        scalar(c.after) &&
+        ["health", "threat", "cards", "status"].includes(c.kind),
+    ) &&
+    (value.cards === undefined ||
+      list(
+        value.cards,
+        (c) =>
+          object(c) &&
+          [c.id, c.name, c.label, c.detail, c.kind].every(
+            (v) => typeof v === "string",
+          ) &&
+          (c.code === undefined || knownCard(c.code)),
+      )) &&
+    (value.attack === undefined ||
+      (object(value.attack) &&
+        person(value.attack.attacker) &&
+        person(value.attack.target) &&
+        person(value.attack.identity) &&
+        typeof value.attack.target.playerId === "string" &&
+        typeof value.attack.label === "string")) &&
+    (value.payment === undefined ||
+      (object(value.payment) &&
+        typeof value.payment.title === "string" &&
+        Number.isFinite(value.payment.cost) &&
+        Number.isFinite(value.payment.total))) &&
+    (value.calculation === undefined ||
+      (object(value.calculation) &&
+        typeof value.calculation.label === "string" &&
+        typeof value.calculation.note === "string" &&
+        Number.isFinite(value.calculation.total) &&
+        list(
+          value.calculation.parts,
+          (p) =>
+            object(p) &&
+            typeof p.label === "string" &&
+            Number.isFinite(p.value),
+        )))
+  );
+}
 export function validateGame(value: unknown): asserts value is GameState {
   const s = value as GameState;
   requireValue(
@@ -228,7 +294,7 @@ export function validateGame(value: unknown): asserts value is GameState {
       (p) =>
         p &&
         typeof p.id === "string" &&
-        !!card(p.code) &&
+        knownCard(p.code) &&
         Number.isFinite(p.damage) &&
         Number.isFinite(p.counters),
     );
@@ -278,7 +344,7 @@ export function validateGame(value: unknown): asserts value is GameState {
   requireValue(
     Array.isArray(s.queue) &&
       s.queue.length <= 1000 &&
-      s.queue.every((e) => e && typeof e.type === "string") &&
+      effects(s.queue) &&
       Array.isArray(s.log) &&
       s.log.every(
         (l) => l && typeof l.text === "string" && Number.isFinite(l.round),
@@ -290,22 +356,39 @@ export function validateGame(value: unknown): asserts value is GameState {
       (["choice", "payment", "select"].includes(s.prompt.kind) &&
         typeof s.prompt.title === "string" &&
         Array.isArray(s.prompt.options) &&
+        typeof s.prompt.text === "string" &&
+        s.prompt.options.length <= 1000 &&
         s.prompt.options.every(
           (o) =>
             o &&
             typeof o.id === "string" &&
             typeof o.label === "string" &&
-            Array.isArray(o.effects),
-        )),
+            effects(o.effects),
+        ) &&
+        (!s.prompt.context || validReview(s.prompt.context)) &&
+        (s.prompt.after === undefined || effects(s.prompt.after))),
     "Invalid pending decision.",
   );
+  requireValue(!s.review || validReview(s.review), "Invalid pending review.");
   requireValue(
-    !s.review ||
-      (typeof s.review.title === "string" &&
-        Array.isArray(s.review.cards || []) &&
-        Array.isArray(s.review.messages) &&
-        Array.isArray(s.review.changes)),
-    "Invalid pending review.",
+    (s.timeline === undefined || list(s.timeline, validReview, 100)) &&
+      (s.pacing === undefined ||
+        ["guided", "brisk", "expert"].includes(s.pacing)) &&
+      (s.heroic === undefined ||
+        (Number.isInteger(s.heroic) && s.heroic >= 0 && s.heroic <= 3)) &&
+      (s.stats === undefined ||
+        (object(s.stats) &&
+          [
+            "damageDealt",
+            "damageTaken",
+            "threatRemoved",
+            "threatPlaced",
+            "cardsPlayed",
+            "enemiesDefeated",
+          ].every((key) =>
+            Number.isFinite(s.stats![key as keyof typeof s.stats]),
+          ))),
+    "Invalid mission presentation.",
   );
 }
 const validId = (id: unknown) =>
@@ -555,7 +638,7 @@ export function createAccountHandler(providedStore?: Store) {
           const mission: MissionRecord = {
             id,
             revision: (old?.revision || 0) + 1,
-            startedAt: old?.startedAt || now,
+            startedAt: old?.startedAt || new Date(body.startedAt).toISOString(),
             updatedAt: now,
             heroes: s.players.map((p) => ({
               heroId: p.heroId,

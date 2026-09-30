@@ -51,6 +51,16 @@ export function useAccount() {
             response.status,
           );
         }
+        // Keep the one-time code in memory until the player acknowledges it.
+        // Refreshes and autosaves must not erase their only recovery method.
+        const previousSession = current.current;
+        if (
+          payload.user &&
+          payload.user.id === previousSession?.user?.id &&
+          !payload.recoveryCode &&
+          previousSession?.recoveryCode
+        )
+          payload.recoveryCode = previousSession.recoveryCode;
         current.current = payload;
         setSession(payload);
         setLoadError("");
@@ -74,6 +84,12 @@ export function useAccount() {
       }),
     [request],
   );
+  const dismissRecoveryCode = useCallback(() => {
+    if (!current.current?.recoveryCode) return;
+    const { recoveryCode: _, ...next } = current.current;
+    current.current = next;
+    setSession(next);
+  }, []);
   useEffect(() => {
     void refresh();
     const onVisible = () => {
@@ -92,7 +108,7 @@ export function useAccount() {
       channel.current = null;
     };
   }, [refresh]);
-  return { session, current, request, refresh, loadError };
+  return { session, current, request, refresh, loadError, dismissRecoveryCode };
 }
 export type AccountController = ReturnType<typeof useAccount>;
 

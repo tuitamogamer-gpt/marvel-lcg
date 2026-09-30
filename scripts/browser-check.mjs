@@ -1,5 +1,5 @@
 import { chromium } from "playwright";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import assert from "node:assert/strict";
 const require = createRequire(import.meta.url);
@@ -45,7 +45,9 @@ async function screenshot(name) {
 }
 async function audit(name) {
   if (!(await page.evaluate(() => !!window.axe)))
-    await page.addScriptTag({ path: require.resolve("axe-core/axe.min.js") });
+    await page.evaluate(
+      await readFile(require.resolve("axe-core/axe.min.js"), "utf8"),
+    );
   const result = await page.evaluate(() =>
     window.axe.run(document, {
       runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },

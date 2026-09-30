@@ -344,6 +344,31 @@ try {
   checks.push(
     "Crowded and exhausted cards stay inside the table without overlap at six viewport widths",
   );
+  await page.setViewportSize({ width: 1366, height: 768 });
+  assert.equal(
+    await page
+      .locator(".table-bottom")
+      .evaluate((el) => getComputedStyle(el).position),
+    "static",
+    "Crowded laptop tables must leave space for identity and card controls",
+  );
+  await page.locator(".hero-form-button").scrollIntoViewIfNeeded();
+  assert.equal(
+    await page.locator(".hero-form-button").evaluate((control) => {
+      const box = control.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2,
+      );
+      return hit === control || control.contains(hit);
+    }),
+    true,
+    "The crowded table's form control must remain unobstructed",
+  );
+  await capture("crowded-laptop");
+  checks.push(
+    "Crowded laptop tables scroll without a pinned hand covering identity controls",
+  );
   assert.equal(errors.length, 0, JSON.stringify(errors));
   assert.equal(
     audits.flatMap((audit) => audit.violations).length,

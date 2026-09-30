@@ -5,6 +5,9 @@ import { useAccount, useMissionSync } from "./account/useAccount";
 import type { SavedDeck, MissionRecord } from "./account/types";
 import { CombatCinematic } from "./CombatCinematic";
 import { HeroEmblem } from "./HeroEmblem";
+import { KeywordGuide, TutorialCoach } from "./Onboarding";
+import { readTutorial, saveTutorial, TUTORIAL_SETUP } from "./tutorial";
+import { shortReason } from "./game/glossary";
 import { DefenseCrest, DefensePlaque } from "./DefenseCrest";
 import "./minion-damage.css";
 import { createPortal } from "react-dom";
@@ -363,14 +366,24 @@ function Modal({
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const target = ref.current?.querySelector<HTMLElement>(
-      "button, input, select",
+      "button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, a[href]",
     );
     target?.focus();
     const key = (e: KeyboardEvent) => {
+      const dialogs = Array.from(
+        document.querySelectorAll('[role="dialog"]'),
+      ).filter((node) => node.getClientRects().length);
+      if (dialogs.at(-1) !== ref.current) return;
       if (e.key === "Escape") closeRef.current?.();
       if (e.key === "Tab") {
-        const nodes = ref.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled),input:not(:disabled),select:not(:disabled),[tabindex="0"]',
+        const nodes = Array.from(
+          ref.current?.querySelectorAll<HTMLElement>(
+            'button:not(:disabled),input:not(:disabled):not([type="hidden"]),select:not(:disabled),textarea:not(:disabled),summary,a[href],[tabindex="0"]',
+          ) || [],
+        ).filter(
+          (node) =>
+            node.getClientRects().length &&
+            getComputedStyle(node).visibility !== "hidden",
         );
         if (!nodes?.length) return;
         const first = nodes[0],
@@ -562,6 +575,10 @@ export default function App() {
   const [deckView, setDeckView] = useState(false);
   const [endTurn, setEndTurn] = useState(false);
   const [restart, setRestart] = useState(false);
+  const [tutorialRequested, setTutorialRequested] = useState(false);
+  const [tutorialMissionId, setTutorialMissionId] = useState(
+    () => readTutorial()?.missionId || null,
+  );
   const [toast, setToast] = useState("");
   const [logOpen, setLogOpen] = useState(true);
   const [sound, setSound] = useState(
@@ -659,6 +676,10 @@ export default function App() {
       )
         return;
       if (screen !== "game" || !gameRef.current?.review) return;
+      // A help, inspection or nested dialog must not advance the table behind it.
+      const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
+      if (dialogs.some((dialog) => !dialog.querySelector("[data-proceed]")))
+        return;
       e.preventDefault();
       sendRef.current({ type: "PROCEED" });
     };
@@ -678,6 +699,9 @@ export default function App() {
       if (
         ["INPUT", "SELECT", "TEXTAREA"].includes(target.tagName) ||
         target.isContentEditable ||
+        Array.from(document.querySelectorAll('[role="dialog"]')).some(
+          (dialog) => !dialog.querySelector("[data-proceed]"),
+        ) ||
         screen !== "game"
       )
         return;
@@ -819,7 +843,7 @@ export default function App() {
       setToast(summary);
     }
   }
-  async function start(replay = false, sameSeed = false) {
+  async function start(replay = false, sameSeed = false, tutorial = false) {
     await missionSync.flush();
     if (missionSync.hasUnsaved()) {
       setToast(
@@ -831,50 +855,68 @@ export default function App() {
     clearHistory();
     missionSync.reset();
     setGameOwner(account.session?.user?.id || null);
-    setGame({
+    const mission = {
       ...newGame(
-        replay && game
-          ? {
-              heroId: game.players[0].heroId,
-              aspect: game.players[0].aspect,
-              heroes: game.players.map((p) => ({
-                heroId: p.heroId,
-                aspect: p.aspect,
-                deckCards: p.deckCards,
-              })),
-              villainId: game.villainId,
-              difficulty: game.difficulty,
-              module: game.module,
-              guided: true,
-              pacing,
-              heroic: game.heroic || 0,
-              seed: sameSeed ? game.startSeed || undefined : undefined,
-            }
-          : {
-              heroId: hero.id,
-              aspect,
-              heroes: team,
-              guided: true,
-              villainId: villain.id,
-              difficulty,
-              module,
-              pacing,
-              heroic,
-              seed: parseSeed(seedText),
-            },
+        tutorial
+          ? { ...TUTORIAL_SETUP, guided: true, pacing: "guided" }
+          : replay && game
+            ? {
+                heroId: game.players[0].heroId,
+                aspect: game.players[0].aspect,
+                heroes: game.players.map((p) => ({
+                  heroId: p.heroId,
+                  aspect: p.aspect,
+                  deckCards: p.deckCards,
+                })),
+                villainId: game.villainId,
+                difficulty: game.difficulty,
+                module: game.module,
+                guided: true,
+                pacing,
+                heroic: game.heroic || 0,
+                seed: sameSeed ? game.startSeed || undefined : undefined,
+              }
+            : {
+                heroId: hero.id,
+                aspect,
+                heroes: team,
+                guided: true,
+                villainId: villain.id,
+                difficulty,
+                module,
+                pacing,
+                heroic,
+                seed: parseSeed(seedText),
+              },
       ),
       accountMission: {
         id: crypto.randomUUID(),
         startedAt: new Date().toISOString(),
       },
-    });
+    };
+    if (tutorial) {
+      setPacingState("guided");
+      try {
+        localStorage.setItem(PACING_KEY, "guided");
+      } catch {
+        /* The mission still uses guided pacing. */
+      }
+      saveTutorial({ missionId: mission.accountMission.id, index: 0 });
+      setTutorialMissionId(mission.accountMission.id);
+    } else {
+      saveTutorial(null);
+      setTutorialMissionId(null);
+    }
+    setGame(mission);
+    setTutorialRequested(false);
     setScreen("game");
     setRestart(false);
     tone();
   }
-  function startRequest() {
+  function startRequest(tutorial = false) {
+    setTutorialRequested(tutorial);
     if (game && !["won", "lost"].includes(game.phase)) setRestart(true);
-    else start();
+    else void start(false, false, tutorial);
   }
   function useSavedDeck(deck: SavedDeck) {
     const existing = team.findIndex((p) => p.heroId === deck.heroId);
@@ -1157,8 +1199,11 @@ export default function App() {
                 >
                   Choose your hero <ArrowRight size={21} />
                 </button>
-                <button className="text-button" onClick={() => setHelp(true)}>
-                  <BookOpen size={17} /> Learn to play
+                <button
+                  className="text-button"
+                  onClick={() => startRequest(true)}
+                >
+                  <BookOpen size={17} /> Play your first mission
                 </button>
               </div>
               <div className="banner-meta">
@@ -1587,7 +1632,7 @@ export default function App() {
               <button
                 id="start-btn"
                 className="primary-button start-button"
-                onClick={startRequest}
+                onClick={() => startRequest()}
               >
                 <Play size={17} weight="fill" /> START MISSION{" "}
                 <ArrowRight size={20} />
@@ -1790,6 +1835,18 @@ export default function App() {
           onPacing={choosePacing}
           canUndo={undoDepth > 0}
           onUndo={undo}
+          coach={
+            tutorialMissionId === game.accountMission?.id ? (
+              <TutorialCoach
+                key={tutorialMissionId}
+                game={game}
+                onClose={() => {
+                  saveTutorial(null);
+                  setTutorialMissionId(null);
+                }}
+              />
+            ) : undefined
+          }
         />
       )}
       {game?.error && <span className="sr-only">{game.error}</span>}
@@ -1841,6 +1898,7 @@ export default function App() {
                 {plain(card(inspect.code).text) ||
                   "A resource card. Spend it when paying a resource cost."}
               </p>
+              <KeywordGuide text={card(inspect.code).text} />
               {card(inspect.code).errata && (
                 <p className="hint">
                   Updated card text ·{" "}
@@ -1962,7 +2020,10 @@ export default function App() {
             {gameOwner
               ? "Your current mission will remain in your profile. Open a new table for "
               : "Your current guest mission will be replaced by "}
-            {hero.name} vs. {villain.name}.
+            {tutorialRequested
+              ? "Spider-Man vs. Rhino (first mission)"
+              : `${hero.name} vs. ${villain.name}`}
+            .
           </p>
           <div className="modal-actions">
             <button
@@ -1974,7 +2035,10 @@ export default function App() {
             >
               Resume current mission
             </button>
-            <button className="primary-button" onClick={() => void start()}>
+            <button
+              className="primary-button"
+              onClick={() => void start(false, false, tutorialRequested)}
+            >
               Start new mission <ArrowRight size={18} />
             </button>
           </div>
@@ -2989,6 +3053,9 @@ function ActionDirector({
   const timeline = (s.timeline || []).slice(-5).reverse();
   const [suggestion, setSuggestion] = useState<Advice | null>(null);
   const [thinking, setThinking] = useState(false);
+  const thought = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const advisorState = useRef(s);
+  advisorState.current = s;
   const canAct =
     s.phase === "player" &&
     !s.prompt &&
@@ -2996,11 +3063,17 @@ function ActionDirector({
     s.activePlayerId === s.turnPlayerId;
   useEffect(() => {
     setSuggestion(null);
-  }, [s.nextId, s.log.length, s.review?.id, s.prompt?.title, s.turnPlayerId]);
+    setThinking(false);
+    if (thought.current) clearTimeout(thought.current);
+    return () => {
+      if (thought.current) clearTimeout(thought.current);
+    };
+  }, [s]);
   const think = () => {
     setThinking(true);
     // Let the button repaint before the planner runs its rollouts.
-    setTimeout(() => {
+    thought.current = setTimeout(() => {
+      if (advisorState.current !== s) return;
       const advice = planAction(s, { rollouts: 3 }) || {
         command: { type: "END_TURN" } as Command,
         title: "End the hero phase",
@@ -3105,44 +3178,14 @@ function ActionDirector({
                 <CheckCircle size={14} />
                 No timers. You control the pace.
               </span>
-              <div className="advisor-box">
-                {suggestion ? (
-                  <>
-                    <span className="advisor-title">
-                      <Lightbulb size={15} weight="fill" /> {suggestion.title}
-                    </span>
-                    <p>{suggestion.reason}</p>
-                    <div className="advisor-actions">
-                      <button
-                        className="primary-button"
-                        onClick={() => {
-                          if (suggestion.command.type === "END_TURN") onEnd();
-                          else send(suggestion.command);
-                          setSuggestion(null);
-                        }}
-                      >
-                        Do it <ArrowRight size={16} />
-                      </button>
-                      <button
-                        className="text-button"
-                        onClick={() => setSuggestion(null)}
-                      >
-                        Dismiss
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <button
-                    className="secondary-button advisor-button"
-                    disabled={thinking || !canAct}
-                    title="The advisor plays the round out on a copy of the table with the hidden cards reshuffled, then suggests the move that scored best."
-                    onClick={think}
-                  >
-                    <Lightbulb size={15} weight="fill" />{" "}
-                    {thinking ? "Thinking…" : "Suggest a move"}
-                  </button>
-                )}
-              </div>
+              {suggestion && (
+                <div className="advisor-box">
+                  <span className="advisor-title">
+                    <Lightbulb size={15} weight="fill" /> {suggestion.title}
+                  </span>
+                  <p>{suggestion.reason}</p>
+                </div>
+              )}
               {timeline.length > 0 && (
                 <div className="director-timeline">
                   <div className="change-heading">
@@ -3181,6 +3224,7 @@ function ActionDirector({
               </div>
               <button
                 ref={button}
+                data-proceed
                 className="primary-button proceed-button"
                 onClick={() => send({ type: "PROCEED" })}
               >
@@ -3191,10 +3235,44 @@ function ActionDirector({
               </span>
             </>
           ) : (
-            <span className="pace-note">
-              <ShieldCheck size={14} />
-              Every step is saved automatically.
-            </span>
+            <>
+              <div className="director-advisor-controls">
+                {suggestion ? (
+                  <div className="advisor-actions">
+                    <button
+                      className="primary-button"
+                      disabled={!canAct}
+                      onClick={() => {
+                        if (suggestion.command.type === "END_TURN") onEnd();
+                        else send(suggestion.command);
+                        setSuggestion(null);
+                      }}
+                    >
+                      Do it <ArrowRight size={16} />
+                    </button>
+                    <button
+                      className="text-button"
+                      onClick={() => setSuggestion(null)}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="secondary-button advisor-button"
+                    disabled={thinking || !canAct}
+                    title="The advisor plays the round out on a copy of the table with the hidden cards reshuffled, then suggests the move that scored best."
+                    onClick={think}
+                  >
+                    <Lightbulb size={15} weight="fill" />{" "}
+                    {thinking ? "Thinking…" : "Suggest a move"}
+                  </button>
+                )}
+              </div>
+              <span className="pace-note">
+                <ShieldCheck size={14} /> Every step is saved automatically.
+              </span>
+            </>
           )}
         </div>
       </section>
@@ -3274,6 +3352,7 @@ function ActionDirector({
               </button>
               <button
                 ref={focusButton}
+                data-proceed
                 className="primary-button"
                 onClick={() => send({ type: "PROCEED" })}
               >
@@ -3446,6 +3525,7 @@ function Tabletop({
   onPacing,
   canUndo,
   onUndo,
+  coach,
 }: {
   game: GameState;
   saveLabel: string;
@@ -3459,6 +3539,7 @@ function Tabletop({
   onPacing: (pacing: Pacing) => void;
   canUndo: boolean;
   onUndo: () => void;
+  coach?: ReactNode;
 }) {
   const [viewId, setViewId] = useState(game.activePlayerId);
   const [playmatId, setPlaymatId] = useState(readPlaymat);
@@ -4550,13 +4631,12 @@ function Tabletop({
                               <span className="hand-card-cost">
                                 COST {card(p).cost ?? 0}
                               </span>
-                            ) : card(p).type_code === "resource" ? (
-                              <span>RESOURCE</span>
-                            ) : reactionCardsUI.includes(p.code) ? (
-                              <span>REACTION</span>
                             ) : (
-                              <span>
-                                <Eye size={12} />
+                              <span
+                                className="hand-reason"
+                                aria-label={disabled || undefined}
+                              >
+                                {shortReason(disabled || "")}
                               </span>
                             )}
                           </span>
@@ -4605,6 +4685,7 @@ function Tabletop({
           </div>
         </div>
         <aside className="mission-rail">
+          {coach}
           <ActionDirector
             game={game}
             send={send}
@@ -4741,7 +4822,6 @@ function Tabletop({
     </main>
   );
 }
-const reactionCardsUI = ["01003", "01004", "01061", "01077", "01078", "01085"];
 function Collection({ onInspect }: { onInspect: (code: string) => void }) {
   const [q, setQ] = useState("");
   const [faction, setFaction] = useState("all");

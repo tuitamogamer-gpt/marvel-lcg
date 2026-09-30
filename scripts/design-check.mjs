@@ -83,6 +83,15 @@ try {
   await fit("collection-laptop", 1280);
   await audit("collection-laptop");
   await capture("collection-laptop");
+  for (const width of [390, 320]) {
+    await fit(`collection-${width}`, width);
+    await capture(`collection-${width}`, false);
+  }
+  await audit("collection-smallest");
+  checks.push(
+    "Card library headings and long card names fit 320 and 390 pixel screens",
+  );
+  await fit("collection-help-laptop", 1280);
   await page.getByRole("button", { name: "How to play", exact: false }).click();
   assert.equal(
     await page.evaluate(() => document.body.style.overflow),
@@ -132,6 +141,40 @@ try {
       await page.getByRole("button", { name: "Proceed", exact: true }).click();
   };
   await proceed();
+  // A pinned hand used to pass the viewport test while covering both of
+  // Peter Parker's identity controls. Check the visible controls themselves.
+  for (const [width, height] of [
+    [1440, 900],
+    [1366, 768],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await page.evaluate(() => scrollTo(0, 0));
+    const identity = await page.evaluate(() =>
+      [".hero-form-button", ".identity-resource .ability-button"].map(
+        (selector) => {
+          const control = document.querySelector(selector);
+          const box = control.getBoundingClientRect();
+          const hit = document.elementFromPoint(
+            box.left + box.width / 2,
+            box.top + box.height / 2,
+          );
+          return {
+            selector,
+            visible: box.top >= 0 && box.bottom <= innerHeight,
+            unobstructed: hit === control || control.contains(hit),
+          };
+        },
+      ),
+    );
+    assert.ok(
+      identity.every((control) => control.visible && control.unobstructed),
+      `${width}x${height}: form and resource controls must be visible and clickable (${JSON.stringify(identity)})`,
+    );
+    await capture(`identity-fit-${width}x${height}`, false);
+  }
+  checks.push(
+    "Suit up and Scientist remain visible and unobstructed on laptop screens",
+  );
   await page.getByRole("button", { name: "Suit up" }).click();
   await proceed();
   const state = () =>
@@ -169,6 +212,28 @@ try {
         villain: !!villain && villain.top >= 0 && villain.bottom <= innerHeight,
       };
     });
+    const formControl = await page
+      .locator(".hero-form-button")
+      .evaluate((control) => {
+        const box = control.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          box.left + box.width / 2,
+          box.top + box.height / 2,
+        );
+        return {
+          visible: box.top >= 0 && box.bottom <= innerHeight,
+          unobstructed: hit === control || control.contains(hit),
+          labelSize: parseFloat(
+            getComputedStyle(control.querySelector("strong")).fontSize,
+          ),
+        };
+      });
+    assert.ok(
+      formControl.visible &&
+        formControl.unobstructed &&
+        formControl.labelSize >= 12,
+      `${width}x${height}: readable form control remains visible (${JSON.stringify(formControl)})`,
+    );
     assert.ok(
       fits.hand && fits.bar && fits.villain,
       `${width}x${height}: villain, actions and hand must be visible without scrolling (${JSON.stringify(fits)})`,

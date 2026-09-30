@@ -1,0 +1,124 @@
+.tutorial-coach {
+  color: #edf7fb;
+  background: #142c3c;
+  border: 1px solid #598797;
+  border-top: 3px solid #e7bd52;
+  border-radius: 5px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+.coach-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.coach-heading > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #ffe29b;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+.coach-heading .icon-button {
+  color: #edf7fb;
+  width: 32px;
+  height: 32px;
+}
+.coach-progress {
+  display: flex;
+  gap: 4px;
+  margin: 10px 0 12px;
+}
+.coach-progress span {
+  height: 4px;
+  border-radius: 2px;
+  flex: 1;
+  background: #547080;
+}
+.coach-progress .complete {
+  background: #8acebd;
+}
+.coach-progress .current {
+  background: #ffe29b;
+}
+.tutorial-coach h3 {
+  font-size: 18px;
+  line-height: 1.2;
+  margin: 0 0 8px;
+  color: #fff;
+}
+.tutorial-coach p {
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 0 0 10px;
+}
+.tutorial-coach .text-button {
+  color: #ffe29b;
+  font-size: 13px;
+  min-height: 32px;
+}
+.keyword-guide {
+  margin: 16px 0;
+}
+.director-advisor-controls {
+  width: 100%;
+}
+.director-advisor-controls .advisor-button {
+  width: 100%;
+  min-height: 34px;
+  font-size: 13px;
+  padding: 6px 8px;
+}
+.director-advisor-controls .advisor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.keyword-guide > div {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.keyword-chip {
+  color: #18364a;
+  background: #eef6f9;
+  border: 1px solid #67879b;
+  border-radius: 5px;
+  max-width: 100%;
+}
+.keyword-chip summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 6px 10px;
+}
+.keyword-chip summary:focus-visible {
+  outline: 3px solid #ad6900;
+  outline-offset: 2px;
+}
+.keyword-chip p {
+  font-size: 15px;
+  line-height: 1.4;
+  max-width: 360px;
+  padding: 0 10px 10px;
+  margin: 0;
+}
+.tabletop .hand-card-footer .hand-reason {
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff0c4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .tutorial-coach {
+    margin: 0 0 14px;
+  }
+}
