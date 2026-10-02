@@ -7,12 +7,20 @@ export interface Card {
   name: string;
   type_code: string;
   faction_code: string;
+  /** Retail/downloadable product containing this printing. */
+  pack_code?: string;
   set_code?: string;
   text?: string;
   errata?: { reference: string; url: string };
   traits?: string;
   quantity: number;
   cost?: number;
+  permanent?: boolean;
+  health_per_hero?: boolean;
+  health_per_group?: boolean;
+  cost_per_hero?: boolean;
+  base_threat_per_group?: boolean;
+  threat_per_group?: boolean;
   attack?: number;
   thwart?: number;
   defense?: number;
@@ -55,6 +63,9 @@ export interface MissionStats {
   enemiesDefeated: number;
 }
 export interface Piece {
+  /** Actual owned cards tucked beneath this instance; faces stay private. */
+  storedCards?: Piece[];
+  pendingDefeat?: boolean;
   id: string;
   code: string;
   exhausted: boolean;
@@ -64,6 +75,10 @@ export interface Piece {
   stunned: boolean;
   confused: boolean;
   attachedTo?: string;
+  /** Steady requires two status cards; booleans mean the status is active. */
+  stunCards?: number;
+  confuseCards?: number;
+  toughCards?: number;
   droneCard?: Piece;
   captured?: Piece[];
   bonusAtk?: number;
@@ -102,6 +117,19 @@ export interface Prompt {
   selectAction?: Effect;
 }
 export interface Attack {
+  interruptsUsed?: string[];
+  identityPrevented?: number;
+  retainedBoostIds?: string[];
+  modifier?: number;
+  omitNormalBoost?: boolean;
+  extraBoostIcons?: number;
+  afterActivation?: Effect[];
+  activationAfter?: Effect;
+  attackerSnapshot?: Piece;
+  identityDamage?: number;
+  damagePlaced?: number;
+  defenseBonus?: number;
+  originalTarget?: string;
   targetPlayerId?: string;
   originalPlayerId?: string;
   basicDefense?: boolean;
@@ -120,6 +148,27 @@ export interface Attack {
   isVillain: boolean;
 }
 export interface GameState {
+  /** Physical source event for the currently resolving effect only. */
+  currentEventId?: string;
+  /** Independent nested attack: preserves printed clauses before its aftermath. */
+  currentAttackProgramId?: string;
+  /** Resolving attack aftermath. Queued effects retain this context across saves. */
+  currentResponseGroup?: string;
+  currentResponseMandatory?: boolean;
+  currentRevealWindowId?: string;
+  boostCancellations?: Record<string, { icons?: boolean; ability?: boolean }>;
+  revealWindows?: Record<string, import("./reveal-window").RevealWindow>;
+  pendingMainCompletion?: boolean;
+  scriptCheckpoints?: Record<
+    string,
+    {
+      target: string;
+      code?: string;
+      stage?: number;
+      threat?: number;
+      existed: boolean;
+    }[]
+  >;
   accountMission?: { id: string; startedAt: string };
   /** Presentation events from the latest command; never used by the rules. */
   combatEvents?: CombatEvent[];
@@ -160,16 +209,27 @@ export interface GameState {
     confused: boolean;
     tough: boolean;
     hand: Piece[];
+    stunCards?: number;
+    confuseCards?: number;
+    toughCards?: number;
     deck: Piece[];
     discard: Piece[];
     inPlay: Piece[];
+    /** Doctor Strange's separate physical supplementary deck. Never part of the
+     * player draw pile or its exhaustion rule. Only its current top is faceup. */
+    invocationDeck?: Piece[];
+    invocationDiscard?: Piece[];
   };
   villain: Piece & { hp: number; maxHp: number; stage: number };
   scheme: { code: string; threat: number; index: number };
   minions: Piece[];
   sideSchemes: Piece[];
   attachments: Piece[];
+  /** Persistent scenario environments, distinct from encounter attachments. */
+  environments?: Piece[];
   encounter: {
+    storedBoosts?: Piece[];
+    knownTop?: { id: string; playerId: string };
     deck: Piece[];
     discard: Piece[];
     dealt: Piece[];
@@ -178,6 +238,12 @@ export interface GameState {
   removed: Piece[];
   resolving: Piece[];
   scheming?: {
+    retainedBoostIds?: string[];
+    modifier?: number;
+    extraBoostIcons?: number;
+    afterActivation?: Effect[];
+    activationAfter?: Effect;
+    threatBefore?: number;
     attacker: string;
     boostCodes: string[];
     boostIds: string[];

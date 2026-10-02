@@ -48,6 +48,9 @@ function cardLocations(s: GameState) {
     put(p.deck, "Deck", name, false);
     put(p.discard, "Discard", name);
     put(p.inPlay, "In play", name);
+    put(p.invocationDeck?.slice(0, 1) || [], "Faceup Invocation", name);
+    put(p.invocationDeck?.slice(1) || [], "Invocation deck", name, false);
+    put(p.invocationDiscard || [], "Invocation discard", name);
   }
   put(s.encounter.deck, "Deck", "Encounter", false);
   put(s.encounter.discard, "Discard");
@@ -72,7 +75,17 @@ function cardLocations(s: GameState) {
       false,
     );
   }
-  put([...s.minions, ...s.sideSchemes, ...s.attachments], "In play");
+  put(
+    [
+      ...s.minions,
+      ...s.sideSchemes,
+      ...s.attachments,
+      ...(s.environments || []),
+    ],
+    "In play",
+  );
+  for (const p of allInPlay(s))
+    put(p.storedCards || [], "Stored", p.ownerId || "", false);
   put(s.removed, "Removed");
   for (const p of s.minions)
     if (p.droneCard) put([p.droneCard], "Drone", "", false);
@@ -153,9 +166,19 @@ export function boardSnapshot(s: GameState) {
     ...s.sideSchemes,
     ...allInPlay(s),
     ...s.attachments,
+    ...(s.environments || []),
   ]) {
     const name = card(p).name;
     put(`${p.id}:zone`, name, "In play", "cards");
+    if (p.storedCards?.length)
+      put(
+        `${p.id}:stored`,
+        `${name} stored cards`,
+        p.storedCards.length,
+        "cards",
+      );
+    if (card(p).type_code === "environment")
+      put(`${p.id}:face`, "Environment", name, "status");
     if (p.counters)
       put(
         `${p.id}:counters`,
@@ -320,6 +343,18 @@ export function effectTitle(e?: Effect) {
 // These steps prepare an action or clean up its cards. Keep their information
 // in the next meaningful review instead of asking the player to approve plumbing.
 const plumbing = new Set([
+  "attackProgramEnd",
+  "nativeEvent",
+  "boostInterruptWindow",
+  "boostResponseWindow",
+  "bwEntryResponses",
+  "bwAllyDefeated",
+  "bwSurgeResponses",
+  "bwMinionSchemeResponses",
+  "resumePrompt",
+  "ds:invocation-finish",
+  "heroAttackResponses",
+  "attackAftermathOrder",
   "target",
   "optional",
   "payRequest",
@@ -330,6 +365,9 @@ const plumbing = new Set([
   "finishResolution",
   "endScheme",
   "resolveHandEvent",
+  "eventResolve",
+  "ms:event-cleanup",
+  "thor:basic-window",
   "nextMulligan",
   "endDiscard",
   "refill",
@@ -443,8 +481,19 @@ export function continuesReview(
 ) {
   const pacing = pacingOf(s);
   if (pacing !== "guided") return !current || !stopsFor(s, current, pacing);
-  if (["revealBoost", "revealSchemeBoost"].includes(e.type))
-    return s.queue[0]?.type !== "boostEffect";
+  if (["revealBoost", "revealSchemeBoost"].includes(e.type)) {
+    const next = s.queue[0];
+    if (next?.type === "boostEffect") return false;
+    // Numeric-icon interrupts and boost responses now run before the star
+    // effect is queued. Preserve the read-card checkpoint before those windows
+    // resolve the printed star, while ordinary boosts still share one review.
+    if (
+      next?.piece &&
+      ["boostInterruptWindow", "boostResponseWindow"].includes(next.type)
+    )
+      return !card(next.piece).boost_star;
+    return true;
+  }
   return plumbing.has(e.type);
 }
 

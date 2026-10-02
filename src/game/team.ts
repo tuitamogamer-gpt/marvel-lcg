@@ -58,6 +58,7 @@ export function controller(s: GameState, id: string) {
   );
 }
 export function upgradeSave(s: GameState): GameState {
+  s.environments ||= [];
   s.resolving ||= [];
   s.pacing ||= "guided";
   s.timeline ||= [];

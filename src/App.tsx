@@ -1,5 +1,29 @@
+import {
+  doctorStrangeAbilityOptions,
+  doctorStrangeTopInvocation,
+} from "./game/doctor-strange";
+import {
+  msMarvelAbilityOptions,
+  msMarvelDiscardPlayable,
+} from "./game/ms-marvel";
+import { thorAbilityOptions } from "./game/thor";
+import { riskyBlankPower } from "./game/risky-business";
+import { mutagenAttachmentActions } from "./game/mutagen-formula";
+import {
+  goblinModuleAttachmentActions,
+  goblinIdentityLocked,
+} from "./game/goblin-modules";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CardPreview } from "./CardPreview";
+import {
+  Collection,
+  ContentBrowser,
+  DeckProvenance,
+  ProductSource,
+} from "./ContentBrowser";
+import { CATALOG_SUMMARY, productForCard } from "./game/catalog";
+import { captainAbilityOptions } from "./game/captain-america";
+import { hulkAbilityOptions } from "./game/hulk";
 import { AccountPage } from "./account/AccountPage";
 import { useAccount, useMissionSync } from "./account/useAccount";
 import type { SavedDeck, MissionRecord } from "./account/types";
@@ -72,7 +96,6 @@ import {
 import type { PlaymatPreference } from "./tabletop-assets";
 import {
   ASPECTS,
-  CARDS,
   HEROES,
   MODULES,
   VILLAINS,
@@ -90,10 +113,13 @@ import {
 import {
   SAVE_KEY,
   abilityOptions,
+  allyLimit,
   dispatch,
   newGame,
   paymentSources,
+  canPay,
   playable,
+  cardCost,
   summarize,
   schemeLimit,
   escalation,
@@ -451,7 +477,14 @@ function Difficulty({ level }: { level: number }) {
 function Status({
   piece,
 }: {
-  piece: { tough?: boolean; stunned?: boolean; confused?: boolean };
+  piece: {
+    tough?: boolean;
+    stunned?: boolean;
+    confused?: boolean;
+    toughCards?: number;
+    stunCards?: number;
+    confuseCards?: number;
+  };
 }) {
   const statuses = [
     {
@@ -479,7 +512,15 @@ function Status({
   return (
     <span className="statuses">
       {statuses
-        .filter(({ key }) => piece[key])
+        .filter(
+          ({ key }) =>
+            piece[key] ||
+            (key === "stunned"
+              ? piece.stunCards
+              : key === "confused"
+                ? piece.confuseCards
+                : piece.toughCards),
+        )
         .map(({ key, name, Icon, hint, rule }) => (
           <span
             className={`status-card ${key}`}
@@ -491,8 +532,19 @@ function Status({
               <Icon size={23} weight="bold" />
             </span>
             <span className="status-copy">
-              <b>{name}</b>
-              <small>{hint}</small>
+              <b>
+                {name}
+                {(
+                  key === "stunned"
+                    ? piece.stunCards
+                    : key === "confused"
+                      ? piece.confuseCards
+                      : piece.toughCards
+                )
+                  ? ` ×${key === "stunned" ? piece.stunCards : key === "confused" ? piece.confuseCards : piece.toughCards}`
+                  : ""}
+              </b>
+              <small>{piece[key] ? hint : "Steady · one more required"}</small>
             </span>
           </span>
         ))}
@@ -520,6 +572,8 @@ const fanCards: Record<string, [string, string]> = {
   iron_man: ["01036", "01032"],
   black_panther: ["01043a", "01047"],
   she_hulk: ["01021", "01028"],
+  captain_america: ["03004", "03006"],
+  hulk: ["10003", "10005"],
 };
 export default function App() {
   const account = useAccount();
@@ -539,6 +593,7 @@ export default function App() {
       aspect: Aspect;
       deckCards?: string[];
       deckName?: string;
+      deckOrigin?: "source";
     }[]
   >([{ heroId: HEROES[0].id, aspect: "justice" }]);
   const [setupSeat, setSetupSeat] = useState(0);
@@ -573,6 +628,7 @@ export default function App() {
   const [inspect, setInspect] = useState<Inspect | null>(null);
   const [help, setHelp] = useState(false);
   const [deckView, setDeckView] = useState(false);
+  const [contentView, setContentView] = useState(false);
   const [endTurn, setEndTurn] = useState(false);
   const [restart, setRestart] = useState(false);
   const [tutorialRequested, setTutorialRequested] = useState(false);
@@ -750,10 +806,12 @@ export default function App() {
               selectedVillain: villain.name,
               aspect,
               difficulty,
+              catalogOpen: contentView,
+              catalogSummary: CATALOG_SUMMARY,
             },
       );
     (window as any).advanceTime = () => {};
-  }, [screen, hero, villain, aspect, difficulty, team]);
+  }, [screen, hero, villain, aspect, difficulty, team, contentView]);
   function tone() {
     if (!sound) return;
     try {
@@ -1047,8 +1105,8 @@ export default function App() {
             </button>
           )}
           <span className="edition">
-            <span>CORE SET</span>
-            <b>01</b>
+            <span>CARD GAME</span>
+            <b>LCG</b>
           </span>
           <button
             className="icon-button"
@@ -1211,10 +1269,10 @@ export default function App() {
                   <User size={16} /> 1–3 hero hot-seat
                 </span>
                 <span>
-                  <ShieldCheck size={17} /> 5 iconic heroes
+                  <ShieldCheck size={17} /> {HEROES.length} iconic heroes
                 </span>
                 <span>
-                  <Skull size={17} /> 3 villain scenarios
+                  <Skull size={17} /> {VILLAINS.length} villain scenarios
                 </span>
               </div>
             </div>
@@ -1341,6 +1399,20 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              <button
+                className="content-entry"
+                onClick={() => setContentView(true)}
+              >
+                <BookOpen size={24} weight="duotone" />
+                <span>
+                  <b>All heroes & starter decks</b>
+                  <small>
+                    {CATALOG_SUMMARY.heroes} heroes · Core Set, expansions &
+                    standalone Hero Packs · Explore where each deck comes from
+                  </small>
+                </span>
+                <ArrowUpRight size={18} />
+              </button>
               <div className="hero-details">
                 <div>
                   <div className="hero-name">
@@ -1357,7 +1429,18 @@ export default function App() {
                     </button>
                     <button
                       className="text-button"
-                      onClick={() => setInspect({ code: fanCards[hero.id][0] })}
+                      onClick={() =>
+                        setInspect({
+                          code:
+                            fanCards[hero.id]?.[0] ||
+                            deckCodes(hero.id, aspect).find(
+                              (code) =>
+                                card(code).type_code === "event" &&
+                                card(code).faction_code === "hero",
+                            ) ||
+                            hero.code,
+                        })
+                      }
                     >
                       <Lightning size={15} /> Signature move
                     </button>
@@ -1384,6 +1467,9 @@ export default function App() {
                     </div>
                   ))}
                 </div>
+              </div>
+              <div className="hero-product-source">
+                <ProductSource code={hero.code} compact />
               </div>
               <div className="aspect-heading">
                 <div>
@@ -1807,7 +1893,10 @@ export default function App() {
         </main>
       )}
       {screen === "collection" && (
-        <Collection onInspect={(code) => setInspect({ code })} />
+        <Collection
+          onInspect={(code) => setInspect({ code })}
+          renderCard={(code) => <CardImage code={code} lazy />}
+        />
       )}
       {screen === "game" && game && (
         <Tabletop
@@ -1885,20 +1974,66 @@ export default function App() {
           mode="end"
         />
       )}
+      {contentView && (
+        <Modal
+          title="All heroes & starter decks"
+          wide
+          className="content-browser-modal"
+          eyebrow="THE COMPLETE MARVEL CHAMPIONS CATALOG"
+          onClose={() => setContentView(false)}
+        >
+          <ContentBrowser
+            initialHeroCode={hero.code}
+            assignedHeroIds={team
+              .filter((_, index) => index !== setupSeat)
+              .map((seat) => seat.heroId)}
+            onInspect={(code) => setInspect({ code })}
+            onChooseHero={(id, selectedAspect, codes, deckName) => {
+              const selected = HEROES.find((h) => h.id === id);
+              if (selected) {
+                const nextAspect =
+                  ASPECTS.find((a) => a.id === selectedAspect)?.id ||
+                  selected.aspect;
+                setTeam((list) =>
+                  list.map((seat, index) =>
+                    index === setupSeat
+                      ? {
+                          heroId: id,
+                          aspect: nextAspect,
+                          ...(codes
+                            ? {
+                                deckCards: [...codes],
+                                deckName,
+                                deckOrigin: "source" as const,
+                              }
+                            : {}),
+                        }
+                      : seat,
+                  ),
+                );
+                setContentView(false);
+              }
+            }}
+          />
+        </Modal>
+      )}
       {inspect && (
         <Modal title={card(inspect.code).name} onClose={() => setInspect(null)}>
           <div className="inspect-content">
             <CardImage code={inspect.code} />
             <div>
               <span className="card-type">
-                {card(inspect.code).faction_code} ·{" "}
-                {card(inspect.code).type_code.replace("_", " ")}
+                {card(inspect.code).faction_code || "card"} ·{" "}
+                {(card(inspect.code).type_code || "card").replace("_", " ")}
               </span>
               <p className="rules-text">
                 {plain(card(inspect.code).text) ||
-                  "A resource card. Spend it when paying a resource cost."}
+                  (card(inspect.code).type_code === "resource"
+                    ? "A resource card. Spend it when paying a resource cost."
+                    : "No printed rules text on this face.")}
               </p>
               <KeywordGuide text={card(inspect.code).text} />
+              <ProductSource code={inspect.code} />
               {card(inspect.code).errata && (
                 <p className="hint">
                   Updated card text ·{" "}
@@ -1934,7 +2069,7 @@ export default function App() {
                         : game,
                       inspect.piece,
                     ) ||
-                      `Pay ${Math.max(0, (card(inspect.code).cost || 0) - Number(game.flags.discount || 0))} resources to play this card.`}
+                      `Pay ${cardCost(game, card(inspect.code))} resources to play this card.`}
                   </p>
                   <button
                     className="primary-button"
@@ -1968,9 +2103,18 @@ export default function App() {
         >
           <p className="modal-intro">
             {team[setupSeat].deckCards?.length || 40} cards ·{" "}
-            {team[setupSeat].deckName || "Core Set starter deck"}. Includes all
-            15 required hero cards.
+            {team[setupSeat].deckName || "App starter deck"}. Includes the
+            complete required hero set.
           </p>
+          <DeckProvenance
+            codes={team[setupSeat].deckCards || deckCodes(hero.id, aspect)}
+            custom={!!team[setupSeat].deckCards}
+            sourceName={
+              team[setupSeat].deckOrigin === "source"
+                ? team[setupSeat].deckName
+                : undefined
+            }
+          />
           <div className="deck-list">
             {(["hero", aspect, "basic"] as const).map((f) => {
               const counts = (
@@ -1993,7 +2137,10 @@ export default function App() {
                           setInspect({ code });
                         }}
                       >
-                        <span>{card(code).name}</span>
+                        <span className="deck-card-source">
+                          {card(code).name}
+                          <small>{productForCard(code)?.name}</small>
+                        </span>
                         <b>×{n}</b>
                       </button>
                     ))}
@@ -3500,12 +3647,27 @@ function AttachedCards({
             ].includes(p.code) && (
               <button
                 className="text-button"
-                disabled={!send}
+                disabled={!send || game.player.form !== "hero"}
                 onClick={() => send?.({ type: "ABILITY", id: p.id })}
               >
                 Remove
               </button>
             )}
+            {[
+              ...mutagenAttachmentActions(game, p),
+              ...goblinModuleAttachmentActions(game, p),
+            ].map((a) => (
+              <button
+                key={a.id}
+                className="text-button"
+                disabled={!send}
+                onClick={() =>
+                  send?.({ type: "ABILITY", id: p.id, action: a.id })
+                }
+              >
+                {a.label}
+              </button>
+            ))}
           </div>
         ))}
       </div>
@@ -3608,6 +3770,7 @@ function Tabletop({
       ...s.player.inPlay.map((p) => p.code),
       ...s.minions.map((p) => p.code),
       ...s.sideSchemes.map((p) => p.code),
+      ...(s.environments || []).map((p) => p.code),
     ]);
     for (const code of codes) {
       const img = new Image();
@@ -3615,7 +3778,26 @@ function Tabletop({
       img.src = imageFor(code);
     }
   }, [s.round, s.activePlayerId, s.player.hand.length]);
+  const importedIdentityAbility = [
+    ...doctorStrangeAbilityOptions(s, "identity"),
+    ...thorAbilityOptions(s, "identity"),
+    ...msMarvelAbilityOptions(s, "identity"),
+  ][0];
+  const visibleInvocation = doctorStrangeTopInvocation(s);
+  const spellUnavailable =
+    importedIdentityAbility?.id === "spell" &&
+    (!visibleInvocation ||
+      !canPay(
+        s,
+        card(visibleInvocation).cost || 0,
+        [],
+        undefined,
+        visibleInvocation.code,
+      ));
   const abilityActive =
+    !!importedIdentityAbility ||
+    captainAbilityOptions(s, "identity").length > 0 ||
+    hulkAbilityOptions(s, "identity").length > 0 ||
     (s.player.form === "alter" &&
       ((s.heroId === "iron_man" && !s.flags.futurist) ||
         (s.heroId === "captain_marvel" && !s.flags.commander))) ||
@@ -3835,18 +4017,14 @@ function Tabletop({
                   game={s}
                   host={s.villain}
                   inspect={inspect}
-                  send={
-                    canUseAction && s.player.form === "hero"
-                      ? sendAction
-                      : undefined
-                  }
+                  send={canUseAction ? sendAction : undefined}
                 />
               </div>
               <div className="villain-info">
                 <span className="small-label">
                   VILLAIN · STAGE {["", "I", "II", "III"][s.villain.stage]}
                 </span>
-                <h2>{v.name.toUpperCase()}</h2>
+                <h2>{card(s.villain).name.toUpperCase()}</h2>
                 <HealthDial
                   value={s.villain.hp}
                   max={s.villain.maxHp}
@@ -3857,10 +4035,12 @@ function Tabletop({
                   <StatToken
                     kind="attack"
                     value={
-                      (card(s.villain).attack || 0) +
-                      s.attachments
-                        .filter((p) => p.attachedTo === s.villain.id)
-                        .reduce((n, p) => n + (card(p).attack || 0), 0)
+                      riskyBlankPower(s, "attack", s.villain.id)
+                        ? 0
+                        : (card(s.villain).attack || 0) +
+                          s.attachments
+                            .filter((p) => p.attachedTo === s.villain.id)
+                            .reduce((n, p) => n + (card(p).attack || 0), 0)
                     }
                     label="ATK"
                     compact
@@ -3868,10 +4048,12 @@ function Tabletop({
                   <StatToken
                     kind="threat"
                     value={
-                      (card(s.villain).scheme || 0) +
-                      s.attachments
-                        .filter((p) => p.attachedTo === s.villain.id)
-                        .reduce((n, p) => n + (card(p).scheme || 0), 0)
+                      riskyBlankPower(s, "scheme", s.villain.id)
+                        ? 0
+                        : (card(s.villain).scheme || 0) +
+                          s.attachments
+                            .filter((p) => p.attachedTo === s.villain.id)
+                            .reduce((n, p) => n + (card(p).scheme || 0), 0)
                     }
                     label="SCH"
                     compact
@@ -3883,6 +4065,25 @@ function Tabletop({
                 <Status piece={s.villain} />
               </div>
             </div>
+            {(s.environments || []).map((p) => (
+              <div className="scenario-environment" key={p.id}>
+                <button
+                  className="environment-card"
+                  onClick={() => inspect({ code: p.code, piece: p })}
+                  aria-label={`Inspect ${card(p).name}`}
+                >
+                  <CardImage code={p.code} />
+                </button>
+                <div>
+                  <span className="small-label">ENVIRONMENT</span>
+                  <strong>{card(p).name}</strong>
+                  <span className="environment-counter">
+                    <PremiumToken kind="counter" />
+                    {p.counters} {p.code === "02006a" ? "Infamy" : "Madness"}
+                  </span>
+                </div>
+              </div>
+            ))}
             <div className="scheme-area">
               <div
                 className={`main-scheme ${threatCritical ? "critical" : ""}`}
@@ -3897,6 +4098,15 @@ function Tabletop({
                 >
                   <CardImage code={s.scheme.code} />
                 </button>
+                <AttachedCards
+                  game={s}
+                  host={{
+                    ...s.villain,
+                    id: `main:${s.scheme.code}`,
+                    code: s.scheme.code,
+                  }}
+                  inspect={inspect}
+                />
                 <StatToken
                   kind="threat"
                   value={s.scheme.threat}
@@ -4061,7 +4271,24 @@ function Tabletop({
                       <Status piece={p} />
                     </span>
                   </button>
-                  <AttachedCards game={s} host={p} inspect={inspect} />
+                  <AttachedCards
+                    game={s}
+                    host={p}
+                    inspect={inspect}
+                    send={canUseAction ? sendAction : undefined}
+                  />
+                  {msMarvelAbilityOptions(s, p.id).map((a) => (
+                    <button
+                      key={a.id}
+                      className="ability-button"
+                      disabled={!canUseAction}
+                      onClick={() =>
+                        sendAction({ type: "ABILITY", id: p.id, action: a.id })
+                      }
+                    >
+                      {a.label}
+                    </button>
+                  ))}
                 </div>
               ))}
             </div>
@@ -4097,6 +4324,16 @@ function Tabletop({
                     <span className="exhausted-badge">EXHAUSTED</span>
                   )}
                 </button>
+                <AttachedCards
+                  game={s}
+                  host={{
+                    ...s.villain,
+                    id: `hero:${s.activePlayerId}`,
+                    code: heroCard(s).code,
+                  }}
+                  inspect={inspect}
+                  send={canUseAction ? sendAction : undefined}
+                />
                 <span
                   className={`readiness-label ${s.player.exhausted ? "spent" : ""}`}
                 >
@@ -4149,24 +4386,37 @@ function Tabletop({
                 {abilityActive && (
                   <button
                     className="ability-button"
-                    disabled={!canUseAction}
+                    title={
+                      spellUnavailable
+                        ? "Not enough resources to pay this Invocation's printed cost."
+                        : undefined
+                    }
+                    disabled={!canUseAction || spellUnavailable}
                     onClick={() =>
                       sendAction({ type: "ABILITY", id: "identity" })
                     }
                   >
                     <Sparkle size={13} />
-                    {s.heroId === "iron_man"
-                      ? "Use Futurist"
-                      : s.player.form === "hero"
-                        ? "Use Rechannel"
-                        : "Use Commander"}
+                    {importedIdentityAbility
+                      ? importedIdentityAbility.label
+                      : s.heroId === "iron_man"
+                        ? "Use Futurist"
+                        : s.heroId === "hulk"
+                          ? "Experimental Research"
+                          : s.heroId === "captain_america"
+                            ? "I Can Do This All Day!"
+                            : s.player.form === "hero"
+                              ? "Use Rechannel"
+                              : "Use Commander"}
                   </button>
                 )}
                 <button
                   className="flip-button hero-form-button"
                   data-form={s.player.form}
                   style={{ "--hero-accent": h.color } as CSSProperties}
-                  disabled={!acting || s.player.flipped}
+                  disabled={
+                    !acting || s.player.flipped || goblinIdentityLocked(s)
+                  }
                   onClick={() => send({ type: "FLIP" })}
                 >
                   <span className="hero-form-emblem">
@@ -4241,10 +4491,25 @@ function Tabletop({
                     s.player.inPlay.filter((p) => card(p).type_code === "ally")
                       .length
                   }{" "}
-                  / {s.player.inPlay.some((p) => p.code === "01073") ? 4 : 3}{" "}
-                  allies
+                  / {allyLimit(s)} allies
                 </span>
               </div>
+              {s.player.discard
+                .filter((p) => msMarvelDiscardPlayable(s, p))
+                .map((p) => (
+                  <button
+                    className="ability-button discard-play-action"
+                    key={p.id}
+                    disabled={!canUseAction || !!playable(s, p)}
+                    onClick={() => sendAction({ type: "PLAY", id: p.id })}
+                  >
+                    <CardImage code={p.code} />
+                    <span>
+                      Play Lockjaw from discard · {cardCost(s, card(p))}{" "}
+                      resources
+                    </span>
+                  </button>
+                ))}
               <div className="tableau-groups">
                 {[
                   {
@@ -4269,8 +4534,7 @@ function Tabletop({
                       {group.title}
                       <b>
                         {group.pieces.length}
-                        {group.key === "allies" &&
-                          ` / ${s.player.inPlay.some((p) => p.code === "01073") ? 4 : 3}`}
+                        {group.key === "allies" && ` / ${allyLimit(s)}`}
                       </b>
                     </span>
                     <div className="in-play-cards">
@@ -4289,6 +4553,13 @@ function Tabletop({
                               <span className="mini-token">
                                 <PremiumToken kind="health" />
                                 {pieceHP(s, p) - p.damage}
+                              </span>
+                            )}
+                            {!!p.storedCards?.length && (
+                              <span className="mini-token stored-token">
+                                <PremiumToken kind="counter" />
+                                {p.storedCards.length}
+                                <small>STORED</small>
                               </span>
                             )}
                             {p.counters > 0 && (
@@ -4384,6 +4655,46 @@ function Tabletop({
                   }
                 />
               </div>
+              {s.heroId === "doctor_strange" &&
+                s.phase !== "mulligan" &&
+                doctorStrangeTopInvocation(s) && (
+                  <section
+                    className="invocation-area"
+                    aria-label="Invocation deck"
+                  >
+                    <span className="table-group-label">INVOCATION DECK</span>
+                    <div className="table-piles">
+                      <TablePile
+                        kind="hero"
+                        count={s.player.invocationDeck?.length || 0}
+                        top={doctorStrangeTopInvocation(s)}
+                        label="Faceup Invocation"
+                        onOpen={() =>
+                          inspect({
+                            code: doctorStrangeTopInvocation(s)!.code,
+                            piece: doctorStrangeTopInvocation(s),
+                          })
+                        }
+                      />
+                      <TablePile
+                        kind="discard"
+                        count={s.player.invocationDiscard?.length || 0}
+                        top={s.player.invocationDiscard?.at(-1)}
+                        label="Invocation discard"
+                        onOpen={() =>
+                          setPile({
+                            title: "Invocation discard",
+                            cards: s.player.invocationDiscard || [],
+                          })
+                        }
+                      />
+                    </div>
+                    <small>
+                      {card(doctorStrangeTopInvocation(s)!).name} ·{" "}
+                      {card(doctorStrangeTopInvocation(s)!).cost || 0} resources
+                    </small>
+                  </section>
+                )}
               {s.encounter.dealt.filter((p) => p.dealtTo === s.activePlayerId)
                 .length > 0 && (
                 <div
@@ -4818,132 +5129,6 @@ function Tabletop({
             </p>
           )}
         </Modal>
-      )}
-    </main>
-  );
-}
-function Collection({ onInspect }: { onInspect: (code: string) => void }) {
-  const [q, setQ] = useState("");
-  const [faction, setFaction] = useState("all");
-  const [type, setType] = useState("all");
-  const cards = CARDS.filter(
-    (c) =>
-      (!q ||
-        `${c.name} ${c.traits || ""} ${plain(c.text)}`
-          .toLowerCase()
-          .includes(q.toLowerCase())) &&
-      (faction === "all" || c.faction_code === faction) &&
-      (type === "all" || c.type_code === type),
-  );
-  return (
-    <main id="main-content" className="collection page-width">
-      <div className="collection-title">
-        <span className="comic-caption">THE S.H.I.E.L.D. ARCHIVES</span>
-        <h1>
-          KNOW YOUR <span>SUPERPOWERS.</span>
-        </h1>
-        <p>
-          209 card faces. Every ally, every threat, every ace up your sleeve.
-        </p>
-      </div>
-      <div className="collection-toolbar">
-        <label className="search-box">
-          <MagnifyingGlass size={19} />
-          <input
-            placeholder="Search by name, trait, or card text…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            aria-label="Search cards"
-          />
-          {q && (
-            <button
-              className="icon-button"
-              onClick={() => setQ("")}
-              aria-label="Clear search"
-            >
-              <X size={16} />
-            </button>
-          )}
-        </label>
-        <select
-          value={faction}
-          onChange={(e) => setFaction(e.target.value)}
-          aria-label="Filter card faction"
-        >
-          <option value="all">All factions</option>
-          {[
-            "hero",
-            "justice",
-            "aggression",
-            "leadership",
-            "protection",
-            "basic",
-            "encounter",
-          ].map((f) => (
-            <option key={f} value={f}>
-              {f[0].toUpperCase() + f.slice(1)}
-            </option>
-          ))}
-        </select>
-        <select
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-          aria-label="Filter card type"
-        >
-          <option value="all">All card types</option>
-          {[...new Set(CARDS.map((c) => c.type_code))].sort().map((t) => (
-            <option value={t} key={t}>
-              {t.replace("_", " ")}
-            </option>
-          ))}
-        </select>
-        <span aria-live="polite">{cards.length} card faces</span>
-        {(faction !== "all" || type !== "all") && (
-          <button
-            className="text-button"
-            onClick={() => {
-              setFaction("all");
-              setType("all");
-              setQ("");
-            }}
-          >
-            Clear filters <X size={14} />
-          </button>
-        )}
-      </div>
-      {cards.length ? (
-        <div className="collection-grid">
-          {cards.map((c) => (
-            <button
-              key={c.code}
-              className="collection-card"
-              onClick={() => onInspect(c.code)}
-            >
-              <CardImage code={c.code} lazy />
-              <strong>{c.name}</strong>
-              <span>
-                {c.type_code.replace("_", " ")}
-                <small>#{c.code}</small>
-              </span>
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="empty-results">
-          <MagnifyingGlass size={40} />
-          <h2>No cards found</h2>
-          <p>Try a different name or clear the filters.</p>
-          <button
-            className="secondary-button"
-            onClick={() => {
-              setQ("");
-              setFaction("all");
-              setType("all");
-            }}
-          >
-            Clear filters
-          </button>
-        </div>
       )}
     </main>
   );

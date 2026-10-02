@@ -1,6 +1,8 @@
 # Marvel Champions — The Tabletop
 
-A playable, scripted **core-set, 1–3 hero hot-seat** fan implementation built with React, TypeScript, and Vite. Command one, two, or three heroes yourself. Choose each hero’s aspect and a shared villain, difficulty, and modular encounter. Play a mission at your own pace with explained action checkpoints and an automatic local save.
+A playable, scripted **1–3 hero hot-seat** fan implementation built with React, TypeScript, and Vite. Command one, two, or three heroes yourself. Choose each hero’s aspect and a shared villain, difficulty, and modular encounter. Play a mission at your own pace with explained action checkpoints and an automatic local save.
+
+The collection also imports every released product through **30 September 2026**, including 69 hero identities, campaign and scenario cards, separately sold Hero Packs, and the free Ronan modular set. **All heroes & starter decks** in the hero selector shows the product containing each hero, its release date, the source of each starter list, and the products supplying its card printings. Automated missions support the five Core identities, Captain America, Hulk, Ms. Marvel, Thor, Black Widow and Doctor Strange, with Rhino, Klaw, Ultron, Mutagen Formula and Risky Business scenarios. Their original source decks can be selected when the complete list validates. The live rules registry has 706 executable registrations; the remaining 3,845 faces and campaign automation are still pending. [Exact engine scope](docs/engine-expansion-coverage.md).
 
 **[Play the game](https://marvel-lcg.vercel.app)**
 
@@ -26,6 +28,11 @@ npm run test:design # desktop layouts, keyboard behavior, and axe audits
 npm run test:tabletop # crowded physical table, exhaustion, piles, and responsive layouts
 npm run test:flow     # action flow, payments, defense, attachments and dialog containment
 npm run test:onboarding # first mission, payments, saved coaching, glossary and shortcuts
+npm run test:catalog # all-content search, deck sources, pagination and mobile access
+npm run test:expansion # Hulk, Mutagen boosts, indirect damage and saved decisions
+npm run test:engine-continuation # Thor, Ms. Marvel, Risky Business, locks and response ordering
+npm run test:hero-packs # Black Widow preparations, Doctor Strange Invocations and source-deck launch
+npm run audit:engine # regenerate exact per-face support and source hashes
 node scripts/make-icons.mjs   # regenerate the PWA icons from public/favicon.svg
 ```
 
@@ -40,17 +47,17 @@ Run the same browser checks against a deployment with `BASE_URL=https://your-pro
 ## Included
 
 - Player registration/sign-in with a username and password, a one-time recovery code, private account sessions, and sign-out.
-- A player profile with up to 30 saved Core Set decks, editing and deck validation, direct use at mission setup, up to 5 resumable missions, and the last 100 completed results with win statistics.
+- A player profile with up to 30 saved supported decks, editing and deck validation, direct use at mission setup, up to 5 resumable missions, and the last 100 completed results with win statistics.
 - Account autosave preserves opening hands, decisions, payments, and action reviews. Guest progress stays separate; an unfinished guest mission can be explicitly added to an account.
-- Spider-Man, Captain Marvel, Iron Man, Black Panther, and She-Hulk.
-- Four selectable aspects with the official core starter-deck recipes: 15 hero + 14 aspect + 11 basic cards.
-- Rhino, Klaw, and Ultron; Standard I/II or Expert II/III.
-- Bomb Scare, Masters of Evil, Under Attack, Legions of Hydra, and The Doomsday Chair.
+- Spider-Man, Captain Marvel, Iron Man, Black Panther, She-Hulk, Captain America, Hulk, Ms. Marvel, Thor, Black Widow and Doctor Strange. The six expansion Hero Packs include their player-card products, obligations and nemeses; Doctor Strange has a separate five-card Invocation deck.
+- Four selectable aspects with app-constructed 40-card starter decks: 15 hero cards plus Core aspect/basic cards. Matching unique identity allies receive a legal replacement. Published source preconstructed lists retain product provenance and can configure a mission when every card and deck requirement is supported.
+- Rhino, Klaw, Ultron, Mutagen Formula and Risky Business; Standard I/II or Expert II/III.
+- Bomb Scare, Masters of Evil, Under Attack, Legions of Hydra, The Doomsday Chair, Goblin Gimmicks, A Mess of Things, Power Drain and Running Interference.
 - Mulligan, payments with typed and wild resources, identity abilities, basic actions, allies, upgrades/supports, encounter/boost cards, defense and interrupt windows, nemeses, obligations, status cards, scheme and villain transitions, and victory/defeat.
 - **Play your first mission** launches a fixed Spider-Man versus Rhino table with a seven-lesson coach that follows the actual game state and remembers progress after reload. Optional lessons can be skipped and the coach can be dismissed while you keep playing. Card inspection includes expandable keyword explanations; hand cards show a short reason when they cannot be played.
 - On laptop-height screens (below 960 px) the table switches to a compact layout: villain, identity controls, action bar and hand stay in view together. Crowded tables and shorter windows use ordinary scrolling so controls remain reachable.
-- Card inspection, searchable 209-face collection, deck inspection, discard inspection, battle log, optional sound, responsive layouts, keyboard focus, reduced-motion support, and fullscreen with `F`.
-- **Advisor:** *Suggest a move* in the action panel tries every legal action on a copy of the table with the hidden cards reshuffled, plays the round out, and proposes the move that scores best, with a short reason and a *Do it* button; every decision dialog shows the advisor's pick with *Choose this*. It is a helpful hint, not a strong player. **Undo** (Ctrl/Cmd+Z) takes back the last action of the current hero phase until a hidden card is revealed.
+- Card inspection, a paginated collection of all released card faces with product/aspect/type filters, deck inspection and product provenance, discard inspection, battle log, optional sound, responsive layouts, keyboard focus, reduced-motion support, and fullscreen with `F`.
+- **Advisor:** _Suggest a move_ in the action panel tries every legal action on a copy of the table with the hidden cards reshuffled, plays the round out, and proposes the move that scores best, with a short reason and a _Do it_ button; every decision dialog shows the advisor's pick with _Choose this_. It is a helpful hint, not a strong player. **Undo** (Ctrl/Cmd+Z) takes back the last action of the current hero phase until a hidden card is revealed.
 - A desktop team strip, individual hands/decks/health, player-order turns, per-hero villain activations, engaged minions, teammate defense, shared card targets, and hero elimination. Scenario values scale with the starting team size.
 - A full action review with card artwork, before/after stats, attack calculations, and a permanently visible **Proceed** button. **View table** closes the review without advancing the game; reopen it from the side panel. No automatic playback or timers. Enter or Space also acknowledges the current step.
 - **Tempo** (mission setup and the action panel): _Guided_ pauses after every resolved step; _Brisk_ pauses only for decisions, damage or status on your side, revealed encounters, placed threat and villain stage changes; _Expert_ pauses only for decisions and damage or status on your side. Steps that resolve without a pause stay in the log and in the **Recent steps** timeline, where each can be opened in full. The rules never change with the tempo; only where the game waits for you.
@@ -67,15 +74,17 @@ Run the same browser checks against a deployment with `BASE_URL=https://your-pro
 
 The engine uses the canonical split-face JSON from [zzorba/marvelsdb-json-data](https://github.com/zzorba/marvelsdb-json-data), with locally cached MarvelCDB card art. These snapshots contain 209 individual faces; the live API returned 205 records because linked faces and alternative printings are represented differently. Active main-scheme art is sourced from [Hall of Heroes](https://hallofheroeslcg.com/core-set-2/), since the original MarvelCDB filename mapping returned setup art for those faces.
 
-See `src/data/provenance.json` for retrieval details. The app never needs a live card service during play. `npm run sync:cards` refreshes snapshots and downloads missing artwork with bounded requests. The engine has explicit scripts for core card IDs; run tests and review any data changes after syncing.
+See `src/data/provenance.json` for Core Set retrieval details and `src/data/catalog-provenance.json` for the full import's pinned sources, per-product coverage, starter-list provenance and artwork results. `npm run sync:cards` refreshes the released-content snapshots and caches artwork with bounded requests. The Core Set snapshots retain their official errata. Exact Core reprints, whole-text declarative programs and installed dedicated modules extend the supported pool; unsupported clauses keep a card unavailable for automated play. Run tests and review data changes after syncing. [Import scope and sources](docs/content-import-2026-09-30.md).
+
+Artwork optimization requires FFmpeg. Imported card scans use WebP at up to 800 pixels; `npm run sync:cards -- --skip-optimize` retains the source scans instead.
 
 ## Implementation and scope
 
 The rules engine is a serializable state machine in `src/game/engine.ts`. Commands operate on a cloned state; invalid commands leave gameplay unchanged and return an error. Effects enter a queue that pauses at a meaningful action checkpoint or an explicit choice, payment, or selection. Player context is carried by queued effects; ownership and control are separate. `team.ts` rebinds the active view after save hydration, and `review.ts` records visible changes. The UI enables guided resolution by default; engine fixtures may use immediate resolution. Shuffle RNG is seeded and part of the saved state. The UI does not implement game effects.
 
-This is the first playable implementation, **not a claim of exhaustive rules certification**. Tests cover all proactive core event handlers, all core encounter handlers, key rule interactions, and complete seeded missions for all 15 hero/villain pairings. See [rules coverage](docs/rules-coverage.md) for remaining limitations and validation boundaries.
+This is the first playable implementation, **not a claim of exhaustive rules certification**. Tests cover all proactive core event handlers, all core encounter handlers, key rule interactions, and complete seeded missions across all 55 registered hero/scenario pairings, plus 540 missions with the six exact expansion source decks across five scenarios, both difficulties and all nine supported modular sets. See [rules coverage](docs/rules-coverage.md) for remaining limitations and validation boundaries.
 
-Online co-op, external deck import, campaigns, and expansions are not included. Custom decks use the supported Core Set card pool. Gameplay layout verification prioritizes desktop (1280–1920px); account pages are also checked at 390px and 320px. Guests have one save slot in the current browser. Signed-in players save missions to their account. Starting a new mission asks before replacing the currently open table; account missions remain in the profile until completed or explicitly deleted.
+Online co-op, external deck import and automated campaigns are not included. Full expansion automation is unfinished: 11 of 69 identities and five scenarios are registered. Mission setup and account deck validation use the executable card registry; importing a card never silently enables unsupported card effects. Gameplay layout verification prioritizes desktop (1280–1920px); account pages are also checked at 390px and 320px. Guests have one save slot in the current browser. Signed-in players save missions to their account. Starting a new mission asks before replacing the currently open table; account missions remain in the profile until completed or explicitly deleted.
 
 The lobby, archive, and decision dialogs use a comic-book visual system. The battlefield recreates a physical card table with a textured playmat, health dials, full card faces, separate draw/discard piles, sideways exhausted cards, and visible teammate tableaus. See [tabletop design research](docs/tabletop-design-research.md) for the real-world references and [visual direction](docs/visual-direction.md) for the broader interface and verification scope.
 

@@ -1,3 +1,9 @@
+import {
+  doctorStrangeAbilityOptions,
+  doctorStrangeTopInvocation,
+} from "./doctor-strange";
+import { thorAbilityOptions } from "./thor";
+import { msMarvelAbilityOptions } from "./ms-marvel";
 import { card, maxHP, pieceHP } from "./cards";
 import {
   abilityOptions,
@@ -37,27 +43,39 @@ function shuffleWith<T>(list: T[], random: () => number) {
 export function fairClone(s: GameState, random: () => number): GameState {
   const c = structuredClone(s);
   syncSeat(c);
+  const knownTop =
+    c.encounter.knownTop?.playerId === s.activePlayerId &&
+    c.encounter.knownTop.id === c.encounter.deck[0]?.id
+      ? c.encounter.deck[0]
+      : undefined;
   const unknownEncounter = [
     ...c.encounter.deck,
     ...c.encounter.dealt,
+    ...(c.encounter.storedBoosts || []),
     ...(c.attack?.pendingBoosts || []),
     ...(c.scheming?.pendingBoosts || []),
-  ].map((piece) => {
-    const p = { ...piece };
-    delete p.dealtTo;
-    return p;
-  });
+  ]
+    .filter((piece) => piece.id !== knownTop?.id)
+    .map((piece) => {
+      const p = { ...piece };
+      delete p.dealtTo;
+      return p;
+    });
   // Start from a stable inventory, so the real hidden ordering cannot affect
   // a suggestion even when the planner uses only a few samples.
   unknownEncounter.sort((a, b) => a.id.localeCompare(b.id));
   shuffleWith(unknownEncounter, random);
   let encounterIndex = 0;
   const takeEncounter = () => unknownEncounter[encounterIndex++];
-  c.encounter.deck = c.encounter.deck.map(takeEncounter);
+  c.encounter.deck = c.encounter.deck.map((_, index) =>
+    knownTop && index === 0 ? knownTop : takeEncounter(),
+  );
   c.encounter.dealt = c.encounter.dealt.map((slot) => ({
     ...takeEncounter(),
     dealtTo: slot.dealtTo,
   }));
+  if (c.encounter.storedBoosts)
+    c.encounter.storedBoosts = c.encounter.storedBoosts.map(takeEncounter);
   if (c.attack?.pendingBoosts)
     c.attack.pendingBoosts = c.attack.pendingBoosts.map(takeEncounter);
   if (c.scheming)
@@ -68,6 +86,16 @@ export function fairClone(s: GameState, random: () => number): GameState {
     ) || [],
   );
   for (const seat of c.players) {
+    // Invocation top is faceup; knowing it does not reveal the remaining order.
+    if (seat.player.invocationDeck?.length) {
+      const visible =
+        c.phase !== "mulligan" ? seat.player.invocationDeck.slice(0, 1) : [];
+      const unknown = seat.player.invocationDeck
+        .slice(visible.length)
+        .sort((a, b) => a.id.localeCompare(b.id));
+      shuffleWith(unknown, random);
+      seat.player.invocationDeck = [...visible, ...unknown];
+    }
     const drones = c.minions.filter((p) => p.droneCard?.ownerId === seat.id);
     const known = seat.id === c.activePlayerId ? lookedAt : new Set<string>();
     const hidden: Piece[] = [
@@ -136,6 +164,18 @@ export function candidates(s: GameState): Command[] {
           continue;
         list.push({ type: "ABILITY", id: p.id, action: o.id });
       }
+  }
+  for (const o of [
+    ...doctorStrangeAbilityOptions(s, "identity"),
+    ...thorAbilityOptions(s, "identity"),
+    ...msMarvelAbilityOptions(s, "identity"),
+  ]) {
+    const top = doctorStrangeTopInvocation(s);
+    if (
+      o.id !== "spell" ||
+      (top && canPay(s, card(top).cost || 0, [], undefined, top.code))
+    )
+      list.push({ type: "ABILITY", id: "identity", action: o.id });
   }
   const hero = s.player.form === "hero";
   if (!s.player.exhausted) {

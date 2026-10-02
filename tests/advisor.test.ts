@@ -223,7 +223,19 @@ describe("advisor", () => {
 
 describe("fair lookahead samples", () => {
   const sample = (s: GameState) => fairClone(s, () => 0);
-  it("resamples facedown dealt encounters and pending boosts while retaining their slots", () => {
+  const encounterInventory = (s: GameState) =>
+    [
+      ...s.encounter.deck,
+      ...s.encounter.dealt,
+      ...(s.encounter.storedBoosts || []),
+      ...(s.attack?.pendingBoosts || []),
+      ...(s.scheming?.pendingBoosts || []),
+      ...s.encounter.discard,
+      ...s.resolving.filter((p) => card(p).faction_code === "encounter"),
+    ]
+      .map((p) => ({ id: p.id, code: p.code }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+  it("resamples facedown dealt encounters, stored boosts and pending boosts while retaining their slots", () => {
     let s = dispatch(fresh(), { type: "FLIP" });
     s.player.hand = [];
     s = dispatch(s, { type: "END_TURN", discard: [] });
@@ -231,23 +243,102 @@ describe("fair lookahead samples", () => {
     const dealt = s.encounter.deck.pop()!;
     dealt.dealtTo = "p1";
     s.encounter.dealt = [dealt];
+    s.encounter.storedBoosts = [s.encounter.deck.pop()!];
     const copy = structuredClone(s);
     [copy.encounter.deck[0], copy.encounter.dealt[0]] = [
       copy.encounter.dealt[0],
       copy.encounter.deck[0],
     ];
     copy.encounter.dealt[0].dealtTo = "p1";
+    [copy.encounter.deck[1], copy.encounter.storedBoosts![0]] = [
+      copy.encounter.storedBoosts![0],
+      copy.encounter.deck[1],
+    ];
+    copy.encounter.deck.reverse();
+    const before = structuredClone(s);
     const left = sample(s),
       right = sample(copy);
     expect(left.encounter).toEqual(right.encounter);
     expect(left.attack?.pendingBoosts).toEqual(right.attack?.pendingBoosts);
+    expect(encounterInventory(left)).toEqual(encounterInventory(s));
+    expect(new Set(encounterInventory(left).map((p) => p.id)).size).toBe(
+      encounterInventory(left).length,
+    );
+    expect(left.encounter.storedBoosts).toHaveLength(1);
     expect(left.encounter.dealt[0].dealtTo).toBe("p1");
     expect(left.encounter.deck.every((p) => !p.dealtTo)).toBe(true);
     expect(left.encounter.deck).not.toBe(s.encounter.deck);
     expect(s.encounter.dealt).toEqual([dealt]);
+    expect(s).toEqual(before);
+    expect(left.hiddenInfo).toBe(s.hiddenInfo);
     const adviceLeft = planPrompt(s, { seed: 17, rollouts: 1 });
     const adviceRight = planPrompt(copy, { seed: 17, rollouts: 1 });
     expect(adviceLeft).toEqual(adviceRight);
+  });
+  it("Intimidation advice cannot inspect its real stored boost or hidden deck ordering, including after hydration", () => {
+    const command = (s: GameState, cmd: Parameters<typeof dispatch>[1]) => {
+      let result = dispatch(s, cmd);
+      expect(result.error).toBeUndefined();
+      for (let n = 0; result.review && n < 50; n++)
+        result = dispatch(result, { type: "PROCEED" });
+      expect(result.error).toBeUndefined();
+      return result;
+    };
+    let s = command(
+      newGame({
+        heroId: "spider_man",
+        aspect: "justice",
+        villainId: "mutagen_formula",
+        module: "goblin_gimmicks",
+        seed: 438,
+        pacing: "expert",
+      }),
+      { type: "MULLIGAN", ids: [] },
+    );
+    s.player.form = "hero";
+    s.player.hand = [];
+    s.minions = [];
+    const revealIntimidation = (state: GameState) => {
+      const index = state.encounter.deck.findIndex((p) => p.code === "02035");
+      expect(index).toBeGreaterThanOrEqual(0);
+      const [piece] = state.encounter.deck.splice(index, 1);
+      state.queue = [{ type: "reveal", piece, skip: true }];
+      state.prompt = {
+        kind: "choice",
+        title: "Encounter fixture",
+        text: "",
+        options: [{ id: "reveal", label: "Resolve", effects: [] }],
+      };
+      return command(state, { type: "CHOOSE", id: "reveal" });
+    };
+    s = revealIntimidation(s);
+    s = command(s, { type: "CHOOSE", id: "boost" });
+    expect(s.encounter.storedBoosts).toHaveLength(1);
+    s.player.hand = [makePiece(s, "01089")];
+    s = revealIntimidation(s);
+    expect(s.prompt?.title).toBe("Intimidation");
+    expect(s.prompt?.options.map((o) => o.id).sort()).toEqual(["boost", "pay"]);
+    const swapped = JSON.parse(JSON.stringify(s)) as GameState;
+    [swapped.encounter.storedBoosts![0], swapped.encounter.deck[0]] = [
+      swapped.encounter.deck[0],
+      swapped.encounter.storedBoosts![0],
+    ];
+    swapped.encounter.deck.reverse();
+    const before = structuredClone(s);
+    const left = sample(s),
+      right = sample(swapped);
+    expect(left.encounter).toEqual(right.encounter);
+    expect(left.seed).toBe(right.seed);
+    expect(encounterInventory(left)).toEqual(encounterInventory(s));
+    expect(new Set(encounterInventory(left).map((p) => p.id)).size).toBe(
+      encounterInventory(left).length,
+    );
+    const advice = planPrompt(s, { seed: 27, rollouts: 1 });
+    expect(advice).not.toBeNull();
+    expect(planPrompt(swapped, { seed: 27, rollouts: 1 })).toEqual(advice);
+    expect(s).toEqual(before);
+    expect(left.hiddenInfo).toBe(s.hiddenInfo);
+    expect(swapped.hiddenInfo).toBe(s.hiddenInfo);
   });
   it("resamples hidden drone cards with the owning deck and retains known Futurist cards", () => {
     const s = fresh("iron_man");

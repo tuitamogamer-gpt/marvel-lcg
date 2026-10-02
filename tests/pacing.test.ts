@@ -307,6 +307,8 @@ describe("tempo: fewer acknowledgements without hiding consequences", () => {
     expect(counts.brisk).toBeLessThan(counts.guided);
     expect(counts.expert).toBeLessThanOrEqual(counts.brisk);
   });
+  // Six bounded three-round simulations also run beside the expansion matrix
+  // in the full suite; the click budgets remain the assertions below.
   it("keeps brisk and expert within a click budget per round", () => {
     for (const [heroes, villainId, brisk, expert] of [
       [[{ heroId: "spider_man", aspect: "justice" }], "rhino", 9, 5],
@@ -338,7 +340,7 @@ describe("tempo: fewer acknowledgements without hiding consequences", () => {
         ).toBeLessThanOrEqual(budget);
       }
     }
-  });
+  }, 20_000);
   it("brisk pauses to read a revealed encounter; expert reads it from the timeline or log", () => {
     const brisk = playRounds(
       "brisk",

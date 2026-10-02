@@ -210,6 +210,9 @@ try {
     .getByRole("button", { name: "Card library", exact: false })
     .click();
   await page
+    .getByRole("combobox", { name: "Filter card product", exact: true })
+    .selectOption("core");
+  await page
     .getByRole("textbox", { name: "Search cards" })
     .fill("Armored Guard");
   await page.locator(".collection-card").click();

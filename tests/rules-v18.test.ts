@@ -1208,11 +1208,8 @@ it("Under Fire reveals its explicit encounter immediately and deals Surge separa
   let s = base();
   deck(s, "01105", "01112", "01101");
   s = reveal(s, "01193");
-  expect(s.prompt?.options.map((p) => p.id)).toEqual([
-    "text-first",
-    "surge-first",
-  ]);
-  s = settle(send(s, { type: "CHOOSE", id: "text-first" }));
+  expect(s.prompt?.options.map((p) => p.id)).toEqual(["text", "surge"]);
+  s = settle(send(s, { type: "CHOOSE", id: "text" }));
   expect(s.villain.tough).toBe(true);
   expect(s.player.confused).toBe(false);
   expect(s.encounter.dealt.map((p) => p.code)).toEqual(["01112"]);
@@ -1221,7 +1218,7 @@ it("the player may resolve Under Fire's Surge before its other When Revealed abi
   let s = base();
   deck(s, "01105", "01112", "01101");
   s = reveal(s, "01193");
-  s = settle(send(s, { type: "CHOOSE", id: "surge-first" }));
+  s = settle(send(s, { type: "CHOOSE", id: "surge" }));
   expect(s.villain.tough).toBe(false);
   expect(s.player.confused).toBe(true);
   expect(s.encounter.dealt.map((p) => p.code)).toEqual(["01105"]);

@@ -1,5 +1,16 @@
+import { thorResourceSources } from "./thor";
+import { blackWidowResourceSources } from "./black-widow";
+import { doctorStrangeResourceSources } from "./doctor-strange";
+import { msMarvelResourceSources } from "./ms-marvel";
+import { rulesCode } from "./rules-code";
 import { CARDS, card, heroCard, resources } from "./cards";
 import { allInPlay } from "./team";
+import { captainResourceSources } from "./captain-america";
+import { hulkResourceSources, hulkCanSpendCard } from "./hulk";
+import { hulkPackResourceSources } from "./hulk-pack";
+import { captainPackResourceSources } from "./captain-pack";
+import { cardScript } from "./script-registry";
+import { resourceAbility } from "./scripts/runtime";
 import type { GameState, Prompt, Resource } from "./types";
 
 export function paymentSubject(s: GameState, prompt: Prompt) {
@@ -29,7 +40,7 @@ export function paymentSources(
 ) {
   const target = targetCode ? card(targetCode) : undefined;
   const sources: PaymentSource[] = s.player.hand
-    .filter((p) => p.id !== exclude)
+    .filter((p) => p.id !== exclude && hulkCanSpendCard(s, p))
     .map((p) => ({
       id: p.id,
       name: card(p).name,
@@ -52,7 +63,7 @@ export function paymentSources(
       kind: "ability",
     });
   for (const p of s.player.inPlay.filter((p) => !p.exhausted)) {
-    if (p.code === "01008" && p.counters > 0 && s.player.form === "hero")
+    if (rulesCode(p) === "01008" && p.counters > 0 && s.player.form === "hero")
       sources.push({
         id: p.id,
         name: "Web-Shooter",
@@ -61,13 +72,35 @@ export function paymentSources(
         description: `Exhaust · spend 1 of ${p.counters} web counters${p.counters === 1 ? " · then discard" : ""}`,
         kind: "ability",
       });
-    if (p.code === "01033" && s.player.discard.length)
+    if (rulesCode(p) === "01033" && s.player.discard.length)
       sources.push({
         id: p.id,
         name: "Pepper Potts",
         code: p.code,
         resources: resources(card(s.player.discard.at(-1)!)),
         description: `Exhaust · copy ${card(s.player.discard.at(-1)!).name}`,
+        kind: "ability",
+      });
+  }
+  sources.push(...thorResourceSources(s));
+  sources.push(...blackWidowResourceSources(s, targetCode));
+  sources.push(...doctorStrangeResourceSources(s));
+  sources.push(...msMarvelResourceSources(s, targetCode));
+  sources.push(...captainResourceSources(s));
+  sources.push(...hulkResourceSources(s));
+  sources.push(
+    ...captainPackResourceSources(s),
+    ...hulkPackResourceSources(s, targetCode),
+  );
+  for (const piece of s.player.inPlay) {
+    const script = cardScript(piece);
+    if (!script || script.implementation !== "script") continue;
+    const ability = resourceAbility(script, piece, s.player.form);
+    if (ability && !sources.some((source) => source.id === piece.id))
+      sources.push({
+        ...ability,
+        name: card(piece).name,
+        description: "Exhaust · generate printed resources",
         kind: "ability",
       });
   }

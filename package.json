@@ -18,7 +18,12 @@
     "test:design": "node scripts/design-check.mjs",
     "test:tabletop": "node scripts/tabletop-check.mjs",
     "test:flow": "node scripts/flow-check.mjs",
-    "test:onboarding": "node scripts/onboarding-check.mjs"
+    "test:onboarding": "node scripts/onboarding-check.mjs",
+    "test:catalog": "node scripts/catalog-check.mjs",
+    "test:expansion": "node scripts/expansion-check.mjs",
+    "test:engine-continuation": "node scripts/engine-continuation-check.mjs",
+    "audit:engine": "node scripts/audit-engine-expansion.mjs",
+    "test:hero-packs": "node scripts/hero-pack-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

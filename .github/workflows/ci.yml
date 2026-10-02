@@ -48,6 +48,18 @@ jobs:
       - run: npm run test:onboarding
         env:
           BASE_URL: http://127.0.0.1:5174
+      - run: npm run test:catalog
+        env:
+          BASE_URL: http://127.0.0.1:5174
+      - run: npm run test:expansion
+        env:
+          BASE_URL: http://127.0.0.1:5174
+      - run: npm run test:engine-continuation
+        env:
+          BASE_URL: http://127.0.0.1:5174
+      - run: npm run test:hero-packs
+        env:
+          BASE_URL: http://127.0.0.1:5174
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

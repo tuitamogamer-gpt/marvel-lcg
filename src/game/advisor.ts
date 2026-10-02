@@ -1,4 +1,8 @@
 import {
+  doctorStrangeAbilityOptions,
+  doctorStrangeTopInvocation,
+} from "./doctor-strange";
+import {
   card,
   handSize,
   heroCard,
@@ -258,6 +262,18 @@ function usefulAbility(s: GameState): Advice | null {
   return null;
 }
 function identityAbility(s: GameState): Advice | null {
+  const top = doctorStrangeTopInvocation(s);
+  const strange = doctorStrangeAbilityOptions(s, "identity").find(
+    (o) =>
+      o.id !== "spell" ||
+      (top && canPay(s, card(top).cost || 0, [], undefined, top.code)),
+  );
+  if (strange)
+    return {
+      command: { type: "ABILITY", id: "identity", action: strange.id },
+      title: strange.label,
+      reason: "Use the visible Invocation and your printed identity ability.",
+    };
   if (s.player.form === "alter") {
     if (s.heroId === "iron_man" && !s.flags.futurist)
       return {

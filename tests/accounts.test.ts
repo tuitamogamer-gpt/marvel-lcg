@@ -424,10 +424,19 @@ describe("private player accounts", () => {
 });
 
 describe("playable saved decks", () => {
-  it("accepts all 20 starter lists and rejects an off-aspect card", () => {
-    for (const h of HEROES)
-      for (const a of ASPECTS)
-        expect(deckErrors(h.id, a.id, deckCodes(h.id, a.id))).toEqual([]);
+  it.each(
+    HEROES.flatMap((hero) =>
+      ASPECTS.map((aspect) => ({
+        heroId: hero.id,
+        aspect: aspect.id,
+      })),
+    ),
+  )("accepts the $heroId $aspect starter list", ({ heroId, aspect }) => {
+    const codes = deckCodes(heroId, aspect);
+    expect(codes).toHaveLength(40);
+    expect(deckErrors(heroId, aspect, codes)).toEqual([]);
+  });
+  it("rejects an off-aspect card in a starter list", () => {
     const codes = deckCodes("spider_man", "justice");
     codes[codes.length - 1] = "01050";
     expect(deckErrors("spider_man", "justice", codes)).not.toEqual([]);

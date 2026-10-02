@@ -1,6 +1,23 @@
+import { thorStats } from "./thor";
+import { blackWidowStats } from "./black-widow";
+import {
+  doctorStrangeHandSize,
+  doctorStrangeStats,
+  doctorStrangeTraits,
+} from "./doctor-strange";
+import { expansionErrata } from "./expansion-errata";
+import { msMarvelStats } from "./ms-marvel";
+import { identityMatch } from "./unique";
+import { rulesCode } from "./rules-code";
+import { captainStats } from "./captain-america";
+import { hulkStats } from "./hulk";
+import { captainPackModifiers, captainPackStats } from "./captain-pack";
+import { scriptedModifier } from "./script-registry";
 import playerData from "../data/core-player.json" with { type: "json" };
 import encounterData from "../data/core-encounter.json" with { type: "json" };
 import errata from "../data/core-errata.json" with { type: "json" };
+import catalogData from "../data/catalog-cards.json" with { type: "json" };
+import catalogImages from "../data/catalog-images.json" with { type: "json" };
 import type { Aspect, Card, GameState, Piece, Resource } from "./types";
 // Keep the downloaded snapshots intact; official corrections survive data syncs.
 export const CARDS = ([...playerData, ...encounterData] as Card[]).map((c) => {
@@ -26,10 +43,16 @@ export const CARDS = ([...playerData, ...encounterData] as Card[]).map((c) => {
       }
     : c;
 });
-export const DB = Object.fromEntries(CARDS.map((c) => [c.code, c])) as Record<
-  string,
-  Card
->;
+/** Read-only collection: imported cards do not gain rules handlers by being in the database. */
+export const CATALOG_CARDS = [
+  ...CARDS,
+  ...(catalogData as Card[])
+    .map(expansionErrata)
+    .filter((c) => !CARDS.some((core) => core.code === c.code)),
+];
+export const DB = Object.fromEntries(
+  CATALOG_CARDS.map((c) => [c.code, c]),
+) as Record<string, Card>;
 DB.drone = {
   code: "drone",
   name: "Ultron Drone",
@@ -50,9 +73,15 @@ export const plain = (text = "") =>
     .replace(/<[^>]*>/g, "")
     .replace(/\[\[|\]\]/g, "")
     .replace(/\[per_hero\]/g, "per player");
+const missingArtwork = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="419" viewBox="0 0 300 419"><rect width="300" height="419" rx="8" fill="#e8ece9"/><rect x="12" y="12" width="276" height="395" rx="6" fill="none" stroke="#a9b8be"/><text x="150" y="201" text-anchor="middle" font-family="sans-serif" font-size="15" fill="#173657">Artwork unavailable</text><text x="150" y="225" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#45596b">Open card details to read the card</text></svg>')}`;
+const coreImageCodes = new Set(CARDS.map((c) => c.code));
 export const imageFor = (code: string) =>
-  code === "drone" ? "/art/player-back.svg" : `/cards/${code}.png`;
-export const HEROES = [
+  code === "drone"
+    ? "/art/player-back.svg"
+    : coreImageCodes.has(code)
+      ? `/cards/${code}.png`
+      : (catalogImages as Record<string, string>)[code] || missingArtwork;
+export const CORE_HEROES = [
   {
     id: "spider_man",
     code: "01001a",
@@ -124,6 +153,93 @@ export const HEROES = [
     complexity: 2,
   },
 ];
+export const HEROES = [
+  ...CORE_HEROES,
+  {
+    id: "captain_america",
+    code: "03001a",
+    alter: "03001b",
+    name: "Captain America",
+    identity: "Steve Rogers",
+    aspect: "leadership" as Aspect,
+    color: "#588dcc",
+    tag: "I can do this all day.",
+    description:
+      "Lead your allies, block damage with your shield, and ready Captain America for another action.",
+    style: "Leadership · Resilient",
+    complexity: 2,
+  },
+  {
+    id: "hulk",
+    code: "10001a",
+    alter: "10001b",
+    name: "Hulk",
+    identity: "Bruce Banner",
+    aspect: "aggression" as Aspect,
+    color: "#6baa65",
+    tag: "Hulk smash!",
+    description:
+      "Build physical resources and turn a basic attack into a devastating Hulk Smash. Spend your hand before Hulk's turn ends.",
+    style: "Strength · Explosive",
+    complexity: 2,
+  },
+  {
+    id: "ms_marvel",
+    code: "05001a",
+    alter: "05001b",
+    name: "Ms. Marvel",
+    identity: "Kamala Khan",
+    aspect: "protection" as Aspect,
+    color: "#dbb649",
+    tag: "Embiggen!",
+    description:
+      "Stretch your event cards with Embiggen and Shrink, then return them with Morphogenetics.",
+    style: "Events · Flexible",
+    complexity: 3,
+  },
+  {
+    id: "thor",
+    code: "06001a",
+    alter: "06001b",
+    name: "Thor",
+    identity: "Odinson",
+    aspect: "aggression" as Aspect,
+    color: "#cf5b50",
+    tag: "Have at thee!",
+    description:
+      "Bring Mjolnir to the battle, engage minions, and turn energy into Lightning Strike.",
+    style: "Minions · Thunder",
+    complexity: 2,
+  },
+  {
+    id: "black_widow",
+    code: "08001a",
+    alter: "08001b",
+    name: "Black Widow",
+    identity: "Natasha Romanoff",
+    aspect: "justice" as Aspect,
+    color: "#bd4b48",
+    tag: "Always prepared.",
+    description:
+      "Prepare for enemy actions, cancel their plans, and answer each resolved Preparation with Widowmaker.",
+    style: "Preparations · Control",
+    complexity: 3,
+  },
+  {
+    id: "doctor_strange",
+    code: "09001a",
+    alter: "09001b",
+    name: "Doctor Strange",
+    identity: "Stephen Strange",
+    aspect: "protection" as Aspect,
+    color: "#647dbe",
+    tag: "Master of the Mystic Arts.",
+    description:
+      "Resolve spells from your separate Invocation deck, protect your allies, and ready with the Cloak of Levitation.",
+    style: "Invocations · Protection",
+    complexity: 3,
+  },
+];
 export const VILLAINS = [
   {
     id: "rhino",
@@ -164,8 +280,38 @@ export const VILLAINS = [
       "An army that never stops growing. A plan to end humanity. No second chances.",
     color: "#89a1aa",
   },
+  {
+    id: "mutagen_formula",
+    name: "Mutagen Formula",
+    codes: ["02014", "02015", "02016"],
+    schemes: ["02017b", "02018b"],
+    module: "goblin_gimmicks",
+    difficulty: 3,
+    title: "Mutagen Formula",
+    location: "New York City",
+    color: "#93bb74",
+    description:
+      "Face Green Goblin and his growing mutagen army. Goblin minions reinforce each other and the main scheme.",
+  },
+  {
+    id: "risky_business",
+    name: "Risky Business",
+    codes: ["02001a", "02002a", "02003a"],
+    schemes: ["02004b", "02005b"],
+    module: "goblin_gimmicks",
+    difficulty: 2,
+    title: "Hostile Takeover",
+    location: "Oscorp",
+    color: "#93bb74",
+    description:
+      "Expose Norman Osborn's criminal enterprise and face Green Goblin as his influence and madness change the battlefield.",
+  },
 ];
 export const MODULES = [
+  { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
+  { id: "power_drain", name: "Power Drain", difficulty: 3 },
+  { id: "running_interference", name: "Running Interference", difficulty: 3 },
+  { id: "goblin_gimmicks", name: "Goblin Gimmicks", difficulty: 2 },
   { id: "bomb_scare", name: "Bomb Scare", difficulty: 1 },
   { id: "masters_of_evil", name: "Masters of Evil", difficulty: 2 },
   { id: "under_attack", name: "Under Attack", difficulty: 3 },
@@ -260,16 +406,30 @@ const aspects: Record<Aspect, Record<string, number>> = {
   },
 };
 export function deckCodes(hero: string, aspect: Aspect) {
-  const a = CARDS.filter(
-    (c) =>
-      c.set_code === hero &&
-      c.faction_code === "hero" &&
-      !["hero", "alter_ego"].includes(c.type_code),
-  ).flatMap((c) => Array(c.quantity).fill(c.code)) as string[];
-  return a.concat(
+  const source = CORE_HEROES.some((h) => h.id === hero) ? CARDS : CATALOG_CARDS;
+  const a = source
+    .filter(
+      (c) =>
+        c.set_code === hero &&
+        c.faction_code === "hero" &&
+        !["hero", "alter_ego"].includes(c.type_code) &&
+        !c.permanent,
+    )
+    .flatMap((c) => Array(c.quantity).fill(c.code)) as string[];
+  const starter = a.concat(
     Object.entries({ ...basics, ...aspects[aspect] }).flatMap(([c, n]) =>
       Array(n).fill(c),
     ),
+  );
+  // An identity cannot include its matching unique ally. Uppercut preserves
+  // the existing Aggression starter; Emergency is legal in every other aspect
+  // and its second copy remains below the printed three-copy limit.
+  return starter.map((code) =>
+    identityMatch(hero, card(code))
+      ? aspect === "aggression"
+        ? "01054"
+        : "01085"
+      : code,
   );
 }
 export function resources(c: Card, target?: Card): Resource[] {
@@ -288,19 +448,28 @@ export function heroCard(s: GameState) {
   return card(s.player.form === "hero" ? h.code : h.alter);
 }
 export function has(s: GameState, code: string) {
-  return s.player.inPlay.some((p) => p.code === code);
+  return s.player.inPlay.some((p) => rulesCode(p) === rulesCode(code));
 }
 export function maxHP(s: GameState) {
   return (
     card(HEROES.find((h) => h.id === s.heroId)!.code).health! +
     s.player.inPlay.reduce(
-      (n, p) => n + (p.code === "01036" ? 6 : p.code === "01039" ? 1 : 0),
+      (n, p) =>
+        n + (rulesCode(p) === "01036" ? 6 : rulesCode(p) === "01039" ? 1 : 0),
       0,
-    )
+    ) +
+    scriptedModifier(s, "health") +
+    hulkStats(s).health +
+    msMarvelStats(s).health +
+    captainPackModifiers(s, "hero").hp
   );
 }
 export function aerial(s: GameState) {
-  return s.player.form === "hero" && (has(s, "01017") || !!s.flags.aerial);
+  return (
+    (s.player.form === "hero" &&
+      (has(s, "01017") || !!s.flags.aerial || thorStats(s).aerial)) ||
+    doctorStrangeTraits(s).includes("Aerial")
+  );
 }
 export function heroStats(s: GameState) {
   const h = card(HEROES.find((h) => h.id === s.heroId)!.code);
@@ -308,14 +477,37 @@ export function heroStats(s: GameState) {
     attack:
       h.attack! +
       (has(s, "01057") ? 1 : 0) +
-      s.player.inPlay.filter((p) => p.code === "01028").length * 2 +
-      Number(s.flags.lead || 0),
-    thwart: h.thwart! + (has(s, "01065") ? 1 : 0) + Number(s.flags.lead || 0),
+      s.player.inPlay.filter((p) => rulesCode(p) === "01028").length * 2 +
+      Number(s.flags.lead || 0) +
+      scriptedModifier(s, "attack") +
+      hulkStats(s).atk +
+      msMarvelStats(s).atk +
+      thorStats(s).atk +
+      doctorStrangeStats(s).attack +
+      captainPackStats(s).attack,
+    thwart:
+      h.thwart! +
+      (has(s, "01065") ? 1 : 0) +
+      Number(s.flags.lead || 0) +
+      captainStats(s).thw +
+      msMarvelStats(s).thw +
+      doctorStrangeStats(s).thwart +
+      scriptedModifier(s, "thwart") +
+      captainPackStats(s).thwart,
     defense:
       h.defense! +
       (has(s, "01081") ? 1 : 0) +
-      (has(s, "01016") ? (aerial(s) ? 2 : 1) : 0),
-    recover: card(HEROES.find((h) => h.id === s.heroId)!.alter).recover!,
+      (has(s, "01016") ? (aerial(s) ? 2 : 1) : 0) +
+      captainStats(s).def +
+      msMarvelStats(s).def +
+      blackWidowStats(s).defense +
+      doctorStrangeStats(s).defense +
+      scriptedModifier(s, "defense"),
+    recover:
+      card(HEROES.find((h) => h.id === s.heroId)!.alter).recover! +
+      scriptedModifier(s, "recover") +
+      hulkStats(s).recover +
+      msMarvelStats(s).recover,
   };
 }
 export function handSize(s: GameState) {
@@ -328,17 +520,26 @@ export function handSize(s: GameState) {
               card(p).type_code === "upgrade" &&
               card(p).traits?.includes("Tech."),
           ).length,
-        )
-    : heroCard(s).hand_size!;
+        ) +
+        scriptedModifier(s, "hand_size") +
+        doctorStrangeHandSize(s)
+    : heroCard(s).hand_size! +
+        scriptedModifier(s, "hand_size") +
+        doctorStrangeHandSize(s);
 }
 export function pieceHP(s: GameState, p: Piece) {
   return (
     (p.code === "drone"
-      ? 1 + s.attachments.filter((p) => p.code === "01142").length
-      : card(p).health || 0) +
-    (s.villain.code === "01136" && card(p).traits?.includes("Drone.") ? 1 : 0) +
-    s.attachments.filter((a) => a.attachedTo === p.id && a.code === "01163")
-      .length *
-      3
+      ? 1 + s.attachments.filter((p) => rulesCode(p) === "01142").length
+      : (card(p).health || 0) * (card(p).health_per_hero ? s.playerCount : 1)) +
+    (rulesCode(s.villain) === "01136" && card(p).traits?.includes("Drone.")
+      ? 1
+      : 0) +
+    s.attachments.filter(
+      (a) => a.attachedTo === p.id && rulesCode(a) === "01163",
+    ).length *
+      3 +
+    scriptedModifier(s, "health", p) +
+    captainPackModifiers(s, p.id).hp
   );
 }

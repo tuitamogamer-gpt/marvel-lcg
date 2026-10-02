@@ -1,4 +1,7 @@
-import { ASPECTS, CARDS, HEROES, card, deckCodes } from "./cards.js";
+import { ASPECTS, CATALOG_CARDS, HEROES, card, deckCodes } from "./cards.js";
+import { identityMatch, uniqueMatches } from "./unique";
+import { hasExecutableScript } from "./script-registry";
+import { CAPTAIN_AMERICA_SCRIPT_CODES } from "./captain-america";
 import type { Aspect, Card } from "./types";
 
 export function countsFor(codes: string[]) {
@@ -11,12 +14,20 @@ export function copyLimit(c: Card) {
   return c.deck_limit ?? (c.is_unique ? 1 : 3);
 }
 export function deckOptions(heroId: string, aspect: Aspect) {
-  return CARDS.filter(
+  const heroPack = card(
+    HEROES.find((h) => h.id === heroId)?.code || "",
+  )?.pack_code;
+  return CATALOG_CARDS.filter(
     (c) =>
+      !identityMatch(heroId, c) &&
+      (hasExecutableScript(c) ||
+        (CAPTAIN_AMERICA_SCRIPT_CODES as readonly string[]).includes(c.code)) &&
       ["ally", "event", "resource", "support", "upgrade"].includes(
         c.type_code,
       ) &&
-      ((c.faction_code === "hero" && c.set_code === heroId) ||
+      ((c.faction_code === "hero" &&
+        c.set_code === heroId &&
+        c.pack_code === heroPack) ||
         c.faction_code === aspect ||
         c.faction_code === "basic"),
   );
@@ -57,5 +68,27 @@ export function deckErrors(
         `${card(code).name}: maximum ${copyLimit(card(code))} copies.`,
       );
   }
+  const uniqueCards = codes
+    .map((code) => card(code))
+    .filter((c) => c?.is_unique);
+  for (let i = 0; i < uniqueCards.length; i++)
+    if (uniqueCards.slice(i + 1).some((c) => uniqueMatches(uniqueCards[i], c)))
+      errors.push(
+        `${uniqueCards[i].name}: matching unique cards cannot share a deck.`,
+      );
+  const names = new Map<string, { count: number; limit: number }>();
+  for (const [code, count] of Object.entries(counts)) {
+    const c = card(code);
+    if (!c || c.faction_code === "hero" || c.is_unique) continue;
+    const entry = names.get(c.name) || { count: 0, limit: copyLimit(c) };
+    entry.count += count;
+    entry.limit = Math.min(entry.limit, copyLimit(c));
+    names.set(c.name, entry);
+  }
+  for (const [name, entry] of names)
+    if (entry.count > entry.limit)
+      errors.push(
+        `${name}: maximum ${entry.limit} copies across all printings.`,
+      );
   return [...new Set(errors)];
 }
