@@ -199,19 +199,19 @@
   pointer-events: none;
   z-index: -1;
 }
-.physical-table .playmat > .zone-label {
+.physical-table .table-play-area > .zone-label {
   background: transparent;
   border: 0;
   padding: 9px 14px 3px;
   color: #edc8bd;
   font-size: 8px;
 }
-.physical-table .playmat > .zone-label > span:last-child {
+.physical-table .table-play-area > .zone-label > span:last-child {
   color: #b4c2c3;
   font-size: 8px;
   letter-spacing: 0.6px;
 }
-.physical-table .playmat > .zone-label svg {
+.physical-table .table-play-area > .zone-label svg {
   width: 13px;
   height: 13px;
 }
@@ -1440,7 +1440,7 @@ button.table-pile:hover .pile-face {
   .physical-table .solo-strip .team-seat {
     max-width: none;
   }
-  .physical-table .playmat > .zone-label > span:last-child {
+  .physical-table .table-play-area > .zone-label > span:last-child {
     display: none;
   }
   .physical-table .opposition {

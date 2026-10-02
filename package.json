@@ -18,6 +18,7 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"src/**/*.tsx\" \"src/*.css\" \"tests/**/*.ts\" \"scripts/*.mjs\" vite.config.ts",
     "test:design": "node scripts/design-check.mjs",
     "test:tabletop": "node scripts/tabletop-check.mjs",
+    "test:viewport-fit": "node scripts/viewport-fit-check.mjs",
     "test:flow": "node scripts/flow-check.mjs",
     "test:onboarding": "node scripts/onboarding-check.mjs",
     "test:catalog": "node scripts/catalog-check.mjs",

@@ -129,7 +129,7 @@
   border-color: #7eacd0;
   color: #fff;
 }
-.physical-table .playmat > .zone-label {
+.physical-table .table-play-area > .zone-label {
   color: #fff;
   padding-block: 8px;
   background: linear-gradient(90deg, #a52335d9, #60233866 48%, transparent);

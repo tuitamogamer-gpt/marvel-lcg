@@ -3992,803 +3992,823 @@ function Tabletop({
               <Palette size={15} /> Customize table
             </button>
           </div>
-          <div className="zone-label">
-            <span>
-              <Skull size={17} weight="fill" /> VILLAIN PLAY AREA
-            </span>
-            <span>
-              {s.playerCount} {s.playerCount === 1 ? "HERO" : "HEROES"} · SHARED
-              PLAY AREA
-            </span>
-          </div>
-          <section className="opposition">
-            <div className="villain-area">
-              <div className="host-card-stack">
-                <button
-                  className="table-card villain-card"
-                  onClick={() => inspect({ code: s.villain.code })}
-                >
-                  <CardImage code={s.villain.code} />
-                  <span className="inspect-hint">
-                    <Eye size={13} /> Inspect
-                  </span>
-                </button>
-                <AttachedCards
-                  game={s}
-                  host={s.villain}
-                  inspect={inspect}
-                  send={canUseAction ? sendAction : undefined}
-                />
-              </div>
-              <div className="villain-info">
-                <span className="small-label">
-                  VILLAIN · STAGE {["", "I", "II", "III"][s.villain.stage]}
-                </span>
-                <h2>{card(s.villain).name.toUpperCase()}</h2>
-                <HealthDial
-                  value={s.villain.hp}
-                  max={s.villain.maxHp}
-                  label="Villain HP"
-                  villain
-                />
-                <div className="enemy-stats stat-row">
-                  <StatToken
-                    kind="attack"
-                    value={
-                      riskyBlankPower(s, "attack", s.villain.id)
-                        ? 0
-                        : (card(s.villain).attack || 0) +
-                          s.attachments
-                            .filter((p) => p.attachedTo === s.villain.id)
-                            .reduce((n, p) => n + (card(p).attack || 0), 0)
-                    }
-                    label="ATK"
-                    compact
-                  />
-                  <StatToken
-                    kind="threat"
-                    value={
-                      riskyBlankPower(s, "scheme", s.villain.id)
-                        ? 0
-                        : (card(s.villain).scheme || 0) +
-                          s.attachments
-                            .filter((p) => p.attachedTo === s.villain.id)
-                            .reduce((n, p) => n + (card(p).scheme || 0), 0)
-                    }
-                    label="SCH"
-                    compact
-                  />
-                </div>
-                <span className="stat-caption">
-                  Before boosts & triggered abilities
-                </span>
-                <Status piece={s.villain} />
-              </div>
+          <div className="table-play-area">
+            <div className="zone-label">
+              <span>
+                <Skull size={17} weight="fill" /> VILLAIN PLAY AREA
+              </span>
+              <span>
+                {s.playerCount} {s.playerCount === 1 ? "HERO" : "HEROES"} ·
+                SHARED PLAY AREA
+              </span>
             </div>
-            {(s.environments || []).map((p) => (
-              <div className="scenario-environment" key={p.id}>
-                <button
-                  className="environment-card"
-                  onClick={() => inspect({ code: p.code, piece: p })}
-                  aria-label={`Inspect ${card(p).name}`}
-                >
-                  <CardImage code={p.code} />
-                </button>
-                <div>
-                  <span className="small-label">ENVIRONMENT</span>
-                  <strong>{card(p).name}</strong>
-                  <span className="environment-counter">
-                    <PremiumToken kind="counter" />
-                    {p.counters} {p.code === "02006a" ? "Infamy" : "Madness"}
-                  </span>
-                </div>
-              </div>
-            ))}
-            <div className="scheme-area">
-              <div
-                className={`main-scheme ${threatCritical ? "critical" : ""}`}
-              >
-                <div className="scheme-heading">
-                  <span className="small-label">MAIN SCHEME</span>
-                  <span className="scheme-stage">{s.scheme.index + 1}B</span>
-                </div>
-                <button
-                  onClick={() => inspect({ code: s.scheme.code })}
-                  className="scheme-card"
-                >
-                  <CardImage code={s.scheme.code} />
-                </button>
-                <AttachedCards
-                  game={s}
-                  host={{
-                    ...s.villain,
-                    id: `main:${s.scheme.code}`,
-                    code: s.scheme.code,
-                  }}
-                  inspect={inspect}
-                />
-                <StatToken
-                  kind="threat"
-                  value={s.scheme.threat}
-                  max={threatLimit}
-                  label="Main scheme threat"
-                />
-                <div className="threat-track">
-                  {Array.from({ length: threatLimit }, (_, i) => (
-                    <i
-                      className={i < s.scheme.threat ? "filled" : ""}
-                      key={i}
-                    />
-                  ))}
-                </div>
-                <p>
-                  +
-                  {escalation(s) +
-                    s.encounter.acceleration +
-                    s.sideSchemes.reduce(
-                      (n, p) => n + (card(p).scheme_acceleration || 0),
-                      0,
-                    )}{" "}
-                  threat each villain phase
-                </p>
-                {threatCritical && (
-                  <span className="threat-warning">
-                    <Warning size={15} weight="fill" /> Threat is critical
-                  </span>
-                )}
-              </div>
-              {s.sideSchemes.map((p) => (
-                <div className="table-side-scheme" key={p.id}>
-                  <span className="table-group-label">SIDE SCHEME</span>
+            <section className="opposition">
+              <div className="villain-area">
+                <div className="host-card-stack">
                   <button
-                    className="scheme-card"
-                    onClick={() => inspect({ code: p.code })}
-                    aria-label={`Inspect ${card(p).name}`}
+                    className="table-card villain-card"
+                    onClick={() => inspect({ code: s.villain.code })}
                   >
-                    <CardImage code={p.code} />
-                  </button>
-                  <div className="side-scheme-counter">
-                    <span className="threat-chip">
-                      <PremiumToken kind="threat" />
-                      <b>{p.counters}</b>
-                    </span>
-                    <span>
-                      {card(p).scheme_crisis
-                        ? "CRISIS"
-                        : card(p).scheme_hazard
-                          ? "HAZARD"
-                          : card(p).scheme_acceleration
-                            ? "ACCELERATION"
-                            : "THREAT"}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="encounter-zone">
-              <span className="table-group-label">ENCOUNTER DECK</span>
-              <div className="table-piles">
-                <TablePile
-                  kind="encounter"
-                  count={s.encounter.deck.length}
-                  label="Draw pile"
-                />
-                <TablePile
-                  kind="discard"
-                  count={s.encounter.discard.length}
-                  top={s.encounter.discard.at(-1)}
-                  label="Encounter discard"
-                  onOpen={() =>
-                    setPile({
-                      title: "Encounter discard",
-                      cards: s.encounter.discard,
-                    })
-                  }
-                />
-              </div>
-              {s.encounter.dealt.length > 0 && (
-                <span className="encounter-dealt">
-                  {s.encounter.dealt.length} dealt across the team
-                </span>
-              )}
-              {s.encounter.acceleration > 0 && (
-                <span className="encounter-dealt">
-                  +{s.encounter.acceleration} acceleration
-                </span>
-              )}
-            </div>
-          </section>
-          {s.minions.length > 0 && (
-            <div className="encounter-field" aria-label="Engaged minions">
-              <span className="table-group-label">ENGAGED MINIONS</span>
-              {s.minions.map((p) => (
-                <div className="enemy-unit" key={p.id}>
-                  <button
-                    className="enemy-tile"
-                    key={p.id}
-                    onClick={() => inspect({ code: p.code })}
-                  >
-                    <span className="minion-card-face">
-                      <CardImage code={p.code} />
-                      {p.damage > 0 && (
-                        <span
-                          className="minion-damage"
-                          key={p.damage}
-                          aria-label={`${p.damage} damage`}
-                        >
-                          <img
-                            src="/art/tabletop/damage-counter.png"
-                            alt=""
-                            width={192}
-                            height={192}
-                          />
-                          <b aria-hidden="true">{p.damage}</b>
-                          <span aria-hidden="true">DAMAGE</span>
-                        </span>
-                      )}
-                    </span>
-                    <span className="minion-info">
-                      <strong>{card(p).name}</strong>
-                      <span className="engagement-label">
-                        Engaged with{" "}
-                        {
-                          HEROES.find(
-                            (h) =>
-                              h.id ===
-                              game.players.find(
-                                (seat) =>
-                                  seat.id ===
-                                  (p.engagedWith || game.activePlayerId),
-                              )?.heroId,
-                          )?.name
-                        }
-                      </span>
-                      <span className="minion-stats">
-                        <span
-                          className="minion-health"
-                          aria-label={`${pieceHP(s, p) - p.damage} of ${pieceHP(s, p)} hit points remaining`}
-                        >
-                          <b>{pieceHP(s, p) - p.damage}</b>
-                          <span>
-                            / {pieceHP(s, p)}
-                            <small>HP LEFT</small>
-                          </span>
-                        </span>
-                        <span className="minion-attack">
-                          <b>
-                            {p.code === "drone"
-                              ? pieceHP(s, p)
-                              : p.code === "01162"
-                                ? pieceHP(s, p) - p.damage
-                                : card(p).attack}
-                          </b>
-                          <small>ATK</small>
-                        </span>
-                      </span>
-                      {card(p).text?.includes("Guard.") && (
-                        <span className="minion-keyword">GUARD</span>
-                      )}
-                      <Status piece={p} />
+                    <CardImage code={s.villain.code} />
+                    <span className="inspect-hint">
+                      <Eye size={13} /> Inspect
                     </span>
                   </button>
                   <AttachedCards
                     game={s}
-                    host={p}
+                    host={s.villain}
                     inspect={inspect}
                     send={canUseAction ? sendAction : undefined}
                   />
-                  {msMarvelAbilityOptions(s, p.id).map((a) => (
-                    <button
-                      key={a.id}
-                      className="ability-button"
-                      disabled={!canUseAction}
-                      onClick={() =>
-                        sendAction({ type: "ABILITY", id: p.id, action: a.id })
-                      }
-                    >
-                      {a.label}
-                    </button>
-                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-          <div className="battle-divider">
-            <i />
-            <span>
-              <Shield size={13} /> {h.name.toUpperCase()}’S PLAY AREA{" "}
-              <span className="table-form-label">
-                {s.player.form === "hero" ? "HERO" : "ALTER-EGO"}
-              </span>
-            </span>
-            <i />
-          </div>
-          <section className="player-area">
-            <div className="identity-area">
-              <div
-                className={`identity-card-space ${combat?.target.playerId === s.activePlayerId ? "under-attack" : ""}`}
-              >
-                {combat?.target.playerId === s.activePlayerId && (
-                  <span className="attack-identity-label">
-                    {combat.target.code === combat.identity.code
-                      ? combat.label
-                      : "ALLY DEFENDING"}
+                <div className="villain-info">
+                  <span className="small-label">
+                    VILLAIN · STAGE {["", "I", "II", "III"][s.villain.stage]}
                   </span>
-                )}
-                <button
-                  className={`table-card identity-card ${s.player.exhausted ? "is-exhausted" : ""}`}
-                  onClick={() => inspect({ code: heroCard(s).code })}
-                >
-                  <CardImage code={heroCard(s).code} />
-                  {s.player.exhausted && (
-                    <span className="exhausted-badge">EXHAUSTED</span>
-                  )}
-                </button>
-                <AttachedCards
-                  game={s}
-                  host={{
-                    ...s.villain,
-                    id: `hero:${s.activePlayerId}`,
-                    code: heroCard(s).code,
-                  }}
-                  inspect={inspect}
-                  send={canUseAction ? sendAction : undefined}
-                />
-                <span
-                  className={`readiness-label ${s.player.exhausted ? "spent" : ""}`}
-                >
-                  {s.player.exhausted ? "EXHAUSTED" : "READY"}
-                </span>
-              </div>
-              <div className="identity-info">
-                <span className="small-label">
-                  {s.player.form === "hero" ? "YOUR HERO" : "YOUR ALTER-EGO"}
-                </span>
-                <h2>{heroCard(s).name}</h2>
-                <HealthDial
-                  value={s.player.hp}
-                  max={maxHP(s)}
-                  label="Hero HP"
-                />
-                <div className="identity-stats stat-row">
-                  {s.player.form === "hero" ? (
-                    <>
-                      <StatToken
-                        kind="attack"
-                        value={stats.attack}
-                        label="ATK"
-                        compact
-                      />
-                      <StatToken
-                        kind="threat"
-                        value={stats.thwart}
-                        label="THW"
-                        compact
-                      />
-                      <StatToken
-                        kind="defense"
-                        value={stats.defense}
-                        label="DEF"
-                        compact
-                      />
-                    </>
-                  ) : (
+                  <h2>{card(s.villain).name.toUpperCase()}</h2>
+                  <HealthDial
+                    value={s.villain.hp}
+                    max={s.villain.maxHp}
+                    label="Villain HP"
+                    villain
+                  />
+                  <div className="enemy-stats stat-row">
                     <StatToken
-                      kind="health"
-                      value={stats.recover}
-                      label="REC"
+                      kind="attack"
+                      value={
+                        riskyBlankPower(s, "attack", s.villain.id)
+                          ? 0
+                          : (card(s.villain).attack || 0) +
+                            s.attachments
+                              .filter((p) => p.attachedTo === s.villain.id)
+                              .reduce((n, p) => n + (card(p).attack || 0), 0)
+                      }
+                      label="ATK"
                       compact
                     />
-                  )}
-                </div>
-                <Status piece={s.player} />
-                <p className="identity-power">{plain(heroCard(s).text)}</p>
-                {abilityActive && (
-                  <button
-                    className="ability-button"
-                    title={
-                      spellUnavailable
-                        ? "Not enough resources to pay this Invocation's printed cost."
-                        : undefined
-                    }
-                    disabled={!canUseAction || spellUnavailable}
-                    onClick={() =>
-                      sendAction({ type: "ABILITY", id: "identity" })
-                    }
-                  >
-                    <Sparkle size={13} />
-                    {importedIdentityAbility
-                      ? importedIdentityAbility.label
-                      : s.heroId === "iron_man"
-                        ? "Use Futurist"
-                        : s.heroId === "hulk"
-                          ? "Experimental Research"
-                          : s.heroId === "captain_america"
-                            ? "I Can Do This All Day!"
-                            : s.player.form === "hero"
-                              ? "Use Rechannel"
-                              : "Use Commander"}
-                  </button>
-                )}
-                <button
-                  className="flip-button hero-form-button"
-                  data-form={s.player.form}
-                  style={{ "--hero-accent": h.color } as CSSProperties}
-                  disabled={
-                    !acting || s.player.flipped || goblinIdentityLocked(s)
-                  }
-                  onClick={() => send({ type: "FLIP" })}
-                >
-                  <span className="hero-form-emblem">
-                    <HeroEmblem heroId={s.heroId} />
-                    <span className="hero-form-switch">
-                      <ArrowsClockwise size={12} weight="bold" />
-                    </span>
-                  </span>
-                  <span className="hero-form-copy">
-                    <strong>
-                      {s.player.form === "hero"
-                        ? `Become ${h.identity}`
-                        : "Suit up"}
-                    </strong>
-                    <small>
-                      {s.player.flipped ? "Used this turn" : "Once per turn"}
-                    </small>
-                  </span>
-                </button>
-              </div>
-              {s.heroId === "spider_man" && (
-                <div
-                  className={`identity-resource ${s.flags.scientist ? "used" : ""}`}
-                >
-                  <div className="scientist-art" aria-hidden="true">
-                    <img
-                      data-card-preview="01001b"
-                      src={imageFor("01001b")}
-                      alt=""
+                    <StatToken
+                      kind="threat"
+                      value={
+                        riskyBlankPower(s, "scheme", s.villain.id)
+                          ? 0
+                          : (card(s.villain).scheme || 0) +
+                            s.attachments
+                              .filter((p) => p.attachedTo === s.villain.id)
+                              .reduce((n, p) => n + (card(p).scheme || 0), 0)
+                      }
+                      label="SCH"
+                      compact
                     />
                   </div>
-                  <div className="scientist-copy">
-                    <span className="ability-kicker">
-                      PETER PARKER · RESOURCE
-                    </span>
-                    <b>
-                      Scientist{" "}
-                      <span className="scientist-output">
-                        <ResourceIcons items={["mental"]} />
-                        <span>+1</span>
-                      </span>
-                    </b>
-                    <small>
-                      {s.flags.scientist
-                        ? "Used · returns next round"
-                        : s.player.form === "hero"
-                          ? "Available in alter-ego form"
-                          : "Once per round · no exhaust"}
-                    </small>
-                    <button
-                      className="ability-button"
-                      disabled={
-                        !canUseAction ||
-                        s.player.form !== "alter" ||
-                        !!s.flags.scientist
-                      }
-                      onClick={() => setResourceHelp(true)}
-                    >
-                      Use Scientist… <ArrowUpRight size={15} />
-                    </button>
-                  </div>
+                  <span className="stat-caption">
+                    Before boosts & triggered abilities
+                  </span>
+                  <Status piece={s.villain} />
                 </div>
-              )}
-            </div>{" "}
-            <div className="in-play-area">
-              <div className="zone-label">
-                <span>
-                  <Shield size={15} /> YOUR PLAY AREA
-                </span>
-                <span>
-                  {
-                    s.player.inPlay.filter((p) => card(p).type_code === "ally")
-                      .length
-                  }{" "}
-                  / {allyLimit(s)} allies
-                </span>
               </div>
-              {s.player.discard
-                .filter((p) => msMarvelDiscardPlayable(s, p))
-                .map((p) => (
+              <div className="scheme-area">
+                <div
+                  className={`main-scheme ${threatCritical ? "critical" : ""}`}
+                >
+                  <div className="scheme-heading">
+                    <span className="small-label">MAIN SCHEME</span>
+                    <span className="scheme-stage">{s.scheme.index + 1}B</span>
+                  </div>
                   <button
-                    className="ability-button discard-play-action"
-                    key={p.id}
-                    disabled={!canUseAction || !!playable(s, p)}
-                    onClick={() => sendAction({ type: "PLAY", id: p.id })}
+                    onClick={() => inspect({ code: s.scheme.code })}
+                    className="scheme-card"
                   >
-                    <CardImage code={p.code} />
-                    <span>
-                      Play Lockjaw from discard · {cardCost(s, card(p))}{" "}
-                      resources
-                    </span>
+                    <CardImage code={s.scheme.code} />
                   </button>
-                ))}
-              <div className="tableau-groups">
-                {[
-                  {
-                    key: "allies",
-                    title: "ALLIES",
-                    pieces: s.player.inPlay.filter(
-                      (p) => card(p).type_code === "ally",
-                    ),
-                    empty: "Your allies join you here",
-                  },
-                  {
-                    key: "setup",
-                    title: "UPGRADES & SUPPORTS",
-                    pieces: s.player.inPlay.filter(
-                      (p) => card(p).type_code !== "ally" && !p.attachedTo,
-                    ),
-                    empty: "Build your hero’s setup",
-                  },
-                ].map((group) => (
-                  <div className={`tableau-group ${group.key}`} key={group.key}>
-                    <span className="table-group-label">
-                      {group.title}
-                      <b>
-                        {group.pieces.length}
-                        {group.key === "allies" && ` / ${allyLimit(s)}`}
-                      </b>
+                  <AttachedCards
+                    game={s}
+                    host={{
+                      ...s.villain,
+                      id: `main:${s.scheme.code}`,
+                      code: s.scheme.code,
+                    }}
+                    inspect={inspect}
+                  />
+                  <StatToken
+                    kind="threat"
+                    value={s.scheme.threat}
+                    max={threatLimit}
+                    label="Main scheme threat"
+                  />
+                  <div className="threat-track">
+                    {Array.from({ length: threatLimit }, (_, i) => (
+                      <i
+                        className={i < s.scheme.threat ? "filled" : ""}
+                        key={i}
+                      />
+                    ))}
+                  </div>
+                  <p>
+                    +
+                    {escalation(s) +
+                      s.encounter.acceleration +
+                      s.sideSchemes.reduce(
+                        (n, p) => n + (card(p).scheme_acceleration || 0),
+                        0,
+                      )}{" "}
+                    threat each villain phase
+                  </p>
+                  {threatCritical && (
+                    <span className="threat-warning">
+                      <Warning size={15} weight="fill" /> Threat is critical
                     </span>
-                    <div className="in-play-cards">
-                      {group.pieces.map((p) => (
-                        <div
-                          className={`in-play-card ${p.exhausted ? "exhausted" : ""}`}
-                          key={p.id}
-                        >
-                          <button
-                            className="in-play-image"
-                            onClick={() => inspect({ code: p.code, piece: p })}
-                          >
-                            <CardImage code={p.code} />
-
-                            {card(p).type_code === "ally" && (
-                              <span className="mini-token">
-                                <PremiumToken kind="health" />
-                                {pieceHP(s, p) - p.damage}
+                  )}
+                </div>
+                {(s.environments || []).map((p) => (
+                  <div className="scenario-environment" key={p.id}>
+                    <button
+                      className="environment-card"
+                      onClick={() => inspect({ code: p.code, piece: p })}
+                      aria-label={`Inspect ${card(p).name}`}
+                    >
+                      <CardImage code={p.code} />
+                    </button>
+                    <div>
+                      <span className="small-label">ENVIRONMENT</span>
+                      <strong>{card(p).name}</strong>
+                      <span className="environment-counter">
+                        <PremiumToken kind="counter" />
+                        {p.counters}{" "}
+                        {p.code === "02006a" ? "Infamy" : "Madness"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+                {s.sideSchemes.map((p) => (
+                  <div className="table-side-scheme" key={p.id}>
+                    <span className="table-group-label">SIDE SCHEME</span>
+                    <button
+                      className="scheme-card"
+                      onClick={() => inspect({ code: p.code })}
+                      aria-label={`Inspect ${card(p).name}`}
+                    >
+                      <CardImage code={p.code} />
+                    </button>
+                    <div className="side-scheme-counter">
+                      <span className="threat-chip">
+                        <PremiumToken kind="threat" />
+                        <b>{p.counters}</b>
+                      </span>
+                      <span>
+                        {card(p).scheme_crisis
+                          ? "CRISIS"
+                          : card(p).scheme_hazard
+                            ? "HAZARD"
+                            : card(p).scheme_acceleration
+                              ? "ACCELERATION"
+                              : "THREAT"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="encounter-zone">
+                <span className="table-group-label">ENCOUNTER DECK</span>
+                <div className="table-piles">
+                  <TablePile
+                    kind="encounter"
+                    count={s.encounter.deck.length}
+                    label="Draw pile"
+                  />
+                  <TablePile
+                    kind="discard"
+                    count={s.encounter.discard.length}
+                    top={s.encounter.discard.at(-1)}
+                    label="Encounter discard"
+                    onOpen={() =>
+                      setPile({
+                        title: "Encounter discard",
+                        cards: s.encounter.discard,
+                      })
+                    }
+                  />
+                </div>
+                {s.encounter.dealt.length > 0 && (
+                  <span className="encounter-dealt">
+                    {s.encounter.dealt.length} dealt across the team
+                  </span>
+                )}
+                {s.encounter.acceleration > 0 && (
+                  <span className="encounter-dealt">
+                    +{s.encounter.acceleration} acceleration
+                  </span>
+                )}
+              </div>
+              {s.minions.length > 0 && (
+                <div className="encounter-field" aria-label="Engaged minions">
+                  <span className="table-group-label">ENGAGED MINIONS</span>
+                  {s.minions.map((p) => (
+                    <div className="enemy-unit" key={p.id}>
+                      <button
+                        className="enemy-tile"
+                        key={p.id}
+                        onClick={() => inspect({ code: p.code })}
+                      >
+                        <span className="minion-card-face">
+                          <CardImage code={p.code} />
+                          {p.damage > 0 && (
+                            <span
+                              className="minion-damage"
+                              key={p.damage}
+                              aria-label={`${p.damage} damage`}
+                            >
+                              <img
+                                src="/art/tabletop/damage-counter.png"
+                                alt=""
+                                width={192}
+                                height={192}
+                              />
+                              <b aria-hidden="true">{p.damage}</b>
+                              <span aria-hidden="true">DAMAGE</span>
+                            </span>
+                          )}
+                        </span>
+                        <span className="minion-info">
+                          <strong>{card(p).name}</strong>
+                          <span className="engagement-label">
+                            Engaged with{" "}
+                            {
+                              HEROES.find(
+                                (h) =>
+                                  h.id ===
+                                  game.players.find(
+                                    (seat) =>
+                                      seat.id ===
+                                      (p.engagedWith || game.activePlayerId),
+                                  )?.heroId,
+                              )?.name
+                            }
+                          </span>
+                          <span className="minion-stats">
+                            <span
+                              className="minion-health"
+                              aria-label={`${pieceHP(s, p) - p.damage} of ${pieceHP(s, p)} hit points remaining`}
+                            >
+                              <b>{pieceHP(s, p) - p.damage}</b>
+                              <span>
+                                / {pieceHP(s, p)}
+                                <small>HP LEFT</small>
                               </span>
-                            )}
-                            {!!p.storedCards?.length && (
-                              <span className="mini-token stored-token">
-                                <PremiumToken kind="counter" />
-                                {p.storedCards.length}
-                                <small>STORED</small>
-                              </span>
-                            )}
-                            {p.counters > 0 && (
-                              <span className="mini-token counter-token">
-                                <PremiumToken kind="counter" />
-                                {p.counters}
-                                <small>
-                                  {p.code === "01066"
-                                    ? "ARROWS"
-                                    : p.code === "01018"
-                                      ? "ENERGY"
-                                      : "USES"}
-                                </small>
-                              </span>
-                            )}
-                          </button>
-                          <AttachedCards game={s} host={p} inspect={inspect} />
-                          <span className="in-play-name">{card(p).name}</span>
-                          {p.exhausted && (
-                            <span className="card-spent-label">EXHAUSTED</span>
+                            </span>
+                            <span className="minion-attack">
+                              <b>
+                                {p.code === "drone"
+                                  ? pieceHP(s, p)
+                                  : p.code === "01162"
+                                    ? pieceHP(s, p) - p.damage
+                                    : card(p).attack}
+                              </b>
+                              <small>ATK</small>
+                            </span>
+                          </span>
+                          {card(p).text?.includes("Guard.") && (
+                            <span className="minion-keyword">GUARD</span>
                           )}
                           <Status piece={p} />
-                          <div className="in-play-actions">
-                            {abilityOptions(s, p).map((a) => (
-                              <button
-                                key={a.id}
-                                disabled={
-                                  !canUseAction ||
-                                  !!a.disabled ||
-                                  (!acting &&
-                                    (["attack", "thwart"].includes(a.id) ||
-                                      !card(p).text?.includes("Action")))
-                                }
-                                title={a.disabled || a.label}
-                                onClick={() =>
-                                  sendAction({
-                                    type: "ABILITY",
-                                    id: p.id,
-                                    action: a.id,
-                                  })
-                                }
-                              >
-                                {a.id === "attack" ? (
-                                  <Fist size={13} weight="fill" />
-                                ) : a.id === "thwart" ? (
-                                  <Target size={13} weight="bold" />
-                                ) : (
-                                  <Sparkle size={13} />
-                                )}
-                                {a.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
+                        </span>
+                      </button>
+                      <AttachedCards
+                        game={s}
+                        host={p}
+                        inspect={inspect}
+                        send={canUseAction ? sendAction : undefined}
+                      />
+                      {msMarvelAbilityOptions(s, p.id).map((a) => (
+                        <button
+                          key={a.id}
+                          className="ability-button"
+                          disabled={!canUseAction}
+                          onClick={() =>
+                            sendAction({
+                              type: "ABILITY",
+                              id: p.id,
+                              action: a.id,
+                            })
+                          }
+                        >
+                          {a.label}
+                        </button>
                       ))}
-                      {!group.pieces.length && (
-                        <div className="table-empty-slot">
-                          <span>
-                            {group.key === "allies" ? (
-                              <Users size={22} weight="thin" />
-                            ) : (
-                              <Stack size={22} weight="thin" />
-                            )}
-                          </span>
-                          <small>{group.empty}</small>
-                        </div>
-                      )}
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="hero-pile-area">
-              <span className="table-group-label">
-                {h.name.toUpperCase()}’S DECK
-              </span>
-              <div className="table-piles">
-                <TablePile
-                  kind="hero"
-                  count={s.player.deck.length}
-                  label="Draw pile"
-                />
-                <TablePile
-                  kind="discard"
-                  count={s.player.discard.length}
-                  top={s.player.discard.at(-1)}
-                  label="Your discard"
-                  onOpen={() =>
-                    setPile({
-                      title: "Your discard pile",
-                      cards: s.player.discard,
-                    })
-                  }
-                />
-              </div>
-              {s.heroId === "doctor_strange" &&
-                s.phase !== "mulligan" &&
-                doctorStrangeTopInvocation(s) && (
-                  <section
-                    className="invocation-area"
-                    aria-label="Invocation deck"
-                  >
-                    <span className="table-group-label">INVOCATION DECK</span>
-                    <div className="table-piles">
-                      <TablePile
-                        kind="hero"
-                        count={s.player.invocationDeck?.length || 0}
-                        top={doctorStrangeTopInvocation(s)}
-                        label="Faceup Invocation"
-                        onOpen={() =>
-                          inspect({
-                            code: doctorStrangeTopInvocation(s)!.code,
-                            piece: doctorStrangeTopInvocation(s),
-                          })
-                        }
-                      />
-                      <TablePile
-                        kind="discard"
-                        count={s.player.invocationDiscard?.length || 0}
-                        top={s.player.invocationDiscard?.at(-1)}
-                        label="Invocation discard"
-                        onOpen={() =>
-                          setPile({
-                            title: "Invocation discard",
-                            cards: s.player.invocationDiscard || [],
-                          })
-                        }
-                      />
-                    </div>
-                    <small>
-                      {card(doctorStrangeTopInvocation(s)!).name} ·{" "}
-                      {card(doctorStrangeTopInvocation(s)!).cost || 0} resources
-                    </small>
-                  </section>
-                )}
-              {s.encounter.dealt.filter((p) => p.dealtTo === s.activePlayerId)
-                .length > 0 && (
-                <div
-                  className="dealt-encounters"
-                  aria-label="Facedown encounters"
-                >
-                  <CardBack kind="encounter" />
-                  <span>
-                    {
-                      s.encounter.dealt.filter(
-                        (p) => p.dealtTo === s.activePlayerId,
-                      ).length
-                    }{" "}
-                    facedown encounter(s)
-                  </span>
+                  ))}
                 </div>
               )}
+            </section>
+            <div className="battle-divider">
+              <i />
+              <span>
+                <Shield size={13} /> {h.name.toUpperCase()}’S PLAY AREA{" "}
+                <span className="table-form-label">
+                  {s.player.form === "hero" ? "HERO" : "ALTER-EGO"}
+                </span>
+              </span>
+              <i />
             </div>
-          </section>
-          {game.playerCount > 1 && (
-            <section
-              className="teammate-tableaux"
-              aria-label="Other heroes at the table"
-            >
-              {game.players
-                .filter((seat) => seat.id !== s.activePlayerId)
-                .map((seat) => {
-                  const view = seatView(game, seat);
-                  const teammate = HEROES.find(
-                    (hero) => hero.id === seat.heroId,
-                  )!;
-                  return (
-                    <div
-                      className={`teammate-tableau ${seat.eliminated ? "eliminated" : ""}`}
-                      key={seat.id}
+            <section className="player-area">
+              <div className="identity-area">
+                <div
+                  className={`identity-card-space ${combat?.target.playerId === s.activePlayerId ? "under-attack" : ""}`}
+                >
+                  {combat?.target.playerId === s.activePlayerId && (
+                    <span className="attack-identity-label">
+                      {combat.target.code === combat.identity.code
+                        ? combat.label
+                        : "ALLY DEFENDING"}
+                    </span>
+                  )}
+                  <button
+                    className={`table-card identity-card ${s.player.exhausted ? "is-exhausted" : ""}`}
+                    onClick={() => inspect({ code: heroCard(s).code })}
+                  >
+                    <CardImage code={heroCard(s).code} />
+                    {s.player.exhausted && (
+                      <span className="exhausted-badge">EXHAUSTED</span>
+                    )}
+                  </button>
+                  <AttachedCards
+                    game={s}
+                    host={{
+                      ...s.villain,
+                      id: `hero:${s.activePlayerId}`,
+                      code: heroCard(s).code,
+                    }}
+                    inspect={inspect}
+                    send={canUseAction ? sendAction : undefined}
+                  />
+                  <span
+                    className={`readiness-label ${s.player.exhausted ? "spent" : ""}`}
+                  >
+                    {s.player.exhausted ? "EXHAUSTED" : "READY"}
+                  </span>
+                </div>
+                <div className="identity-info">
+                  <span className="small-label">
+                    {s.player.form === "hero" ? "YOUR HERO" : "YOUR ALTER-EGO"}
+                  </span>
+                  <h2>{heroCard(s).name}</h2>
+                  <HealthDial
+                    value={s.player.hp}
+                    max={maxHP(s)}
+                    label="Hero HP"
+                  />
+                  <div className="identity-stats stat-row">
+                    {s.player.form === "hero" ? (
+                      <>
+                        <StatToken
+                          kind="attack"
+                          value={stats.attack}
+                          label="ATK"
+                          compact
+                        />
+                        <StatToken
+                          kind="threat"
+                          value={stats.thwart}
+                          label="THW"
+                          compact
+                        />
+                        <StatToken
+                          kind="defense"
+                          value={stats.defense}
+                          label="DEF"
+                          compact
+                        />
+                      </>
+                    ) : (
+                      <StatToken
+                        kind="health"
+                        value={stats.recover}
+                        label="REC"
+                        compact
+                      />
+                    )}
+                  </div>
+                  <Status piece={s.player} />
+                  <p className="identity-power">{plain(heroCard(s).text)}</p>
+                  {abilityActive && (
+                    <button
+                      className="ability-button"
+                      title={
+                        spellUnavailable
+                          ? "Not enough resources to pay this Invocation's printed cost."
+                          : undefined
+                      }
+                      disabled={!canUseAction || spellUnavailable}
+                      onClick={() =>
+                        sendAction({ type: "ABILITY", id: "identity" })
+                      }
                     >
-                      <button
-                        className="teammate-identity"
-                        onClick={() => {
-                          setViewId(seat.id);
-                          setHandFilter("all");
-                        }}
-                        aria-label={`Switch to ${teammate.name}’s play area`}
-                      >
-                        <CardImage code={heroCard(view).code} />
-                        <span>
-                          <strong>{teammate.name}</strong>
-                          <small>
-                            <Heart size={11} weight="fill" />
-                            {view.player.hp}/{maxHP(view)} ·{" "}
-                            {view.player.exhausted ? "Exhausted" : "Ready"}
-                          </small>
-                          <small>
-                            {view.player.hand.length} in hand ·{" "}
-                            {view.player.deck.length} in deck
-                          </small>
+                      <Sparkle size={13} />
+                      {importedIdentityAbility
+                        ? importedIdentityAbility.label
+                        : s.heroId === "iron_man"
+                          ? "Use Futurist"
+                          : s.heroId === "hulk"
+                            ? "Experimental Research"
+                            : s.heroId === "captain_america"
+                              ? "I Can Do This All Day!"
+                              : s.player.form === "hero"
+                                ? "Use Rechannel"
+                                : "Use Commander"}
+                    </button>
+                  )}
+                  <button
+                    className="flip-button hero-form-button"
+                    data-form={s.player.form}
+                    style={{ "--hero-accent": h.color } as CSSProperties}
+                    disabled={
+                      !acting || s.player.flipped || goblinIdentityLocked(s)
+                    }
+                    onClick={() => send({ type: "FLIP" })}
+                  >
+                    <span className="hero-form-emblem">
+                      <HeroEmblem heroId={s.heroId} />
+                      <span className="hero-form-switch">
+                        <ArrowsClockwise size={12} weight="bold" />
+                      </span>
+                    </span>
+                    <span className="hero-form-copy">
+                      <strong>
+                        {s.player.form === "hero"
+                          ? `Become ${h.identity}`
+                          : "Suit up"}
+                      </strong>
+                      <small>
+                        {s.player.flipped ? "Used this turn" : "Once per turn"}
+                      </small>
+                    </span>
+                  </button>
+                </div>
+                {s.heroId === "spider_man" && (
+                  <div
+                    className={`identity-resource ${s.flags.scientist ? "used" : ""}`}
+                  >
+                    <div className="scientist-art" aria-hidden="true">
+                      <img
+                        data-card-preview="01001b"
+                        src={imageFor("01001b")}
+                        alt=""
+                      />
+                    </div>
+                    <div className="scientist-copy">
+                      <span className="ability-kicker">
+                        PETER PARKER · RESOURCE
+                      </span>
+                      <b>
+                        Scientist{" "}
+                        <span className="scientist-output">
+                          <ResourceIcons items={["mental"]} />
+                          <span>+1</span>
                         </span>
-                        <ArrowRight size={14} />
+                      </b>
+                      <small>
+                        {s.flags.scientist
+                          ? "Used · returns next round"
+                          : s.player.form === "hero"
+                            ? "Available in alter-ego form"
+                            : "Once per round · no exhaust"}
+                      </small>
+                      <button
+                        className="ability-button"
+                        disabled={
+                          !canUseAction ||
+                          s.player.form !== "alter" ||
+                          !!s.flags.scientist
+                        }
+                        onClick={() => setResourceHelp(true)}
+                      >
+                        Use Scientist… <ArrowUpRight size={15} />
                       </button>
-                      <div className="teammate-cards">
-                        {view.player.inPlay
-                          .filter((p) => !p.attachedTo)
-                          .map((p) => (
-                            <div className="teammate-card-stack" key={p.id}>
-                              <button
-                                key={p.id}
-                                className={p.exhausted ? "spent" : ""}
-                                onClick={() =>
-                                  inspect({
-                                    code: p.code,
-                                    piece: p,
-                                    playerId: seat.id,
-                                  })
-                                }
-                                aria-label={`Inspect ${teammate.name}’s ${card(p).name}`}
-                              >
-                                <CardImage code={p.code} />
-                              </button>
-                              <AttachedCards
-                                game={game}
-                                host={p}
-                                inspect={inspect}
-                              />
+                    </div>
+                  </div>
+                )}
+              </div>{" "}
+              <div className="in-play-area">
+                <div className="zone-label">
+                  <span>
+                    <Shield size={15} /> YOUR PLAY AREA
+                  </span>
+                  <span>
+                    {
+                      s.player.inPlay.filter(
+                        (p) => card(p).type_code === "ally",
+                      ).length
+                    }{" "}
+                    / {allyLimit(s)} allies
+                  </span>
+                </div>
+                {s.player.discard
+                  .filter((p) => msMarvelDiscardPlayable(s, p))
+                  .map((p) => (
+                    <button
+                      className="ability-button discard-play-action"
+                      key={p.id}
+                      disabled={!canUseAction || !!playable(s, p)}
+                      onClick={() => sendAction({ type: "PLAY", id: p.id })}
+                    >
+                      <CardImage code={p.code} />
+                      <span>
+                        Play Lockjaw from discard · {cardCost(s, card(p))}{" "}
+                        resources
+                      </span>
+                    </button>
+                  ))}
+                <div className="tableau-groups">
+                  {[
+                    {
+                      key: "allies",
+                      title: "ALLIES",
+                      pieces: s.player.inPlay.filter(
+                        (p) => card(p).type_code === "ally",
+                      ),
+                      empty: "Your allies join you here",
+                    },
+                    {
+                      key: "setup",
+                      title: "UPGRADES & SUPPORTS",
+                      pieces: s.player.inPlay.filter(
+                        (p) => card(p).type_code !== "ally" && !p.attachedTo,
+                      ),
+                      empty: "Build your hero’s setup",
+                    },
+                  ].map((group) => (
+                    <div
+                      className={`tableau-group ${group.key}`}
+                      key={group.key}
+                    >
+                      <span className="table-group-label">
+                        {group.title}
+                        <b>
+                          {group.pieces.length}
+                          {group.key === "allies" && ` / ${allyLimit(s)}`}
+                        </b>
+                      </span>
+                      <div className="in-play-cards">
+                        {group.pieces.map((p) => (
+                          <div
+                            className={`in-play-card ${p.exhausted ? "exhausted" : ""}`}
+                            key={p.id}
+                          >
+                            <button
+                              className="in-play-image"
+                              onClick={() =>
+                                inspect({ code: p.code, piece: p })
+                              }
+                            >
+                              <CardImage code={p.code} />
+
+                              {card(p).type_code === "ally" && (
+                                <span className="mini-token">
+                                  <PremiumToken kind="health" />
+                                  {pieceHP(s, p) - p.damage}
+                                </span>
+                              )}
+                              {!!p.storedCards?.length && (
+                                <span className="mini-token stored-token">
+                                  <PremiumToken kind="counter" />
+                                  {p.storedCards.length}
+                                  <small>STORED</small>
+                                </span>
+                              )}
+                              {p.counters > 0 && (
+                                <span className="mini-token counter-token">
+                                  <PremiumToken kind="counter" />
+                                  {p.counters}
+                                  <small>
+                                    {p.code === "01066"
+                                      ? "ARROWS"
+                                      : p.code === "01018"
+                                        ? "ENERGY"
+                                        : "USES"}
+                                  </small>
+                                </span>
+                              )}
+                            </button>
+                            <AttachedCards
+                              game={s}
+                              host={p}
+                              inspect={inspect}
+                            />
+                            <span className="in-play-name">{card(p).name}</span>
+                            {p.exhausted && (
+                              <span className="card-spent-label">
+                                EXHAUSTED
+                              </span>
+                            )}
+                            <Status piece={p} />
+                            <div className="in-play-actions">
+                              {abilityOptions(s, p).map((a) => (
+                                <button
+                                  key={a.id}
+                                  disabled={
+                                    !canUseAction ||
+                                    !!a.disabled ||
+                                    (!acting &&
+                                      (["attack", "thwart"].includes(a.id) ||
+                                        !card(p).text?.includes("Action")))
+                                  }
+                                  title={a.disabled || a.label}
+                                  onClick={() =>
+                                    sendAction({
+                                      type: "ABILITY",
+                                      id: p.id,
+                                      action: a.id,
+                                    })
+                                  }
+                                >
+                                  {a.id === "attack" ? (
+                                    <Fist size={13} weight="fill" />
+                                  ) : a.id === "thwart" ? (
+                                    <Target size={13} weight="bold" />
+                                  ) : (
+                                    <Sparkle size={13} />
+                                  )}
+                                  {a.label}
+                                </button>
+                              ))}
                             </div>
-                          ))}
-                        {!view.player.inPlay.length && (
-                          <small>No cards in play yet</small>
+                          </div>
+                        ))}
+                        {!group.pieces.length && (
+                          <div className="table-empty-slot">
+                            <span>
+                              {group.key === "allies" ? (
+                                <Users size={22} weight="thin" />
+                              ) : (
+                                <Stack size={22} weight="thin" />
+                              )}
+                            </span>
+                            <small>{group.empty}</small>
+                          </div>
                         )}
                       </div>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
+              </div>
+              <div className="hero-pile-area">
+                <span className="table-group-label">
+                  {h.name.toUpperCase()}’S DECK
+                </span>
+                <div className="table-piles">
+                  <TablePile
+                    kind="hero"
+                    count={s.player.deck.length}
+                    label="Draw pile"
+                  />
+                  <TablePile
+                    kind="discard"
+                    count={s.player.discard.length}
+                    top={s.player.discard.at(-1)}
+                    label="Your discard"
+                    onOpen={() =>
+                      setPile({
+                        title: "Your discard pile",
+                        cards: s.player.discard,
+                      })
+                    }
+                  />
+                </div>
+                {s.heroId === "doctor_strange" &&
+                  s.phase !== "mulligan" &&
+                  doctorStrangeTopInvocation(s) && (
+                    <section
+                      className="invocation-area"
+                      aria-label="Invocation deck"
+                    >
+                      <span className="table-group-label">INVOCATION DECK</span>
+                      <div className="table-piles">
+                        <TablePile
+                          kind="hero"
+                          count={s.player.invocationDeck?.length || 0}
+                          top={doctorStrangeTopInvocation(s)}
+                          label="Faceup Invocation"
+                          onOpen={() =>
+                            inspect({
+                              code: doctorStrangeTopInvocation(s)!.code,
+                              piece: doctorStrangeTopInvocation(s),
+                            })
+                          }
+                        />
+                        <TablePile
+                          kind="discard"
+                          count={s.player.invocationDiscard?.length || 0}
+                          top={s.player.invocationDiscard?.at(-1)}
+                          label="Invocation discard"
+                          onOpen={() =>
+                            setPile({
+                              title: "Invocation discard",
+                              cards: s.player.invocationDiscard || [],
+                            })
+                          }
+                        />
+                      </div>
+                      <small>
+                        {card(doctorStrangeTopInvocation(s)!).name} ·{" "}
+                        {card(doctorStrangeTopInvocation(s)!).cost || 0}{" "}
+                        resources
+                      </small>
+                    </section>
+                  )}
+                {s.encounter.dealt.filter((p) => p.dealtTo === s.activePlayerId)
+                  .length > 0 && (
+                  <div
+                    className="dealt-encounters"
+                    aria-label="Facedown encounters"
+                  >
+                    <CardBack kind="encounter" />
+                    <span>
+                      {
+                        s.encounter.dealt.filter(
+                          (p) => p.dealtTo === s.activePlayerId,
+                        ).length
+                      }{" "}
+                      facedown encounter(s)
+                    </span>
+                  </div>
+                )}
+              </div>
             </section>
-          )}
+            {game.playerCount > 1 && (
+              <section
+                className="teammate-tableaux"
+                aria-label="Other heroes at the table"
+              >
+                {game.players
+                  .filter((seat) => seat.id !== s.activePlayerId)
+                  .map((seat) => {
+                    const view = seatView(game, seat);
+                    const teammate = HEROES.find(
+                      (hero) => hero.id === seat.heroId,
+                    )!;
+                    return (
+                      <div
+                        className={`teammate-tableau ${seat.eliminated ? "eliminated" : ""}`}
+                        key={seat.id}
+                      >
+                        <button
+                          className="teammate-identity"
+                          onClick={() => {
+                            setViewId(seat.id);
+                            setHandFilter("all");
+                          }}
+                          aria-label={`Switch to ${teammate.name}’s play area`}
+                        >
+                          <CardImage code={heroCard(view).code} />
+                          <span>
+                            <strong>{teammate.name}</strong>
+                            <small>
+                              <Heart size={11} weight="fill" />
+                              {view.player.hp}/{maxHP(view)} ·{" "}
+                              {view.player.exhausted ? "Exhausted" : "Ready"}
+                            </small>
+                            <small>
+                              {view.player.hand.length} in hand ·{" "}
+                              {view.player.deck.length} in deck
+                            </small>
+                          </span>
+                          <ArrowRight size={14} />
+                        </button>
+                        <div className="teammate-cards">
+                          {view.player.inPlay
+                            .filter((p) => !p.attachedTo)
+                            .map((p) => (
+                              <div className="teammate-card-stack" key={p.id}>
+                                <button
+                                  key={p.id}
+                                  className={p.exhausted ? "spent" : ""}
+                                  onClick={() =>
+                                    inspect({
+                                      code: p.code,
+                                      piece: p,
+                                      playerId: seat.id,
+                                    })
+                                  }
+                                  aria-label={`Inspect ${teammate.name}’s ${card(p).name}`}
+                                >
+                                  <CardImage code={p.code} />
+                                </button>
+                                <AttachedCards
+                                  game={game}
+                                  host={p}
+                                  inspect={inspect}
+                                />
+                              </div>
+                            ))}
+                          {!view.player.inPlay.length && (
+                            <small>No cards in play yet</small>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </section>
+            )}
+          </div>
           <div className="table-bottom">
             <div className="action-bar">
               <div className="basic-actions">

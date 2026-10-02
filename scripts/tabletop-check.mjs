@@ -285,19 +285,37 @@ try {
 
   for (const width of [1280, 1440, 1920, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 1000 });
-    const layout = await page.evaluate(() => {
-      const playmat = document
-        .querySelector(".playmat")
-        .getBoundingClientRect();
-      const cards = [
-        ...document.querySelectorAll(
-          ".identity-card, .in-play-image .card-image",
-        ),
-      ];
-      const outside = cards.filter((card) => {
+    const inspections = [];
+    const inspectableCards = page.locator(
+      ".identity-card, .in-play-image .card-image",
+    );
+    for (let index = 0; index < (await inspectableCards.count()); index++) {
+      const inspectableCard = inspectableCards.nth(index);
+      // In-play lanes may scroll horizontally. Validate every physical card
+      // after bringing it into view, including cards beyond the initial lane.
+      await inspectableCard.scrollIntoViewIfNeeded();
+      const inspection = await inspectableCard.evaluate((card) => {
+        const mat = document.querySelector(".playmat").getBoundingClientRect();
         const rect = card.getBoundingClientRect();
-        return rect.left < playmat.left || rect.right > playmat.right;
-      }).length;
+        const button = card.closest("button");
+        const control = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          control.left + control.width / 2,
+          control.top + control.height / 2,
+        );
+        return {
+          name: card.getAttribute("alt") || button.getAttribute("aria-label"),
+          inside:
+            rect.left >= mat.left - 1 &&
+            rect.right <= mat.right + 1 &&
+            rect.top >= mat.top - 1 &&
+            rect.bottom <= mat.bottom + 1,
+          unobstructed: hit === button || button.contains(hit),
+        };
+      });
+      inspections.push(inspection);
+    }
+    const layout = await page.evaluate(() => {
       const overlap = [...document.querySelectorAll(".in-play-cards")].some(
         (group) => {
           const cards = [
@@ -325,11 +343,13 @@ try {
       return {
         width: innerWidth,
         scrollWidth: document.documentElement.scrollWidth,
-        outside,
         overlap,
         pageRegions,
       };
     });
+    layout.inspections = inspections;
+    layout.outside = inspections.filter((card) => !card.inside).length;
+    layout.obstructed = inspections.filter((card) => !card.unobstructed).length;
     layouts.push(layout);
     assert.ok(layout.scrollWidth <= width + 1, `Page overflow at ${width}`);
     assert.equal(
@@ -337,22 +357,32 @@ try {
       0,
       `Rotated cards outside the mat at ${width}`,
     );
+    assert.equal(
+      layout.obstructed,
+      0,
+      `Card inspection controls obstructed at ${width}: ${JSON.stringify(inspections.filter((card) => !card.unobstructed))}`,
+    );
     assert.equal(layout.overlap, false, `Rotated card overlap at ${width}`);
     await capture(`crowded-${width}`);
     if ([1440, 390].includes(width)) await audit(`crowded-${width}`);
   }
   checks.push(
-    "Crowded and exhausted cards stay inside the table without overlap at six viewport widths",
+    "Every crowded and exhausted card can be brought into view and inspected inside the table without overlap at six viewport widths",
   );
   await page.setViewportSize({ width: 1366, height: 768 });
-  assert.equal(
-    await page
-      .locator(".table-bottom")
-      .evaluate((el) => getComputedStyle(el).position),
-    "static",
-    "Crowded laptop tables must leave space for identity and card controls",
+  await page.evaluate(() => window.scrollTo(0, 0));
+  assert.ok(
+    await page.evaluate(
+      () => document.documentElement.scrollHeight <= innerHeight + 1,
+    ),
+    "The crowded laptop table must fit without page scrolling",
   );
-  await page.locator(".hero-form-button").scrollIntoViewIfNeeded();
+  assert.ok(
+    await page
+      .locator(".table-play-area")
+      .evaluate((el) => el.scrollHeight <= el.clientHeight + 1),
+    "The crowded laptop table must fit without vertical scrolling inside the mat",
+  );
   assert.equal(
     await page.locator(".hero-form-button").evaluate((control) => {
       const box = control.getBoundingClientRect();
@@ -367,7 +397,7 @@ try {
   );
   await capture("crowded-laptop");
   checks.push(
-    "Crowded laptop tables scroll without a pinned hand covering identity controls",
+    "The crowded laptop table fits one screen and its form control remains unobstructed",
   );
   assert.equal(errors.length, 0, JSON.stringify(errors));
   assert.equal(
