@@ -1,11 +1,11 @@
-import type { Effect, Piece } from "../types";
+import type { Effect, Piece } from "../types.js";
 import type {
   CardScript,
   ScriptContext,
   ScriptNode,
   ScriptTrigger,
   StaticModifier,
-} from "./types";
+} from "./types.js";
 
 const targeted = (
   node: ScriptNode,

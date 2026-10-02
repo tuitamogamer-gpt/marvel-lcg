@@ -1,6 +1,13 @@
-import type { Card, Effect, GameState, Option, Piece, Resource } from "./types";
-import { playerOrder } from "./team";
-import catalogCards from "../data/catalog-cards.json";
+import type {
+  Card,
+  Effect,
+  GameState,
+  Option,
+  Piece,
+  Resource,
+} from "./types.js";
+import { playerOrder } from "./team.js";
+import catalogCards from "../data/catalog-cards.json" with { type: "json" };
 
 const cards = new Map((catalogCards as Card[]).map((c) => [c.code, c]));
 const E = (type: string, args: Record<string, unknown> = {}): Effect => ({

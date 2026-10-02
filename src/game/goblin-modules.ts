@@ -1,10 +1,17 @@
-import type { Card, Effect, GameState, Option, Piece, Resource } from "./types";
-import { engaged, playerOrder, seatView } from "./team";
-import catalog from "../data/catalog-cards.json";
+import type {
+  Card,
+  Effect,
+  GameState,
+  Option,
+  Piece,
+  Resource,
+} from "./types.js";
+import { engaged, playerOrder, seatView } from "./team.js";
+import catalog from "../data/catalog-cards.json" with { type: "json" };
 import type {
   MutagenActivation,
   MutagenForcedResponse,
-} from "./mutagen-formula";
+} from "./mutagen-formula.js";
 
 const cards = new Map((catalog as Card[]).map((c) => [c.code, c]));
 const E = (type: string, args: Record<string, unknown> = {}): Effect => ({

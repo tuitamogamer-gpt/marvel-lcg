@@ -30,7 +30,7 @@ import {
   resolveDoctorStrangeEffect,
   DOCTOR_STRANGE_SCRIPT_CODES,
   type DoctorStrangePorts,
-} from "./doctor-strange";
+} from "./doctor-strange.js";
 import {
   blackWidowAllyDiscount,
   blackWidowPlayRestriction,
@@ -55,12 +55,12 @@ import {
   resolveBlackWidowEffect,
   BLACK_WIDOW_SCRIPT_CODES,
   type BlackWidowPorts,
-} from "./black-widow";
+} from "./black-widow.js";
 import {
   beginRevealWindow,
   revealWindowGainSurge,
   resolveRevealWindowEffect,
-} from "./reveal-window";
+} from "./reveal-window.js";
 import {
   GOBLIN_MODULE_SCRIPT_CODES,
   goblinModuleReveal,
@@ -72,7 +72,7 @@ import {
   goblinModuleAttachmentActions,
   resolveGoblinModuleEffect,
   type GoblinModuleEnginePorts,
-} from "./goblin-modules";
+} from "./goblin-modules.js";
 import {
   thorStats,
   thorAllyDiscount,
@@ -93,7 +93,7 @@ import {
   thorBoost,
   resolveThorEffect,
   type ThorEnginePorts,
-} from "./thor";
+} from "./thor.js";
 import {
   msMarvelEventAmountModifier,
   msMarvelBeforeEvent,
@@ -118,7 +118,7 @@ import {
   msMarvelEncounterReveal,
   resolveMsMarvelEffect,
   type MsMarvelPorts,
-} from "./ms-marvel";
+} from "./ms-marvel.js";
 import {
   RISKY_BUSINESS_SCRIPT_CODES,
   riskySetup,
@@ -134,9 +134,9 @@ import {
   riskyBoost,
   resolveRiskyEffect,
   type RiskyBusinessEnginePorts,
-} from "./risky-business";
-import { uniqueConflict } from "./unique";
-import { rulesCode } from "./rules-code";
+} from "./risky-business.js";
+import { uniqueConflict } from "./unique.js";
+import { rulesCode } from "./rules-code.js";
 import {
   CARDS,
   CATALOG_CARDS,
@@ -156,7 +156,7 @@ import {
   aerial,
   pieceHP,
   plain,
-} from "./cards";
+} from "./cards.js";
 import type {
   Aspect,
   Attack,
@@ -170,7 +170,7 @@ import type {
   Piece,
   Prompt,
   Resource,
-} from "./types";
+} from "./types.js";
 import {
   activateSeat,
   allInPlay,
@@ -180,7 +180,7 @@ import {
   seatView,
   syncSeat,
   upgradeSave,
-} from "./team";
+} from "./team.js";
 import {
   boardSnapshot,
   recordReview,
@@ -189,10 +189,10 @@ import {
   mergeReviews,
   pacingOf,
   stopsFor,
-} from "./review";
-import { paymentSources, paymentStatus } from "./payment";
-import { combatCharacter, recordCombat } from "./combat";
-import { deckErrors } from "./decks";
+} from "./review.js";
+import { paymentSources, paymentStatus } from "./payment.js";
+import { combatCharacter, recordCombat } from "./combat.js";
+import { deckErrors } from "./decks.js";
 import {
   captainSetup,
   captainAbilityOptions,
@@ -211,14 +211,14 @@ import {
   captainPlayRestriction,
   resolveCaptainEffect,
   CAPTAIN_AMERICA_SCRIPT_CODES,
-} from "./captain-america";
+} from "./captain-america.js";
 import {
   cardScript,
   hasExecutableScript,
   scriptedModifier,
-} from "./script-registry";
-import { checkScriptLegality, scriptEffects } from "./scripts/runtime";
-import type { ScriptContext, ScriptSelector } from "./scripts/types";
+} from "./script-registry.js";
+import { checkScriptLegality, scriptEffects } from "./scripts/runtime.js";
+import type { ScriptContext, ScriptSelector } from "./scripts/types.js";
 import {
   printedKeyword,
   scaledKeyword,
@@ -227,8 +227,8 @@ import {
   consumeTough,
   discardToughForPiercing,
   syncStatuses,
-} from "./keywords";
-import type { PrintedKeyword, StatusKind, StatusState } from "./keywords";
+} from "./keywords.js";
+import type { PrintedKeyword, StatusKind, StatusState } from "./keywords.js";
 import {
   hulkStats,
   hulkFormChanged,
@@ -243,7 +243,7 @@ import {
   hulkAfterEnemyAttack,
   hulkEncounterReveal,
   resolveHulkEffect,
-} from "./hulk";
+} from "./hulk.js";
 import {
   captainPackModifiers,
   captainPackStats,
@@ -263,7 +263,7 @@ import {
   captainPackSchemeDefeated,
   captainPackExpertDefenseOptions,
   resolveCaptainPackEffect,
-} from "./captain-pack";
+} from "./captain-pack.js";
 import {
   hulkPackModifiers,
   hulkPackPlayRestriction,
@@ -276,8 +276,8 @@ import {
   hulkPackResourceSpent,
   hulkPackAttackResponseOptions,
   resolveHulkPackEffect,
-} from "./hulk-pack";
-export { paymentSources } from "./payment";
+} from "./hulk-pack.js";
+export { paymentSources } from "./payment.js";
 import {
   MUTAGEN_FORMULA_SCRIPT_CODES,
   mutagenSetup,
@@ -292,8 +292,11 @@ import {
   mutagenEncounterReveal,
   mutagenBoost,
   resolveMutagenEffect,
-} from "./mutagen-formula";
-import type { MutagenEnginePorts, MutagenActivation } from "./mutagen-formula";
+} from "./mutagen-formula.js";
+import type {
+  MutagenEnginePorts,
+  MutagenActivation,
+} from "./mutagen-formula.js";
 export const SAVE_KEY = "champions.save.v1";
 const E = (type: string, args: Record<string, any> = {}): Effect => ({
   type,

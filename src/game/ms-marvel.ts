@@ -1,9 +1,16 @@
-import importedCards from "../data/catalog-cards.json";
-import { allInPlay, controller, playerOrder, seatView } from "./team";
-import { uniqueConflict } from "./unique";
-import { goblinIdentityLocked } from "./goblin-modules";
-import type { PaymentSource } from "./payment";
-import type { Card, Effect, GameState, Option, Piece, Resource } from "./types";
+import importedCards from "../data/catalog-cards.json" with { type: "json" };
+import { allInPlay, controller, playerOrder, seatView } from "./team.js";
+import { uniqueConflict } from "./unique.js";
+import { goblinIdentityLocked } from "./goblin-modules.js";
+import type { PaymentSource } from "./payment.js";
+import type {
+  Card,
+  Effect,
+  GameState,
+  Option,
+  Piece,
+  Resource,
+} from "./types.js";
 
 const cards = new Map(
   (importedCards as unknown as Card[]).map((card) => [card.code, card]),

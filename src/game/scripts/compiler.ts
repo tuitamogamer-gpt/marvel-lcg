@@ -1,12 +1,12 @@
 import corePlayers from "../../data/core-player.json" with { type: "json" };
 import coreEncounters from "../../data/core-encounter.json" with { type: "json" };
-import type { Card, Resource } from "../types";
+import type { Card, Resource } from "../types.js";
 import type {
   CardScript,
   ScriptNode,
   ScriptSelector,
   StaticModifier,
-} from "./types";
+} from "./types.js";
 
 /** Formatting only. No operative sentences, costs, qualifiers, reminders or boost text are dropped. */
 export function normalizeRules(text = "") {

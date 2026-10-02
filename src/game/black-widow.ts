@@ -1,9 +1,16 @@
-import importedCards from "../data/catalog-cards.json";
-import { controller, playerOrder, seatView } from "./team";
-import { consumeStatus } from "./keywords";
-import { uniqueConflict } from "./unique";
-import type { PaymentSource } from "./payment";
-import type { Card, Effect, GameState, Option, Piece, Resource } from "./types";
+import importedCards from "../data/catalog-cards.json" with { type: "json" };
+import { controller, playerOrder, seatView } from "./team.js";
+import { consumeStatus } from "./keywords.js";
+import { uniqueConflict } from "./unique.js";
+import type { PaymentSource } from "./payment.js";
+import type {
+  Card,
+  Effect,
+  GameState,
+  Option,
+  Piece,
+  Resource,
+} from "./types.js";
 
 const cards = new Map(
   (importedCards as unknown as Card[]).map((c) => [c.code, c]),

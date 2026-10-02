@@ -1,4 +1,4 @@
-import type { Card } from "./types";
+import type { Card } from "./types.js";
 
 const url =
   "https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf#page=66";

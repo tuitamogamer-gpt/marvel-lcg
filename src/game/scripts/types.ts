@@ -1,4 +1,4 @@
-import type { Card, Effect, GameState, Piece, Resource } from "../types";
+import type { Card, Effect, GameState, Piece, Resource } from "../types.js";
 
 export type ScriptTrigger =
   | "event-action"

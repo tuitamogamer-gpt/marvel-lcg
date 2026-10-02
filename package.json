@@ -11,6 +11,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest run",
+    "test:production-entry": "node scripts/production-entry-check.mjs",
     "sync:cards": "node scripts/sync-cards.mjs",
     "test:ui": "node scripts/browser-check.mjs",
     "test:accounts": "node scripts/accounts-check.mjs",

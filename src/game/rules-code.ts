@@ -1,8 +1,8 @@
 import players from "../data/core-player.json" with { type: "json" };
 import encounters from "../data/core-encounter.json" with { type: "json" };
 import catalog from "../data/catalog-cards.json" with { type: "json" };
-import type { Card, Piece } from "./types";
-import { mechanicalSignature } from "./scripts/compiler";
+import type { Card, Piece } from "./types.js";
+import { mechanicalSignature } from "./scripts/compiler.js";
 
 const fingerprint = mechanicalSignature;
 const originals = [...players, ...encounters] as Card[];

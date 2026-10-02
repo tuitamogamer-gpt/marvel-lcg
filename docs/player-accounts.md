@@ -34,7 +34,13 @@ private to the OS user, excluded from Git, and denied by Vite's file server.
 so the file server deny rule applies. Local accounts are separate from live accounts.
 
 The Vite static preview command previews the frontend only; use the development
-server or Vercel for account API verification.
+server or Vercel for account API verification. `npm run test:production-entry` also
+checks the actual account handler in a clean native Node production process,
+without bundling or TypeScript loaders. It preserves import specifiers and JSON
+attributes, blocks external requests and requires HTTP 200 with empty library
+and `storage: "unavailable"` when cloud storage is not configured. It also
+rejects local SQLite creation. This startup check does not establish cloud
+persistence.
 
 ## Vercel production setup
 

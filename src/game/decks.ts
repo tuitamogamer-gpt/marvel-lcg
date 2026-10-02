@@ -1,8 +1,8 @@
 import { ASPECTS, CATALOG_CARDS, HEROES, card, deckCodes } from "./cards.js";
-import { identityMatch, uniqueMatches } from "./unique";
-import { hasExecutableScript } from "./script-registry";
-import { CAPTAIN_AMERICA_SCRIPT_CODES } from "./captain-america";
-import type { Aspect, Card } from "./types";
+import { identityMatch, uniqueMatches } from "./unique.js";
+import { hasExecutableScript } from "./script-registry.js";
+import { CAPTAIN_AMERICA_SCRIPT_CODES } from "./captain-america.js";
+import type { Aspect, Card } from "./types.js";
 
 export function countsFor(codes: string[]) {
   return codes.reduce<Record<string, number>>((counts, code) => {

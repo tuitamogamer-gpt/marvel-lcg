@@ -1,6 +1,13 @@
-import catalog from "../data/catalog-cards.json";
-import type { Card, Effect, GameState, Option, Piece, Resource } from "./types";
-import type { PaymentSource } from "./payment";
+import catalog from "../data/catalog-cards.json" with { type: "json" };
+import type {
+  Card,
+  Effect,
+  GameState,
+  Option,
+  Piece,
+  Resource,
+} from "./types.js";
+import type { PaymentSource } from "./payment.js";
 
 const cards = new Map((catalog as Card[]).map((card) => [card.code, card]));
 const E = (type: string, args: Record<string, unknown> = {}): Effect => ({

@@ -1,6 +1,6 @@
-import type { Effect, GameState, Option, Piece } from "./types";
-import { playerOrder, seatView } from "./team";
-import type { MutagenActivation } from "./mutagen-formula";
+import type { Effect, GameState, Option, Piece } from "./types.js";
+import { playerOrder, seatView } from "./team.js";
+import type { MutagenActivation } from "./mutagen-formula.js";
 
 const E = (type: string, args: Record<string, unknown> = {}): Effect => ({
   type,

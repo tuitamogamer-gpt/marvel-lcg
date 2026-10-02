@@ -1,6 +1,6 @@
-import type { Card, Effect, GameState, Option, Piece } from "./types";
-import { keywordDeclarations, printedKeyword } from "./keywords";
-import { playerOrder } from "./team";
+import type { Card, Effect, GameState, Option, Piece } from "./types.js";
+import { keywordDeclarations, printedKeyword } from "./keywords.js";
+import { playerOrder } from "./team.js";
 
 export type RevealAbilityId = "text" | "incite" | "surge";
 export interface RevealWindow {

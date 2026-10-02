@@ -1,8 +1,8 @@
-import catalogCards from "../data/catalog-cards.json";
-import sourceDecks from "../data/catalog-decks.json";
-import type { Card } from "./types";
-import { SCRIPTED_HERO_IDS } from "./engine-support";
-import { identityMatch } from "./unique";
+import catalogCards from "../data/catalog-cards.json" with { type: "json" };
+import sourceDecks from "../data/catalog-decks.json" with { type: "json" };
+import type { Card } from "./types.js";
+import { SCRIPTED_HERO_IDS } from "./engine-support.js";
+import { identityMatch } from "./unique.js";
 
 type ImportedCard = Card & { duplicate_of?: string; permanent?: boolean };
 export type HeroAspect =

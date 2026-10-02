@@ -1,7 +1,7 @@
-import { CARDS, card, heroCard, heroStats, HEROES } from "./cards";
-import { allInPlay, seatView } from "./team";
-import { paymentSources, paymentStatus, paymentSubject } from "./payment";
-import { attackContext } from "./presentation";
+import { CARDS, card, heroCard, heroStats, HEROES } from "./cards.js";
+import { allInPlay, seatView } from "./team.js";
+import { paymentSources, paymentStatus, paymentSubject } from "./payment.js";
+import { attackContext } from "./presentation.js";
 import type {
   ActionReview,
   Effect,
@@ -9,7 +9,7 @@ import type {
   Pacing,
   Piece,
   ReviewCard,
-} from "./types";
+} from "./types.js";
 
 type LocatedCard = {
   id: string;

@@ -1,7 +1,7 @@
 import {
   doctorStrangeAbilityOptions,
   doctorStrangeTopInvocation,
-} from "./doctor-strange";
+} from "./doctor-strange.js";
 import {
   card,
   handSize,
@@ -10,7 +10,7 @@ import {
   maxHP,
   pieceHP,
   plain,
-} from "./cards";
+} from "./cards.js";
 import {
   abilityOptions,
   canPay,
@@ -20,11 +20,11 @@ import {
   playable,
   schemeLimit,
   targets,
-} from "./engine";
-import { suggestPayment } from "./payment";
-import type { PaymentSource } from "./payment";
-import { engaged } from "./team";
-import type { Command, GameState, Piece, Prompt } from "./types";
+} from "./engine.js";
+import { suggestPayment } from "./payment.js";
+import type { PaymentSource } from "./payment.js";
+import { engaged } from "./team.js";
+import type { Command, GameState, Piece, Prompt } from "./types.js";
 
 /**
  * A rules-aware heuristic player. It suggests the next command for the hero

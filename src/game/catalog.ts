@@ -1,6 +1,6 @@
 import packData from "../data/catalog-packs.json" with { type: "json" };
 import deckData from "../data/catalog-decks.json" with { type: "json" };
-import { CATALOG_CARDS, HEROES, card, deckCodes } from "./cards";
+import { CATALOG_CARDS, HEROES, card, deckCodes } from "./cards.js";
 
 export interface Product {
   code: string;

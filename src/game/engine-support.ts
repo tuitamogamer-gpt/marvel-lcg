@@ -1,14 +1,14 @@
-import { GOBLIN_MODULE_SCRIPT_CODES } from "./goblin-modules";
-import { BLACK_WIDOW_SCRIPT_CODES } from "./black-widow";
-import { DOCTOR_STRANGE_SCRIPT_CODES } from "./doctor-strange";
-import { THOR_SCRIPT_CODES } from "./thor";
-import { MS_MARVEL_SCRIPT_CODES } from "./ms-marvel";
-import { RISKY_BUSINESS_SCRIPT_CODES } from "./risky-business";
-import { CAPTAIN_AMERICA_SCRIPT_CODES } from "./captain-america";
-import { HULK_SCRIPT_CODES } from "./hulk";
-import { HULK_PACK_SCRIPT_CODES } from "./hulk-pack";
-import { MUTAGEN_FORMULA_SCRIPT_CODES } from "./mutagen-formula";
-import { CAPTAIN_PACK_SCRIPT_CODES } from "./captain-pack";
+import { GOBLIN_MODULE_SCRIPT_CODES } from "./goblin-modules.js";
+import { BLACK_WIDOW_SCRIPT_CODES } from "./black-widow.js";
+import { DOCTOR_STRANGE_SCRIPT_CODES } from "./doctor-strange.js";
+import { THOR_SCRIPT_CODES } from "./thor.js";
+import { MS_MARVEL_SCRIPT_CODES } from "./ms-marvel.js";
+import { RISKY_BUSINESS_SCRIPT_CODES } from "./risky-business.js";
+import { CAPTAIN_AMERICA_SCRIPT_CODES } from "./captain-america.js";
+import { HULK_SCRIPT_CODES } from "./hulk.js";
+import { HULK_PACK_SCRIPT_CODES } from "./hulk-pack.js";
+import { MUTAGEN_FORMULA_SCRIPT_CODES } from "./mutagen-formula.js";
+import { CAPTAIN_PACK_SCRIPT_CODES } from "./captain-pack.js";
 
 /** Modules installed in the dispatcher and verified by actual mission tests. */
 export const SCRIPTED_HERO_IDS = new Set([

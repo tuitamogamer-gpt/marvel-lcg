@@ -1,6 +1,6 @@
-import catalogCards from "../data/catalog-cards.json";
-import { allInPlay } from "./team";
-import type { Card, GameState } from "./types";
+import catalogCards from "../data/catalog-cards.json" with { type: "json" };
+import { allInPlay } from "./team.js";
+import type { Card, GameState } from "./types.js";
 
 const cards = catalogCards as unknown as Card[];
 const byCode = new Map(cards.map((c) => [c.code, c]));

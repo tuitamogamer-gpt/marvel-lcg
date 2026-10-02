@@ -65,4 +65,6 @@ The suite includes focused transparency tests for immediate hero form changes wi
 
 `scripts/expansion-check.mjs` additionally exercises real Hulk Smash payment/Overkill, Mutagen delayed boosts, indirect damage allocation, save/reload and responsive decision windows. `scripts/engine-continuation-check.mjs` covers Thor, Ms. Marvel, Risky Business counters, form/ready locks, ally limits and mandatory response ordering. `scripts/hero-pack-check.mjs` exercises the faceup Invocation inspector, hidden special-deck order, native Spell Mastery payment, physical Preparation discard and ordered followers, both original source-deck launches, pending-decision reloads and 1440/390/320-pixel layouts.
 
+The account API also has a native Node production-entry smoke (`npm run test:production-entry`). It loads the actual transpiled function/dependency graph with explicit `.js` module specifiers and JSON import attributes, then verifies the unconfigured-storage response without network or local SQLite access. This catches serverless import failures that bundled Vitest/Vite checks can conceal; it does not certify cloud persistence or card rules.
+
 The standard web-game skill client also runs against the application, using `window.render_game_to_text` and the deterministic `window.advanceTime` hook. This turn-based game has no wall-clock-driven rules.

@@ -1,9 +1,16 @@
-import { goblinIdentityLocked } from "./goblin-modules";
-import type { Card, Effect, GameState, Option, Piece, Resource } from "./types";
-import type { PaymentSource } from "./payment";
-import { playerOrder } from "./team";
-import { consumeStatus } from "./keywords";
-import catalogCards from "../data/catalog-cards.json";
+import { goblinIdentityLocked } from "./goblin-modules.js";
+import type {
+  Card,
+  Effect,
+  GameState,
+  Option,
+  Piece,
+  Resource,
+} from "./types.js";
+import type { PaymentSource } from "./payment.js";
+import { playerOrder } from "./team.js";
+import { consumeStatus } from "./keywords.js";
+import catalogCards from "../data/catalog-cards.json" with { type: "json" };
 
 const cards = new Map((catalogCards as Card[]).map((c) => [c.code, c]));
 const E = (type: string, args: Record<string, unknown> = {}): Effect => ({

@@ -1,6 +1,6 @@
-import { card, heroCard, pieceHP } from "./cards";
-import { allInPlay } from "./team";
-import type { GameState } from "./types";
+import { card, heroCard, pieceHP } from "./cards.js";
+import { allInPlay } from "./team.js";
+import type { GameState } from "./types.js";
 
 export function combatCharacter(s: GameState, id: string) {
   if (id === "hero") {

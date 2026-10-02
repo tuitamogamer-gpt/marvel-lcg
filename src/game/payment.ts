@@ -1,17 +1,17 @@
-import { thorResourceSources } from "./thor";
-import { blackWidowResourceSources } from "./black-widow";
-import { doctorStrangeResourceSources } from "./doctor-strange";
-import { msMarvelResourceSources } from "./ms-marvel";
-import { rulesCode } from "./rules-code";
-import { CARDS, card, heroCard, resources } from "./cards";
-import { allInPlay } from "./team";
-import { captainResourceSources } from "./captain-america";
-import { hulkResourceSources, hulkCanSpendCard } from "./hulk";
-import { hulkPackResourceSources } from "./hulk-pack";
-import { captainPackResourceSources } from "./captain-pack";
-import { cardScript } from "./script-registry";
-import { resourceAbility } from "./scripts/runtime";
-import type { GameState, Prompt, Resource } from "./types";
+import { thorResourceSources } from "./thor.js";
+import { blackWidowResourceSources } from "./black-widow.js";
+import { doctorStrangeResourceSources } from "./doctor-strange.js";
+import { msMarvelResourceSources } from "./ms-marvel.js";
+import { rulesCode } from "./rules-code.js";
+import { CARDS, card, heroCard, resources } from "./cards.js";
+import { allInPlay } from "./team.js";
+import { captainResourceSources } from "./captain-america.js";
+import { hulkResourceSources, hulkCanSpendCard } from "./hulk.js";
+import { hulkPackResourceSources } from "./hulk-pack.js";
+import { captainPackResourceSources } from "./captain-pack.js";
+import { cardScript } from "./script-registry.js";
+import { resourceAbility } from "./scripts/runtime.js";
+import type { GameState, Prompt, Resource } from "./types.js";
 
 export function paymentSubject(s: GameState, prompt: Prompt) {
   return (

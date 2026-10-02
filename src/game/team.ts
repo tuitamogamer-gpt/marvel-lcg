@@ -1,4 +1,4 @@
-import type { GameState, PlayerSeat, Piece } from "./types";
+import type { GameState, PlayerSeat, Piece } from "./types.js";
 
 // The active view keeps the original solo API. Seats own every persistent zone.
 // Rebind after JSON hydration, which does not preserve shared object references.

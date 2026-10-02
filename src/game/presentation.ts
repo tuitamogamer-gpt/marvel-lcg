@@ -1,6 +1,6 @@
-import { card, heroCard } from "./cards";
-import { allInPlay, seatView } from "./team";
-import type { Attack, GameState } from "./types";
+import { card, heroCard } from "./cards.js";
+import { allInPlay, seatView } from "./team.js";
+import type { Attack, GameState } from "./types.js";
 
 /** Attachments retain their rules-engine zones; the table groups them by host. */
 export function attachmentsFor(s: GameState, hostId: string) {

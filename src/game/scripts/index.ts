@@ -1,3 +1,3 @@
-export * from "./types";
-export * from "./compiler";
-export * from "./runtime";
+export * from "./types.js";
+export * from "./compiler.js";
+export * from "./runtime.js";

@@ -1,24 +1,24 @@
-import { thorStats } from "./thor";
-import { blackWidowStats } from "./black-widow";
+import { thorStats } from "./thor.js";
+import { blackWidowStats } from "./black-widow.js";
 import {
   doctorStrangeHandSize,
   doctorStrangeStats,
   doctorStrangeTraits,
-} from "./doctor-strange";
-import { expansionErrata } from "./expansion-errata";
-import { msMarvelStats } from "./ms-marvel";
-import { identityMatch } from "./unique";
-import { rulesCode } from "./rules-code";
-import { captainStats } from "./captain-america";
-import { hulkStats } from "./hulk";
-import { captainPackModifiers, captainPackStats } from "./captain-pack";
-import { scriptedModifier } from "./script-registry";
+} from "./doctor-strange.js";
+import { expansionErrata } from "./expansion-errata.js";
+import { msMarvelStats } from "./ms-marvel.js";
+import { identityMatch } from "./unique.js";
+import { rulesCode } from "./rules-code.js";
+import { captainStats } from "./captain-america.js";
+import { hulkStats } from "./hulk.js";
+import { captainPackModifiers, captainPackStats } from "./captain-pack.js";
+import { scriptedModifier } from "./script-registry.js";
 import playerData from "../data/core-player.json" with { type: "json" };
 import encounterData from "../data/core-encounter.json" with { type: "json" };
 import errata from "../data/core-errata.json" with { type: "json" };
 import catalogData from "../data/catalog-cards.json" with { type: "json" };
 import catalogImages from "../data/catalog-images.json" with { type: "json" };
-import type { Aspect, Card, GameState, Piece, Resource } from "./types";
+import type { Aspect, Card, GameState, Piece, Resource } from "./types.js";
 // Keep the downloaded snapshots intact; official corrections survive data syncs.
 export const CARDS = ([...playerData, ...encounterData] as Card[]).map((c) => {
   const correction = errata.find((e) => e.code === c.code);

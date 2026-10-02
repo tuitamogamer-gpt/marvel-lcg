@@ -1,11 +1,11 @@
-import catalog from "../data/catalog-cards.json";
-import players from "../data/core-player.json";
-import encounters from "../data/core-encounter.json";
-import type { Card, GameState, Piece } from "./types";
-import { compileCardScript } from "./scripts/compiler";
-import { staticModifierValue } from "./scripts/runtime";
-import type { StaticModifier } from "./scripts/types";
-import { EXPLICIT_CARD_SCRIPTS } from "./engine-support";
+import catalog from "../data/catalog-cards.json" with { type: "json" };
+import players from "../data/core-player.json" with { type: "json" };
+import encounters from "../data/core-encounter.json" with { type: "json" };
+import type { Card, GameState, Piece } from "./types.js";
+import { compileCardScript } from "./scripts/compiler.js";
+import { staticModifierValue } from "./scripts/runtime.js";
+import type { StaticModifier } from "./scripts/types.js";
+import { EXPLICIT_CARD_SCRIPTS } from "./engine-support.js";
 
 const originals = [...players, ...encounters] as Card[];
 const originalCodes = new Set(originals.map((c) => c.code));

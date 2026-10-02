@@ -1,10 +1,10 @@
 import {
   doctorStrangeAbilityOptions,
   doctorStrangeTopInvocation,
-} from "./doctor-strange";
-import { thorAbilityOptions } from "./thor";
-import { msMarvelAbilityOptions } from "./ms-marvel";
-import { card, maxHP, pieceHP } from "./cards";
+} from "./doctor-strange.js";
+import { thorAbilityOptions } from "./thor.js";
+import { msMarvelAbilityOptions } from "./ms-marvel.js";
+import { card, maxHP, pieceHP } from "./cards.js";
 import {
   abilityOptions,
   canPay,
@@ -12,11 +12,16 @@ import {
   playable,
   schemeLimit,
   targets,
-} from "./engine";
-import { seatView, syncSeat } from "./team";
-import type { Command, GameState, Piece } from "./types";
-import { advise, adviseAction, advisePrompt, endTurnDiscards } from "./advisor";
-import type { Advice } from "./advisor";
+} from "./engine.js";
+import { seatView, syncSeat } from "./team.js";
+import type { Command, GameState, Piece } from "./types.js";
+import {
+  advise,
+  adviseAction,
+  advisePrompt,
+  endTurnDiscards,
+} from "./advisor.js";
+import type { Advice } from "./advisor.js";
 
 /**
  * One-turn lookahead on top of the heuristic advisor. Each candidate action is

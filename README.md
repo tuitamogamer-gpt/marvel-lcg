@@ -21,6 +21,7 @@ Open the local address printed by Vite. In the current workspace the preview run
 ```sh
 npm test          # rules and complete seeded missions
 npm run build    # TypeScript and production bundle
+npm run test:production-entry # native Node account API import and unconfigured-storage response
 npm run preview  # serve the production bundle
 npm run sync:cards
 npm run test:ui   # with the dev server running at localhost:5174
@@ -41,6 +42,8 @@ GitHub Actions (`.github/workflows/ci.yml`) runs the tests, the production build
 ## Deploy
 
 `vercel.json` configures the Vite production build, long-lived cache headers for `/cards`, `/art`, `/icons` and `/assets`, and the security headers (CSP, frame denial, referrer policy). Import the GitHub repository into Vercel or run `vercel --prod` from the linked project. Guest play needs no environment variables. Player accounts require a durable Upstash Redis database and server-only `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` variables in Vercel (the `KV_REST_API_URL` / `KV_REST_API_TOKEN` aliases also work). Until that database is connected the interface hides the sign-in and deck-saving controls; guest play is unaffected. See [account setup and verification](docs/player-accounts.md). Local Vercel account/project metadata is excluded from Git.
+
+Run `npm run test:production-entry` before publishing. It imports the transpiled account function and its actual dependencies in native Node ESM, preserving runtime import specifiers and JSON attributes. The check requires a successful account GET when cloud storage is unconfigured, blocks network requests and rejects a local SQLite fallback. It verifies server startup and the unavailable-storage response; it does not verify configured cloud persistence.
 
 Run the same browser checks against a deployment with `BASE_URL=https://your-project.vercel.app npm run test:ui`.
 

@@ -1,9 +1,9 @@
-import importedCards from "../data/catalog-cards.json";
-import { allInPlay, controller, playerOrder, seatView } from "./team";
-import { captainPackHasTrait } from "./captain-pack";
-import { hulkThreatLocked } from "./hulk";
-import type { Card, Effect, GameState, Option, Piece } from "./types";
-import type { PaymentSource } from "./payment";
+import importedCards from "../data/catalog-cards.json" with { type: "json" };
+import { allInPlay, controller, playerOrder, seatView } from "./team.js";
+import { captainPackHasTrait } from "./captain-pack.js";
+import { hulkThreatLocked } from "./hulk.js";
+import type { Card, Effect, GameState, Option, Piece } from "./types.js";
+import type { PaymentSource } from "./payment.js";
 
 const cards = new Map(
   (importedCards as unknown as Card[]).map((c) => [c.code, c]),
