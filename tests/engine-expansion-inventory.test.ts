@@ -77,8 +77,8 @@ describe("complete expansion rules inventory", () => {
         unsupportedFaceCodes: [],
       });
     }
-    expect(coverage.executableFaces).toBe(706);
-    expect(coverage.unsupportedFaces).toBe(3845);
+    expect(coverage.executableFaces).toBe(703);
+    expect(coverage.unsupportedFaces).toBe(3848);
     expect(coverage.dedicatedFaces).toBe(221);
     expect(coverage.registeredHeroIds).toHaveLength(11);
     expect(goblin.automationCertification).toContain(

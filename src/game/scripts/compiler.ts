@@ -519,8 +519,18 @@ export function compileCardScript(
   }
   if (card.type_code === "ally") {
     const name = card.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (
+      new RegExp(`^Response: After you play ${name} from your hand, `).test(
+        text,
+      )
+    )
+      return {
+        ...script,
+        reason:
+          "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger.",
+      };
     const m = new RegExp(
-      `^Response: After (?:${name} enters play|you play ${name} from your hand), (.+)$`,
+      `^Response: After ${name} enters play, (.+)$`,
     ).exec(text);
     if (m) {
       const program = operation(

@@ -34836,6 +34836,7 @@
         "04037",
         "04038",
         "04039",
+        "04040",
         "04043",
         "04045",
         "04047",
@@ -34857,6 +34858,7 @@
         "04037",
         "04038",
         "04039",
+        "04040",
         "04043",
         "04045",
         "04047",
@@ -35916,6 +35918,7 @@
         "13013",
         "13014",
         "13017",
+        "13018",
         "13019",
         "13020",
         "13024",
@@ -35947,6 +35950,7 @@
         "13013",
         "13014",
         "13017",
+        "13018",
         "13019",
         "13020",
         "13024",
@@ -44538,6 +44542,7 @@
         "56008",
         "56009",
         "56010",
+        "56011",
         "56012",
         "56013",
         "56014",
@@ -44568,6 +44573,7 @@
         "56008",
         "56009",
         "56010",
+        "56011",
         "56012",
         "56013",
         "56014",
@@ -64479,16 +64485,14 @@
       ],
       "compiler": {
         "code": "04040",
-        "status": "supported",
-        "implementation": "script",
-        "rule": "whole-ally-entrance-response",
-        "trigger": "ally-enter"
+        "status": "unsupported",
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "04040",
-        "executable": true,
-        "mechanism": "declarative",
-        "compilerStatus": "supported"
+        "executable": false,
+        "mechanism": "unsupported",
+        "compilerStatus": "unsupported"
       }
     },
     {
@@ -64665,7 +64669,7 @@
       "compiler": {
         "code": "04045",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "04045",
@@ -66826,7 +66830,7 @@
       "compiler": {
         "code": "04097",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "04097",
@@ -66860,7 +66864,7 @@
       "compiler": {
         "code": "04098",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "04098",
@@ -66894,7 +66898,7 @@
       "compiler": {
         "code": "04099",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "04099",
@@ -66928,7 +66932,7 @@
       "compiler": {
         "code": "04100",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "04100",
@@ -82302,7 +82306,7 @@
       "compiler": {
         "code": "13011",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "13011",
@@ -82547,16 +82551,14 @@
       ],
       "compiler": {
         "code": "13018",
-        "status": "supported",
-        "implementation": "script",
-        "rule": "whole-ally-entrance-response",
-        "trigger": "ally-enter"
+        "status": "unsupported",
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "13018",
-        "executable": true,
-        "mechanism": "declarative",
-        "compilerStatus": "supported"
+        "executable": false,
+        "mechanism": "unsupported",
+        "compilerStatus": "unsupported"
       }
     },
     {
@@ -82584,7 +82586,7 @@
       "compiler": {
         "code": "13019",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "13019",
@@ -93403,7 +93405,7 @@
       "compiler": {
         "code": "17002",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "17002",
@@ -98426,7 +98428,7 @@
       "compiler": {
         "code": "21013",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "21013",
@@ -106519,7 +106521,7 @@
       "compiler": {
         "code": "22011",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "22011",
@@ -114732,7 +114734,7 @@
       "compiler": {
         "code": "27010",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "27010",
@@ -114766,7 +114768,7 @@
       "compiler": {
         "code": "27011",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "27011",
@@ -130049,7 +130051,7 @@
       "compiler": {
         "code": "32042",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "32042",
@@ -140213,7 +140215,7 @@
       "compiler": {
         "code": "35014",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "35014",
@@ -141722,7 +141724,7 @@
       "compiler": {
         "code": "36017",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "36017",
@@ -144290,7 +144292,7 @@
       "compiler": {
         "code": "38011",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "38011",
@@ -149117,7 +149119,7 @@
       "compiler": {
         "code": "40016",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "40016",
@@ -157856,7 +157858,7 @@
       "compiler": {
         "code": "41003",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "41003",
@@ -173319,7 +173321,7 @@
       "compiler": {
         "code": "46020",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "46020",
@@ -191756,7 +191758,7 @@
       "compiler": {
         "code": "54003",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "54003",
@@ -196828,16 +196830,14 @@
       ],
       "compiler": {
         "code": "56011",
-        "status": "supported",
-        "implementation": "script",
-        "rule": "whole-ally-entrance-response",
-        "trigger": "ally-enter"
+        "status": "unsupported",
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "56011",
-        "executable": true,
-        "mechanism": "declarative",
-        "compilerStatus": "supported"
+        "executable": false,
+        "mechanism": "unsupported",
+        "compilerStatus": "unsupported"
       }
     },
     {
@@ -197554,7 +197554,7 @@
       "compiler": {
         "code": "56030",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "56030",
@@ -221993,7 +221993,7 @@
       "compiler": {
         "code": "61017",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       "installedRegistry": {
         "code": "61017",
@@ -265621,7 +265621,7 @@
     "src/data/core-encounter.json": "db9ec82bf2b9aa6b00bc813bc6b64aac3d0237996e3393f47d8dbd3645ddd2da",
     "src/game/engine.ts": "967377ebb1c263159875790bedfa0dd99e949ecdd6cc1a5d36c3b0d94120713c",
     "src/data/catalog-provenance.json": "8dddd4de54508b44039d4cf196a98550503486efdaf2ac9771de55992a77b7e4",
-    "src/game/scripts/compiler.ts": "76f081395cf2aebba141c7bf7011db59ef113e39378f334c4982a55d02deefd7",
+    "src/game/scripts/compiler.ts": "f215e38deadb3bffad4a636177f6671670b4050a0cc9ccdf8014c7dbc5ffcdf1",
     "src/game/scripts/runtime.ts": "60ed7040b44d97589d6eb3e0583e6153680757c1de50fe8788c5dd48d1c355ac",
     "src/game/scripts/types.ts": "7c911c5060b6d6945391256137de71ac00a4adb75b5765040b7a6f0a71dbe2fc",
     "src/game/script-registry.ts": "b0a455f80883246deeede82cef93ce15faf5eedaf71b63732f65edeabb962a99",
@@ -265700,12 +265700,12 @@
   "compilerCoverage": {
     "total": 4551,
     "native": 432,
-    "declarative": 66,
-    "unsupported": 4053,
+    "declarative": 63,
+    "unsupported": 4056,
     "rules": {
       "exact-native-core-alias": 432,
-      "unsupported": 4053,
-      "whole-ally-entrance-response": 6,
+      "unsupported": 4056,
+      "whole-ally-entrance-response": 3,
       "whole-action-operation": 35,
       "whole-exhaust-resource": 4,
       "whole-keyword-only-character": 3,
@@ -267901,10 +267901,8 @@
       },
       {
         "code": "04040",
-        "status": "supported",
-        "implementation": "script",
-        "rule": "whole-ally-entrance-response",
-        "trigger": "ally-enter"
+        "status": "unsupported",
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "04041",
@@ -267936,7 +267934,7 @@
       {
         "code": "04045",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "04046",
@@ -268235,22 +268233,22 @@
       {
         "code": "04097",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "04098",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "04099",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "04100",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "04101",
@@ -270455,7 +270453,7 @@
       {
         "code": "13011",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "13012",
@@ -270494,15 +270492,13 @@
       },
       {
         "code": "13018",
-        "status": "supported",
-        "implementation": "script",
-        "rule": "whole-ally-entrance-response",
-        "trigger": "ally-enter"
+        "status": "unsupported",
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "13019",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "13020",
@@ -272021,7 +272017,7 @@
       {
         "code": "17002",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "17003",
@@ -272779,7 +272775,7 @@
       {
         "code": "21013",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "21014",
@@ -273870,7 +273866,7 @@
       {
         "code": "22011",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "22012",
@@ -275033,12 +275029,12 @@
       {
         "code": "27010",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "27011",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "27012",
@@ -277104,7 +277100,7 @@
       {
         "code": "32042",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "32043",
@@ -278473,7 +278469,7 @@
       {
         "code": "35014",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "35015",
@@ -278693,7 +278689,7 @@
       {
         "code": "36017",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "36018",
@@ -279069,7 +279065,7 @@
       {
         "code": "38011",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "38012",
@@ -279689,7 +279685,7 @@
       {
         "code": "40016",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "40017",
@@ -280814,7 +280810,7 @@
       {
         "code": "41003",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "41004",
@@ -282893,7 +282889,7 @@
       {
         "code": "46020",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "46021",
@@ -285408,7 +285404,7 @@
       {
         "code": "54003",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "54004",
@@ -286058,10 +286054,8 @@
       },
       {
         "code": "56011",
-        "status": "supported",
-        "implementation": "script",
-        "rule": "whole-ally-entrance-response",
-        "trigger": "ally-enter"
+        "status": "unsupported",
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "56012",
@@ -286168,7 +286162,7 @@
       {
         "code": "56030",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "56031",
@@ -289357,7 +289351,7 @@
       {
         "code": "61017",
         "status": "unsupported",
-        "reason": "No exact executable rule covers every printed clause and timing on this face."
+        "reason": "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger."
       },
       {
         "code": "61018",
@@ -289719,8 +289713,8 @@
   },
   "installedRegistryCoverage": {
     "total": 4551,
-    "executableFaces": 706,
-    "unsupportedFaces": 3845,
+    "executableFaces": 703,
+    "unsupportedFaces": 3848,
     "dedicatedFaces": 221,
     "dedicatedCodes": [
       "02001a",
@@ -290252,7 +290246,7 @@
         "code": "trors",
         "name": "The Rise of Red Skull",
         "faceCount": 181,
-        "executableFaces": 21,
+        "executableFaces": 20,
         "unsupportedFaceCodes": [
           "04001a",
           "04001b",
@@ -290285,6 +290279,7 @@
           "04037",
           "04038",
           "04039",
+          "04040",
           "04043",
           "04045",
           "04047",
@@ -290531,7 +290526,7 @@
         "code": "wsp",
         "name": "Wasp",
         "faceCount": 36,
-        "executableFaces": 6,
+        "executableFaces": 5,
         "unsupportedFaceCodes": [
           "13001a",
           "13001b",
@@ -290550,6 +290545,7 @@
           "13013",
           "13014",
           "13017",
+          "13018",
           "13019",
           "13020",
           "13024",
@@ -293787,7 +293783,7 @@
         "code": "cw",
         "name": "Civil War",
         "faceCount": 234,
-        "executableFaces": 5,
+        "executableFaces": 4,
         "unsupportedFaceCodes": [
           "56001a",
           "56001b",
@@ -293800,6 +293796,7 @@
           "56008",
           "56009",
           "56010",
+          "56011",
           "56012",
           "56013",
           "56014",
@@ -296615,9 +296612,9 @@
       },
       {
         "code": "04040",
-        "executable": true,
-        "mechanism": "declarative",
-        "compilerStatus": "supported"
+        "executable": false,
+        "mechanism": "unsupported",
+        "compilerStatus": "unsupported"
       },
       {
         "code": "04041",
@@ -299543,9 +299540,9 @@
       },
       {
         "code": "13018",
-        "executable": true,
-        "mechanism": "declarative",
-        "compilerStatus": "supported"
+        "executable": false,
+        "mechanism": "unsupported",
+        "compilerStatus": "unsupported"
       },
       {
         "code": "13019",
@@ -317567,9 +317564,9 @@
       },
       {
         "code": "56011",
-        "executable": true,
-        "mechanism": "declarative",
-        "compilerStatus": "supported"
+        "executable": false,
+        "mechanism": "unsupported",
+        "compilerStatus": "unsupported"
       },
       {
         "code": "56012",
