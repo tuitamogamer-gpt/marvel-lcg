@@ -2,6 +2,11 @@ import { ASPECTS, CATALOG_CARDS, HEROES, card, deckCodes } from "./cards.js";
 import { identityMatch, uniqueMatches } from "./unique.js";
 import { hasExecutableScript } from "./script-registry.js";
 import { CAPTAIN_AMERICA_SCRIPT_CODES } from "./captain-america.js";
+import {
+  heroDeckAspects,
+  heroRequiredCards,
+  validateHeroDeck,
+} from "./hero-runtime.js";
 import type { Aspect, Card } from "./types.js";
 
 export function countsFor(codes: string[]) {
@@ -13,10 +18,16 @@ export function countsFor(codes: string[]) {
 export function copyLimit(c: Card) {
   return c.deck_limit ?? (c.is_unique ? 1 : 3);
 }
-export function deckOptions(heroId: string, aspect: Aspect) {
+export function deckOptions(
+  heroId: string,
+  aspect: Aspect,
+  chosenAspects?: Aspect[],
+) {
   const heroPack = card(
     HEROES.find((h) => h.id === heroId)?.code || "",
   )?.pack_code;
+  const selectedAspects =
+    chosenAspects || heroDeckAspects(heroId, deckCodes(heroId, aspect), aspect);
   return CATALOG_CARDS.filter(
     (c) =>
       !identityMatch(heroId, c) &&
@@ -25,10 +36,11 @@ export function deckOptions(heroId: string, aspect: Aspect) {
       ["ally", "event", "resource", "support", "upgrade"].includes(
         c.type_code,
       ) &&
-      ((c.faction_code === "hero" &&
+      (((c.faction_code === "hero" ||
+        Object.hasOwn(heroRequiredCards(heroId), c.code)) &&
         c.set_code === heroId &&
         c.pack_code === heroPack) ||
-        c.faction_code === aspect ||
+        selectedAspects.includes(c.faction_code as Aspect) ||
         c.faction_code === "basic"),
   );
 }
@@ -36,6 +48,7 @@ export function deckErrors(
   heroId: string,
   aspect: Aspect,
   codes: unknown,
+  chosenAspects?: Aspect[],
 ): string[] {
   if (
     !HEROES.some((h) => h.id === heroId) ||
@@ -44,6 +57,25 @@ export function deckErrors(
     return ["Choose a valid hero and aspect."];
   if (!Array.isArray(codes) || codes.some((c) => typeof c !== "string"))
     return ["Choose cards for this deck."];
+  if (
+    chosenAspects &&
+    (!Array.isArray(chosenAspects) ||
+      chosenAspects.length !== (heroId === "spider_woman" ? 2 : 1) ||
+      new Set(chosenAspects).size !== chosenAspects.length ||
+      !chosenAspects.includes(aspect) ||
+      chosenAspects.some((a) => !ASPECTS.some((option) => option.id === a)))
+  )
+    return ["Choose distinct supported aspects, including the primary aspect."];
+  if (heroId === "spider_woman" || heroId === "hawkeye") {
+    const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);
+    const errors = validateHeroDeck(heroId, selected, codes).errors;
+    for (const code of codes)
+      if (!hasExecutableScript(code))
+        errors.push(
+          `${card(code)?.name || code} does not have complete automated rules support.`,
+        );
+    return [...new Set(errors)];
+  }
   if (codes.length > 50 || codes.length < 40)
     return ["A deck needs 40–50 cards, including its 15 hero cards."];
   const counts = countsFor(codes);

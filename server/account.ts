@@ -8,6 +8,7 @@ import {
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { ASPECTS, HEROES, MODULES, VILLAINS, card } from "../src/game/cards.js";
 import { deckErrors } from "../src/game/decks.js";
+import { heroDeckAspects } from "../src/game/hero-runtime.js";
 import type { GameState } from "../src/game/types";
 import type {
   AccountSession,
@@ -571,7 +572,23 @@ export function createAccountHandler(providedStore?: Store) {
             name.length > 0 && name.length <= 60,
             "Name your deck using 1–60 characters.",
           );
-          const errors = deckErrors(body.heroId, body.aspect, body.cards);
+          requireValue(
+            body.aspects === undefined ||
+              (Array.isArray(body.aspects) &&
+                body.aspects.every((a: unknown) => typeof a === "string")),
+            "Choose valid aspects for this deck.",
+          );
+          const aspects =
+            body.aspects ||
+            (Array.isArray(body.cards)
+              ? heroDeckAspects(body.heroId, body.cards, body.aspect)
+              : []);
+          const errors = deckErrors(
+            body.heroId,
+            body.aspect,
+            body.cards,
+            aspects,
+          );
           requireValue(!errors.length, errors[0]);
           const old = library.decks.find((d) => d.id === id);
           requireValue(
@@ -588,6 +605,7 @@ export function createAccountHandler(providedStore?: Store) {
             name,
             heroId: body.heroId,
             aspect: body.aspect,
+            aspects,
             cards: body.cards,
             revision: (old?.revision || 0) + 1,
             updatedAt: now,

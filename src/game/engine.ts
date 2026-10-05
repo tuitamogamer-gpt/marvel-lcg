@@ -1,4 +1,39 @@
 import {
+  hawkeyePlayRestriction,
+  hawkeyeEvent,
+  hawkeyeCardEntered,
+  hawkeyeStoredPlayable,
+  hawkeyeTakeStoredForPlay,
+  hawkeyeAbilityOptions,
+  hawkeyeAbility,
+  hawkeyeAttackInitiatedOptions,
+  hawkeyeEncounterReveal,
+  hawkeyeBoost,
+  hawkeyeSchemeDefeated,
+  hawkeyePhaseEnded,
+  hawkeyeEnemyAttackTraits,
+  hawkeyeAllyAttackTraits,
+  HAWKEYE_SCRIPT_CODES,
+  resolveHawkeyeEffect,
+  type HawkeyePorts,
+} from "./hawkeye.js";
+import {
+  spiderWomanCardPlayed,
+  spiderWomanResourceSpent,
+  spiderWomanPlayRestriction,
+  spiderWomanEvent,
+  spiderWomanAllyEnter,
+  spiderWomanAllyBasicUsed,
+  spiderWomanSchemeDefeated,
+  spiderWomanAbilityOptions,
+  spiderWomanAbility,
+  spiderWomanEncounterReveal,
+  spiderWomanBoost,
+  resolveSpiderWomanEffect,
+  SPIDER_WOMAN_SCRIPT_CODES,
+  type SpiderWomanPorts,
+} from "./spider-woman.js";
+import {
   doctorStrangeSetup,
   doctorStrangeMasterInvocation,
   doctorStrangeAdditionalPlayCost,
@@ -246,6 +281,7 @@ import {
 } from "./hulk.js";
 import {
   captainPackModifiers,
+  captainPackHasTrait,
   captainPackStats,
   captainPackAllyLimit,
   captainPackDiscount,
@@ -399,12 +435,27 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
   if (source === "hero")
     return (
       printedKeyword(heroCard(s), name) +
+      (name === "Ranged" && s.player.inPlay.some((p) => p.code === "04002")
+        ? 1
+        : 0) +
       (name === "Retaliate"
         ? captainStats(s).retaliate + hulkStats(s).retaliate
         : 0)
     );
   const p = find(s, source);
-  return p ? printedKeyword(card(p), name) : 0;
+  if (!p) return 0;
+  const granted = hawkeyeEnemyAttackTraits(s, p);
+  const allyTraits = hawkeyeAllyAttackTraits(p);
+  return Math.max(
+    printedKeyword(card(p), name),
+    Number(
+      name === "Piercing" &&
+        (granted.piercing ||
+          allyTraits.piercing ||
+          (s.attack?.attacker === p.id && s.attack.piercing)),
+    ),
+    Number(name === "Ranged" && (granted.ranged || allyTraits.ranged)),
+  );
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
 function resetPiece(p: Piece, entering = false): Piece {
@@ -1479,13 +1530,13 @@ function threat(
     }
   }
 }
-function thwart(s: GameState, target: string, n: number) {
+function thwart(s: GameState, target: string, n: number, ignoreCrisis = false) {
   if (n > 0 && !s.flags.additionalThwartPacket)
     n += msMarvelEventAmountModifier(s, s.currentEventId, "thwart");
   if (hulkThreatLocked(s, target)) return 0;
   if (target === "main") {
     if (
-      s.sideSchemes.some((p) => card(p).scheme_crisis) ||
+      (!ignoreCrisis && s.sideSchemes.some((p) => card(p).scheme_crisis)) ||
       rulesCode(s.scheme) === "01139b"
     ) {
       log(s, "Threat cannot be removed from the main scheme.");
@@ -1529,6 +1580,7 @@ function defeatScheme(s: GameState, p: Piece) {
     s.villain.hp -= 10;
   }
   doctorStrangeSchemeDefeated(s, p, dsPorts);
+  add(s, ...hawkeyeSchemeDefeated(s, p), ...spiderWomanSchemeDefeated(s, p));
   discardPiece(s, p.id);
   if (s.villain.hp <= 0) advanceVillain(s);
 }
@@ -1763,6 +1815,7 @@ function thwartAction(
   n: number,
   source = "hero",
   initiated = false,
+  ignoreCrisis = false,
 ) {
   const p = source === "hero" ? s.player : find(s, source);
   if (!p) return;
@@ -1775,9 +1828,15 @@ function thwartAction(
     log(s, "Confused is removed instead of thwarting.");
     return;
   }
-  if (!targets(s, "scheme", false, true).some((entry) => entry.id === target))
+  if (
+    !(
+      ignoreCrisis
+        ? hawkeyePorts.schemeTargets(s, true)
+        : targets(s, "scheme", false, true)
+    ).some((entry) => entry.id === target)
+  )
     return;
-  thwart(s, target, n);
+  thwart(s, target, n, ignoreCrisis);
 }
 /** Whether the hero's hand and resource abilities can meet a cost right now. */
 export function canPay(
@@ -1823,6 +1882,7 @@ function requestPayment(
     cost,
     requirements,
     card: piece,
+    cancellationQueue: cancelable && s.attack ? [...s.queue] : undefined,
     after: after.map((e) => effectContext(s, e)),
     cancelable,
     paymentTarget: targetCode || piece?.code,
@@ -1856,6 +1916,7 @@ function pay(s: GameState, ids: string[], wildAs: Resource = "energy") {
       const source = find(s, id)!;
       const msSpent = msMarvelResourceSpent(s, source);
       const dsSpent = doctorStrangeResourceSpent(s, source);
+      spiderWomanResourceSpent(s, source, p.paymentTarget);
       source.exhausted = true;
       for (const effect of [
         ...(msSpent || []),
@@ -1899,7 +1960,12 @@ export function newGame(config: {
   difficulty?: "standard" | "expert";
   module?: string;
   seed?: number;
-  heroes?: { heroId: string; aspect: Aspect; deckCards?: string[] }[];
+  heroes?: {
+    heroId: string;
+    aspect: Aspect;
+    deckCards?: string[];
+    deckAspects?: Aspect[];
+  }[];
   guided?: boolean;
   pacing?: Pacing;
   heroic?: number;
@@ -1931,7 +1997,12 @@ export function newGame(config: {
   );
   for (const seat of team) {
     if (seat.deckCards) {
-      const errors = deckErrors(seat.heroId, seat.aspect, seat.deckCards);
+      const errors = deckErrors(
+        seat.heroId,
+        seat.aspect,
+        seat.deckCards,
+        seat.deckAspects,
+      );
       need(!errors.length, errors[0]);
     }
   }
@@ -2168,6 +2239,10 @@ export function playable(s: GameState, p: Piece): string | null {
   if (thorRestriction) return thorRestriction;
   const msRestriction = msMarvelPlayRestriction(s, p);
   if (msRestriction) return msRestriction;
+  const hawkeyeRestriction = hawkeyePlayRestriction(s, p, hawkeyePorts);
+  if (hawkeyeRestriction) return hawkeyeRestriction;
+  const spiderWomanRestriction = spiderWomanPlayRestriction(s, p, swPorts);
+  if (spiderWomanRestriction) return spiderWomanRestriction;
   const captainRestriction = captainPlayRestriction(s, p);
   if (captainRestriction) return captainRestriction;
   const hulkRestriction = hulkPlayRestriction(s, p);
@@ -2280,16 +2355,37 @@ function play(
   lightningX?: number,
   masterInvocationId?: string,
   attachedTarget?: string,
+  agilityHandled = false,
 ) {
   const c = card(p);
-  const zone = s.player.hand.some((x) => x.id === p.id)
+  const agility = !agilityHandled ? spiderWomanCardPlayed(s, c) : [];
+  if (agility.length) {
+    add(
+      s,
+      ...agility,
+      E("play", {
+        piece: p,
+        paid,
+        lightningX,
+        masterInvocationId,
+        attachedTarget,
+        agilityHandled: true,
+      }),
+    );
+    return;
+  }
+  const stored = hawkeyeStoredPlayable(s).some((x) => x.id === p.id);
+  const fromHand = s.player.hand.some((x) => x.id === p.id);
+  const zone = fromHand
     ? s.player.hand
     : msMarvelDiscardPlayable(s, p)
       ? s.player.discard
       : s.player.hand;
   const i = zone.findIndex((x) => x.id === p.id);
-  need(i >= 0, "Card is no longer available to play.");
-  zone.splice(i, 1);
+  need(stored || i >= 0, "Card is no longer available to play.");
+  if (stored)
+    need(hawkeyeTakeStoredForPlay(s, p.id), "The stored Arrow is unavailable.");
+  else zone.splice(i, 1);
   for (const e of doctorStrangeCardPlayed(s, c)) discardPiece(s, e.id);
   msMarvelCardPlayed(s);
   captainCardPlayed(s, c);
@@ -2326,6 +2422,7 @@ function play(
       ...thorCardEntered(s, p),
       ...doctorStrangeCardEntered(s, p),
       ...blackWidowCardPlayed(s, p),
+      ...hawkeyeCardEntered(s, p),
     );
     if (cardScript(p)?.implementation === "script")
       s.player.hp += maxHP(s) - healthBefore;
@@ -2348,10 +2445,11 @@ function play(
     if (rulesCode(p) === "01039") s.player.hp++;
     if (p.code === "10010") s.player.hp += 4;
     if (c.type_code === "ally")
-      add(s, E("allyLimit"), E("allyEnter", { id: p.id, paid }));
+      add(s, E("allyLimit"), E("allyEnter", { id: p.id, paid, fromHand }));
     const script = cardScript(p);
     if (
       script?.implementation === "script" &&
+      p.code !== "04016" &&
       script.constraints.playUnderAnyPlayer &&
       s.playerCount > 1
     )
@@ -2404,7 +2502,17 @@ function play(
       );
   }
 }
-function allyEnter(s: GameState, p: Piece, paid: Resource[] = []) {
+function allyEnter(
+  s: GameState,
+  p: Piece,
+  paid: Resource[] = [],
+  fromHand = false,
+) {
+  const sw = spiderWomanAllyEnter(s, p, fromHand);
+  if (sw !== null) {
+    add(s, ...sw);
+    return;
+  }
   const ds = doctorStrangeAllyEnter(s, p);
   if (ds !== null) {
     add(s, ...ds);
@@ -2505,6 +2613,16 @@ function event(
   lightningX?: number,
   masterInvocationId?: string,
 ) {
+  const hawkeye = hawkeyeEvent(s, p);
+  if (hawkeye !== null) {
+    add(s, ...hawkeye);
+    return;
+  }
+  const sw = spiderWomanEvent(s, p);
+  if (sw !== null) {
+    add(s, ...sw);
+    return;
+  }
   const ds = doctorStrangeEvent(s, p, paid, masterInvocationId);
   if (ds !== null) {
     add(
@@ -2774,6 +2892,8 @@ export function abilityOptions(
 ): { id: string; label: string; disabled?: string }[] {
   const c = card(p);
   const hero = s.player.form === "hero";
+  const riseOptions = nativeHeroAbilityOptions(s, p.id);
+  if (riseOptions.length && c.type_code !== "ally") return riseOptions;
   const dsOptions = doctorStrangeAbilityOptions(s, p.id, dsPorts);
   if (dsOptions.length && card(p).type_code !== "ally")
     return dsOptions.map(({ id, label }) => ({ id, label }));
@@ -2830,6 +2950,7 @@ export function abilityOptions(
         disabled: p.exhausted ? "Exhausted" : undefined,
       },
       ...scriptedOptions,
+      ...riseOptions,
       ...dsOptions.map(({ id, label }) => ({ id, label })),
       ...(["01020", "01030", "01068"].includes(rulesCode(p))
         ? [
@@ -2922,6 +3043,23 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   );
 }
 function ability(s: GameState, id: string, action = "special") {
+  const rise =
+    hawkeyeAbility(
+      s,
+      id,
+      action === "special" ? undefined : action,
+      hawkeyePorts,
+    ) ??
+    spiderWomanAbility(
+      s,
+      id,
+      action === "special" ? undefined : action,
+      swPorts,
+    );
+  if (rise) {
+    add(s, ...rise);
+    return;
+  }
   if (!(
     find(s, id) &&
     card(find(s, id)!).type_code === "ally" &&
@@ -3249,6 +3387,7 @@ function ability(s: GameState, id: string, action = "special") {
           option(kind, kind === "attack" ? "+2 ATK" : "+2 THW", [
             E("payRequest", {
               title: "Density Control",
+              targetCode: x.code,
               cost: 1,
               requirements: ["energy"],
               after: [E("vision", { id, kind })],
@@ -3717,6 +3856,142 @@ const dsPorts: DoctorStrangePorts = {
   cancelBoost: (s, id) => bwPorts.cancelBoostIcons(s, id),
 };
 
+const hawkeyePorts: HawkeyePorts = {
+  queue: add,
+  choose,
+  revealHidden,
+  shufflePlayerDeck: (s) => {
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  recyclePlayer,
+  discardHand,
+  discardPiece,
+  returnAlly: (s, id) => msPorts.returnAlly(s, id),
+  transferControl: (s, id, playerId) =>
+    hulkPackPorts.transferControl(s, id, playerId),
+  canChangeForm: (s) => !goblinIdentityLocked(s),
+  flip,
+  canReadyIdentity: (s, id) => !goblinIdentityLocked(seatView(s, id)),
+  identityHasTrait: (s, id, trait) => bwPorts.identityHasTrait(s, id, trait),
+  characterHasTrait: captainPackHasTrait,
+  canPay,
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  schemeTargets: (s, ignoreCrisis) => {
+    if (captainThwartBlocked(s)) return [];
+    const ordinary = targets(s, "scheme", false, true);
+    if (
+      ignoreCrisis &&
+      !ordinary.some((p) => p.id === "main") &&
+      !engaged(s).some((p) => keyword(p, "Patrol")) &&
+      rulesCode(s.scheme) !== "01139b" &&
+      s.scheme.threat > 0
+    ) {
+      ordinary.unshift({
+        id: "main",
+        label: card(s.scheme.code).name,
+        code: s.scheme.code,
+      });
+    }
+    return ordinary;
+  },
+  preventAllAttackDamage: (s) => {
+    if (s.attack) s.attack.preventAllDamage = true;
+  },
+  log,
+};
+const swPorts: SpiderWomanPorts = {
+  queue: add,
+  choose,
+  revealHidden,
+  shufflePlayerDeck: hawkeyePorts.shufflePlayerDeck,
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  identityMaxHP: (s, id) => maxHP(seatView(s, id)),
+  canReadyIdentity: hawkeyePorts.canReadyIdentity,
+  canGiveStatus: (s, id, status) => dsPorts.canAddStatus(s, id, status),
+  enemyTargets: hawkeyePorts.enemyTargets,
+  schemeTargets: (s, thwarting) => targets(s, "scheme", false, thwarting),
+  peekableDecks: (s) => [
+    ...playerOrder(s).map((seat) => ({
+      id: `player:${seat.id}`,
+      label: `${heroCard(seatView(s, seat)).name}'s deck`,
+      top: seatView(s, seat).player.deck[0],
+    })),
+    { id: "encounter", label: "Encounter deck", top: s.encounter.deck[0] },
+    ...playerOrder(s).flatMap((seat) => {
+      const inv = seatView(s, seat).player.invocationDeck;
+      return inv
+        ? [
+            {
+              id: `invocation:${seat.id}`,
+              label: `${heroCard(seatView(s, seat)).name}'s Invocation deck`,
+              top: inv[0],
+            },
+          ]
+        : [];
+    }),
+  ],
+  thwartDistribution: (s, packets) => {
+    const legal = targets(s, "scheme", false, true);
+    need(
+      packets.every(
+        (p) => p.amount >= 0 && legal.some((x) => x.id === p.target),
+      ),
+      "Invalid threat distribution.",
+    );
+    const defeated: Piece[] = [];
+    for (const packet of packets) {
+      const piece = s.sideSchemes.find((p) => p.id === packet.target);
+      const available =
+        packet.target === "main" ? s.scheme.threat : piece?.counters || 0;
+      const removed = Math.min(packet.amount, available);
+      if (packet.target === "main") s.scheme.threat -= removed;
+      else if (piece) {
+        piece.counters -= removed;
+        if (!piece.counters) defeated.push(piece);
+      }
+      track(s, "threatRemoved", removed);
+      log(
+        s,
+        `Remove ${removed} threat from ${packet.target === "main" ? "the main scheme" : card(piece!).name}.`,
+        "good",
+      );
+    }
+    // Defeat interrupts still see the schemes and their attachments in play.
+    // After they finish, remove the whole simultaneous batch before responses.
+    add(
+      s,
+      ...defeated.flatMap((p) => [
+        ...(goblinModuleDefeated(s, p) || []),
+        ...(mutagenDefeated(s, p) || []),
+        ...captainPackSchemeDefeated(s, p),
+      ]),
+      E("defeatSchemes", { ids: defeated.map((p) => p.id) }),
+    );
+  },
+  attackMinion: (s, id, playerId, after) => {
+    activateSeat(s, playerId);
+    enemyAttack(s, id, undefined, {
+      after,
+      playerId,
+      enemyId: id,
+      kind: "attack",
+      modifier: 0,
+    });
+  },
+  putMinion: (s, p, playerId) => {
+    Object.assign(p, resetPiece(p, true));
+    mutagenPorts.putMinion(s, p, playerId);
+  },
+  log,
+};
+export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
+  return [
+    ...hawkeyeAbilityOptions(s, id, hawkeyePorts),
+    ...spiderWomanAbilityOptions(s, id, swPorts),
+  ].map(({ id, label }) => ({ id, label }));
+}
+export { hawkeyeStoredPlayable };
+
 const thorPorts: ThorEnginePorts = {
   queue: add,
   choose,
@@ -4006,12 +4281,17 @@ function enemyAttack(
   // Forced drone entry, including its responses, completes before defense.
   if (isVillain && rulesCode(s.villain) === "01135") add(s, E("drone"));
   const novaOptions = msMarvelAttackInitiatedOptions(s, p, [], msPorts);
-  if (novaOptions.length)
+  const hawkeyeOptions = hawkeyeAttackInitiatedOptions(s, p, hawkeyePorts);
+  if (novaOptions.length || hawkeyeOptions.length)
     choose(
       s,
       "Enemy initiates attack",
-      "Use Nova before revealing boost cards?",
-      [...novaOptions, option("continue", "Continue the attack", [])],
+      "Use an interrupt before revealing boost cards?",
+      [
+        ...novaOptions,
+        ...hawkeyeOptions,
+        option("continue", "Continue the attack", []),
+      ],
     );
   const forced = doctorStrangeEnemyAttackInitiated(s, p);
   if (forced.length) {
@@ -4062,6 +4342,7 @@ function abortAttack(s: GameState) {
           {
             ...a.activationAfter,
             performed: true,
+            attackedPlayerId: a.targetPlayerId || s.activePlayerId,
             damagePlaced: 0,
             threatPlaced: 0,
           },
@@ -4162,6 +4443,11 @@ function declareDefense(s: GameState) {
   );
 }
 function boostEffects(s: GameState, p: Piece) {
+  const rise = hawkeyeBoost(s, p) ?? spiderWomanBoost(s, p);
+  if (rise !== null) {
+    add(s, ...rise);
+    return;
+  }
   const bw = blackWidowBoost(s, p);
   if (bw !== null) {
     add(s, ...bw);
@@ -4449,7 +4735,9 @@ function finishAttack(s: GameState) {
       : a.originalTarget || "hero";
   const visualAttacker = combatCharacter(s, a.attacker);
   const visualTarget = combatCharacter(s, target);
-  const damage = Math.max(0, a.base - a.defense - a.prevented);
+  const damage = a.preventAllDamage
+    ? 0
+    : Math.max(0, a.base - a.defense - a.prevented);
   const before =
     target === "hero"
       ? s.player.hp
@@ -4616,6 +4904,7 @@ function finishAttack(s: GameState) {
           {
             ...a.activationAfter,
             performed: true,
+            attackedPlayerId: recipientId,
             damagePlaced: a.damagePlaced || 0,
             threatPlaced: 0,
           },
@@ -4766,6 +5055,8 @@ function reveal(s: GameState, p: Piece, skip = false, repeat = false) {
       ...MUTAGEN_FORMULA_SCRIPT_CODES,
       ...BLACK_WIDOW_SCRIPT_CODES,
       ...DOCTOR_STRANGE_SCRIPT_CODES,
+      ...HAWKEYE_SCRIPT_CODES,
+      ...SPIDER_WOMAN_SCRIPT_CODES,
     ].some((code) => code === p.code) ||
       CARDS.some(
         (core) => core.code === rulesCode(p) && core.type_code === "treachery",
@@ -4834,6 +5125,18 @@ function reveal(s: GameState, p: Piece, skip = false, repeat = false) {
   const goblinModule = goblinModuleReveal(s, p);
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
+  const rise = hawkeyeEncounterReveal(s, p) ?? spiderWomanEncounterReveal(s, p);
+  if (
+    rise !== null &&
+    ["obligation", "treachery", "attachment"].includes(c.type_code)
+  ) {
+    if (c.type_code === "attachment" && !repeat) {
+      s.resolving = s.resolving.filter((x) => x.id !== p.id);
+      s.attachments.push(p);
+    }
+    add(s, ...rise);
+    return;
+  }
   if (
     goblinModule !== null &&
     ["treachery", "attachment"].includes(c.type_code)
@@ -4897,6 +5200,7 @@ function reveal(s: GameState, p: Piece, skip = false, repeat = false) {
     if (ms !== null) add(s, ...ms);
     if (risky !== null) add(s, ...risky);
     if (mutagen !== null) add(s, ...mutagen);
+    if (rise !== null) add(s, ...rise);
     if (rulesCode(p) === "01103")
       add(
         s,
@@ -4927,6 +5231,7 @@ function reveal(s: GameState, p: Piece, skip = false, repeat = false) {
     if (bw !== null) add(s, ...bw);
     if (thor !== null) add(s, ...thor);
     if (ms !== null) add(s, ...ms);
+    if (rise !== null) add(s, ...rise);
     if (risky !== null) add(s, ...risky);
     if (mutagen !== null) add(s, ...mutagen);
     if (ds !== null) add(s, ...ds);
@@ -5365,6 +5670,8 @@ function treachery(s: GameState, p: Piece) {
   }
 }
 function resolve(s: GameState, e: Effect) {
+  if (resolveHawkeyeEffect(s, e, hawkeyePorts)) return;
+  if (resolveSpiderWomanEffect(s, e, swPorts)) return;
   if (resolveDoctorStrangeEffect(s, e, dsPorts)) return;
   if (resolveBlackWidowEffect(s, e, bwPorts)) return;
   if (
@@ -5379,7 +5686,9 @@ function resolve(s: GameState, e: Effect) {
           riskyEncounterReveal(state, piece) ??
           mutagenEncounterReveal(state, piece) ??
           blackWidowEncounterReveal(state, piece) ??
-          doctorStrangeEncounterReveal(state, piece);
+          doctorStrangeEncounterReveal(state, piece) ??
+          hawkeyeEncounterReveal(state, piece) ??
+          spiderWomanEncounterReveal(state, piece);
         if (effects !== null) add(state, ...effects);
         else treachery(state, piece);
         state.currentRevealWindowId = previous;
@@ -5649,7 +5958,9 @@ function resolve(s: GameState, e: Effect) {
         heal(s, "hero", 2);
       }
       if (
-        !["03006", "06005", "08004"].includes(p.code) &&
+        !["03006", "06005", "08004", "04005", "04007", "04009"].includes(
+          p.code,
+        ) &&
         c.text?.includes("(attack)") &&
         s.player.stunned
       ) {
@@ -5657,7 +5968,7 @@ function resolve(s: GameState, e: Effect) {
         break;
       }
       if (
-        !["01023", "06003"].includes(rulesCode(p)) &&
+        !["01023", "06003", "04008"].includes(rulesCode(p)) &&
         c.text?.includes("(thwart)") &&
         s.player.confused
       ) {
@@ -5689,6 +6000,13 @@ function resolve(s: GameState, e: Effect) {
     case "resolveHandEvent": {
       const i = s.player.hand.findIndex((p) => p.id === e.id);
       need(i >= 0, "The reaction card is no longer in hand.");
+      const agility = !e.agilityHandled
+        ? spiderWomanCardPlayed(s, card(s.player.hand[i]))
+        : [];
+      if (agility.length) {
+        add(s, ...agility, { ...e, agilityHandled: true });
+        break;
+      }
       const [p] = s.player.hand.splice(i, 1);
       beginResolution(s, p);
       s.flags.discount = 0;
@@ -5863,6 +6181,18 @@ function resolve(s: GameState, e: Effect) {
       if (p) defeatScheme(s, p);
       break;
     }
+    case "defeatSchemes": {
+      const responses: Effect[] = [];
+      for (const id of e.ids as string[]) {
+        const p = s.sideSchemes.find((p) => p.id === id && !p.counters);
+        if (!p) continue;
+        const queued = s.queue.length;
+        defeatScheme(s, p);
+        responses.push(...s.queue.splice(0, s.queue.length - queued));
+      }
+      add(s, ...responses);
+      break;
+    }
     case "minionReactions": {
       const p = find(s, e.id);
       if (p)
@@ -5904,7 +6234,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     case "allyEnter": {
       const p = find(s, e.id);
-      if (p) allyEnter(s, p, e.paid || []);
+      if (p) allyEnter(s, p, e.paid || [], !!e.fromHand);
       break;
     }
     case "restrictedLimit":
@@ -6068,6 +6398,11 @@ function resolve(s: GameState, e: Effect) {
           break;
         }
       }
+      if (e.heroAttackAmount) e.amount = heroStats(s).attack;
+      if (e.basic && e.basicStatAmount !== undefined) {
+        e.amount += heroStats(s).attack - e.basicStatAmount;
+        delete e.basicStatAmount;
+      }
       if (e.attack)
         attackAction(
           s,
@@ -6135,9 +6470,20 @@ function resolve(s: GameState, e: Effect) {
         break;
       }
       if (e.additional) s.flags.additionalThwartPacket = true;
+      if (e.basic && e.basicStatAmount !== undefined) {
+        e.amount += heroStats(s).thwart - e.basicStatAmount;
+        delete e.basicStatAmount;
+      }
       if (e.action)
-        thwartAction(s, e.target, e.amount, e.source, e.thwartInitiated);
-      else thwart(s, e.target, e.amount);
+        thwartAction(
+          s,
+          e.target,
+          e.amount,
+          e.source,
+          e.thwartInitiated,
+          !!e.ignoreCrisis,
+        );
+      else thwart(s, e.target, e.amount, !!e.ignoreCrisis);
       delete s.flags.additionalThwartPacket;
       break;
     case "target":
@@ -6223,6 +6569,7 @@ function resolve(s: GameState, e: Effect) {
         e.lightningX,
         e.masterInvocationId,
         e.attachedTarget,
+        !!e.agilityHandled,
       );
       break;
     case "payRequest":
@@ -6449,6 +6796,7 @@ function resolve(s: GameState, e: Effect) {
       const p = find(s, e.id);
       if (!p) break;
       add(s, ...hulkPackAllyResponse(s, p, !!e.attack));
+      add(s, ...spiderWomanAllyBasicUsed(s, p, e.attack ? "attack" : "thwart"));
       if (rulesCode(p) === "01058" && !e.attack)
         add(
           s,
@@ -6642,6 +6990,9 @@ function resolve(s: GameState, e: Effect) {
       break;
     case "enemyAttack":
       enemyAttack(s, e.id, e.extra);
+      break;
+    case "attackKeyword":
+      if (s.attack && e.keyword === "piercing") s.attack.piercing = true;
       break;
     case "enemyScheme":
       enemyScheme(s, e.id, e.extra);
@@ -7120,6 +7471,7 @@ function resolve(s: GameState, e: Effect) {
                   E("damage", {
                     target: e.attacker,
                     amount: heroStats(s).attack,
+                    heroAttackAmount: true,
                     attack: true,
                   }),
                 ],
@@ -7376,6 +7728,7 @@ function resolve(s: GameState, e: Effect) {
       log(s, `Discarded ${e.ids.length} card(s) before refilling.`);
       break;
     case "allReady":
+      hawkeyePhaseEnded(s, hawkeyePorts);
       add(s, ...eachPlayer(s, E("refill")));
       break;
     case "refill":
@@ -7396,6 +7749,7 @@ function resolve(s: GameState, e: Effect) {
       log(s, `${heroCard(s).name} and their cards are ready.`, "phase");
       break;
     case "beginVillain":
+      hawkeyePhaseEnded(s, hawkeyePorts);
       s.phase = "villain";
       log(s, "Villain phase · threat, activations, then encounters.", "phase");
       add(
@@ -7493,6 +7847,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "newRound": {
+      hawkeyePhaseEnded(s, hawkeyePorts);
       add(s, ...doctorStrangeRoundEnded(s));
       const prev = s.activePlayerId;
       for (const seat of playerOrder(s)) {
@@ -7650,35 +8005,36 @@ function run(s: GameState) {
     const actor = s.players.find(
       (p) => p.id === (e.actorId || s.activePlayerId),
     );
-    const global = [
-      "newRound",
-      "dealEncounters",
-      "beginVillain",
-      "villainStepOne",
-      "nextMulligan",
-      "allReady",
-      "finishResolution",
-      "endScheme",
-      "completeBoost",
-      "mutagen:return-boost",
-      "reveal-window:step",
-      "reveal-window:execute",
-      "reveal-window:text",
-      "attackAftermathOrder",
-      "forcedResponses",
-      "threat",
-      "risky:reveal-each",
-      "risky:main-completed",
-      "risky:discard-each",
-      "risky:advance-main",
-      "risky:loss",
-      "mutagen:deal-each-player",
-      "mutagen:deal",
-      "mutagen:advance-main",
-      "mutagen:loss",
-      "goblin-module:power-drain-each",
-      "goblin-module:interference-each",
-    ].includes(e.type);
+    const global =
+      [
+        "newRound",
+        "dealEncounters",
+        "beginVillain",
+        "villainStepOne",
+        "nextMulligan",
+        "allReady",
+        "finishResolution",
+        "endScheme",
+        "completeBoost",
+        "mutagen:return-boost",
+        "reveal-window:step",
+        "reveal-window:execute",
+        "reveal-window:text",
+        "attackAftermathOrder",
+        "forcedResponses",
+        "threat",
+        "risky:reveal-each",
+        "risky:main-completed",
+        "risky:discard-each",
+        "risky:advance-main",
+        "risky:loss",
+        "mutagen:deal-each-player",
+        "mutagen:deal",
+        "mutagen:advance-main",
+        "mutagen:loss",
+        "goblin-module:power-drain-each",
+        "goblin-module:interference-each",
+      ].includes(e.type) || e.type.startsWith("sw:hydra");
     if (actor?.eliminated && !global) continue;
     activateSeat(
       s,
@@ -7836,8 +8192,9 @@ export function dispatch(state: GameState, command: Command): GameState {
     } else if (command.type === "PAY") pay(s, command.ids, command.wildAs);
     else if (command.type === "CANCEL") {
       need(s.prompt?.cancelable, "This decision cannot be canceled.");
+      const resume = s.prompt?.cancellationQueue;
       s.prompt = null;
-      s.queue = [];
+      s.queue = resume || [];
     } else {
       need(
         s.phase === "player" &&
@@ -7852,7 +8209,8 @@ export function dispatch(state: GameState, command: Command): GameState {
           s.player.hand.find((p) => p.id === command.id) ||
           s.player.discard.find(
             (p) => p.id === command.id && msMarvelDiscardPlayable(s, p),
-          );
+          ) ||
+          hawkeyeStoredPlayable(s).find((p) => p.id === command.id);
         need(p, "Card is not available to play.");
         const reason = playable(s, p!);
         need(!reason, reason || "");
@@ -7952,6 +8310,7 @@ export function dispatch(state: GameState, command: Command): GameState {
                   title: "Basic attack",
                   action: E("damage", {
                     amount: stats.attack,
+                    basicStatAmount: stats.attack,
                     attack: true,
                     basic: true,
                   }),
@@ -7965,6 +8324,7 @@ export function dispatch(state: GameState, command: Command): GameState {
                   title: "Basic thwart",
                   action: E("thwart", {
                     amount: stats.thwart,
+                    basicStatAmount: stats.thwart,
                     action: true,
                     basic: true,
                   }),
@@ -7975,6 +8335,7 @@ export function dispatch(state: GameState, command: Command): GameState {
           if (s.attachments.some((p) => p.id === command.id)) {
             const p = find(s, command.id)!;
             const custom = [
+              ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
               ...goblinModuleAttachmentActions(s, p),
               ...mutagenAttachmentActions(s, p),
             ];
@@ -8123,6 +8484,14 @@ export function summarize(s: GameState) {
     round: s.round,
     identity: heroCard(s).name,
     heroHP: s.player.hp,
+    quiverArrows: hawkeyeStoredPlayable(s).map((p) => ({
+      id: p.id,
+      code: p.code,
+      name: card(p).name,
+      cost: cardCost(s, card(p)),
+      playable: playable(s, p) === null,
+      disabled: playable(s, p) || undefined,
+    })),
     maxHP: maxHP(s),
     exhausted: s.player.exhausted,
     form: s.player.form,

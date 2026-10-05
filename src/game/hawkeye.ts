@@ -35,6 +35,14 @@ const own = (s: GameState, id: string, code?: string) =>
   s.player.inPlay.find((p) => p.id === id && (!code || p.code === code));
 const bow = (s: GameState) => s.player.inPlay.find((p) => p.code === "04002");
 const phaseKey = (s: GameState) => `${s.round}:${s.phase}`;
+// A printed maximum is shared across all copies and all players. Keep its
+// receipt with the player who used it, including after that player is eliminated.
+const goliathUsedThisPhase = (s: GameState) =>
+  s.players.some(
+    (seat) => seatView(s, seat).flags.hawkeyeGoliathPhase === phaseKey(s),
+  );
+const teamTraining = (p: Piece) => definition(p)?.name === "Team Training";
+const skyCycle = (p: Piece) => definition(p)?.name === "Sky Cycle";
 const arrows = new Set(["04005", "04006", "04007", "04008", "04009"]);
 const arrowEvent = (p: Piece) =>
   definition(p)?.type_code === "event" && trait(p, "Arrow");
@@ -92,7 +100,7 @@ export const HAWKEYE_SCRIPT_CODES = [
   "04030",
 ] as const;
 export const HAWKEYE_RULES_SOURCE =
-  "https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf";
+  "https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/08/mc_rulesreference_v18_compressed-1.pdf";
 export const HAWKEYE_STARTER_SOURCE =
   "https://images-cdn.fantasyflightgames.com/filer_public/92/1d/921ddef8-c28c-4096-a9e9-63142230a602/mc10_the_rise_of_red_skull_rules_web.pdf";
 
@@ -116,6 +124,7 @@ export interface HawkeyePorts {
   flip(s: GameState, counts: boolean): void;
   canReadyIdentity(s: GameState, playerId: string): boolean;
   identityHasTrait(s: GameState, playerId: string, trait: string): boolean;
+  characterHasTrait?(s: GameState, id: string, trait: string): boolean;
   canPay(
     s: GameState,
     cost: number,
@@ -138,7 +147,7 @@ export function hawkeyeStats(s: GameState) {
 export function hawkeyeAllyMaxHP(s: GameState, p: Piece): number {
   const seat = controller(s, p.id);
   return seat && definition(p)?.type_code === "ally"
-    ? seatView(s, seat).player.inPlay.filter((x) => x.code === "04016").length
+    ? seatView(s, seat).player.inPlay.filter(teamTraining).length
     : 0;
 }
 export function hawkeyeAllyAttackTraits(p: Piece) {
@@ -153,22 +162,26 @@ export function hawkeyeEnemyAttackTraits(s: GameState, p: Piece) {
   };
 }
 export function hawkeyeAllyAerial(s: GameState, p: Piece): boolean {
-  return allInPlay(s).some((x) => x.code === "04015" && x.attachedTo === p.id);
+  return allInPlay(s).some((x) => skyCycle(x) && x.attachedTo === p.id);
 }
-const skyCycleTargets = (s: GameState, exclude?: string) =>
+const avengerAlly = (s: GameState, p: Piece, ports: HawkeyePorts) =>
+  definition(p)?.type_code === "ally" &&
+  (ports.characterHasTrait
+    ? ports.characterHasTrait(s, p.id, "Avenger")
+    : trait(p, "Avenger"));
+const skyCycleTargets = (s: GameState, ports: HawkeyePorts, exclude?: string) =>
   allInPlay(s).filter(
     (p) =>
-      definition(p)?.type_code === "ally" &&
-      trait(p, "Avenger") &&
+      avengerAlly(s, p, ports) &&
       !allInPlay(s).some(
-        (x) => x.id !== exclude && x.code === "04015" && x.attachedTo === p.id,
+        (x) => x.id !== exclude && skyCycle(x) && x.attachedTo === p.id,
       ),
   );
 const trainingRecipients = (s: GameState, exclude?: string) =>
   livePlayers(s).filter(
     (seat) =>
       !seatView(s, seat).player.inPlay.some(
-        (p) => p.id !== exclude && p.code === "04016",
+        (p) => p.id !== exclude && teamTraining(p),
       ),
   );
 const avengers = (s: GameState, ports: HawkeyePorts) => [
@@ -176,9 +189,7 @@ const avengers = (s: GameState, ports: HawkeyePorts) => [
   ports.identityHasTrait(s, s.activePlayerId, "Avenger")
     ? [{ id: "hero", code: "04001a", exhausted: s.player.exhausted }]
     : []),
-  ...s.player.inPlay.filter(
-    (p) => definition(p)?.type_code === "ally" && trait(p, "Avenger"),
-  ),
+  ...s.player.inPlay.filter((p) => avengerAlly(s, p, ports)),
 ];
 
 export function hawkeyePlayRestriction(
@@ -203,7 +214,7 @@ export function hawkeyePlayRestriction(
     )
       return "There is no legal scheme to thwart.";
   }
-  if (p.code === "04015" && !skyCycleTargets(s).length)
+  if (p.code === "04015" && !skyCycleTargets(s, ports).length)
     return "There is no eligible Avenger ally without Sky Cycle.";
   if (p.code === "04016" && !trainingRecipients(s).length)
     return "Each player already controls Team Training.";
@@ -296,7 +307,7 @@ export function hawkeyeAbilityOptions(
   id: string,
   ports: HawkeyePorts,
 ): Option[] {
-  if (id === "hero" && s.heroId === "hawkeye") {
+  if ((id === "identity" || id === "hero") && s.heroId === "hawkeye") {
     if (s.player.form === "hero")
       return !s.player.exhausted && bow(s)?.exhausted
         ? [
@@ -358,7 +369,7 @@ export function hawkeyeAbilityOptions(
         p.code,
       ),
     ];
-  if (p?.code === "04013" && s.flags.hawkeyeGoliathPhase !== phaseKey(s))
+  if (p?.code === "04013" && !goliathUsedThisPhase(s))
     return [
       option(
         "goliath",
@@ -791,10 +802,7 @@ export function resolveHawkeyeEffect(
     }
     case "hawkeye:goliath": {
       const p = own(s, e.id, "04013");
-      need(
-        p && s.flags.hawkeyeGoliathPhase !== phaseKey(s),
-        "Goliath is unavailable this phase.",
-      );
+      need(p && !goliathUsedThisPhase(s), "Goliath is unavailable this phase.");
       s.flags.hawkeyeGoliathPhase = phaseKey(s);
       s.flags[`hawkeyeGoliath:${p!.id}`] = phaseKey(s);
       // The normal leave-play reset removes this in-play-instance marker. A
@@ -809,7 +817,7 @@ export function resolveHawkeyeEffect(
       select(
         s,
         "Sky Cycle",
-        skyCycleTargets(s, p!.id).map((x) => ({
+        skyCycleTargets(s, ports, p!.id).map((x) => ({
           id: x.id,
           label: definition(x).name,
           code: x.code,
@@ -822,10 +830,14 @@ export function resolveHawkeyeEffect(
     case "hawkeye:cycle-attached": {
       const p = own(s, e.id, "04015");
       need(
-        p && skyCycleTargets(s, e.id).some((x) => x.id === e.target),
+        p && skyCycleTargets(s, ports, e.id).some((x) => x.id === e.target),
         "Sky Cycle cannot attach to this target.",
       );
       p!.attachedTo = e.target;
+      const recipient = controller(s, e.target);
+      need(recipient, "The attached ally has no controller.");
+      if (recipient!.id !== s.activePlayerId)
+        ports.transferControl(s, p!.id, recipient!.id);
       break;
     }
     case "hawkeye:cycle-ready": {

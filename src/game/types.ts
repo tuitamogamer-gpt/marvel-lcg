@@ -112,11 +112,16 @@ export interface Prompt {
   card?: Piece;
   after?: Effect[];
   cancelable?: boolean;
+  /** A canceled optional payment resumes the already initiated activation. */
+  cancellationQueue?: Effect[];
   paymentTarget?: string;
   wildAs?: Resource;
   selectAction?: Effect;
 }
 export interface Attack {
+  /** Printed boost grants and whole-attack prevention survive defender choice. */
+  piercing?: boolean;
+  preventAllDamage?: boolean;
   interruptsUsed?: string[];
   identityPrevented?: number;
   retainedBoostIds?: string[];
@@ -272,6 +277,7 @@ export interface CombatEvent {
 }
 export interface PlayerSeat {
   deckCards?: string[];
+  deckAspects?: Aspect[];
   id: string;
   heroId: string;
   aspect: Aspect;

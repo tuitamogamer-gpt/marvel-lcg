@@ -1,9 +1,5 @@
-/**
- * Pending acceptance fixtures for a hero deliberately unavailable in the
- * installed engine. The final pre-publication run failed at launch/integration.
- * Activate as *.test.ts after native adapters and deck rules are implemented.
- * These fixtures are not evidence of playable support.
- */
+/** Acceptance scenarios use native commands and serialized decisions, including
+ * starter aliases, physical encounter pieces and multiplayer routing. */
 import { describe, expect, it } from "vitest";
 import { card, handSize, heroStats } from "../src/game/cards";
 import {
@@ -19,7 +15,7 @@ import {
   validateHeroDeck,
 } from "../src/game/hero-runtime";
 import { spiderWomanHasAerial } from "../src/game/spider-woman";
-import { seatView } from "../src/game/team";
+import { activateSeat, seatView } from "../src/game/team";
 import type { Command, Effect, GameState, Piece } from "../src/game/types";
 
 function command(input: GameState, c: Command) {
@@ -30,11 +26,11 @@ function command(input: GameState, c: Command) {
   expect(s.error).toBeUndefined();
   return s;
 }
-function base(team = false) {
+function base(team = false, villainId = "rhino") {
   let s = newGame({
     heroId: "spider_woman",
     aspect: "aggression",
-    villainId: "rhino",
+    villainId,
     seed: 41,
     pacing: "expert",
     ...(team
@@ -100,6 +96,10 @@ function choose(s: GameState, id: string) {
     JSON.stringify(s.prompt),
   ).toBe(true);
   return command(s, { type: "CHOOSE", id });
+}
+function chooseTarget(s: GameState, id: string) {
+  // Native target effects immediately resolve when only one legal target exists.
+  return s.prompt ? choose(s, id) : s;
 }
 function native(s: GameState, ...effects: Effect[]) {
   s.queue = effects;
@@ -206,7 +206,7 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
       const h = hand(s, code, "04050");
       s = playPaid(s, h[0], [h[1].id]);
       expect(s.flags[`swAgility:${faction}`]).toBe(s.round);
-      if (["04035", "04036"].includes(code)) s = choose(s, s.villain.id);
+      if (["04035", "04036"].includes(code)) s = chooseTarget(s, s.villain.id);
       if (code === "04038") s = choose(s, "main:3");
     }
     expect(heroStats(s)).toMatchObject({
@@ -224,16 +224,16 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
     let s = base();
     let h = hand(s, "04035", "04050");
     s = playPaid(s, h[0], [h[1].id], "skip");
-    s = choose(s, s.villain.id);
+    s = chooseTarget(s, s.villain.id);
     expect(s.flags["swAgility:aggression"]).toBeUndefined();
     h = hand(s, "04035", "04050");
     s = playPaid(s, h[0], [h[1].id]);
-    s = choose(s, s.villain.id);
+    s = chooseTarget(s, s.villain.id);
     expect(heroStats(s).attack).toBe(2);
     h = hand(s, "04035", "04050");
     s = playPaid(s, h[0], [h[1].id]);
     expect(s.prompt?.title).not.toBe("Superhuman Agility");
-    s = choose(s, s.villain.id);
+    s = chooseTarget(s, s.villain.id);
     expect(heroStats(s).attack).toBe(2);
   });
   it("Finesse pays only for aspect cards in hero form and canceled payment never exhausts it", () => {
@@ -268,6 +268,119 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
     expect(
       paymentSources(s, undefined, "04038").some((p) => p.id === finesse.id),
     ).toBe(false);
+  });
+  it("Finesse pays Jarnbjorn's actual aspect ability cost after a basic attack", () => {
+    let s = base();
+    const finesse = put(s, "04033"),
+      axe = put(s, "06019");
+    const hp = s.villain.hp;
+    s = command(s, { type: "BASIC", action: "attack" });
+    expect(s.prompt?.title).toBe("After your hero attacks");
+    s = choose(reload(s), axe.id);
+    expect(s.prompt?.requirements).toEqual(["physical"]);
+    expect(s.prompt?.paymentTarget).toBe("06019");
+    expect(
+      paymentSources(s, undefined, s.prompt?.paymentTarget),
+    ).toContainEqual(
+      expect.objectContaining({ id: finesse.id, resources: ["wild"] }),
+    );
+    s = command(reload(s), { type: "PAY", ids: [finesse.id] });
+    if (s.prompt) s = chooseTarget(s, s.villain.id);
+    expect(s.villain.hp).toBe(hp - 3);
+    expect(s.player.inPlay.find((p) => p.id === finesse.id)?.exhausted).toBe(
+      true,
+    );
+    expect(heroStats(s).attack).toBe(1);
+    expect(s.flags["swAgility:aggression"]).toBeUndefined();
+  });
+  it("Finesse pays Vision's native leadership ability using the correct typed target", () => {
+    let s = base();
+    const finesse = put(s, "04033"),
+      vision = put(s, "01068");
+    s = command(s, { type: "ABILITY", id: vision.id, action: "special" });
+    s = choose(reload(s), "attack");
+    expect(s.prompt?.requirements).toEqual(["energy"]);
+    expect(s.prompt?.paymentTarget).toBe("01068");
+    expect(
+      paymentSources(s, undefined, s.prompt?.paymentTarget),
+    ).toContainEqual(
+      expect.objectContaining({ id: finesse.id, resources: ["wild"] }),
+    );
+    s = command(reload(s), { type: "PAY", ids: [finesse.id] });
+    expect(s.player.inPlay.find((p) => p.id === finesse.id)?.exhausted).toBe(
+      true,
+    );
+    expect(s.player.inPlay.find((p) => p.id === vision.id)?.bonusAtk).toBe(2);
+    expect(s.flags["swAgility:leadership"]).toBeUndefined();
+  });
+  it("playing Skilled Strike grants Agility before calculating that same basic attack", () => {
+    let s = base();
+    const strike = hand(s, "09037")[0];
+    const hp = s.villain.hp;
+    s = command(s, { type: "BASIC", action: "attack" });
+    expect(s.prompt?.title).toBe("Basic attack");
+    s = choose(reload(s), strike.id);
+    expect(s.prompt?.title).toBe("Superhuman Agility");
+    s = choose(reload(s), "yes");
+    expect(s.villain.hp).toBe(hp - 4);
+    expect(heroStats(s).attack).toBe(2);
+    expect(s.player.discard.find((p) => p.id === strike.id)?.code).toBe(
+      "09037",
+    );
+    s.player.exhausted = false;
+    s = command(s, { type: "BASIC", action: "attack" });
+    expect(s.villain.hp).toBe(hp - 6);
+  });
+  it("Counter-Punch calculates Spider-Woman's ATK after its aspect play interrupt resolves", () => {
+    let s = base();
+    const counter = hand(s, "01077")[0];
+    s.encounter.deck = [makePiece(s, "05029"), makePiece(s, "05029")];
+    const hp = s.villain.hp;
+    s = native(s, { type: "enemyAttack", id: s.villain.id });
+    s = choose(s, "hero");
+    s = choose(reload(s), "counter");
+    expect(s.prompt?.title).toBe("Superhuman Agility");
+    s = choose(reload(s), "yes");
+    expect(heroStats(s).attack).toBe(2);
+    expect(s.villain.hp).toBe(hp - 2);
+    expect(s.player.discard.some((p) => p.id === counter.id)).toBe(true);
+  });
+  it("Pheromones is not canceled by Stunned or Guard and targets only enemies with status capacity", () => {
+    let s = base();
+    s.player.stunned = true;
+    s.player.stunCards = 1;
+    const guard = minion(s, "01101"),
+      stalwart = minion(s, "27058"),
+      immune = minion(s);
+    immune.stunned = immune.confused = true;
+    immune.stunCards = immune.confuseCards = 1;
+    const h = hand(s, "04036", "04050");
+    s = playPaid(s, h[0], [h[1].id]);
+    expect(s.prompt?.title).toBe("Pheromones");
+    expect(s.prompt?.options.map((o) => o.id)).toEqual([
+      s.villain.id,
+      guard.id,
+    ]);
+    expect(s.prompt?.options.some((o) => o.id === stalwart.id)).toBe(false);
+    s = choose(reload(s), s.villain.id);
+    expect(s.villain.stunned).toBe(true);
+    expect(s.villain.confused).toBe(true);
+    expect(s.player.stunned).toBe(true);
+  });
+  it("Pheromones adds one of each status to Steady and a second play reaches both thresholds", () => {
+    let s = base();
+    const steady = minion(s, "27128");
+    for (let play = 1; play <= 2; play++) {
+      const h = hand(s, "04036", "04050");
+      s = playPaid(s, h[0], [h[1].id]);
+      s = choose(reload(s), steady.id);
+      expect(s.minions.find((p) => p.id === steady.id)).toMatchObject({
+        stunCards: play,
+        confuseCards: play,
+        stunned: play === 2,
+        confused: play === 2,
+      });
+    }
   });
   it("Jessica Drew looks at an encounter top card once per round without moving or shuffling it", () => {
     let s = base();
@@ -335,6 +448,33 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
     if (s.prompt?.title === "Skilled Investigator") s = choose(s, "skip");
     expect(s.prompt).toBeNull();
   });
+  it("Inconspicuous completes Followed's defeat interrupt before discarding schemes and opening Investigator responses", () => {
+    let s = base();
+    const first = scheme(s, "04055", 1),
+      second = scheme(s, "01110", 2),
+      followed = put(s, "03032");
+    followed.attachedTo = first.id;
+    put(s, "04047");
+    const h = hand(s, "04038", "04050");
+    s = playPaid(s, h[0], [h[1].id]);
+    s = choose(s, `${first.id}:1`);
+    s = choose(reload(s), `${second.id}:2`);
+    expect(s.prompt?.title).toBe("Followed");
+    expect(s.sideSchemes.map((p) => [p.id, p.counters])).toEqual([
+      [first.id, 0],
+      [second.id, 0],
+    ]);
+    expect(s.player.inPlay.some((p) => p.id === followed.id)).toBe(true);
+    const hp = s.villain.hp;
+    s = choose(reload(s), "yes");
+    expect(s.villain.hp).toBe(hp - 4);
+    expect(s.sideSchemes).toHaveLength(0);
+    expect(s.player.inPlay.some((p) => p.id === followed.id)).toBe(false);
+    expect(s.prompt?.title).toBe("Skilled Investigator");
+    s = choose(s, "skip");
+    s = choose(s, "skip");
+    expect(s.prompt).toBeNull();
+  });
   it("initial Crisis and Patrol legality prevents simultaneous Inconspicuous main-scheme allocation", () => {
     let s = base();
     s.scheme.threat = 3;
@@ -395,7 +535,7 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
     let h = hand(s, "04043", "04050");
     const top = s.player.deck[0];
     s = playPaid(s, h[0], [h[1].id]);
-    s = choose(s, s.villain.id);
+    s = chooseTarget(s, s.villain.id);
     expect(s.player.hand).toContainEqual(top);
     const target = minion(s);
     target.stunned = true;
@@ -408,13 +548,48 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
     expect(s.minions.some((p) => p.id === target.id)).toBe(false);
     expect(s.player.deck).toHaveLength(before);
   });
+  it("Press the Advantage handles Ultron's synthesized Drone and draws after it survives", () => {
+    let s = base(false, "ultron");
+    s = native(s, { type: "drone" });
+    const drone = s.minions[0],
+      physical = drone.droneCard!;
+    expect(drone.code).toBe("drone");
+    s.villain.code = "01136";
+    s.attachments.push(makePiece(s, "01142"));
+    drone.stunned = true;
+    drone.stunCards = 1;
+    const top = s.player.deck[0],
+      h = hand(s, "04043", "04050");
+    s = playPaid(s, h[0], [h[1].id]);
+    s = choose(reload(s), drone.id);
+    expect(s.minions.find((p) => p.id === drone.id)).toMatchObject({
+      damage: 2,
+      droneCard: physical,
+    });
+    expect(s.player.hand).toContainEqual(top);
+    expect(s.prompt).toBeNull();
+  });
+  it("Spider-Girl can select a synthesized Ultron Drone and give it both statuses", () => {
+    let s = base(false, "ultron");
+    s = native(s, { type: "drone" });
+    const drone = s.minions[0],
+      h = hand(s, "04040", "04050");
+    s = playPaid(s, h[0], [h[1].id]);
+    s = choose(s, "yes");
+    expect(s.prompt?.options[0].label).toBe("Ultron Drone");
+    s = choose(reload(s), drone.id);
+    expect(s.minions.find((p) => p.id === drone.id)).toMatchObject({
+      stunned: true,
+      confused: true,
+    });
+  });
   it("Captain Marvel draws before lethal consequential damage after a real basic attack", () => {
     let s = base();
     const ally = put(s, "04032");
     ally.damage = (card(ally).health || 0) - 1;
     const top = s.player.deck[0];
     s = command(s, { type: "ABILITY", id: ally.id, action: "attack" });
-    if (s.prompt?.title !== "Captain Marvel") s = choose(s, s.villain.id);
+    if (s.prompt?.title !== "Captain Marvel") s = chooseTarget(s, s.villain.id);
     expect(s.prompt?.title).toBe("Captain Marvel");
     expect(s.player.inPlay.some((p) => p.id === ally.id)).toBe(true);
     s = choose(reload(s), "yes");
@@ -430,7 +605,7 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
     const hp = s.villain.hp,
       before = s.player.deck.length;
     s = command(s, { type: "ABILITY", id: ally.id, action: "attack" });
-    if (s.prompt) s = choose(s, s.villain.id);
+    if (s.prompt) s = chooseTarget(s, s.villain.id);
     expect(s.villain.hp).toBe(hp);
     expect(s.player.deck).toHaveLength(before);
     expect(s.player.inPlay.find((p) => p.id === ally.id)).toMatchObject({
@@ -440,21 +615,32 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
   });
   it("Spider-Girl's real hand play stuns and confuses a chosen minion, while put-into-play does not", () => {
     let s = base();
-    const target = minion(s);
+    const targetMinion = minion(s);
     let h = hand(s, "04040", "04050");
     s = playPaid(s, h[0], [h[1].id]);
     expect(s.prompt?.title).toBe("Spider-Girl");
     s = choose(s, "yes");
-    s = choose(s, target.id);
-    expect(s.minions.find((p) => p.id === target.id)).toMatchObject({
+    s = choose(s, targetMinion.id);
+    expect(s.minions.find((p) => p.id === targetMinion.id)).toMatchObject({
       stunned: true,
       confused: true,
     });
     s = base();
-    const handPiece = hand(s, "04040")[0];
-    minion(s);
-    s = native(s, { type: "putAlly", id: handPiece.id });
+    const handPiece = makePiece(s, "04040");
+    handPiece.ownerId = s.activePlayerId;
+    s.player.discard = [handPiece];
+    const unplayedMinion = minion(s);
+    h = hand(s, "01071", "04050");
+    s = playPaid(s, h[0], []);
+    expect(s.prompt?.title).toBe("Make the Call");
+    s = choose(reload(s), handPiece.id);
+    s = command(reload(s), { type: "PAY", ids: [h[1].id] });
     expect(s.prompt?.title).not.toBe("Spider-Girl");
+    expect(s.player.inPlay.some((p) => p.id === handPiece.id)).toBe(true);
+    expect(s.minions.find((p) => p.id === unplayedMinion.id)).toMatchObject({
+      stunned: false,
+      confused: false,
+    });
   });
   it("Spider-Man's hand-play response removes six threat in two-player play without using a thwart power", () => {
     let s = base(true);
@@ -500,7 +686,7 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
     const h = hand(s, "04044", "04050"),
       hp = s.villain.hp;
     s = playPaid(s, h[0], [h[1].id]);
-    s = choose(s, s.villain.id);
+    s = chooseTarget(s, s.villain.id);
     expect(s.villain.hp).toBe(hp - 3);
     expect(s.villain.tough).toBe(false);
     expect(s.player.discard.find((p) => p.id === h[0].id)?.code).toBe("04044");
@@ -511,14 +697,14 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
     let h = hand(s, "04049", "04050"),
       top = s.player.deck[0];
     s = playPaid(s, h[0], [h[1].id]);
-    s = choose(s, "main");
+    s = chooseTarget(s, "main");
     expect(s.scheme.threat).toBe(0);
     expect(s.player.hand).toContainEqual(top);
     s.scheme.threat = 3;
     h = hand(s, "04049", "04050");
     const count = s.player.deck.length;
     s = playPaid(s, h[0], [h[1].id]);
-    s = choose(s, "main");
+    s = chooseTarget(s, "main");
     expect(s.scheme.threat).toBe(1);
     expect(s.player.deck).toHaveLength(count);
   });
@@ -547,7 +733,7 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
     for (let use = 1; use <= 3; use++) {
       s.player.inPlay.find((p) => p.id === h[0].id)!.exhausted = false;
       s = command(s, { type: "ABILITY", id: h[0].id });
-      s = choose(s, s.villain.id);
+      s = chooseTarget(s, s.villain.id);
       expect(s.villain.hp).toBe(hp - use * 2);
     }
     expect(s.player.inPlay.some((p) => p.id === h[0].id)).toBe(false);
@@ -567,7 +753,7 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
     });
     expect(s.prompt?.title).toBe("Interrogation Room");
     s = choose(s, "yes");
-    s = choose(s, "main");
+    s = chooseTarget(s, "main");
     expect(s.scheme.threat).toBe(1);
     expect(s.player.inPlay.find((p) => p.id === room.id)?.exhausted).toBe(true);
   });
@@ -646,11 +832,34 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
       hp - (card(attacker).attack || 0),
     );
     expect(s.prompt?.title).toBe("Hail Hydra!");
+    expect(s.activePlayerId).toBe(other);
     s = choose(reload(s), searched.id);
     expect(s.minions.find((p) => p.id === searched.id)?.engagedWith).toBe(
       other,
     );
     expect(s.scheme.threat).toBe(threat);
+    expect(s.prompt).toBeNull();
+  });
+  it("Hail Hydra's attack order belongs to the first player when another player reveals it", () => {
+    let s = base(true);
+    const first = s.firstPlayerId,
+      other = s.players[1].id;
+    const firstMinion = minion(s, "04056", first),
+      secondMinion = minion(s, "04056", other);
+    activateSeat(s, other);
+    s.encounter.deck = [makePiece(s, "08020")];
+    s = reveal(s, "04057");
+    expect(s.prompt?.title).toBe("Hail Hydra!");
+    expect(s.activePlayerId).toBe(first);
+    expect(s.prompt?.options.map((o) => o.id)).toEqual([
+      firstMinion.id,
+      secondMinion.id,
+    ]);
+    s = choose(reload(s), secondMinion.id);
+    expect(s.attack?.attacker).toBe(secondMinion.id);
+    s = choose(s, "take");
+    expect(s.attack?.attacker).toBe(firstMinion.id);
+    s = choose(reload(s), "take");
     expect(s.prompt).toBeNull();
   });
   it("Hail Hydra counts the hero who defended as attacked and makes the original engaged player search", () => {

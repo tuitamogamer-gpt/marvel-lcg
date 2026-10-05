@@ -191,6 +191,7 @@ describe("imported data never silently gains automated rules support", () => {
     const imported = CATALOG_CARDS.find(
       (c) =>
         c.pack_code !== "core" &&
+        !hasExecutableScript(c) &&
         c.faction_code === "basic" &&
         c.type_code === "event",
     )!;

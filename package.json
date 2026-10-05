@@ -25,7 +25,8 @@
     "test:expansion": "node scripts/expansion-check.mjs",
     "test:engine-continuation": "node scripts/engine-continuation-check.mjs",
     "audit:engine": "node scripts/audit-engine-expansion.mjs",
-    "test:hero-packs": "node scripts/hero-pack-check.mjs"
+    "test:hero-packs": "node scripts/hero-pack-check.mjs",
+    "test:rise-heroes": "node scripts/rise-heroes-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

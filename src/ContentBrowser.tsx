@@ -15,6 +15,7 @@ import {
 } from "@phosphor-icons/react";
 import { ASPECTS, CATALOG_CARDS, card, imageFor, plain } from "./game/cards";
 import { deckErrors } from "./game/decks";
+import { heroStarterAspects } from "./game/hero-runtime";
 import {
   CATALOG_HEROES,
   CATALOG_SUMMARY,
@@ -326,7 +327,12 @@ export function ContentBrowser({
           count === 1,
       ));
   const deckSize = deck?.deckSize ?? codes.length - setupCount;
-  const deckAspect = ASPECTS.find((aspect) => aspect.id === deck?.aspect)?.id;
+  const deckAspect =
+    ASPECTS.find((aspect) => aspect.id === deck?.aspect)?.id ||
+    (hero.id === "spider_woman" && deck?.aspect === "multi"
+      ? ASPECTS.find((aspect) => aspect.id === heroStarterAspects(hero.id)[0])
+          ?.id
+      : undefined);
   const validationErrors =
     hero.automated && deck && deckAspect
       ? deckErrors(hero.id, deckAspect, codes)

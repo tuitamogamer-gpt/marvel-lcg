@@ -155,7 +155,7 @@ export function captainPackHasTrait(
   );
 }
 export function captainPackAllyLimit(s: GameState) {
-  return s.player.inPlay.some((p) => p.code === "03024") &&
+  return s.player.inPlay.some((p) => ["03024", "04021"].includes(p.code)) &&
     ownAllies(s).every((p) => captainPackHasTrait(s, p.id, "Avenger"))
     ? 1
     : 0;
@@ -292,7 +292,7 @@ export function captainPackTurnStart(s: GameState): Effect[] {
 export function captainPackAbilityOptions(s: GameState, id: string): Option[] {
   const p = s.player.inPlay.find((p) => p.id === id);
   if (!p) return [];
-  if (p.code === "03024" && !p.exhausted)
+  if (["03024", "04021"].includes(p.code) && !p.exhausted)
     return [
       option(
         "tower",
@@ -588,7 +588,7 @@ export function resolveCaptainPackEffect(
     }
     case "cap-pack:tower": {
       const p = s.player.inPlay.find(
-        (p) => p.id === e.id && p.code === "03024",
+        (p) => p.id === e.id && ["03024", "04021"].includes(p.code),
       );
       need(p && !p.exhausted, "Avengers Tower must be ready.");
       p!.exhausted = true;

@@ -5,7 +5,13 @@ import { createAccountHandler, validateGame } from "../server/account";
 import { sqliteStore } from "../server/storage";
 import type { Store } from "../server/storage";
 import { deckCodes, HEROES, ASPECTS } from "../src/game/cards";
-import { countsFor, deckErrors } from "../src/game/decks";
+import {
+  countsFor,
+  deckErrors,
+  deckOptions,
+  copyLimit,
+} from "../src/game/decks";
+import { heroRequiredCards } from "../src/game/hero-runtime";
 import { newGame, dispatch } from "../src/game/engine";
 import { paymentSources } from "../src/game/payment";
 
@@ -28,6 +34,24 @@ const game = () =>
     seed: 12345,
     guided: true,
   });
+function basicSpiderWomanDeck() {
+  const codes = Object.entries(heroRequiredCards("spider_woman")).flatMap(
+    ([code, count]) => Array(count).fill(code) as string[],
+  );
+  const names = new Set<string>();
+  for (const c of deckOptions("spider_woman", "leadership", [
+    "leadership",
+    "protection",
+  ])) {
+    if (c.faction_code !== "basic" || names.has(c.name)) continue;
+    names.add(c.name);
+    codes.push(
+      ...Array(Math.min(copyLimit(c), 40 - codes.length)).fill(c.code),
+    );
+    if (codes.length === 40) break;
+  }
+  return codes;
+}
 async function call(
   body?: Record<string, unknown>,
   token = "",
@@ -218,6 +242,91 @@ describe("private player accounts", () => {
         )
       ).data.library.decks,
     ).toHaveLength(0);
+  });
+  it("preserves the chosen Spider-Woman pair when no customizable aspect card reveals it", async () => {
+    const a = await register();
+    const cards = basicSpiderWomanDeck();
+    expect(
+      deckErrors("spider_woman", "leadership", cards, [
+        "leadership",
+        "protection",
+      ]),
+    ).toEqual([]);
+    const save = await call(
+      {
+        action: "deck.save",
+        accountId: a.data.user.id,
+        name: "Jessica's basic deck",
+        heroId: "spider_woman",
+        aspect: "leadership",
+        aspects: ["leadership", "protection"],
+        cards,
+      },
+      a.cookie,
+    );
+    expect(save.status).toBe(200);
+    const deck = (await call(undefined, a.cookie)).data.library.decks[0];
+    expect(deck.aspects).toEqual(["leadership", "protection"]);
+    expect(deck.cards).toEqual(cards);
+    const s = newGame({
+      heroId: deck.heroId,
+      aspect: deck.aspect,
+      villainId: "rhino",
+      heroes: [
+        {
+          heroId: deck.heroId,
+          aspect: deck.aspect,
+          deckCards: deck.cards,
+          deckAspects: deck.aspects,
+        },
+      ],
+    });
+    const hydrated = dispatch(JSON.parse(JSON.stringify(s)), {
+      type: "MULLIGAN",
+      ids: [],
+    });
+    expect(hydrated.error).toBeUndefined();
+    expect(hydrated.players[0].deckAspects).toEqual(deck.aspects);
+    expect(
+      countsFor(
+        [...hydrated.player.hand, ...hydrated.player.deck].map((p) => p.code),
+      ),
+    ).toEqual(countsFor(cards));
+  });
+  it("infers legacy Spider-Woman pairs and rejects malformed or conflicting saved metadata", async () => {
+    const a = await register();
+    const draft = {
+      action: "deck.save",
+      accountId: a.data.user.id,
+      name: "Legacy Jessica",
+      heroId: "spider_woman",
+      aspect: "leadership",
+      cards: deckCodes("spider_woman", "leadership", [
+        "leadership",
+        "protection",
+      ]),
+    };
+    const save = await call(draft, a.cookie);
+    expect(save.status).toBe(200);
+    expect(save.data.library.decks[0].aspects.sort()).toEqual([
+      "leadership",
+      "protection",
+    ]);
+    for (const aspects of [
+      "leadership",
+      ["leadership", "leadership"],
+      ["aggression", "justice"],
+      ["leadership", "unknown"],
+    ]) {
+      expect((await call({ ...draft, aspects }, a.cookie)).status).toBe(400);
+    }
+    expect(
+      (await call({ ...draft, aspects: ["leadership", "justice"] }, a.cookie))
+        .status,
+    ).toBe(400);
+    expect((await call(undefined, a.cookie)).data.library.decks).toHaveLength(
+      1,
+    );
   });
   it("round-trips pending gameplay and records a result only once", async () => {
     const a = await register();

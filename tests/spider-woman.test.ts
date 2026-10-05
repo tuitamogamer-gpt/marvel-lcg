@@ -446,6 +446,31 @@ describe("Spider-Woman's complete Rise of Red Skull hero and starter dependency 
       { type: "status", target: "hero", status: "tough" },
     ]);
   });
+  it("Pheromones chooses only enemies that can gain a status and never invokes an attack", () => {
+    const { s, ports, minion, run, choose } = fixture();
+    const legal = minion(),
+      blocked = minion("27058");
+    ports.canGiveStatus = (_state, id, status) =>
+      id === legal.id && status === "confused";
+    expect(
+      spiderWomanPlayRestriction(s, makePiece(s, "04036"), ports),
+    ).toBeNull();
+    run(spiderWomanEvent(s, makePiece(s, "04036"))![0]);
+    expect(s.prompt?.options.map((o) => o.id)).toEqual([legal.id]);
+    expect(s.prompt?.options.some((o) => o.id === blocked.id)).toBe(false);
+    choose(legal.id);
+    expect(s.queue).toEqual([
+      { type: "status", target: legal.id, status: "stunned" },
+      { type: "status", target: legal.id, status: "confused" },
+    ]);
+    ports.canGiveStatus = () => false;
+    expect(
+      spiderWomanPlayRestriction(s, makePiece(s, "04036"), ports),
+    ).toContain("no enemy");
+    expect(() =>
+      run({ type: "sw:pheromones-status", target: legal.id }),
+    ).toThrow("no longer");
+  });
   it("Press the Advantage draws only if its attacked enemy still exists and has the status after damage", () => {
     const { s, minion, run } = fixture();
     const p = minion();

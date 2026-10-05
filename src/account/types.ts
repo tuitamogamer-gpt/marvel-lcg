@@ -5,6 +5,7 @@ export interface SavedDeck {
   name: string;
   heroId: string;
   aspect: Aspect;
+  aspects?: Aspect[];
   cards: string[];
   revision: number;
   updatedAt: string;
@@ -44,6 +45,7 @@ export interface DeckDraft {
   name: string;
   heroId: string;
   aspect: Aspect;
+  aspects?: Aspect[];
   cards: string[];
 }
 export interface MissionIdentity {

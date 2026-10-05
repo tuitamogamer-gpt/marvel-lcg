@@ -9,6 +9,8 @@ import { HULK_SCRIPT_CODES } from "./hulk.js";
 import { HULK_PACK_SCRIPT_CODES } from "./hulk-pack.js";
 import { MUTAGEN_FORMULA_SCRIPT_CODES } from "./mutagen-formula.js";
 import { CAPTAIN_PACK_SCRIPT_CODES } from "./captain-pack.js";
+import { HAWKEYE_SCRIPT_CODES, HAWKEYE_EXISTING_CODES } from "./hawkeye.js";
+import { SPIDER_WOMAN_SCRIPT_CODES } from "./spider-woman.js";
 
 /** Modules installed in the dispatcher and verified by actual mission tests. */
 export const SCRIPTED_HERO_IDS = new Set([
@@ -23,6 +25,8 @@ export const SCRIPTED_HERO_IDS = new Set([
   "thor",
   "black_widow",
   "doctor_strange",
+  "hawkeye",
+  "spider_woman",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...CAPTAIN_AMERICA_SCRIPT_CODES,
@@ -36,4 +40,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...GOBLIN_MODULE_SCRIPT_CODES,
   ...BLACK_WIDOW_SCRIPT_CODES,
   ...DOCTOR_STRANGE_SCRIPT_CODES,
+  ...HAWKEYE_SCRIPT_CODES,
+  ...HAWKEYE_EXISTING_CODES,
+  ...SPIDER_WOMAN_SCRIPT_CODES,
 ]);

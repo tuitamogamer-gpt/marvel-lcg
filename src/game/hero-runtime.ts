@@ -199,6 +199,39 @@ export function heroStarterAspects(idOrCode: string): HeroAspect[] {
     .map(([aspect]) => aspect);
 }
 
+/** Chosen aspects come from customizable cards; signature colors are mandatory
+ * regardless of the chosen pair. The complete composition proves equality. */
+export function heroDeckAspects(
+  idOrCode: string,
+  codes: string[],
+  primary?: string,
+): HeroAspect[] {
+  const hero = heroRuntime(idOrCode);
+  if (!hero || hero.deckRule.aspects !== "two-equal")
+    return primary && HERO_ASPECTS.includes(primary as HeroAspect)
+      ? [primary as HeroAspect]
+      : heroStarterAspects(idOrCode);
+  const selected = [
+    ...new Set(
+      codes.flatMap((code) => {
+        const c = byCode.get(code);
+        return c &&
+          c.set_code !== hero.id &&
+          HERO_ASPECTS.includes(c.faction_code as HeroAspect)
+          ? [c.faction_code as HeroAspect]
+          : [];
+      }),
+    ),
+  ];
+  if (
+    primary &&
+    HERO_ASPECTS.includes(primary as HeroAspect) &&
+    !selected.includes(primary as HeroAspect)
+  )
+    selected.unshift(primary as HeroAspect);
+  return selected.length ? selected : heroStarterAspects(idOrCode);
+}
+
 /** Printed copy limit; unique cards match by title and subtitle under RRG1.8. */
 export function heroCardCopyLimit(c: Card): number {
   const printed = /Max\s+(\d+)\s+per deck/i.exec(plain(c.text));
@@ -313,7 +346,16 @@ export function validateHeroDeck(
         rule.aspects === "four-equal-singleton" && !signature ? 1 : Infinity,
       ),
     });
-    if (signature) continue;
+    if (signature) {
+      // Jessica's colored signatures belong to their printed aspect when
+      // counting the two chosen colors, even though they are required in every deck.
+      if (
+        rule.aspects === "two-equal" &&
+        aspects.includes(c.faction_code as HeroAspect)
+      )
+        aspectCounts[c.faction_code]++;
+      continue;
+    }
     if (
       !cardTypes.has(c.type_code) ||
       !["basic", ...HERO_ASPECTS].includes(c.faction_code)
@@ -390,7 +432,9 @@ export function validateHeroDeck(
     new Set(Object.values(aspectCounts)).size > 1
   )
     errors.push(
-      "This identity requires an equal number of non-signature cards from each chosen aspect.",
+      rule.aspects === "two-equal"
+        ? "Spider-Woman requires an equal number of cards from each chosen aspect, including signature cards of those colors."
+        : "This identity requires an equal number of non-signature cards from each chosen aspect.",
     );
   return {
     valid: errors.length === 0,

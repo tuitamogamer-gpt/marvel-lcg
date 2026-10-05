@@ -19,6 +19,7 @@ import {
   playable,
 } from "../src/game/engine";
 import type { GameState, Resource, Piece } from "../src/game/types";
+import { heroRequiredCards } from "../src/game/hero-runtime";
 function base(
   heroId = "spider_man",
   villainId = "rhino",
@@ -147,9 +148,17 @@ describe("core set and setup", () => {
       it(`${h.name} / ${a.name} has a legal 40-card starter deck`, () => {
         const codes = deckCodes(h.id, a.id);
         expect(codes).toHaveLength(40);
-        expect(
-          codes.filter((c) => card(c).faction_code === "hero"),
-        ).toHaveLength(15);
+        const required = heroRequiredCards(h.id);
+        const signatureCodes = codes.filter((code) =>
+          Object.hasOwn(required, code),
+        );
+        expect(signatureCodes).toHaveLength(
+          Object.values(required).reduce((total, count) => total + count, 0),
+        );
+        for (const [code, quantity] of Object.entries(required))
+          expect(codes.filter((candidate) => candidate === code)).toHaveLength(
+            quantity,
+          );
         const counts: Record<string, number> = {};
         for (const c of codes)
           counts[card(c).name] = (counts[card(c).name] || 0) + 1;

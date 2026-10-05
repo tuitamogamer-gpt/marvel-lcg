@@ -19,6 +19,8 @@ import {
   newGame,
   playable,
   targets,
+  nativeHeroAbilityOptions,
+  hawkeyeStoredPlayable,
 } from "../src/game/engine";
 import { advisePrompt } from "../src/game/advisor";
 import {
@@ -27,6 +29,7 @@ import {
 } from "../src/game/captain-america";
 import { hulkAbilityOptions } from "../src/game/hulk";
 import { uniqueConflict } from "../src/game/unique";
+import { heroStarterAspects } from "../src/game/hero-runtime";
 import type { Aspect, Command, GameState, Piece } from "../src/game/types";
 
 const ended = (s: GameState) => ["won", "lost"].includes(s.phase);
@@ -37,6 +40,8 @@ const heroIds = [
   "ms_marvel",
   "black_widow",
   "doctor_strange",
+  "hawkeye",
+  "spider_woman",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -88,7 +93,9 @@ function runMission(config: (typeof missions)[number]) {
     (d) => d.sourceType !== "app-starter",
   )!;
   const codes = catalogDeckCodes(deck),
-    aspect = deck.aspect as Aspect;
+    aspect = (
+      deck.aspect === "multi" ? heroStarterAspects(hero.id)[0] : deck.aspect
+    ) as Aspect;
   expect(deckErrors(hero.id, aspect, codes)).toEqual([]);
   expect(codes).toHaveLength(40);
   let s = newGame({
@@ -168,6 +175,7 @@ function runMission(config: (typeof missions)[number]) {
       if (s.player.hp < maxHP(s) && !s.player.exhausted)
         act({ type: "BASIC", action: "recover" });
       const identity = [
+        ...nativeHeroAbilityOptions(s),
         ...doctorStrangeAbilityOptions(s, "identity"),
         ...hulkAbilityOptions(s, "identity"),
         ...thorAbilityOptions(s, "identity"),
@@ -178,7 +186,7 @@ function runMission(config: (typeof missions)[number]) {
       if (!s.player.flipped && !goblinIdentityLocked(s)) act({ type: "FLIP" });
     }
     for (let actions = 0; actions < 8 && !ended(s); actions++) {
-      const next = s.player.hand
+      const next = [...s.player.hand, ...hawkeyeStoredPlayable(s)]
         .filter((p) => playable(s, p) === null)
         .sort((a, b) => {
           const value = (p: Piece) =>
@@ -249,7 +257,7 @@ function runMission(config: (typeof missions)[number]) {
 }
 
 describe("published expansion starters across every supported mission setting", () => {
-  it("covers four expansion heroes, all scenarios, both difficulties and every supported encounter module", () => {
+  it("covers eight expansion heroes, all scenarios, both difficulties and every supported encounter module", () => {
     expect(missions).toHaveLength(
       heroIds.length * VILLAINS.length * 2 * MODULES.length,
     );

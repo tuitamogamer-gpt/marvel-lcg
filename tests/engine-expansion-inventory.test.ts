@@ -77,10 +77,22 @@ describe("complete expansion rules inventory", () => {
         unsupportedFaceCodes: [],
       });
     }
-    expect(coverage.executableFaces).toBe(703);
-    expect(coverage.unsupportedFaces).toBe(3848);
-    expect(coverage.dedicatedFaces).toBe(221);
-    expect(coverage.registeredHeroIds).toHaveLength(11);
+    expect(coverage.executableFaces).toBe(743);
+    expect(coverage.unsupportedFaces).toBe(3808);
+    expect(coverage.dedicatedFaces).toBe(264);
+    expect(coverage.registeredHeroIds).toHaveLength(13);
+    for (const id of ["hawkeye", "spider_woman"]) {
+      expect(
+        coverage.registeredHeroes.some(
+          (hero: { id: string }) => hero.id === id,
+        ),
+      ).toBe(true);
+      expect(
+        inventory.heroes.find(
+          (hero: { id: string }) => hero.id === `trors:${id}`,
+        ).installedCardClosure,
+      ).toBe(true);
+    }
     expect(goblin.automationCertification).toContain(
       "registration_closure_only",
     );

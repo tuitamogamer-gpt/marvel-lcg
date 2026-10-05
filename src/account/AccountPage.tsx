@@ -19,11 +19,22 @@ import {
   card,
   deckCodes,
   imageFor,
-} from "../game/cards";
-import { copyLimit, countsFor, deckErrors, deckOptions } from "../game/decks";
-import type { Aspect } from "../game/types";
-import type { AccountController } from "./useAccount";
-import type { DeckDraft, MissionRecord, SavedDeck } from "./types";
+} from "../game/cards.js";
+import {
+  copyLimit,
+  countsFor,
+  deckErrors,
+  deckOptions,
+} from "../game/decks.js";
+import {
+  heroDeckAspects,
+  heroDeckRule,
+  heroRequiredCards,
+  heroStarterAspects,
+} from "../game/hero-runtime.js";
+import type { Aspect } from "../game/types.js";
+import type { AccountController } from "./useAccount.js";
+import type { DeckDraft, MissionRecord, SavedDeck } from "./types.js";
 import "./account.css";
 
 const date = (value: string) =>
@@ -33,6 +44,28 @@ const date = (value: string) =>
     year: "numeric",
   });
 const heroName = (id: string) => HEROES.find((h) => h.id === id)?.name || id;
+
+function editorAspects(
+  heroId: string,
+  primary: Aspect,
+  codes: string[] = [],
+  declared?: Aspect[],
+): Aspect[] {
+  if (heroDeckRule(heroId)?.aspects !== "two-equal") return [primary];
+  const candidates = [
+    ...(declared || heroDeckAspects(heroId, codes, primary)),
+    ...heroStarterAspects(heroId),
+    ...ASPECTS.map((a) => a.id),
+  ];
+  const secondary = candidates.find(
+    (a): a is Aspect =>
+      a !== primary && ASPECTS.some((option) => option.id === a),
+  )!;
+  return [primary, secondary];
+}
+
+const savedDeckAspects = (deck: SavedDeck) =>
+  editorAspects(deck.heroId, deck.aspect, deck.cards, deck.aspects);
 
 function AuthForm({ account }: { account: AccountController }) {
   const [mode, setMode] = useState<"login" | "register" | "recover">(
@@ -248,7 +281,7 @@ function AuthForm({ account }: { account: AccountController }) {
   );
 }
 
-function DeckEditor({
+export function DeckEditor({
   initial,
   busy,
   error,
@@ -263,22 +296,42 @@ function DeckEditor({
 }) {
   const [heroId, setHero] = useState(initial?.heroId || "spider_man");
   const [aspect, setAspect] = useState<Aspect>(initial?.aspect || "justice");
+  const initialAspects = editorAspects(
+    heroId,
+    aspect,
+    initial?.cards,
+    initial?.aspects,
+  );
+  const [secondAspect, setSecondAspect] = useState<Aspect>(
+    initialAspects[1] || "aggression",
+  );
   const [name, setName] = useState(initial?.name || "");
   const [codes, setCodes] = useState(
-    initial?.cards || deckCodes(heroId, aspect),
+    initial?.cards || deckCodes(heroId, aspect, initialAspects),
   );
+  const dualAspect = heroDeckRule(heroId)?.aspects === "two-equal";
+  const aspects = dualAspect ? [aspect, secondAspect] : [aspect];
+  const required = heroRequiredCards(heroId);
   const counts = countsFor(codes);
-  const errors = deckErrors(heroId, aspect, codes);
-  function reset(h: string, a: Aspect) {
+  const errors = deckErrors(heroId, aspect, codes, aspects);
+  const options = deckOptions(heroId, aspect, aspects);
+  function reset(h: string, a: Aspect, secondary?: Aspect) {
+    const next = editorAspects(
+      h,
+      a,
+      [],
+      secondary ? [a, secondary === a ? aspect : secondary] : undefined,
+    );
     setHero(h);
     setAspect(a);
-    setCodes(deckCodes(h, a));
+    setSecondAspect(next[1] || "aggression");
+    setCodes(deckCodes(h, a, next));
   }
   return (
     <section className="account-editor" aria-label="Deck builder">
       <div className="account-section-heading">
         <div>
-          <span className="small-label">CORE SET DECK BUILDER</span>
+          <span className="small-label">DECK BUILDER</span>
           <h2>{initial ? "Refine your strategy." : "Make it your own."}</h2>
         </div>
         <button className="secondary-button" onClick={onCancel} disabled={busy}>
@@ -294,6 +347,7 @@ function DeckEditor({
             name,
             heroId,
             aspect,
+            aspects,
             cards: codes,
           });
         }}
@@ -312,6 +366,7 @@ function DeckEditor({
           <label>
             Hero
             <select
+              aria-label="Hero"
               value={heroId}
               onChange={(e) => reset(e.target.value, aspect)}
             >
@@ -325,8 +380,11 @@ function DeckEditor({
           <label>
             Aspect
             <select
+              aria-label="Aspect"
               value={aspect}
-              onChange={(e) => reset(heroId, e.target.value as Aspect)}
+              onChange={(e) =>
+                reset(heroId, e.target.value as Aspect, secondAspect)
+              }
             >
               {ASPECTS.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -335,17 +393,42 @@ function DeckEditor({
               ))}
             </select>
           </label>
+          {dualAspect && (
+            <label>
+              Second aspect
+              <select
+                aria-label="Second aspect"
+                value={secondAspect}
+                onChange={(e) =>
+                  reset(heroId, aspect, e.target.value as Aspect)
+                }
+              >
+                {ASPECTS.filter((a) => a.id !== aspect).map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
         <p className="account-hint">
           Changing hero or aspect loads its starter list. Keep all 15 hero cards
           and choose 25–35 aspect or basic cards.
+          {dualAspect &&
+            " Include equal numbers of your two chosen aspects, counting required hero cards of those colors."}
         </p>
         <div className="account-deck-columns">
-          {["hero", aspect, "basic"].map((faction) => (
+          {["hero", ...aspects, "basic"].map((faction) => (
             <section key={faction}>
               <h3>{faction.toUpperCase()}</h3>
-              {deckOptions(heroId, aspect)
-                .filter((c) => c.faction_code === faction)
+              {options
+                .filter((c) =>
+                  faction === "hero"
+                    ? Object.hasOwn(required, c.code)
+                    : !Object.hasOwn(required, c.code) &&
+                      c.faction_code === faction,
+                )
                 .map((c) => (
                   <div className="account-card-row" key={c.code}>
                     <span data-card-preview={c.code} tabIndex={0}>
@@ -355,7 +438,7 @@ function DeckEditor({
                         {c.cost !== undefined ? `· cost ${c.cost}` : ""}
                       </small>
                     </span>
-                    {faction === "hero" ? (
+                    {Object.hasOwn(required, c.code) ? (
                       <strong className="account-fixed-count">
                         ×{counts[c.code] || 0}
                       </strong>
@@ -622,7 +705,8 @@ export function AccountPage({
               <div>
                 <h2>Your next great strategy.</h2>
                 <p>
-                  Build a Core Set deck, then bring it straight to the table.
+                  Build a supported hero deck, then bring it straight to the
+                  table.
                 </p>
               </div>
               <button
@@ -656,7 +740,7 @@ export function AccountPage({
                       <img src={imageFor(hero.code)} alt={hero.name} />
                       <div>
                         <span className="small-label">
-                          {hero.name} · {deck.aspect}
+                          {hero.name} · {savedDeckAspects(deck).join(" + ")}
                         </span>
                         <h3>{deck.name}</h3>
                         <p>

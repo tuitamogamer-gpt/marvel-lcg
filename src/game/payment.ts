@@ -1,4 +1,6 @@
 import { thorResourceSources } from "./thor.js";
+import { hawkeyeResourceSources } from "./hawkeye.js";
+import { spiderWomanResourceSources } from "./spider-woman.js";
 import { blackWidowResourceSources } from "./black-widow.js";
 import { doctorStrangeResourceSources } from "./doctor-strange.js";
 import { msMarvelResourceSources } from "./ms-marvel.js";
@@ -83,6 +85,8 @@ export function paymentSources(
       });
   }
   sources.push(...thorResourceSources(s));
+  sources.push(...hawkeyeResourceSources(s, targetCode));
+  sources.push(...spiderWomanResourceSources(s, targetCode));
   sources.push(...blackWidowResourceSources(s, targetCode));
   sources.push(...doctorStrangeResourceSources(s));
   sources.push(...msMarvelResourceSources(s, targetCode));

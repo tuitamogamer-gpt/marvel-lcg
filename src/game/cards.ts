@@ -1,4 +1,10 @@
 import { thorStats } from "./thor.js";
+import { hawkeyeStats, hawkeyeAllyMaxHP } from "./hawkeye.js";
+import {
+  spiderWomanStats,
+  spiderWomanHasAerial,
+  spiderWomanHandSize,
+} from "./spider-woman.js";
 import { blackWidowStats } from "./black-widow.js";
 import {
   doctorStrangeHandSize,
@@ -7,7 +13,7 @@ import {
 } from "./doctor-strange.js";
 import { expansionErrata } from "./expansion-errata.js";
 import { msMarvelStats } from "./ms-marvel.js";
-import { identityMatch } from "./unique.js";
+import { identityMatch, uniqueMatches } from "./unique.js";
 import { rulesCode } from "./rules-code.js";
 import { captainStats } from "./captain-america.js";
 import { hulkStats } from "./hulk.js";
@@ -18,6 +24,7 @@ import encounterData from "../data/core-encounter.json" with { type: "json" };
 import errata from "../data/core-errata.json" with { type: "json" };
 import catalogData from "../data/catalog-cards.json" with { type: "json" };
 import catalogImages from "../data/catalog-images.json" with { type: "json" };
+import sourceDecks from "../data/catalog-decks.json" with { type: "json" };
 import type { Aspect, Card, GameState, Piece, Resource } from "./types.js";
 // Keep the downloaded snapshots intact; official corrections survive data syncs.
 export const CARDS = ([...playerData, ...encounterData] as Card[]).map((c) => {
@@ -239,6 +246,34 @@ export const HEROES = [
     style: "Invocations · Protection",
     complexity: 3,
   },
+  {
+    id: "hawkeye",
+    code: "04001a",
+    alter: "04001b",
+    name: "Hawkeye",
+    identity: "Clint Barton",
+    aspect: "leadership" as Aspect,
+    color: "#9777bd",
+    tag: "Every arrow counts.",
+    description:
+      "Find your Bow, keep Arrows in your Quiver, and lead your allies while taking precise shots.",
+    style: "Arrows · Leadership",
+    complexity: 2,
+  },
+  {
+    id: "spider_woman",
+    code: "04031a",
+    alter: "04031b",
+    name: "Spider-Woman",
+    identity: "Jessica Drew",
+    aspect: "aggression" as Aspect,
+    color: "#cf5753",
+    tag: "Double agent. Four ways to fight.",
+    description:
+      "Combine two aspects and play different aspect cards to build Superhuman Agility throughout the round.",
+    style: "Two aspects · Versatile",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -405,17 +440,60 @@ const aspects: Record<Aspect, Record<string, number>> = {
     "01082": 2,
   },
 };
-export function deckCodes(hero: string, aspect: Aspect) {
+export function deckCodes(
+  hero: string,
+  aspect: Aspect,
+  chosenAspects?: Aspect[],
+) {
+  const sourceStarter = sourceDecks.find(
+    (deck) => deck.heroCode === HEROES.find((h) => h.id === hero)?.code,
+  );
+  const pair = chosenAspects || [
+    aspect,
+    aspect === "aggression" ? "justice" : "aggression",
+  ];
+  if (
+    sourceStarter &&
+    ((hero === "hawkeye" && aspect === "leadership") ||
+      (hero === "spider_woman" &&
+        pair.length === 2 &&
+        pair.includes("aggression") &&
+        pair.includes("justice")))
+  )
+    return Object.entries(sourceStarter.cards).flatMap(([code, quantity]) =>
+      Array(quantity).fill(code),
+    ) as string[];
   const source = CORE_HEROES.some((h) => h.id === hero) ? CARDS : CATALOG_CARDS;
   const a = source
     .filter(
       (c) =>
         c.set_code === hero &&
-        c.faction_code === "hero" &&
+        (c.faction_code === "hero" ||
+          (hero === "spider_woman" &&
+            ["ally", "event", "resource", "support", "upgrade"].includes(
+              c.type_code,
+            ))) &&
         !["hero", "alter_ego"].includes(c.type_code) &&
         !c.permanent,
     )
     .flatMap((c) => Array(c.quantity).fill(c.code)) as string[];
+  if (hero === "spider_woman") {
+    const selected = pair.filter(
+      (value, index) => pair.indexOf(value) === index,
+    );
+    if (selected.length !== 2)
+      throw Error("Spider-Woman must choose two distinct aspects.");
+    return a.concat(
+      Object.entries(basics).flatMap(([code, quantity]) =>
+        Array(quantity).fill(code),
+      ),
+      ...selected.map((selectedAspect) =>
+        Object.entries(aspects[selectedAspect])
+          .flatMap(([code, quantity]) => Array(quantity).fill(code))
+          .slice(0, 7),
+      ),
+    );
+  }
   const starter = a.concat(
     Object.entries({ ...basics, ...aspects[aspect] }).flatMap(([c, n]) =>
       Array(n).fill(c),
@@ -425,7 +503,10 @@ export function deckCodes(hero: string, aspect: Aspect) {
   // the existing Aggression starter; Emergency is legal in every other aspect
   // and its second copy remains below the printed three-copy limit.
   return starter.map((code) =>
-    identityMatch(hero, card(code))
+    identityMatch(hero, card(code)) ||
+    (!a.includes(code) &&
+      card(code).is_unique &&
+      a.some((signatureCode) => uniqueMatches(card(signatureCode), card(code))))
       ? aspect === "aggression"
         ? "01054"
         : "01085"
@@ -468,7 +549,8 @@ export function aerial(s: GameState) {
   return (
     (s.player.form === "hero" &&
       (has(s, "01017") || !!s.flags.aerial || thorStats(s).aerial)) ||
-    doctorStrangeTraits(s).includes("Aerial")
+    doctorStrangeTraits(s).includes("Aerial") ||
+    spiderWomanHasAerial(s)
   );
 }
 export function heroStats(s: GameState) {
@@ -484,6 +566,8 @@ export function heroStats(s: GameState) {
       msMarvelStats(s).atk +
       thorStats(s).atk +
       doctorStrangeStats(s).attack +
+      hawkeyeStats(s).atk +
+      spiderWomanStats(s).attack +
       captainPackStats(s).attack,
     thwart:
       h.thwart! +
@@ -492,6 +576,7 @@ export function heroStats(s: GameState) {
       captainStats(s).thw +
       msMarvelStats(s).thw +
       doctorStrangeStats(s).thwart +
+      spiderWomanStats(s).thwart +
       scriptedModifier(s, "thwart") +
       captainPackStats(s).thwart,
     defense:
@@ -502,6 +587,7 @@ export function heroStats(s: GameState) {
       msMarvelStats(s).def +
       blackWidowStats(s).defense +
       doctorStrangeStats(s).defense +
+      spiderWomanStats(s).defense +
       scriptedModifier(s, "defense"),
     recover:
       card(HEROES.find((h) => h.id === s.heroId)!.alter).recover! +
@@ -522,10 +608,12 @@ export function handSize(s: GameState) {
           ).length,
         ) +
         scriptedModifier(s, "hand_size") +
-        doctorStrangeHandSize(s)
+        doctorStrangeHandSize(s) +
+        spiderWomanHandSize(s)
     : heroCard(s).hand_size! +
         scriptedModifier(s, "hand_size") +
-        doctorStrangeHandSize(s);
+        doctorStrangeHandSize(s) +
+        spiderWomanHandSize(s);
 }
 export function pieceHP(s: GameState, p: Piece) {
   return (
@@ -540,6 +628,7 @@ export function pieceHP(s: GameState, p: Piece) {
     ).length *
       3 +
     scriptedModifier(s, "health", p) +
+    hawkeyeAllyMaxHP(s, p) +
     captainPackModifiers(s, p.id).hp
   );
 }

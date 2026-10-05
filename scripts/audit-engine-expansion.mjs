@@ -6,7 +6,7 @@ import path from "node:path";
 /** This is a triage inventory, never a natural-language rules interpreter. */
 export const AUDIT_SCHEMA_VERSION = 1;
 export const RULES_REFERENCE_URL =
-  "https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf";
+  "https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/08/mc_rulesreference_v18_compressed-1.pdf";
 
 export function normalizeRules(text = "") {
   return text
@@ -1005,6 +1005,7 @@ export async function generateAudit(
     "src/game/script-registry.ts",
     "src/game/keywords.ts",
     "src/game/engine-support.ts",
+    "src/game/engine.ts",
     "src/game/cards.ts",
     "src/game/captain-america.ts",
     "src/game/captain-pack.ts",
@@ -1018,6 +1019,8 @@ export async function generateAudit(
     "src/game/reveal-window.ts",
     "src/game/black-widow.ts",
     "src/game/doctor-strange.ts",
+    "src/game/hawkeye.ts",
+    "src/game/spider-woman.ts",
     "src/game/expansion-errata.ts",
     "src/game/types.ts",
     "src/game/payment.ts",

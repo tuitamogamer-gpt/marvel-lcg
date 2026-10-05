@@ -226,7 +226,7 @@ function fixture() {
     },
   };
 }
-describe("Hawkeye's entire source-preconstructed Rise of Red Skull half", () => {
+describe("Hawkeye module rules and adapter contracts", () => {
   it("assigns all31 faces once to native, Core-equivalent, existing Tower, or compiled whole text", () => {
     const source = sourceCards.filter(
       (c) => c.pack_code === "trors" && c.position <= 30,
@@ -258,7 +258,7 @@ describe("Hawkeye's entire source-preconstructed Rise of Red Skull half", () => 
       b = play("04002");
     expect(hawkeyeStats(s).atk).toBe(1);
     b.exhausted = true;
-    expect(hawkeyeAbility(s, "hero", "quick-draw", ports)).toEqual([
+    expect(hawkeyeAbility(s, "identity", "quick-draw", ports)).toEqual([
       H("quick-draw"),
     ]);
     run(H("quick-draw"));
@@ -268,13 +268,13 @@ describe("Hawkeye's entire source-preconstructed Rise of Red Skull half", () => 
     s.player.form = "alter";
     expect(hawkeyeStats(s).atk).toBe(0);
   });
-  it("Weapon of Choice spends through native payment, takes the exact discarded Bow, shuffles, and limits by phase", () => {
+  it("Weapon of Choice requests payment, takes the exact discarded Bow, shuffles, and limits by phase", () => {
     const { s, ports, make, hand, run } = fixture();
     s.player.form = "alter";
     hand("04023");
     const b = make("04002");
     s.player.discard.push(b);
-    const ability = hawkeyeAbilityOptions(s, "hero", ports)[0];
+    const ability = hawkeyeAbilityOptions(s, "identity", ports)[0];
     expect(ability.effects[0]).toMatchObject({
       type: "payRequest",
       cost: 1,
@@ -502,7 +502,7 @@ describe("Hawkeye's entire source-preconstructed Rise of Red Skull half", () => 
     });
     expect(s.queue[0].attack).toBeUndefined();
   });
-  it("Goliath can act while exhausted, gains4 until real phase end, and the delayed discard survives reload", () => {
+  it("Goliath can act while exhausted, gains4 until phase end, and the delayed discard survives reload", () => {
     const { s, play, run, ports } = fixture(),
       p = play("04013");
     p.exhausted = true;
@@ -561,12 +561,61 @@ describe("Hawkeye's entire source-preconstructed Rise of Red Skull half", () => 
     expect(teammate.player.inPlay).toEqual([]);
     expect(s.player.discard.map((x) => x.id)).toContain(p.id);
   });
+  it("Goliath's maximum is shared across players and remains spent after a physical copy leaves play and reload", () => {
+    const { s, second, play, make, run, ports } = fixture();
+    const teammate = second(),
+      first = play("04013"),
+      later = make("04013");
+    run(H("goliath", { id: first.id }));
+    ports.discardPiece(s, first.id);
+    teammate.player.inPlay.push(later);
+    const saved = JSON.parse(JSON.stringify(s)) as GameState;
+    activateSeat(saved, teammate.id);
+    expect(hawkeyeAbilityOptions(saved, later.id, ports)).toEqual([]);
+    expect(() =>
+      resolveHawkeyeEffect(saved, H("goliath", { id: later.id }), ports),
+    ).toThrow("unavailable this phase");
+    saved.phase = "villain";
+    expect(hawkeyeAbilityOptions(saved, later.id, ports)).toHaveLength(1);
+  });
+  it("Goliath's maximum remains spent when the player who used it is eliminated", () => {
+    const { s, second, play, make, run, ports } = fixture();
+    const teammate = second(),
+      first = play("04013"),
+      later = make("04013");
+    run(H("goliath", { id: first.id }));
+    s.players[0].eliminated = true;
+    teammate.player.inPlay.push(later);
+    activateSeat(s, teammate.id);
+    expect(hawkeyeAbilityOptions(s, later.id, ports)).toEqual([]);
+  });
   it("Team Training rejects a second support under an occupied controller", () => {
     const { s, ports, play, make } = fixture();
     play("04016");
     expect(hawkeyePlayRestriction(s, make("04016"), ports)).toContain(
       "already controls",
     );
+  });
+  it("Team Training's maximum counts every printing under the recipient, while allowing another free player", () => {
+    const { s, ports, second, play, make, run, drain } = fixture();
+    const teammate = second(),
+      existing = play("45013");
+    const support = make("04016");
+    expect(hawkeyePlayRestriction(s, support, ports)).toBeNull();
+    s.player.inPlay.push(support);
+    run(hawkeyeCardEntered(s, support)[0]);
+    drain();
+    expect(controller(s, support.id)?.id).toBe(teammate.id);
+    expect(controller(s, existing.id)?.id).toBe("p1");
+    expect(hawkeyePlayRestriction(s, make("04016"), ports)).toContain(
+      "already controls",
+    );
+  });
+  it("Team Training reprint grants health to the current controller's allies", () => {
+    const { s, play } = fixture();
+    const ally = play("04020");
+    play("45013");
+    expect(hawkeyeAllyMaxHP(s, ally)).toBe(1);
   });
   it("Sky Cycle attaches to another player's Avenger, grants Aerial, and readies by exhausting only the upgrade", () => {
     const { s, second, make, play, run, drain, ports } = fixture(),
@@ -579,13 +628,30 @@ describe("Hawkeye's entire source-preconstructed Rise of Red Skull half", () => 
     run(hawkeyeCardEntered(s, cycle)[0]);
     drain();
     expect(cycle.attachedTo).toBe(ally.id);
+    expect(controller(s, cycle.id)?.id).toBe(teammate.id);
+    expect(cycle.ownerId).toBe("p1");
     expect(hawkeyeAllyAerial(s, ally)).toBe(true);
+    expect(hawkeyeAbilityOptions(s, cycle.id, ports)).toEqual([]);
+    activateSeat(s, teammate.id);
     run(hawkeyeAbilityOptions(s, cycle.id, ports)[0].effects[0]);
     expect(cycle.exhausted).toBe(true);
     expect(s.queue[0]).toMatchObject({ type: "ready", target: ally.id });
     expect(hawkeyePlayRestriction(s, make("04015"), ports)).toContain(
       "no eligible",
     );
+  });
+  it("Sky Cycle and Earth's Mightiest Heroes accept an ally's native gained Avenger trait", () => {
+    const { s, play, make, ports } = fixture();
+    const ally = play("01041");
+    expect(card(ally).traits).not.toContain("Avenger");
+    expect(hawkeyePlayRestriction(s, make("04015"), ports)).toContain(
+      "no eligible",
+    );
+    ports.characterHasTrait = (_s, id, name) =>
+      id === ally.id && name === "Avenger";
+    expect(hawkeyePlayRestriction(s, make("04015"), ports)).toBeNull();
+    s.player.exhausted = true;
+    expect(hawkeyePlayRestriction(s, make("04022"), ports)).toBeNull();
   });
   it("Ready for Action chooses only this controller's non-Tough ally", () => {
     const { s, second, make, play, run } = fixture(),

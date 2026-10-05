@@ -7,6 +7,8 @@ import {
   msMarvelDiscardPlayable,
 } from "./game/ms-marvel";
 import { thorAbilityOptions } from "./game/thor";
+import { hawkeyeStoredPlayable } from "./game/hawkeye";
+import { heroDeckAspects } from "./game/hero-runtime";
 import { riskyBlankPower } from "./game/risky-business";
 import { mutagenAttachmentActions } from "./game/mutagen-formula";
 import {
@@ -123,6 +125,7 @@ import {
   summarize,
   schemeLimit,
   escalation,
+  nativeHeroAbilityOptions,
 } from "./game/engine";
 import { seatView, upgradeSave } from "./game/team";
 import { effectTitle } from "./game/review";
@@ -592,6 +595,7 @@ export default function App() {
       heroId: string;
       aspect: Aspect;
       deckCards?: string[];
+      deckAspects?: Aspect[];
       deckName?: string;
       deckOrigin?: "source";
     }[]
@@ -599,15 +603,59 @@ export default function App() {
   const [setupSeat, setSetupSeat] = useState(0);
   const hero = HEROES.find((h) => h.id === team[setupSeat].heroId)!;
   const aspect = team[setupSeat].aspect;
+  const chosenAspects =
+    team[setupSeat].deckAspects ||
+    heroDeckAspects(
+      hero.id,
+      team[setupSeat].deckCards || deckCodes(hero.id, aspect),
+      aspect,
+    );
   const setHero = (h: (typeof HEROES)[number]) =>
     setTeam((a) =>
       a.map((p, i) =>
         i === setupSeat ? { heroId: h.id, aspect: h.aspect } : p,
       ),
     );
-  const setAspect = (aspect: Aspect) =>
+  const setAspect = (aspect: Aspect, second?: Aspect) =>
     setTeam((a) =>
-      a.map((p, i) => (i === setupSeat ? { heroId: p.heroId, aspect } : p)),
+      a.map((p, i) => {
+        if (i !== setupSeat) return p;
+        if (p.heroId === "spider_woman") {
+          const previous =
+            p.deckAspects ||
+            (heroDeckAspects(
+              p.heroId,
+              p.deckCards || deckCodes(p.heroId, p.aspect),
+              p.aspect,
+            ) as Aspect[]);
+          const other =
+            second ||
+            previous.find((value) => value !== aspect) ||
+            (aspect === "aggression" ? "justice" : "aggression");
+          const source =
+            [aspect, other].includes("aggression") &&
+            [aspect, other].includes("justice");
+          return {
+            heroId: p.heroId,
+            aspect,
+            deckCards: deckCodes(p.heroId, aspect, [aspect, other]),
+            deckAspects: [aspect, other],
+            deckName: source
+              ? "Spider-Woman Starter Deck"
+              : "Two-aspect starter deck",
+            ...(source ? { deckOrigin: "source" as const } : {}),
+          };
+        }
+        return p.heroId === "hawkeye" && aspect === "leadership"
+          ? {
+              heroId: p.heroId,
+              aspect,
+              deckCards: deckCodes(p.heroId, aspect),
+              deckName: "Hawkeye Starter Deck",
+              deckOrigin: "source" as const,
+            }
+          : { heroId: p.heroId, aspect };
+      }),
     );
   function setTeamSize(size: number) {
     setTeam((prev) => {
@@ -925,6 +973,7 @@ export default function App() {
                   heroId: p.heroId,
                   aspect: p.aspect,
                   deckCards: p.deckCards,
+                  deckAspects: p.deckAspects,
                 })),
                 villainId: game.villainId,
                 difficulty: game.difficulty,
@@ -986,6 +1035,7 @@ export default function App() {
               heroId: deck.heroId,
               aspect: deck.aspect,
               deckCards: [...deck.cards],
+              deckAspects: deck.aspects,
               deckName: deck.name,
             }
           : p,
@@ -1044,6 +1094,7 @@ export default function App() {
           `${hero.name} / ${ASPECTS.find((a) => a.id === aspect)!.name}`,
         heroId: hero.id,
         aspect,
+        aspects: chosenAspects,
         cards: team[setupSeat].deckCards || deckCodes(hero.id, aspect),
       });
       setToast("Deck saved to your profile.");
@@ -1200,7 +1251,7 @@ export default function App() {
             <span>
               <span className="live-dot" />A NEW MISSION AWAITS
             </span>
-            <span>FIVE HEROES. ONE EXTRAORDINARY UNIVERSE.</span>
+            <span>{HEROES.length} HEROES. ONE EXTRAORDINARY UNIVERSE.</span>
           </div>
           {active && (
             <button className="resume-banner" onClick={() => setScreen("game")}>
@@ -1512,6 +1563,30 @@ export default function App() {
                   );
                 })}
               </div>
+              {hero.id === "spider_woman" && (
+                <label className="aspect-description">
+                  Second aspect{" "}
+                  <select
+                    aria-label="Spider-Woman second aspect"
+                    value={chosenAspects.find((value) => value !== aspect)}
+                    onChange={(event) =>
+                      setAspect(aspect, event.target.value as Aspect)
+                    }
+                  >
+                    {ASPECTS.filter((value) => value.id !== aspect).map(
+                      (value) => (
+                        <option key={value.id} value={value.id}>
+                          {value.name}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                  <span>
+                    Equal cards from both chosen aspects, including their
+                    signature cards.
+                  </span>
+                </label>
+              )}
               <p className="aspect-description">
                 {ASPECTS.find((a) => a.id === aspect)!.description}{" "}
                 <span>
@@ -2097,7 +2172,7 @@ export default function App() {
       )}
       {deckView && (
         <Modal
-          title={`${hero.name} / ${ASPECTS.find((a) => a.id === aspect)!.name}`}
+          title={`${hero.name} / ${chosenAspects.map((value) => ASPECTS.find((a) => a.id === value)?.name).join(" + ")}`}
           wide
           onClose={() => setDeckView(false)}
         >
@@ -2116,7 +2191,14 @@ export default function App() {
             }
           />
           <div className="deck-list">
-            {(["hero", aspect, "basic"] as const).map((f) => {
+            {[
+              "hero",
+              ...new Set(
+                (team[setupSeat].deckCards || deckCodes(hero.id, aspect))
+                  .map((code) => card(code).faction_code)
+                  .filter((faction) => faction !== "hero"),
+              ),
+            ].map((f) => {
               const counts = (
                 team[setupSeat].deckCards || deckCodes(hero.id, aspect)
               ).reduce(
@@ -3779,6 +3861,7 @@ function Tabletop({
     }
   }, [s.round, s.activePlayerId, s.player.hand.length]);
   const importedIdentityAbility = [
+    ...nativeHeroAbilityOptions(s),
     ...doctorStrangeAbilityOptions(s, "identity"),
     ...thorAbilityOptions(s, "identity"),
     ...msMarvelAbilityOptions(s, "identity"),
@@ -4399,7 +4482,11 @@ function Tabletop({
                       }
                       disabled={!canUseAction || spellUnavailable}
                       onClick={() =>
-                        sendAction({ type: "ABILITY", id: "identity" })
+                        sendAction({
+                          type: "ABILITY",
+                          id: "identity",
+                          action: importedIdentityAbility?.id,
+                        })
                       }
                     >
                       <Sparkle size={13} />
@@ -4673,6 +4760,54 @@ function Tabletop({
                     }
                   />
                 </div>
+                {hawkeyeStoredPlayable(s).length > 0 && (
+                  <section
+                    className="invocation-area"
+                    aria-label="Hawkeye's Quiver"
+                  >
+                    <span className="table-group-label">
+                      FACEUP ARROWS · QUIVER
+                    </span>
+                    <div className="attached-card-list">
+                      {hawkeyeStoredPlayable(s).map((arrow) => {
+                        const reason = playable(s, arrow);
+                        return (
+                          <div className="attached-piece" key={arrow.id}>
+                            <button
+                              className="attached-card"
+                              aria-label={`Inspect ${card(arrow).name} in Quiver`}
+                              onClick={() =>
+                                inspect({
+                                  code: arrow.code,
+                                  piece: arrow,
+                                  hand: true,
+                                  playerId: s.activePlayerId,
+                                })
+                              }
+                            >
+                              <CardImage code={arrow.code} />
+                              <span>{card(arrow).name}</span>
+                            </button>
+                            <button
+                              className="ability-button"
+                              aria-label={`Play from Quiver: ${card(arrow).name}`}
+                              title={
+                                reason ||
+                                `Pay ${cardCost(s, card(arrow))} resources`
+                              }
+                              disabled={!canUseAction || !!reason}
+                              onClick={() =>
+                                sendAction({ type: "PLAY", id: arrow.id })
+                              }
+                            >
+                              Play Arrow · {cardCost(s, card(arrow))}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
                 {s.heroId === "doctor_strange" &&
                   s.phase !== "mulligan" &&
                   doctorStrangeTopInvocation(s) && (

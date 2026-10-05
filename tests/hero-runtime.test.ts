@@ -6,6 +6,7 @@ import {
   heroRuntime,
   heroStarterAspects,
   heroStarterCodes,
+  heroDeckAspects,
   validateHeroDeck,
   isPermanent,
 } from "../src/game/hero-runtime";
@@ -27,7 +28,7 @@ describe("imported hero definitions and printed starter legality", () => {
   it("imported identities stay unautomated until their full runtime is installed", () => {
     expect(
       HERO_RUNTIME.filter((h) => h.scripted).map((h) => h.id),
-    ).toHaveLength(11);
+    ).toHaveLength(13);
     expect(heroRuntime("captain_america")?.scripted).toBe(true);
     expect(heroRuntime("daredevil")?.scripted).toBe(false);
   });
@@ -62,6 +63,67 @@ describe("imported hero definitions and printed starter legality", () => {
         " ",
       ),
     ).toContain("equal number");
+  });
+  it("counts chosen-color signatures in equality while retaining other required signature colors", () => {
+    const signatures = heroStarterCodes("spider_woman").filter(
+      (code) => byCode.get(code)?.set_code === "spider_woman",
+    );
+    const codes = [
+      ...signatures,
+      ...deckCodes("spider_man", "leadership").filter(
+        (code) => byCode.get(code)?.faction_code === "basic",
+      ),
+      "01066",
+      "01067",
+      "01068",
+      "01069",
+      "01069",
+      "01070",
+      "01070",
+      ...Array(3).fill("44017"),
+      ...Array(3).fill("44021"),
+      ...Array(3).fill("44029"),
+    ];
+    expect(heroDeckAspects("spider_woman", codes, "leadership")).toEqual([
+      "leadership",
+      "pool",
+    ]);
+    expect(
+      validateHeroDeck("spider_woman", ["leadership", "pool"], codes).errors,
+    ).toEqual([]);
+    codes[codes.indexOf("44017")] = "01085";
+    expect(
+      validateHeroDeck(
+        "spider_woman",
+        ["leadership", "pool"],
+        codes,
+      ).errors.join(" "),
+    ).toContain("including signature cards");
+  });
+  it("offers exact Rise source starters and balanced alternate two-aspect compositions", () => {
+    expect(deckCodes("hawkeye", "leadership").sort()).toEqual(
+      heroStarterCodes("hawkeye").sort(),
+    );
+    expect(deckCodes("spider_woman", "aggression").sort()).toEqual(
+      heroStarterCodes("spider_woman").sort(),
+    );
+    for (const pair of [
+      ["leadership", "protection"],
+      ["justice", "leadership"],
+      ["aggression", "protection"],
+    ] as const) {
+      const codes = deckCodes("spider_woman", pair[0], [...pair]);
+      expect(codes).toHaveLength(40);
+      expect(validateHeroDeck("spider_woman", [...pair], codes).errors).toEqual(
+        [],
+      );
+      expect(heroDeckAspects("spider_woman", codes, pair[0]).sort()).toEqual(
+        [...pair].sort(),
+      );
+    }
+    expect(() =>
+      deckCodes("spider_woman", "aggression", ["aggression", "aggression"]),
+    ).toThrow("two distinct aspects");
   });
   it("matching identity allies remain illegal across typographic differences in alter-ego names", () => {
     const codes = deckCodes("black_panther", "leadership");

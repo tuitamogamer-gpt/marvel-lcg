@@ -529,9 +529,9 @@ export function compileCardScript(
         reason:
           "This response requires a hand-play lifecycle adapter; entering play alone does not satisfy its printed trigger.",
       };
-    const m = new RegExp(
-      `^Response: After ${name} enters play, (.+)$`,
-    ).exec(text);
+    const m = new RegExp(`^Response: After ${name} enters play, (.+)$`).exec(
+      text,
+    );
     if (m) {
       const program = operation(
         m[1][0].toUpperCase() + m[1].slice(1),

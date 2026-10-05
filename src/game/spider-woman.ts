@@ -39,6 +39,10 @@ const schemeThreat = (s: GameState, id: string) =>
     : s.sideSchemes.find((p) => p.id === id)?.counters || 0;
 const actorEffects = (effects: Effect[], playerId: string) =>
   effects.map((e) => ({ ...e, actorId: e.actorId || playerId }));
+const survivingActor = (s: GameState, preferred?: string) =>
+  s.players.find((seat) => seat.id === preferred && !seat.eliminated)?.id ||
+  playerOrder(s)[0]?.id ||
+  s.activePlayerId;
 
 /** The Spider-Woman half of Rise of Red Skull, with one complete owner per
  * printed face. Core reprints and whole-text compiler programs stay separate. */
@@ -51,18 +55,14 @@ export const SPIDER_WOMAN_CORE_ALIASES = [
   "04051",
   "04052",
 ] as const;
-export const SPIDER_WOMAN_COMPILED_CODES = [
-  "04035",
-  "04036",
-  "04044",
-  "04049",
-] as const;
+export const SPIDER_WOMAN_COMPILED_CODES = ["04035", "04044", "04049"] as const;
 export const SPIDER_WOMAN_SCRIPT_CODES = [
   "04031a",
   "04031b",
   "04032",
   "04033",
   "04034",
+  "04036",
   "04037",
   "04038",
   "04039",
@@ -77,7 +77,7 @@ export const SPIDER_WOMAN_SCRIPT_CODES = [
   "04057",
 ] as const;
 export const SPIDER_WOMAN_RULES_SOURCE =
-  "https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf";
+  "https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/08/mc_rulesreference_v18_compressed-1.pdf";
 export const SPIDER_WOMAN_STARTER_SOURCE =
   "https://images-cdn.fantasyflightgames.com/filer_public/92/1d/921ddef8-c28c-4096-a9e9-63142230a602/mc10_the_rise_of_red_skull_rules_web.pdf";
 export const SPIDER_WOMAN_RULINGS_SOURCE =
@@ -126,6 +126,12 @@ export interface SpiderWomanPorts {
   putMinion(s: GameState, p: Piece, playerId: string): void;
   log(s: GameState, message: string): void;
 }
+/** Enemy labels come from the host, including synthesized encounter pieces
+ * such as Ultron's facedown Drone cards that have no printed catalog face. */
+const enemyName = (s: GameState, p: Piece, ports: SpiderWomanPorts) =>
+  ports.enemyTargets(s, false).find((target) => target.id === p.id)?.label ||
+  cards.get(p.code)?.name ||
+  p.code;
 
 export function spiderWomanStats(s: GameState) {
   const amount =
@@ -244,6 +250,17 @@ export function spiderWomanPlayRestriction(
   ports: SpiderWomanPorts,
 ): string | null {
   if (
+    p.code === "04036" &&
+    !ports
+      .enemyTargets(s, false)
+      .some(
+        (target) =>
+          ports.canGiveStatus(s, target.id, "stunned") ||
+          ports.canGiveStatus(s, target.id, "confused"),
+      )
+  )
+    return "There is no enemy that Pheromones can stun or confuse.";
+  if (
     p.code === "04047" &&
     s.player.inPlay.some(
       (p) => cards.get(p.code)?.name === "Skilled Investigator",
@@ -278,6 +295,8 @@ export function spiderWomanPlayRestriction(
 }
 export function spiderWomanEvent(s: GameState, p: Piece): Effect[] | null {
   switch (p.code) {
+    case "04036":
+      return [SW("pheromones")];
     case "04037":
       return [
         E("heal", { target: "hero", amount: 3 }),
@@ -503,6 +522,43 @@ export function resolveSpiderWomanEffect(
       s.flags.swAerialRound = s.round;
       ports.queue(s, E("ready", { target: "hero" }));
       break;
+    case "sw:pheromones": {
+      const targets = ports
+        .enemyTargets(s, false)
+        .filter(
+          (target) =>
+            ports.canGiveStatus(s, target.id, "stunned") ||
+            ports.canGiveStatus(s, target.id, "confused"),
+        );
+      if (targets.length)
+        ports.choose(
+          s,
+          "Pheromones",
+          "Choose an enemy to stun and confuse.",
+          targets.map((target) =>
+            option(
+              target.id,
+              target.label,
+              [SW("pheromones-status", { target: target.id })],
+              target.code,
+            ),
+          ),
+        );
+      break;
+    }
+    case "sw:pheromones-status":
+      need(
+        ports.enemyTargets(s, false).some((target) => target.id === e.target) &&
+          (ports.canGiveStatus(s, e.target, "stunned") ||
+            ports.canGiveStatus(s, e.target, "confused")),
+        "Pheromones' enemy can no longer be stunned or confused.",
+      );
+      ports.queue(
+        s,
+        E("status", { target: e.target, status: "stunned" }),
+        E("status", { target: e.target, status: "confused" }),
+      );
+      break;
     case "sw:inconspicuous": {
       const assigned = e.assigned as Record<string, number>;
       const legal: string[] =
@@ -590,7 +646,7 @@ export function resolveSpiderWomanEffect(
       ports.queue(
         s,
         E("damage", { target: p.id, amount: 2, attack: true, source: "hero" }),
-        SW("press-draw", { target: p.id, name: cards.get(p.code)!.name }),
+        SW("press-draw", { target: p.id, name: enemyName(s, p, ports) }),
       );
       break;
     }
@@ -599,7 +655,7 @@ export function resolveSpiderWomanEffect(
         e.target === s.villain.id
           ? s.villain
           : s.minions.find((p) => p.id === e.target);
-      if (p && cards.get(p.code)?.name === e.name && (p.stunned || p.confused))
+      if (p && enemyName(s, p, ports) === e.name && (p.stunned || p.confused))
         ports.queue(s, E("draw", { amount: 1 }));
       break;
     }
@@ -617,7 +673,7 @@ export function resolveSpiderWomanEffect(
           targets.map((p) =>
             option(
               p.id,
-              cards.get(p.code)!.name,
+              enemyName(s, p, ports),
               [SW("spider-girl-status", { target: p.id })],
               p.code,
             ),
@@ -714,6 +770,7 @@ export function resolveSpiderWomanEffect(
         s,
         SW("hydra-attacks", {
           origin: e.origin,
+          actorId: survivingActor(s, s.firstPlayerId),
           remaining: s.minions
             .filter((p) => {
               const seat = s.players.find(
@@ -757,7 +814,7 @@ export function resolveSpiderWomanEffect(
             players: playerOrder(s)
               .filter((seat) => !e.attacked.includes(seat.id))
               .map((seat) => seat.id),
-            actorId: e.origin,
+            actorId: survivingActor(s, e.origin),
           }),
         );
         break;
@@ -820,7 +877,7 @@ export function resolveSpiderWomanEffect(
             ? [...new Set([...e.attacked, e.attackedPlayerId || e.playerId])]
             : e.attacked,
           origin: e.origin,
-          actorId: e.origin,
+          actorId: survivingActor(s, s.firstPlayerId),
         }),
       );
       break;
@@ -829,10 +886,20 @@ export function resolveSpiderWomanEffect(
         s.players.some((seat) => seat.id === id && !seat.eliminated),
       );
       if (!players.length) {
-        if (e.searchedDeck) ports.shuffleEncounter(s);
+        ports.queue(
+          s,
+          SW("hydra-finish", {
+            searchedDeck: e.searchedDeck,
+            actorId: survivingActor(s, e.origin),
+          }),
+        );
         break;
       }
       const playerId = players[0];
+      if (s.activePlayerId !== playerId) {
+        ports.queue(s, { ...e, players, actorId: playerId });
+        break;
+      }
       const candidates = [...s.encounter.deck, ...s.encounter.discard].filter(
         (p) =>
           cards.get(p.code)?.type_code === "minion" &&
@@ -891,6 +958,9 @@ export function resolveSpiderWomanEffect(
       ports.putMinion(s, p!, e.playerId);
       break;
     }
+    case "sw:hydra-finish":
+      if (e.searchedDeck) ports.shuffleEncounter(s);
+      break;
     default:
       throw Error(`Unimplemented Spider-Woman effect: ${e.type}`);
   }
