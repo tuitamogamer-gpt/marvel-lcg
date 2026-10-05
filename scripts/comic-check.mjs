@@ -140,13 +140,48 @@ try {
   await page.mouse.move(0, 0);
   await page.locator(".hand-card [data-card-preview]").first().hover();
   await page.getByRole("tooltip").waitFor();
-  await page.getByRole("tooltip").hover();
+  const popupBounds = await page.getByRole("tooltip").boundingBox();
+  assert.ok(popupBounds);
+  await page.mouse.move(
+    popupBounds.x + popupBounds.width / 2,
+    popupBounds.y + popupBounds.height / 2,
+  );
   await page.waitForTimeout(300);
   assert.equal(await page.getByRole("tooltip").count(), 1);
   await page.mouse.move(0, 0);
   await page.waitForTimeout(300);
   assert.equal(await page.getByRole("tooltip").count(), 0);
   checks.push("Leaving both the card and its preview dismisses the popup");
+  await page.keyboard.press("Escape");
+  await page.locator(".hand-card [data-card-preview]").first().hover();
+  const fallbackPreview = page.getByRole("tooltip");
+  await fallbackPreview.waitFor();
+  await fallbackPreview.locator("img").dispatchEvent("error");
+  const fallback = fallbackPreview.locator(".preview-fallback");
+  await fallback.waitFor();
+  await fallback.evaluate((element) => {
+    element.style.minHeight = "0";
+    element.style.maxHeight = "80px";
+  });
+  const fallbackBounds = await fallback.boundingBox();
+  await page.mouse.move(
+    fallbackBounds.x + fallbackBounds.width / 2,
+    fallbackBounds.y + fallbackBounds.height / 2,
+  );
+  await page.mouse.wheel(0, 200);
+  await page.waitForTimeout(100);
+  assert.ok(await fallback.evaluate((element) => element.scrollTop > 0));
+  assert.ok(
+    await fallbackPreview.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return !element.contains(
+        document.elementFromPoint(rect.x + 10, rect.y + 10),
+      );
+    }),
+  );
+  checks.push(
+    "Failed-image text scrolls while leaving table controls clickable",
+  );
   await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 390, height: 844 });
   await preview(

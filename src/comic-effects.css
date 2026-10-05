@@ -11,6 +11,7 @@
   overflow: hidden;
   animation: preview-appear 130ms ease-out;
   max-height: calc(100dvh - 24px);
+  pointer-events: none;
 }
 .card-hover-preview > img {
   display: block;

@@ -298,6 +298,57 @@ try {
   );
   await capture("preparation-trigger-choice");
   await audit("Preparation trigger choice");
+  const biteIndex = s.prompt.options.findIndex(
+    (option) => option.id === data.biteId,
+  );
+  const biteDecision = page.locator(".decision-option").nth(biteIndex);
+  await biteDecision.hover();
+  const preview = page.getByRole("tooltip", {
+    name: "Enlarged card: Widow's Bite",
+    exact: true,
+  });
+  await preview.waitFor({ state: "visible" });
+  const previewRect = await preview.boundingBox();
+  await page.mouse.move(
+    previewRect.x + previewRect.width / 2,
+    previewRect.y + previewRect.height / 2,
+  );
+  await page.waitForTimeout(220);
+  assert.ok(
+    await preview.isVisible(),
+    "Card preview remains readable when the pointer moves over it",
+  );
+  await page.mouse.move(5, 5);
+  await preview.waitFor({ state: "hidden" });
+  await biteDecision.hover();
+  await preview.waitFor({ state: "visible" });
+  assert.ok(
+    await biteDecision.evaluate((button) => {
+      const rect = button.getBoundingClientRect();
+      return button.contains(
+        document.elementFromPoint(
+          rect.x + rect.width / 2,
+          rect.y + rect.height / 2,
+        ),
+      );
+    }),
+    "Hover artwork must not intercept the actual decision button",
+  );
+  await capture("preparation-hover-through");
+  await preview.locator("img").dispatchEvent("error");
+  await preview.locator(".preview-fallback").waitFor();
+  assert.ok(
+    await biteDecision.evaluate((button) => {
+      const rect = button.getBoundingClientRect();
+      return button.contains(
+        document.elementFromPoint(
+          rect.x + rect.width / 2,
+          rect.y + rect.height / 2,
+        ),
+      );
+    }),
+    "Failed-image text must not intercept the actual decision button",
+  );
   await choice(data.biteId);
   s = await save();
   assert.equal(s.prompt?.title, "After your Preparation resolves");

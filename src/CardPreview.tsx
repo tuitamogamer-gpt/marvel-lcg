@@ -29,6 +29,8 @@ export function CardPreview() {
     const clear = () => {
       clearTimeout(openTimer);
       clearTimeout(closeTimer);
+      openTimer = undefined;
+      closeTimer = undefined;
     };
     const close = () => {
       clear();
@@ -88,12 +90,33 @@ export function CardPreview() {
         shown = true;
       }, 260);
     };
-    const insidePopup = (target: EventTarget | null) =>
-      target instanceof Node && popup.current?.contains(target);
+    const insidePopup = (
+      target: EventTarget | null,
+      pointer?: Pick<PointerEvent, "clientX" | "clientY">,
+    ) => {
+      const element = popup.current;
+      if (!element) return false;
+      if (target instanceof Node && element.contains(target)) return true;
+      if (!pointer) return false;
+      const rect = element.getBoundingClientRect();
+      // The preview lets clicks reach the table beneath it. Coordinate checks
+      // keep it hoverable even though its image does not receive pointer events.
+      return (
+        pointer.clientX >= rect.left &&
+        pointer.clientX <= rect.right &&
+        pointer.clientY >= rect.top &&
+        pointer.clientY <= rect.bottom
+      );
+    };
     const enter = (event: PointerEvent | FocusEvent) => {
       if (event instanceof PointerEvent && event.pointerType === "touch")
         return;
-      if (insidePopup(event.target)) {
+      if (
+        insidePopup(
+          event.target,
+          event instanceof PointerEvent ? event : undefined,
+        )
+      ) {
         clear();
         return;
       }
@@ -103,12 +126,26 @@ export function CardPreview() {
     };
     const move = (event: PointerEvent) => {
       lastMove = performance.now();
-      if (event.pointerType === "touch" || insidePopup(event.target)) return;
+      if (event.pointerType === "touch") return;
+      if (insidePopup(event.target, event)) {
+        clearTimeout(closeTimer);
+        closeTimer = undefined;
+        return;
+      }
       const next = candidate(event.target);
       if (next && next !== anchor) open(next);
+      else if (next === anchor) {
+        clearTimeout(closeTimer);
+        closeTimer = undefined;
+      } else if (shown && !closeTimer) closeTimer = setTimeout(close, 180);
     };
     const leave = (event: PointerEvent | FocusEvent) => {
-      if (insidePopup(event.relatedTarget)) {
+      if (
+        insidePopup(
+          event.relatedTarget,
+          event instanceof PointerEvent ? event : undefined,
+        )
+      ) {
         clear();
         return;
       }
@@ -129,6 +166,22 @@ export function CardPreview() {
     const scroll = (event: Event) => {
       if (!insidePopup(event.target)) close();
     };
+    const wheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.deltaY === 0) return;
+      if (!insidePopup(event.target, event)) return;
+      const fallback =
+        popup.current?.querySelector<HTMLElement>(".preview-fallback");
+      if (!fallback || fallback.scrollHeight <= fallback.clientHeight) return;
+      // Text remains scrollable without placing an input surface over buttons.
+      const unit =
+        event.deltaMode === 1
+          ? 16
+          : event.deltaMode === 2
+            ? fallback.clientHeight
+            : 1;
+      event.preventDefault();
+      fallback.scrollTop += event.deltaY * unit;
+    };
     const observer = new MutationObserver(() => {
       if (anchor && (!anchor.isConnected || !anchor.getClientRects().length))
         close();
@@ -140,6 +193,7 @@ export function CardPreview() {
     document.addEventListener("focusin", enter);
     document.addEventListener("focusout", leave);
     document.addEventListener("pointerdown", close);
+    document.addEventListener("wheel", wheel, { passive: false });
     window.addEventListener("keydown", escape, true);
     window.addEventListener("scroll", scroll, true);
     window.addEventListener("resize", close);
@@ -153,6 +207,7 @@ export function CardPreview() {
       document.removeEventListener("focusin", enter);
       document.removeEventListener("focusout", leave);
       document.removeEventListener("pointerdown", close);
+      document.removeEventListener("wheel", wheel);
       window.removeEventListener("keydown", escape, true);
       window.removeEventListener("scroll", scroll, true);
       window.removeEventListener("resize", close);
