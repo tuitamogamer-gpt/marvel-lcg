@@ -373,6 +373,8 @@ const plumbing = new Set([
   "refill",
   "allReady",
   "beginVillain",
+  // The phase announcement reads with the threat it places, not as a stop of its own.
+  "villainStepOne",
   "villainActivate",
   "minionActivations",
   "defensePrompt",
@@ -384,6 +386,15 @@ const plumbing = new Set([
   // A turn hand-off or an empty scenario setup only restates what the table shows.
   "beginTurn",
   "stageSetup",
+]);
+/** Villain-phase bookkeeping the encounter deck performs on its own. */
+const villainEffects = new Set([
+  "beginVillain",
+  "villainStepOne",
+  "villainActivate",
+  "minionActivations",
+  "dealEncounters",
+  "accelerate",
 ]);
 export function pacingOf(s: GameState): Pacing {
   return s.pacing || "guided";
@@ -800,11 +811,22 @@ export function recordReview(
   const p =
     effect.piece ||
     [...allInPlay(s), s.villain, ...s.minions].find((p) => p.id === effect.id);
+  // Steps the encounter deck drives are presented as the villain's, not the hero's.
+  const villainDriven =
+    s.phase === "villain" &&
+    (villainEffects.has(effect.type) ||
+      (effect.type === "threat" && effect.target === "main"));
   s.review = {
     id: ++s.reviewCount,
     title: effectTitle(effect),
     actor: HEROES.find((h) => h.id === s.heroId)!.name,
     phase: s.phase,
+    step:
+      effect.type === "newRound"
+        ? "newRound"
+        : s.phase === "villain"
+          ? s.villainStep || "threat"
+          : undefined,
     source:
       effect.sourceCode ||
       (payment ? before.paymentSubject : undefined) ||
@@ -826,6 +848,11 @@ export function recordReview(
       )
         ? [s.villain, ...s.minions].find((p) => p.id === s.scheming?.attacker)
             ?.code
+        : undefined) ||
+      (villainDriven
+        ? effect.type === "threat"
+          ? s.scheme.code
+          : s.villain.code
         : undefined) ||
       heroCard(s).code,
     messages,

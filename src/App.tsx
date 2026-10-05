@@ -143,6 +143,7 @@ import type {
   Command,
   GameState,
   Pacing,
+  VillainStep,
   Piece,
   Resource,
 } from "./game/types";
@@ -282,6 +283,53 @@ function TempoMenu({
         </p>
       </div>
     </details>
+  );
+}
+const VILLAIN_STEPS: { id: VillainStep; name: string; icon: typeof Target }[] =
+  [
+    { id: "threat", name: "Threat", icon: Target },
+    { id: "activation", name: "Villain acts", icon: Skull },
+    { id: "encounters", name: "Encounters", icon: Cards },
+    { id: "newRound", name: "New round", icon: ArrowsClockwise },
+  ];
+/** The spine of the villain phase: the same four stops in every round. */
+function VillainSteps({
+  current,
+  compact = false,
+}: {
+  current?: VillainStep;
+  compact?: boolean;
+}) {
+  const at = VILLAIN_STEPS.findIndex((step) => step.id === current);
+  return (
+    <ol
+      className={`villain-steps ${compact ? "compact" : ""} ${current ? "" : "upcoming"}`}
+      aria-label="Villain phase progress"
+    >
+      {VILLAIN_STEPS.map((step, i) => {
+        const Icon = step.icon;
+        const state = i < at ? "done" : i === at ? "current" : "next";
+        return (
+          <li
+            key={step.id}
+            className={state}
+            aria-current={state === "current" ? "step" : undefined}
+          >
+            <span className="villain-step-mark">
+              {state === "done" ? (
+                <Check size={11} weight="bold" />
+              ) : (
+                <Icon
+                  size={12}
+                  weight={state === "current" ? "fill" : "bold"}
+                />
+              )}
+            </span>
+            <span className="villain-step-name">{step.name}</span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 function ResourceIcons({ items }: { items: Resource[] }) {
@@ -2409,6 +2457,7 @@ function CardSelection({
       }
     >
       <p className="modal-intro">{text}</p>
+      {mode === "end" && <VillainSteps />}
       <div className="selection-cards">
         {pieces.map((p) => (
           <button
@@ -2769,6 +2818,9 @@ function Decision({
       }
       onClose={p.cancelable ? () => send({ type: "CANCEL" }) : undefined}
     >
+      {s.phase === "villain" && (
+        <VillainSteps current={p.context?.step || s.villainStep || "threat"} />
+      )}
       <p className="modal-intro">{p.text}</p>
       {hint && (
         <div className="advisor-hint" role="note">
@@ -3093,9 +3145,19 @@ function ReviewDetails({
     [review.attack.attacker.code, review.attack.target.code].includes(
       review.source || "",
     );
-  const messages = participantSource
-    ? review.messages
-    : review.messages.slice(1);
+  // The headline belongs to the card shown beside it: a merged step may open with
+  // another card's line (the hero readying before the villain places threat).
+  const headline = participantSource
+    ? -1
+    : Math.max(
+        0,
+        review.source
+          ? review.messages.findIndex((m) =>
+              m.includes(card(review.source!).name),
+            )
+          : -1,
+      );
+  const messages = review.messages.filter((_, i) => i !== headline);
   return (
     <div
       className={`review-details ${review.cards?.length ? "has-cards" : ""} ${review.cards?.length === 1 ? "one-card" : ""} ${review.attack ? "attack-review" : ""}`}
@@ -3139,7 +3201,7 @@ function ReviewDetails({
               <small>IN THIS ACTION</small>
               <b>{card(review.source).name}</b>
               <span>
-                {review.messages[0] ||
+                {review.messages[headline] ||
                   "The table has updated. Review the changes below."}
               </span>
             </span>
@@ -3343,6 +3405,8 @@ function ActionDirector({
       (focused ? focusButton : button).current?.focus({ preventScroll: true });
   }, [review?.id, focused]);
   const activeHero = HEROES.find((h) => h.id === s.heroId)!;
+  // The new-round step closes the villain phase even though the table has moved on.
+  const villainPhase = s.phase === "villain" || !!review?.step;
   const waiting =
     s.phase === "mulligan"
       ? "Confirm your opening hand"
@@ -3365,7 +3429,6 @@ function ActionDirector({
             ACTION RESOLUTION
           </span>
           <div className="director-tools">
-            {review && <b>{`STEP ${String(review.id).padStart(2, "0")}`}</b>}
             <TempoMenu value={pacing} onChange={onPacing} />
           </div>
         </div>
@@ -3377,14 +3440,17 @@ function ActionDirector({
           aria-label="Current action details"
         >
           <div className="director-actor">
-            <span
-              className={`resolution-dot ${s.phase === "villain" ? "enemy" : ""}`}
-            />
+            <span className={`resolution-dot ${villainPhase ? "enemy" : ""}`} />
             {review?.actor || activeHero.name}
-            <small>
-              {s.phase === "villain" ? "VILLAIN PHASE" : "HERO PHASE"}
-            </small>
+            {review && <b>{`STEP ${String(review.id).padStart(2, "0")}`}</b>}
+            <small>{villainPhase ? "VILLAIN PHASE" : "HERO PHASE"}</small>
           </div>
+          {villainPhase && (
+            <VillainSteps
+              compact
+              current={review?.step || s.villainStep || "threat"}
+            />
+          )}
           <h2>{review?.title || waiting}</h2>
           {review ? (
             focused ? (
@@ -3545,16 +3611,20 @@ function ActionDirector({
         </Modal>
       )}
       {focused && review && (
+        // One window stays open across consecutive steps so each Proceed
+        // swaps the content instead of re-opening the dialog.
         <Modal
-          key={review.id}
+          key="review-focus"
           title={review.title}
           wide={!!review.cards?.length}
-          className={`review-focus ${review.cards?.length ? "with-cards" : ""} ${review.attack ? "with-attack" : ""}`}
-          eyebrow={`STEP ${String(review.id).padStart(2, "0")} · ${review.actor.toUpperCase()} · ${review.phase === "villain" ? "VILLAIN PHASE" : "HERO PHASE"}`}
+          className={`review-focus ${review.cards?.length ? "with-cards" : ""} ${review.attack ? "with-attack" : ""} ${review.step ? "villain-step" : ""}`}
+          eyebrow={`STEP ${String(review.id).padStart(2, "0")} · ${review.actor.toUpperCase()} · ${review.phase === "villain" || review.step ? "VILLAIN PHASE" : "HERO PHASE"}`}
           onClose={() => setCollapsedId(review.id)}
         >
+          {review.step && <VillainSteps current={review.step} />}
           <div
             className="review-focus-body"
+            key={review.id}
             tabIndex={0}
             role="region"
             aria-label="Action details and cards"

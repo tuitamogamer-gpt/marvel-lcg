@@ -188,6 +188,8 @@ export interface GameState {
   difficulty: "standard" | "expert";
   module: string;
   phase: "mulligan" | "player" | "villain" | "won" | "lost";
+  /** The part of the villain phase currently resolving. */
+  villainStep?: VillainStep;
   round: number;
   players: PlayerSeat[];
   activePlayerId: string;
@@ -305,11 +307,15 @@ export interface ReviewCard {
     | "dealt";
   resources?: Resource[];
 }
+/** The villain phase runs threat, then each villain activation, then encounters, then the new round. */
+export type VillainStep = "threat" | "activation" | "encounters" | "newRound";
 export interface ActionReview {
   id: number;
   title: string;
   actor: string;
   phase: string;
+  /** Which part of the villain phase this step belongs to, when it is one. */
+  step?: VillainStep;
   source?: string;
   attack?: {
     attacker: { code: string; name: string };

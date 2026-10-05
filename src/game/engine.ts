@@ -7751,6 +7751,7 @@ function resolve(s: GameState, e: Effect) {
     case "beginVillain":
       hawkeyePhaseEnded(s, hawkeyePorts);
       s.phase = "villain";
+      s.villainStep = "threat";
       log(s, "Villain phase · threat, activations, then encounters.", "phase");
       add(
         s,
@@ -7784,6 +7785,7 @@ function resolve(s: GameState, e: Effect) {
       );
       break;
     case "villainActivate":
+      s.villainStep = "activation";
       add(
         s,
         E(s.player.form === "hero" ? "enemyAttack" : "enemyScheme", {
@@ -7819,6 +7821,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "dealEncounters": {
+      s.villainStep = "encounters";
       const order = playerOrder(s);
       for (const seat of order)
         for (let i = 0; i <= (s.heroic || 0); i++) dealEncounter(s, seat.id);
@@ -7870,6 +7873,7 @@ function resolve(s: GameState, e: Effect) {
       s.firstPlayerId = (order[1] || order[0]).id;
       s.round++;
       s.phase = "player";
+      s.villainStep = "newRound";
       s.attack = null;
       activateSeat(s, s.firstPlayerId);
       s.turnPlayerId = s.firstPlayerId;
