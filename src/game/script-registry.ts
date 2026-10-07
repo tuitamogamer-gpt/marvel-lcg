@@ -6,6 +6,7 @@ import { compileCardScript } from "./scripts/compiler.js";
 import { staticModifierValue } from "./scripts/runtime.js";
 import type { StaticModifier } from "./scripts/types.js";
 import { EXPLICIT_CARD_SCRIPTS } from "./engine-support.js";
+import { isTextBlank } from "./card-text.js";
 
 const originals = [...players, ...encounters] as Card[];
 const originalCodes = new Set(originals.map((c) => c.code));
@@ -47,6 +48,7 @@ export function scriptedModifier(
           (sum, source) => {
             const script = cardScript(source);
             if (
+              isTextBlank(s, source) ||
               !script ||
               script.implementation !== "script" ||
               // These native handlers enforce form/recipient timing themselves.

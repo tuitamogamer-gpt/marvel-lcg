@@ -1,4 +1,5 @@
 import { thorResourceSources } from "./thor.js";
+import { isTextBlank } from "./card-text.js";
 import { hawkeyeResourceSources } from "./hawkeye.js";
 import { spiderWomanResourceSources } from "./spider-woman.js";
 import { blackWidowResourceSources } from "./black-widow.js";
@@ -108,7 +109,9 @@ export function paymentSources(
         kind: "ability",
       });
   }
-  return sources.filter((x) => x.resources.length);
+  return sources.filter(
+    (x) => x.resources.length && (x.kind === "card" || !isTextBlank(s, x.code)),
+  );
 }
 
 /**

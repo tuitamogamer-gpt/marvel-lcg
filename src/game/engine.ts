@@ -1,3 +1,5 @@
+import * as antMan from "./ant-man.js";
+import * as antPack from "./ant-man-pack.js";
 import {
   hawkeyePlayRestriction,
   hawkeyeEvent,
@@ -171,6 +173,7 @@ import {
   type RiskyBusinessEnginePorts,
 } from "./risky-business.js";
 import { uniqueConflict } from "./unique.js";
+import { isTextBlank, textActiveState } from "./card-text.js";
 import { rulesCode } from "./rules-code.js";
 import {
   CARDS,
@@ -571,6 +574,9 @@ const find = (s: GameState, id: string) =>
   allPieces(s).find((p) => p.id === id);
 const friends = (s: GameState) =>
   s.player.inPlay.filter((p) => card(p).type_code === "ally");
+export function allyCount(s: GameState) {
+  return friends(s).filter((p) => !antPack.antManPackAllyExcluded(s, p)).length;
+}
 export function allyLimit(s: GameState) {
   return (
     3 +
@@ -710,6 +716,12 @@ function discardPiece(s: GameState, id: string) {
   const controlling = controller(s, id);
   const viewBefore = controlling ? seatView(s, controlling) : s;
   const healthBefore = maxHP(viewBefore);
+  const removedSource = find(s, id);
+  const blankBefore = !!removedSource && isTextBlank(s, removedSource);
+  const teamHealthBefore =
+    removedSource?.code === "12026"
+      ? s.players.map((seat) => ({ id: seat.id, hp: maxHP(seatView(s, seat)) }))
+      : [];
   let p: Piece | undefined;
   for (const zone of [
     ...s.players.map((x) => seatView(s, x).player.inPlay),
@@ -725,6 +737,10 @@ function discardPiece(s: GameState, id: string) {
     }
   }
   if (!p) return;
+  for (const before of teamHealthBefore) {
+    const view = seatView(s, before.id);
+    view.player.hp += maxHP(view) - before.hp;
+  }
   for (const stored of p.storedCards || []) {
     const owner = s.players.find((seat) => seat.id === stored.ownerId);
     if (!owner || owner.eliminated) s.removed.push(resetPiece(stored));
@@ -752,8 +768,8 @@ function discardPiece(s: GameState, id: string) {
     if (owner.eliminated) s.removed.push(discarded);
     else seatView(s, owner).player.discard.push(discarded);
     const view = controlling ? seatView(s, controlling) : s;
-    if (rulesCode(p) === "01036") view.player.hp -= 6;
-    if (rulesCode(p) === "01039") view.player.hp--;
+    if (rulesCode(p) === "01036" && !blankBefore) view.player.hp -= 6;
+    if (rulesCode(p) === "01039" && !blankBefore) view.player.hp--;
     if (p.code === "10010") view.player.hp -= 4;
     if (
       cardScript(p)?.implementation === "script" ||
@@ -809,7 +825,7 @@ function check(s: GameState) {
     )
       add(s, E("restrictedLimit", { actorId: seat.id }));
     if (
-      friends(view).length > allyLimit(view) &&
+      allyCount(view) > allyLimit(view) &&
       !(s.prompt?.title === "Ally limit" && s.activePlayerId === seat.id) &&
       !s.queue.some(
         (e) =>
@@ -847,7 +863,11 @@ function check(s: GameState) {
       for (const id of s.attack.boostIds || []) finishResolution(s, id);
       // Established delayed effects still resolve when elimination ends the
       // attack early, including elimination during an earlier boost ability.
-      add(s, ...(s.attack.afterActivation || []));
+      add(
+        s,
+        ...antMan.antManEnemyActivated(s, s.attack.attacker),
+        ...(s.attack.afterActivation || []),
+      );
       s.attack.afterActivation = [];
       s.attack = null;
     }
@@ -984,6 +1004,11 @@ function dealDamage(
     n += msMarvelEventAmountModifier(s, s.currentEventId, "damage");
   const original = find(s, target);
   const code = original?.code;
+  const originalHP = original
+    ? target === s.villain.id
+      ? s.villain.hp
+      : pieceHP(s, original) - original.damage
+    : 0;
   const targetPiece = target === "hero" ? s.player : original;
   if (targetPiece && attack)
     discardToughForPiercing(
@@ -1004,6 +1029,8 @@ function dealDamage(
       E("heroAttackResponses", {
         target,
         wasMinion: card(original).type_code === "minion",
+        defeatedCode: code,
+        excessDamage: Math.max(0, n - originalHP),
         mandatory: false,
         afterAttack: true,
       }),
@@ -1021,7 +1048,10 @@ function dealDamage(
     const amount =
       (traits.ranged ?? !!sourceKeyword(s, source, "Ranged"))
         ? 0
-        : printedKeyword(card(original), "Retaliate") +
+        : (isTextBlank(s, original)
+            ? 0
+            : printedKeyword(card(original), "Retaliate")) +
+          antMan.antManEnemyRetaliate(s, original) +
           (target === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -1066,18 +1096,24 @@ function dealDamage(
         (e) => e.responseGroup === responseGroup && e.afterAttack,
       );
       const after = [...previousAfter];
-      for (const effect of effects.filter((e) => e.afterAttack))
-        if (
-          !after.some(
-            (x) =>
-              x.type === effect.type &&
-              (effect.type === "heroAttackResponses"
-                ? x.target === effect.target
-                : effect.retaliateSource &&
-                  x.retaliateSource === effect.retaliateSource),
-          )
+      for (const effect of effects.filter((e) => e.afterAttack)) {
+        const previous = after.findIndex(
+          (x) =>
+            x.type === effect.type &&
+            (effect.type === "heroAttackResponses"
+              ? x.target === effect.target
+              : effect.retaliateSource &&
+                x.retaliateSource === effect.retaliateSource),
+        );
+        if (previous < 0) after.push(effect);
+        // One attack can hit the same enemy twice (Giant Stomp). Keep its
+        // lethal packet's excess damage while offering each aftermath once.
+        else if (
+          effect.type === "heroAttackResponses" &&
+          effect.excessDamage > after[previous].excessDamage
         )
-          after.push(effect);
+          after[previous] = effect;
+      }
       const remaining = continuation.filter((e) => !previousAfter.includes(e));
       const boundary = remaining.findIndex(isBoundary);
       remaining.splice(
@@ -1275,7 +1311,8 @@ function defeatCharacter(
   }
   const minion = s.minions.some((x) => x.id === m.id);
   const tracers = allInPlay(s).filter(
-    (a) => rulesCode(a) === "01007" && a.attachedTo === m.id,
+    (a) =>
+      rulesCode(a) === "01007" && a.attachedTo === m.id && !isTextBlank(s, a),
   );
   const name = card(m).name;
   const allyController = controller(s, m.id)?.id;
@@ -1864,8 +1901,10 @@ function requestPayment(
   piece?: Piece,
   cancelable = false,
   targetCode?: string,
+  forcePayment = false,
+  paymentCommit: Effect[] = [],
 ) {
-  if (cost === 0 && !requirements.length) {
+  if (cost === 0 && !requirements.length && !forcePayment) {
     add(s, ...after.map((e) => ({ ...e, paid: [] })));
     return;
   }
@@ -1884,6 +1923,7 @@ function requestPayment(
     card: piece,
     cancellationQueue: cancelable && s.attack ? [...s.queue] : undefined,
     after: after.map((e) => effectContext(s, e)),
+    paymentCommit: paymentCommit.map((e) => effectContext(s, e)),
     cancelable,
     paymentTarget: targetCode || piece?.code,
     wildAs: requirements[0] || "energy",
@@ -1909,10 +1949,13 @@ function pay(s: GameState, ids: string[], wildAs: Resource = "energy") {
     !p.card || hulkPaymentAllowed(p.card, printed, wildAs),
     "Crushing Blow can only be paid with physical resources.",
   );
+  const spentResponses: Effect[] = [];
   for (const id of ids) {
     if (id === "scientist") s.flags.scientist = true;
-    else if (s.player.hand.some((x) => x.id === id)) discardHand(s, id);
-    else {
+    else if (s.player.hand.some((x) => x.id === id)) {
+      const spent = discardHand(s, id);
+      spentResponses.push(...antMan.antManResourceSpent(s, spent, antManPorts));
+    } else {
       const source = find(s, id)!;
       const msSpent = msMarvelResourceSpent(s, source);
       const dsSpent = doctorStrangeResourceSpent(s, source);
@@ -1951,7 +1994,16 @@ function pay(s: GameState, ids: string[], wildAs: Resource = "energy") {
     s,
     `Paid ${printed.length} resource${printed.length === 1 ? "" : "s"} for ${p.title}: ${selected.map((x) => x!.name).join(", ")}.`,
   );
-  add(s, ...(p.after || []).map((e) => ({ ...e, paid })));
+  for (const commit of p.paymentCommit || []) resolve(s, commit);
+  add(
+    s,
+    ...spentResponses,
+    ...(p.after || []).map((e) => ({
+      ...e,
+      paid,
+      overpaid: Math.max(0, printed.length - (p.cost || 0)),
+    })),
+  );
 }
 export function newGame(config: {
   heroId: string;
@@ -2239,6 +2291,10 @@ export function playable(s: GameState, p: Piece): string | null {
   if (thorRestriction) return thorRestriction;
   const msRestriction = msMarvelPlayRestriction(s, p);
   if (msRestriction) return msRestriction;
+  const antRestriction =
+    antMan.antManPlayRestriction(s, p, antManPorts) ||
+    antPack.antManPackPlayRestriction(s, p, antPackPorts);
+  if (antRestriction) return antRestriction;
   const hawkeyeRestriction = hawkeyePlayRestriction(s, p, hawkeyePorts);
   if (hawkeyeRestriction) return hawkeyeRestriction;
   const spiderWomanRestriction = spiderWomanPlayRestriction(s, p, swPorts);
@@ -2356,6 +2412,7 @@ function play(
   masterInvocationId?: string,
   attachedTarget?: string,
   agilityHandled = false,
+  overpaid = 0,
 ) {
   const c = card(p);
   const agility = !agilityHandled ? spiderWomanCardPlayed(s, c) : [];
@@ -2370,6 +2427,7 @@ function play(
         masterInvocationId,
         attachedTarget,
         agilityHandled: true,
+        overpaid,
       }),
     );
     return;
@@ -2413,9 +2471,13 @@ function play(
   } else {
     const healthBefore = maxHP(s);
     Object.assign(p, resetPiece(p, true));
+    if (attachedTarget) p.attachedTo = attachedTarget;
     s.player.inPlay.push(p);
+    antPack.antManPackAllyPlayed(s, p, overpaid);
     add(
       s,
+      ...antMan.antManCardEntered(s, p, antManPorts),
+      ...antPack.antManPackCardEntered(s, p),
       ...captainPackCardEntered(s, p),
       ...hulkPackCardEntered(s, p),
       ...msMarvelCardEntered(s, p),
@@ -2441,8 +2503,8 @@ function play(
     if (["01008", "01056", "01064", "01080"].includes(rulesCode(p)))
       p.counters = 3;
     if (rulesCode(p) === "01066") p.counters = 4;
-    if (rulesCode(p) === "01036") s.player.hp += 6;
-    if (rulesCode(p) === "01039") s.player.hp++;
+    if (rulesCode(p) === "01036" && !isTextBlank(s, p)) s.player.hp += 6;
+    if (rulesCode(p) === "01039" && !isTextBlank(s, p)) s.player.hp++;
     if (p.code === "10010") s.player.hp += 4;
     if (c.type_code === "ally")
       add(s, E("allyLimit"), E("allyEnter", { id: p.id, paid, fromHand }));
@@ -2465,7 +2527,6 @@ function play(
             ),
         ),
       );
-    if (attachedTarget) p.attachedTo = attachedTarget;
     if (
       !attachedTarget &&
       script?.implementation === "script" &&
@@ -2508,6 +2569,12 @@ function allyEnter(
   paid: Resource[] = [],
   fromHand = false,
 ) {
+  if (isTextBlank(s, p)) return;
+  const ant = antPack.antManPackAllyEnter(s, p);
+  if (ant !== null) {
+    add(s, ...ant);
+    return;
+  }
   const sw = spiderWomanAllyEnter(s, p, fromHand);
   if (sw !== null) {
     add(s, ...sw);
@@ -2613,6 +2680,11 @@ function event(
   lightningX?: number,
   masterInvocationId?: string,
 ) {
+  const ant = antMan.antManEvent(s, p) ?? antPack.antManPackEvent(s, p, paid);
+  if (ant !== null) {
+    add(s, ...ant);
+    return;
+  }
   const hawkeye = hawkeyeEvent(s, p);
   if (hawkeye !== null) {
     add(s, ...hawkeye);
@@ -2864,18 +2936,76 @@ function event(
       throw Error(`No player event script for ${p.code}.`);
   }
 }
-function flip(s: GameState, counts = true) {
-  if (goblinIdentityLocked(s)) {
-    need(!counts, "All Tied Up prevents changing form.");
+export function canChangeIdentityForm(s: GameState) {
+  return !goblinIdentityLocked(s) && !s.flags.antManCannotChangeUntilTurnEnd;
+}
+function flip(
+  s: GameState,
+  counts = true,
+  target?: "alter" | "tiny" | "giant",
+) {
+  if (!canChangeIdentityForm(s)) {
+    need(
+      !counts,
+      goblinIdentityLocked(s)
+        ? "All Tied Up prevents changing form."
+        : "Care for Cassie prevents changing form.",
+    );
     return;
   }
-  if (counts) {
-    need(!s.player.flipped, "You already changed form this turn.");
-    s.player.flipped = true;
+  if (counts) need(!s.player.flipped, "You already changed form this turn.");
+  if (s.heroId === "ant") {
+    const current =
+      s.player.form === "alter" ? "alter" : s.player.heroForm || "tiny";
+    if (!target && counts) {
+      choose(
+        s,
+        "Change form",
+        "Choose Ant-Man's next form.",
+        (["alter", "tiny", "giant"] as const)
+          .filter((form) => form !== current)
+          .map((form) =>
+            option(
+              form,
+              form === "alter"
+                ? "Scott Lang · Alter-ego"
+                : `Ant-Man · ${form === "tiny" ? "Tiny" : "Giant"}`,
+              [E("flip", { counts, target: form })],
+              undefined,
+              form === "alter"
+                ? "12001b"
+                : form === "tiny"
+                  ? "12001a"
+                  : "12001c",
+            ),
+          ),
+        true,
+      );
+      return;
+    }
+    target ||= s.player.form === "hero" ? "alter" : "tiny";
+    need(current !== target, "Choose a different form.");
+    s.player.form = target === "alter" ? "alter" : "hero";
+    if (target !== "alter") s.player.heroForm = target;
+  } else {
+    need(
+      !target || target === "alter",
+      "This identity has only one hero form.",
+    );
+    s.player.form = s.player.form === "hero" ? "alter" : "hero";
   }
-  s.player.form = s.player.form === "hero" ? "alter" : "hero";
+  if (counts) s.player.flipped = true;
   add(s, ...hulkFormChanged(s));
-  log(s, `Change form to ${heroCard(s).name}.`);
+  const responses = antMan.antManFormChanged(s, antManPorts);
+  if (
+    responses.length ||
+    antPack.antManPackFormResponseOptions(s, antPackPorts).length
+  )
+    add(s, E("antFormResponses", { responses }));
+  log(
+    s,
+    `Change form to ${heroCard(s).name}${s.heroId === "ant" && s.player.form === "hero" ? ` (${s.player.heroForm})` : ""}.`,
+  );
   if (s.player.form === "hero" && s.heroId === "she_hulk")
     add(
       s,
@@ -2886,11 +3016,13 @@ function flip(s: GameState, counts = true) {
       }),
     );
 }
+
 export function abilityOptions(
   s: GameState,
   p: Piece,
 ): { id: string; label: string; disabled?: string }[] {
   const c = card(p);
+  if (isTextBlank(s, p) && c.type_code !== "ally") return [];
   const hero = s.player.form === "hero";
   const riseOptions = nativeHeroAbilityOptions(s, p.id);
   if (riseOptions.length && c.type_code !== "ally") return riseOptions;
@@ -3037,12 +3169,39 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
       : (p.bonusThw || 0) +
         (rulesCode(p) === "01059" ? s.sideSchemes.length : 0)) +
     scriptedModifier(s, kind, p) +
+    antPack.antManPackModifiers(s, p.id, { maxAllyHP: pieceHP })[kind] +
     (kind === "attack"
-      ? captainPackModifiers(s, p.id).attack + hulkPackModifiers(s, p.id).attack
+      ? captainPackModifiers(textActiveState(s), p.id).attack +
+        hulkPackModifiers(textActiveState(s), p.id).attack
       : 0)
   );
 }
 function ability(s: GameState, id: string, action = "special") {
+  const source = find(s, id);
+  need(
+    !source ||
+      !isTextBlank(s, source) ||
+      (card(source).type_code === "ally" &&
+        ["attack", "thwart"].includes(action)),
+    "This card's printed text is blank.",
+  );
+  const ant =
+    antMan.antManAbility(
+      s,
+      id,
+      action === "special" ? undefined : action,
+      antManPorts,
+    ) ??
+    antPack.antManPackAbility(
+      s,
+      id,
+      action === "special" ? undefined : action,
+      antPackPorts,
+    );
+  if (ant) {
+    add(s, ...ant);
+    return;
+  }
   const rise =
     hawkeyeAbility(
       s,
@@ -3597,7 +3756,7 @@ const bwPorts: BlackWidowPorts = {
   shufflePlayerDeck: (s) => {
     s.player.deck = shuffle(s, s.player.deck);
   },
-  canChangeForm: (s) => !goblinIdentityLocked(s),
+  canChangeForm: canChangeIdentityForm,
   canReadyIdentity: (s, id) => !goblinIdentityLocked(seatView(s, id)),
   identityHasTrait: (s, id, trait) =>
     [
@@ -3721,6 +3880,16 @@ function warningOptions(
   );
 }
 function allyUpgradeTargets(s: GameState, p: Piece) {
+  if (["12017", "12018"].includes(p.code))
+    return antPack
+      .antManPackAttachmentTargets(s, p.code, {
+        hasTrait: captainPackHasTrait,
+      })
+      .map((target) => ({
+        id: target.id,
+        label: card(target).name,
+        code: target.code,
+      }));
   const script = cardScript(p);
   const attach =
     script?.implementation === "script"
@@ -3754,7 +3923,7 @@ const dsPorts: DoctorStrangePorts = {
   revealHidden,
   discardPiece,
   flip,
-  canChangeForm: (s) => !goblinIdentityLocked(s),
+  canChangeForm: canChangeIdentityForm,
   canReadyIdentity: (s, id) => !goblinIdentityLocked(seatView(s, id)),
   discardTop: (s, id, n) => {
     const previous = s.activePlayerId;
@@ -3869,7 +4038,7 @@ const hawkeyePorts: HawkeyePorts = {
   returnAlly: (s, id) => msPorts.returnAlly(s, id),
   transferControl: (s, id, playerId) =>
     hulkPackPorts.transferControl(s, id, playerId),
-  canChangeForm: (s) => !goblinIdentityLocked(s),
+  canChangeForm: canChangeIdentityForm,
   flip,
   canReadyIdentity: (s, id) => !goblinIdentityLocked(seatView(s, id)),
   identityHasTrait: (s, id, trait) => bwPorts.identityHasTrait(s, id, trait),
@@ -3984,8 +4153,99 @@ const swPorts: SpiderWomanPorts = {
   },
   log,
 };
+const antManPorts: antMan.AntManPorts = {
+  queue: add,
+  choose,
+  canChangeForm: canChangeIdentityForm,
+  flip,
+  canReadyIdentity: (s, id) => !goblinIdentityLocked(seatView(s, id)),
+  canPay,
+  canGiveStatus: dsPorts.canAddStatus,
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  schemeTargets: (s, thwarting) => {
+    if (thwarting && captainThwartBlocked(s)) return [];
+    const list = targets(s, "scheme", false, thwarting);
+    if (
+      !thwarting &&
+      !list.some((t) => t.id === "main") &&
+      rulesCode(s.scheme) !== "01139b" &&
+      s.scheme.threat > 0 &&
+      !hulkThreatLocked(s, "main")
+    )
+      list.unshift({
+        id: "main",
+        label: card(s.scheme.code).name,
+        code: s.scheme.code,
+      });
+    return list;
+  },
+  isTextBlank,
+  discardHand,
+  discardPiece,
+  revealHidden,
+  recycleEncounter,
+  attackProgram: bwPorts.attackProgram,
+  log,
+};
+const antPackPorts: antPack.AntManPackPorts = {
+  queue: add,
+  choose,
+  attach: attachPackUpgrade,
+  mill,
+  maxAllyHP: pieceHP,
+  maxHeroHP: maxHP,
+  hasTrait: (s, target, trait) =>
+    (trait.toLowerCase() === "aerial" &&
+      (target === "hero" || target.startsWith("hero:")) &&
+      aerial(target === "hero" ? s : seatView(s, target.slice(5)))) ||
+    captainPackHasTrait(s, target, trait),
+  friendlyTargets: (s) => targets(s, "friendly"),
+  canGiveStatus: dsPorts.canAddStatus,
+  schemeTargets: (s) =>
+    captainThwartBlocked(s) ? [] : targets(s, "scheme", false, true),
+  cardCost: (s, p) => cardCost(s, card(p)),
+  canPay: (s, cost, exclude, code) => canPay(s, cost, [], exclude, code),
+  playableWithDiscount: (s, p, discount) =>
+    !playable(
+      {
+        ...s,
+        turnPlayerId: s.activePlayerId,
+        flags: {
+          ...s.flags,
+          discount: Number(s.flags.discount || 0) + discount,
+        },
+      },
+      p,
+    ),
+  playFromHand: (s, id, discount) => {
+    const p = s.player.hand.find((p) => p.id === id);
+    need(
+      p && antPackPorts.playableWithDiscount(s, p, discount),
+      "That card cannot be played now.",
+    );
+    const choices = allyUpgradeTargets(s, p!);
+    if (choices.length && maximumAllyUpgradeDiscount(s, p!) > 0) {
+      choose(
+        s,
+        card(p!).name,
+        "Choose the ally before paying this upgrade's reduced cost.",
+        choices.map((target) =>
+          option(
+            target.id,
+            target.label,
+            [E("antTeamPayment", { piece: p, discount, target: target.id })],
+            undefined,
+            target.code,
+          ),
+        ),
+      );
+    } else add(s, E("antTeamPayment", { piece: p, discount }));
+  },
+};
 export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
   return [
+    ...antMan.antManAbilityOptions(s, id, antManPorts),
+    ...antPack.antManPackAbilityOptions(s, id, antPackPorts),
     ...hawkeyeAbilityOptions(s, id, hawkeyePorts),
     ...spiderWomanAbilityOptions(s, id, swPorts),
   ].map(({ id, label }) => ({ id, label }));
@@ -4000,7 +4260,7 @@ const thorPorts: ThorEnginePorts = {
   discardPiece,
   mill,
   flip,
-  canChangeForm: (s) => !goblinIdentityLocked(s),
+  canChangeForm: canChangeIdentityForm,
   paymentSources,
   canPay,
   shufflePlayerDeck: (s) => {
@@ -4326,7 +4586,14 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
               ? 1
               : 0);
   return (
-    base + bonus + attachments + blackWidowEnemyModifier(s, p, originalPlayerId)
+    base +
+    bonus +
+    attachments +
+    blackWidowEnemyModifier(s, p, originalPlayerId) +
+    antMan.antManEnemyStats(s, p).attack -
+    s.attachments
+      .filter((a) => a.code === "12028" && a.attachedTo === p.id)
+      .reduce((n, a) => n + (card(a).attack || 0), 0)
   );
 }
 function abortAttack(s: GameState) {
@@ -4336,6 +4603,7 @@ function abortAttack(s: GameState) {
   for (const id of a.boostIds || []) finishResolution(s, id);
   add(
     s,
+    ...antMan.antManEnemyActivated(s, a.attacker),
     ...(a.afterActivation || []),
     ...(a.activationAfter
       ? [
@@ -4653,6 +4921,7 @@ function finishScheme(s: GameState) {
           .filter((p) => rulesCode(p) === "01180")
           .map((p) => E("threat", { target: p.id, amount: 2 }))
       : []),
+    ...antMan.antManEnemyActivated(s, id),
     ...(activation.afterActivation || []),
     ...activation.boostIds.map((id) => E("finishResolution", { id })),
     E("bwMinionSchemeResponses", { id }),
@@ -4816,6 +5085,7 @@ function finishAttack(s: GameState) {
     );
   add(
     s,
+    ...antMan.antManEnemyActivated(s, a.attacker),
     ...(a.afterActivation || []),
     E("forcedResponses", {
       responses: [
@@ -5125,7 +5395,10 @@ function reveal(s: GameState, p: Piece, skip = false, repeat = false) {
   const goblinModule = goblinModuleReveal(s, p);
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
-  const rise = hawkeyeEncounterReveal(s, p) ?? spiderWomanEncounterReveal(s, p);
+  const rise =
+    antMan.antManEncounterReveal(s, p) ??
+    hawkeyeEncounterReveal(s, p) ??
+    spiderWomanEncounterReveal(s, p);
   if (
     rise !== null &&
     ["obligation", "treachery", "attachment"].includes(c.type_code)
@@ -5224,7 +5497,16 @@ function reveal(s: GameState, p: Piece, skip = false, repeat = false) {
     if (!repeat) {
       p.counters =
         (c.base_threat || 0) * (c.base_threat_fixed ? 1 : s.playerCount);
+      const healthBefore = s.players.map((seat) => ({
+        id: seat.id,
+        hp: maxHP(seatView(s, seat)),
+      }));
       s.sideSchemes.push(p);
+      if (p.code === "12026")
+        for (const before of healthBefore) {
+          const view = seatView(s, before.id);
+          view.player.hp += maxHP(view) - before.hp;
+        }
     }
     if (captain !== null) add(s, ...captain);
     if (goblinModule !== null) add(s, ...goblinModule);
@@ -5670,6 +5952,9 @@ function treachery(s: GameState, p: Piece) {
   }
 }
 function resolve(s: GameState, e: Effect) {
+  if (e.retaliateSource && !find(s, e.retaliateSource)) return;
+  if (antMan.resolveAntManEffect(s, e, antManPorts)) return;
+  if (antPack.resolveAntManPackEffect(s, e, antPackPorts)) return;
   if (resolveHawkeyeEffect(s, e, hawkeyePorts)) return;
   if (resolveSpiderWomanEffect(s, e, swPorts)) return;
   if (resolveDoctorStrangeEffect(s, e, dsPorts)) return;
@@ -5687,6 +5972,7 @@ function resolve(s: GameState, e: Effect) {
           mutagenEncounterReveal(state, piece) ??
           blackWidowEncounterReveal(state, piece) ??
           doctorStrangeEncounterReveal(state, piece) ??
+          antMan.antManEncounterReveal(state, piece) ??
           hawkeyeEncounterReveal(state, piece) ??
           spiderWomanEncounterReveal(state, piece);
         if (effects !== null) add(state, ...effects);
@@ -6047,6 +6333,11 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "heroAttackResponses":
+      if (
+        e.excessDamage > 0 &&
+        (!find(s, e.target) || find(s, e.target)?.code !== e.defeatedCode)
+      )
+        add(s, ...antPack.antManPackAfterAttackDefeat(s, e.excessDamage));
       add(
         s,
         ...thorAfterHeroAttack(s, {
@@ -6257,7 +6548,7 @@ function resolve(s: GameState, e: Effect) {
       discardPiece(s, e.id);
       break;
     case "allyLimit":
-      if (friends(s).length > allyLimit(s))
+      if (allyCount(s) > allyLimit(s))
         choose(
           s,
           "Ally limit",
@@ -6276,6 +6567,42 @@ function resolve(s: GameState, e: Effect) {
     case "discardForLimit":
       discardPiece(s, e.id);
       break;
+    case "antFormResponses": {
+      const responses: Effect[] = e.responses || [];
+      const native = responses.map((response, index) =>
+        option(
+          `form-response:${index}`,
+          response.title,
+          [
+            ...response.effects,
+            E("antFormResponses", {
+              responses: responses.filter((_, i) => i !== index),
+            }),
+          ],
+          response.text,
+          response.effects[0]?.id
+            ? find(s, response.effects[0].id)?.code
+            : heroCard(s).code,
+        ),
+      );
+      const hand = antPack
+        .antManPackFormResponseOptions(s, antPackPorts)
+        .map((entry) => ({
+          ...entry,
+          effects: entry.effects.map((effect) => ({
+            ...effect,
+            continuation: [E("antFormResponses", { responses })],
+          })),
+        }));
+      if (native.length || hand.length)
+        choose(
+          s,
+          "After changing form",
+          "Choose a response in any order, or continue.",
+          [...native, ...hand, option("pass", "Continue", [])],
+        );
+      break;
+    }
     case "draw":
       draw(s, e.amount);
       break;
@@ -6509,7 +6836,7 @@ function resolve(s: GameState, e: Effect) {
       }
       break;
     case "flip":
-      flip(s, e.counts ?? false);
+      flip(s, e.counts ?? false, e.target);
       break;
     case "ready":
       e.target ||= e.id;
@@ -6537,6 +6864,60 @@ function resolve(s: GameState, e: Effect) {
         p.counters--;
         if (p.counters <= 0) discardPiece(s, p.id);
       }
+      break;
+    }
+    case "antTeamPayment": {
+      const p: Piece = e.piece;
+      need(
+        s.player.hand.some((card) => card.id === p.id),
+        "The chosen card is no longer in hand.",
+      );
+      if (e.target)
+        need(
+          allyUpgradeTargets(s, p).some((t) => t.id === e.target),
+          "The chosen ally is unavailable.",
+        );
+      const cost =
+        Math.max(
+          0,
+          cardCost(s, card(p)) -
+            e.discount -
+            (e.target ? doctorStrangeAttachedUpgradeDiscount(s, e.target) : 0),
+        ) + doctorStrangeAdditionalPlayCost(s, p);
+      if (p.code === "06006") {
+        const options = thorLightningPaymentOptions(s, p, cost, thorPorts).map(
+          (entry) => ({
+            ...entry,
+            effects: entry.effects.map((effect) => ({
+              ...effect,
+              cancelable: false,
+            })),
+          }),
+        );
+        choose(
+          s,
+          "Lightning Strike",
+          "Choose X before paying the reduced cost.",
+          options,
+        );
+      } else
+        requestPayment(
+          s,
+          card(p).name,
+          cost,
+          [
+            E("play", {
+              piece: p,
+              attachedTarget: e.target,
+              masterInvocationId: doctorStrangeMasterInvocation(s, p)?.id,
+            }),
+          ],
+          p.code === "10002" ? Array(cost).fill("physical") : [],
+          p,
+          false,
+          undefined,
+          p.code === "12011",
+        );
       break;
     }
     case "allyUpgradePayment": {
@@ -6570,6 +6951,7 @@ function resolve(s: GameState, e: Effect) {
         e.masterInvocationId,
         e.attachedTarget,
         !!e.agilityHandled,
+        e.overpaid || 0,
       );
       break;
     case "payRequest":
@@ -6582,6 +6964,8 @@ function resolve(s: GameState, e: Effect) {
         e.piece,
         e.cancelable,
         e.targetCode,
+        e.forcePayment,
+        e.commit,
       );
       break;
     case "attachPlayer": {
@@ -6796,7 +7180,11 @@ function resolve(s: GameState, e: Effect) {
       const p = find(s, e.id);
       if (!p) break;
       add(s, ...hulkPackAllyResponse(s, p, !!e.attack));
-      add(s, ...spiderWomanAllyBasicUsed(s, p, e.attack ? "attack" : "thwart"));
+      add(
+        s,
+        ...spiderWomanAllyBasicUsed(s, p, e.attack ? "attack" : "thwart"),
+        ...antPack.antManPackAfterAllyBasic(s, p),
+      );
       if (rulesCode(p) === "01058" && !e.attack)
         add(
           s,
@@ -7729,6 +8117,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     case "allReady":
       hawkeyePhaseEnded(s, hawkeyePorts);
+      antMan.antManPhaseEnded(s);
       add(s, ...eachPlayer(s, E("refill")));
       break;
     case "refill":
@@ -7737,6 +8126,7 @@ function resolve(s: GameState, e: Effect) {
       captainPhaseEnded(s);
       captainPackPhaseEnded(s);
       draw(s, Math.max(0, handSize(s) - s.player.hand.length));
+      antPack.antManPackPhaseEnded(s);
       if (!goblinIdentityLocked(s)) s.player.exhausted = false;
       for (const p of s.player.inPlay) {
         p.exhausted = false;
@@ -7749,7 +8139,10 @@ function resolve(s: GameState, e: Effect) {
       log(s, `${heroCard(s).name} and their cards are ready.`, "phase");
       break;
     case "beginVillain":
+      for (const seat of s.players)
+        antPack.antManPackPhaseEnded(seatView(s, seat));
       hawkeyePhaseEnded(s, hawkeyePorts);
+      antMan.antManPhaseEnded(s);
       s.phase = "villain";
       s.villainStep = "threat";
       log(s, "Villain phase · threat, activations, then encounters.", "phase");
@@ -7851,6 +8244,7 @@ function resolve(s: GameState, e: Effect) {
     }
     case "newRound": {
       hawkeyePhaseEnded(s, hawkeyePorts);
+      antMan.antManPhaseEnded(s);
       add(s, ...doctorStrangeRoundEnded(s));
       const prev = s.activePlayerId;
       for (const seat of playerOrder(s)) {
@@ -7859,7 +8253,15 @@ function resolve(s: GameState, e: Effect) {
           (p) => rulesCode(p) === "01084",
         ))
           discardPiece(s, p.id);
-        s.flags = { nemesis: s.flags.nemesis || false };
+        s.flags = {
+          nemesis: s.flags.nemesis || false,
+          ...(s.flags.antManCannotChangeUntilTurnEnd
+            ? {
+                antManCannotChangeUntilTurnEnd:
+                  s.flags.antManCannotChangeUntilTurnEnd,
+              }
+            : {}),
+        };
         s.player.flipped = false;
         seat.ended = false;
         for (const p of s.player.inPlay) {
@@ -8273,11 +8675,13 @@ export function dispatch(state: GameState, command: Command): GameState {
           requirements,
           p,
           true,
+          undefined,
+          p!.code === "12011",
         );
       } else {
         s.flags.basicAttack = false;
         s.flags.heroKill = false;
-        if (command.type === "FLIP") flip(s);
+        if (command.type === "FLIP") flip(s, true, command.target);
         else if (command.type === "BASIC") {
           need(!s.player.exhausted, "Your identity is exhausted.");
           if (command.action === "thwart")
@@ -8391,6 +8795,7 @@ export function dispatch(state: GameState, command: Command): GameState {
             );
           // Discard/refill happens after the entire team has finished its turns.
           const seat = s.players.find((p) => p.id === s.activePlayerId)!;
+          antMan.antManTurnEnded(s);
           seat.ended = true;
           log(s, `${heroCard(s).name} ends their turn.`, "phase");
           const next = playerOrder(s).find((p) => !p.ended);
@@ -8456,6 +8861,7 @@ export function summarize(s: GameState) {
           Number(seatView(s, p).player.tough),
       },
       form: seatView(s, p).player.form,
+      heroForm: seatView(s, p).player.heroForm,
       hand: seatView(s, p).player.hand.length,
       deck: seatView(s, p).player.deck.length,
       invocation:
@@ -8499,6 +8905,7 @@ export function summarize(s: GameState) {
     maxHP: maxHP(s),
     exhausted: s.player.exhausted,
     form: s.player.form,
+    heroForm: s.player.heroForm,
     stats: heroStats(s),
     statuses: {
       stunned: s.player.stunned,

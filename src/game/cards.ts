@@ -1,4 +1,11 @@
+import { antManStats } from "./ant-man.js";
+import {
+  antManPackAllyHP,
+  antManPackStats,
+  antManPackHandSize,
+} from "./ant-man-pack.js";
 import { thorStats } from "./thor.js";
+import { isTextBlank, textActiveState } from "./card-text.js";
 import { hawkeyeStats, hawkeyeAllyMaxHP } from "./hawkeye.js";
 import {
   spiderWomanStats,
@@ -274,6 +281,20 @@ export const HEROES = [
     style: "Two aspects · Versatile",
     complexity: 3,
   },
+  {
+    id: "ant",
+    code: "12001a",
+    alter: "12001b",
+    name: "Ant-Man",
+    identity: "Scott Lang",
+    aspect: "leadership" as Aspect,
+    color: "#c74e48",
+    tag: "Small hero. Giant impact.",
+    description:
+      "Switch between Tiny and Giant forms, command your ants, and lead a team of upgraded allies.",
+    style: "Three forms · Leadership",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -454,7 +475,7 @@ export function deckCodes(
   ];
   if (
     sourceStarter &&
-    ((hero === "hawkeye" && aspect === "leadership") ||
+    (((hero === "hawkeye" || hero === "ant") && aspect === "leadership") ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
         pair.includes("aggression") &&
@@ -526,12 +547,17 @@ export function resources(c: Card, target?: Card): Resource[] {
 }
 export function heroCard(s: GameState) {
   const h = HEROES.find((h) => h.id === s.heroId)!;
+  if (s.heroId === "ant" && s.player.form === "hero")
+    return card(s.player.heroForm === "giant" ? "12001c" : "12001a");
   return card(s.player.form === "hero" ? h.code : h.alter);
 }
 export function has(s: GameState, code: string) {
-  return s.player.inPlay.some((p) => rulesCode(p) === rulesCode(code));
+  return s.player.inPlay.some(
+    (p) => rulesCode(p) === rulesCode(code) && !isTextBlank(s, p),
+  );
 }
 export function maxHP(s: GameState) {
+  s = textActiveState(s);
   return (
     card(HEROES.find((h) => h.id === s.heroId)!.code).health! +
     s.player.inPlay.reduce(
@@ -554,7 +580,11 @@ export function aerial(s: GameState) {
   );
 }
 export function heroStats(s: GameState) {
-  const h = card(HEROES.find((h) => h.id === s.heroId)!.code);
+  const h =
+    s.heroId === "ant" && s.player.form === "hero"
+      ? heroCard(s)
+      : card(HEROES.find((h) => h.id === s.heroId)!.code);
+  s = textActiveState(s);
   return {
     attack:
       h.attack! +
@@ -567,6 +597,8 @@ export function heroStats(s: GameState) {
       thorStats(s).atk +
       doctorStrangeStats(s).attack +
       hawkeyeStats(s).atk +
+      antManStats(s).attack +
+      antManPackStats(s).attack +
       spiderWomanStats(s).attack +
       captainPackStats(s).attack,
     thwart:
@@ -577,6 +609,7 @@ export function heroStats(s: GameState) {
       msMarvelStats(s).thw +
       doctorStrangeStats(s).thwart +
       spiderWomanStats(s).thwart +
+      antManPackStats(s).thwart +
       scriptedModifier(s, "thwart") +
       captainPackStats(s).thwart,
     defense:
@@ -588,6 +621,7 @@ export function heroStats(s: GameState) {
       blackWidowStats(s).defense +
       doctorStrangeStats(s).defense +
       spiderWomanStats(s).defense +
+      antManPackStats(s).defense +
       scriptedModifier(s, "defense"),
     recover:
       card(HEROES.find((h) => h.id === s.heroId)!.alter).recover! +
@@ -609,11 +643,13 @@ export function handSize(s: GameState) {
         ) +
         scriptedModifier(s, "hand_size") +
         doctorStrangeHandSize(s) +
-        spiderWomanHandSize(s)
+        spiderWomanHandSize(s) +
+        antManPackHandSize(s)
     : heroCard(s).hand_size! +
         scriptedModifier(s, "hand_size") +
         doctorStrangeHandSize(s) +
-        spiderWomanHandSize(s);
+        spiderWomanHandSize(s) +
+        antManPackHandSize(s);
 }
 export function pieceHP(s: GameState, p: Piece) {
   return (
@@ -629,6 +665,7 @@ export function pieceHP(s: GameState, p: Piece) {
       3 +
     scriptedModifier(s, "health", p) +
     hawkeyeAllyMaxHP(s, p) +
-    captainPackModifiers(s, p.id).hp
+    antManPackAllyHP(s, p) +
+    captainPackModifiers(textActiveState(s), p.id).hp
   );
 }

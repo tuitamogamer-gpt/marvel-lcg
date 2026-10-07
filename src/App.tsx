@@ -116,6 +116,7 @@ import {
   SAVE_KEY,
   abilityOptions,
   allyLimit,
+  allyCount,
   dispatch,
   newGame,
   paymentSources,
@@ -126,6 +127,7 @@ import {
   schemeLimit,
   escalation,
   nativeHeroAbilityOptions,
+  canChangeIdentityForm,
 } from "./game/engine";
 import { seatView, upgradeSave } from "./game/team";
 import { effectTitle } from "./game/review";
@@ -694,12 +696,15 @@ export default function App() {
             ...(source ? { deckOrigin: "source" as const } : {}),
           };
         }
-        return p.heroId === "hawkeye" && aspect === "leadership"
+        return ["hawkeye", "ant"].includes(p.heroId) && aspect === "leadership"
           ? {
               heroId: p.heroId,
               aspect,
               deckCards: deckCodes(p.heroId, aspect),
-              deckName: "Hawkeye Starter Deck",
+              deckName:
+                p.heroId === "ant"
+                  ? "Ant-Man Starter Deck"
+                  : "Hawkeye Starter Deck",
               deckOrigin: "source" as const,
             }
           : { heroId: p.heroId, aspect };
@@ -4501,7 +4506,11 @@ function Tabletop({
                 </div>
                 <div className="identity-info">
                   <span className="small-label">
-                    {s.player.form === "hero" ? "YOUR HERO" : "YOUR ALTER-EGO"}
+                    {s.player.form === "hero"
+                      ? s.heroId === "ant"
+                        ? `${(s.player.heroForm || "tiny").toUpperCase()} HERO`
+                        : "YOUR HERO"
+                      : "YOUR ALTER-EGO"}
                   </span>
                   <h2>{heroCard(s).name}</h2>
                   <HealthDial
@@ -4578,7 +4587,7 @@ function Tabletop({
                     data-form={s.player.form}
                     style={{ "--hero-accent": h.color } as CSSProperties}
                     disabled={
-                      !acting || s.player.flipped || goblinIdentityLocked(s)
+                      !acting || s.player.flipped || !canChangeIdentityForm(s)
                     }
                     onClick={() => send({ type: "FLIP" })}
                   >
@@ -4590,9 +4599,11 @@ function Tabletop({
                     </span>
                     <span className="hero-form-copy">
                       <strong>
-                        {s.player.form === "hero"
-                          ? `Become ${h.identity}`
-                          : "Suit up"}
+                        {s.heroId === "ant"
+                          ? "Change form"
+                          : s.player.form === "hero"
+                            ? `Become ${h.identity}`
+                            : "Suit up"}
                       </strong>
                       <small>
                         {s.player.flipped ? "Used this turn" : "Once per turn"}
@@ -4650,12 +4661,7 @@ function Tabletop({
                     <Shield size={15} /> YOUR PLAY AREA
                   </span>
                   <span>
-                    {
-                      s.player.inPlay.filter(
-                        (p) => card(p).type_code === "ally",
-                      ).length
-                    }{" "}
-                    / {allyLimit(s)} allies
+                    {allyCount(s)} / {allyLimit(s)} allies
                   </span>
                 </div>
                 {s.player.discard
@@ -4700,7 +4706,9 @@ function Tabletop({
                       <span className="table-group-label">
                         {group.title}
                         <b>
-                          {group.pieces.length}
+                          {group.key === "allies"
+                            ? allyCount(s)
+                            : group.pieces.length}
                           {group.key === "allies" && ` / ${allyLimit(s)}`}
                         </b>
                       </span>

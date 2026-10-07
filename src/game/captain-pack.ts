@@ -145,7 +145,13 @@ export function captainPackHasTrait(
   const hero = view ? heroProfile(view.heroId) : undefined;
   const c =
     view && hero
-      ? cards.get(view.player.form === "hero" ? hero.code : hero.alter)
+      ? cards.get(
+          view.player.form === "hero"
+            ? view.heroId === "ant" && view.player.heroForm === "giant"
+              ? "12001c"
+              : hero.code
+            : hero.alter,
+        )
       : cards.get(inPlay(s, target)?.code || "");
   return (
     hasPrintedTrait(c, name) ||

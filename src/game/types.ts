@@ -111,6 +111,8 @@ export interface Prompt {
   requirements?: Resource[];
   card?: Piece;
   after?: Effect[];
+  /** Costs committed before resource-spend responses open. */
+  paymentCommit?: Effect[];
   cancelable?: boolean;
   /** A canceled optional payment resumes the already initiated activation. */
   cancellationQueue?: Effect[];
@@ -209,6 +211,8 @@ export interface GameState {
   reviewCount: number;
   player: {
     form: "hero" | "alter";
+    /** Three-sided identities retain their selected hero face through saves. */
+    heroForm?: "tiny" | "giant";
     hp: number;
     exhausted: boolean;
     flipped: boolean;
@@ -349,7 +353,7 @@ export type Command =
   | { type: "PAY"; ids: string[]; wildAs?: Resource }
   | { type: "PLAY"; id: string; playerId?: string }
   | { type: "BASIC"; action: "attack" | "thwart" | "recover" }
-  | { type: "FLIP" }
+  | { type: "FLIP"; target?: "alter" | "tiny" | "giant" }
   | { type: "ABILITY"; id: string; action?: string; playerId?: string }
   | { type: "END_TURN"; discard?: string[] }
   | { type: "CANCEL" }

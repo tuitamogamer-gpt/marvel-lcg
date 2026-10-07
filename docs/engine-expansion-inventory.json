@@ -186,6 +186,8 @@
       "allyUpgradePayment",
       "alpha",
       "ancestral",
+      "antFormResponses",
+      "antTeamPayment",
       "assignDamage",
       "assignOne",
       "attachPlayer",
@@ -35714,37 +35716,11 @@
       ],
       "compiledCardClosure": false,
       "automationCertification": "requires_dedicated_rules_and_integration_evidence",
-      "registeredHeroIds": [],
-      "installedUnsupportedDependencies": [
-        "12001a",
-        "12001b",
-        "12001c",
-        "12002",
-        "12003",
-        "12004",
-        "12005",
-        "12006",
-        "12007",
-        "12008",
-        "12009",
-        "12010",
-        "12011",
-        "12012",
-        "12013",
-        "12014",
-        "12015",
-        "12016",
-        "12017",
-        "12018",
-        "12020",
-        "12024",
-        "12025",
-        "12026",
-        "12027",
-        "12028",
-        "12029"
+      "registeredHeroIds": [
+        "ant"
       ],
-      "installedCardClosure": false
+      "installedUnsupportedDependencies": [],
+      "installedCardClosure": true
     },
     {
       "id": "wsp:wsp",
@@ -80584,8 +80560,8 @@
       },
       "installedRegistry": {
         "code": "12001a",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -80622,8 +80598,8 @@
       },
       "installedRegistry": {
         "code": "12001b",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -80659,8 +80635,8 @@
       },
       "installedRegistry": {
         "code": "12001c",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -80697,8 +80673,8 @@
       },
       "installedRegistry": {
         "code": "12002",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -80735,8 +80711,8 @@
       },
       "installedRegistry": {
         "code": "12003",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -80774,8 +80750,8 @@
       },
       "installedRegistry": {
         "code": "12004",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -80810,8 +80786,8 @@
       },
       "installedRegistry": {
         "code": "12005",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -80850,8 +80826,8 @@
       },
       "installedRegistry": {
         "code": "12006",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -80887,8 +80863,8 @@
       },
       "installedRegistry": {
         "code": "12007",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -80926,8 +80902,8 @@
       },
       "installedRegistry": {
         "code": "12008",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -80963,8 +80939,8 @@
       },
       "installedRegistry": {
         "code": "12009",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81002,8 +80978,8 @@
       },
       "installedRegistry": {
         "code": "12010",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81040,8 +81016,8 @@
       },
       "installedRegistry": {
         "code": "12011",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81070,8 +81046,8 @@
       },
       "installedRegistry": {
         "code": "12012",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81100,8 +81076,8 @@
       },
       "installedRegistry": {
         "code": "12013",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81131,8 +81107,8 @@
       },
       "installedRegistry": {
         "code": "12014",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81164,8 +81140,8 @@
       },
       "installedRegistry": {
         "code": "12015",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81200,8 +81176,8 @@
       },
       "installedRegistry": {
         "code": "12016",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81236,8 +81212,8 @@
       },
       "installedRegistry": {
         "code": "12017",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81268,8 +81244,8 @@
       },
       "installedRegistry": {
         "code": "12018",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81345,8 +81321,8 @@
       },
       "installedRegistry": {
         "code": "12020",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81475,8 +81451,8 @@
       },
       "installedRegistry": {
         "code": "12024",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81512,8 +81488,8 @@
       },
       "installedRegistry": {
         "code": "12025",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81545,8 +81521,8 @@
       },
       "installedRegistry": {
         "code": "12026",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81580,8 +81556,8 @@
       },
       "installedRegistry": {
         "code": "12027",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81621,8 +81597,8 @@
       },
       "installedRegistry": {
         "code": "12028",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81655,8 +81631,8 @@
       },
       "installedRegistry": {
         "code": "12029",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81690,8 +81666,8 @@
       },
       "installedRegistry": {
         "code": "12030",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81728,8 +81704,8 @@
       },
       "installedRegistry": {
         "code": "12031",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81763,8 +81739,8 @@
       },
       "installedRegistry": {
         "code": "12032",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -81796,8 +81772,8 @@
       },
       "installedRegistry": {
         "code": "12033",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -265583,36 +265559,39 @@
     "src/data/catalog-decks.json": "6d75a9c883223b59a9b9d950696de7b6876f8921ffe025d40e352495c1a2b886",
     "src/data/core-player.json": "451c26f5ca50fd7b9c4bfc167675a23031b411c291bc546ad011c608603bbfa2",
     "src/data/core-encounter.json": "db9ec82bf2b9aa6b00bc813bc6b64aac3d0237996e3393f47d8dbd3645ddd2da",
-    "src/game/engine.ts": "757d93522b84f5bafb0bb5d29a3f079ba4a39cf6d0f222108eeaf848212aa077",
+    "src/game/engine.ts": "5ce88b7a1f3256b8cd81fc683cdf61c0342c481e8e13a13f694aeea1fe5bd107",
     "src/data/catalog-provenance.json": "8dddd4de54508b44039d4cf196a98550503486efdaf2ac9771de55992a77b7e4",
     "src/game/scripts/compiler.ts": "33feb608b78cc98fa23bfca85926b8213dd82b4a056d419fa459e6bef5363e87",
     "src/game/scripts/runtime.ts": "60ed7040b44d97589d6eb3e0583e6153680757c1de50fe8788c5dd48d1c355ac",
     "src/game/scripts/types.ts": "7c911c5060b6d6945391256137de71ac00a4adb75b5765040b7a6f0a71dbe2fc",
-    "src/game/script-registry.ts": "cf02f38146f092e469c5d34232c5b87242556840cf4e718b164c6b3356602811",
+    "src/game/script-registry.ts": "ef1a70d1b07d46a9165045e38cbaeb6acecbffc303bda84db9a810bc44d9d0f5",
     "src/game/keywords.ts": "773badc9609fc065a43227235c04609b4525e25cf25bdebe3bc216411a2e693d",
-    "src/game/engine-support.ts": "5adc84f28b9d4101512fba7b381001395d34c4a02f8e4179dbd10dd520735668",
-    "src/game/cards.ts": "3790c391897625e9591488e297c851e2df9c0185b9faa1748229bf094266fee4",
+    "src/game/engine-support.ts": "6b1344420c239434b95bbdfbe1ff5bf41e13f74c7ed863b6e80a7a3adae50651",
+    "src/game/cards.ts": "a989d0e499545dcbca4ab7c849b71dac62dfd76b6a26a8613084be2458eff3c8",
     "src/game/captain-america.ts": "602fdfd10b0d6aaf7cdb810a72162b00738538c5b183fbeb2fef1fe1be1c930a",
-    "src/game/captain-pack.ts": "0a3d129ccaedabc894bc32d9767416ab9280146930c3fafcf2f6fc00bb104277",
+    "src/game/captain-pack.ts": "cef0d9c130d8f20e47419fd453794524e6893ef169ca14118596d181d1febf92",
     "src/game/hulk.ts": "290b811221f25f8b8e67319c114bf615442d8a607c005a78013ffc7f4003a8a6",
     "src/game/hulk-pack.ts": "f3ed32c891e11eaca1f075865b43b172645d081a0ca05b94a0d70fa949967c5b",
     "src/game/mutagen-formula.ts": "59e4168899dcb1efcd47a78bd7148013b768843704eec8569b8429c2f6c401e2",
     "src/game/thor.ts": "ed7ddc9a31fb4f445b1226a7c111b75e97a48940e2a167c4fa33f80aabbcc6c3",
-    "src/game/ms-marvel.ts": "e622ade1f94139ef9161e57a89622fb8d5fc0678b1f2da7a2c619e467ce61e11",
+    "src/game/ms-marvel.ts": "65d56b74172bf1a725006fe4f388cf2aba092a63107266a5b09d01870d85aacd",
     "src/game/risky-business.ts": "e4071b93fec1d38e97140e34f44ff18549a265f9ec45d0933e70106303500807",
     "src/game/goblin-modules.ts": "47a2f445df457aa19d0565af9dee80cdb972436149342435ad7d97fcb11ec40a",
     "src/game/reveal-window.ts": "43d6db8bc27acc419c5b77bf001a10d01c119e5440820560b96c88ea00441684",
-    "src/game/black-widow.ts": "6a51488193611d102c6eecb71ac57fef68af9dc020cc4d3c399003d408bf6491",
+    "src/game/black-widow.ts": "d91b15ce8e84ea48b5652c79c11e0c456b3a953d3ce557f8494916b1d4643d38",
     "src/game/doctor-strange.ts": "f4344ac5a4ae7f7292f108a6c29b9f04c1c744e1355102c4db84cb09f465f041",
     "src/game/hawkeye.ts": "ff0aa3a3f5cedc49816454a94879c244a5b8c4020394b416f78267f4b1a86711",
     "src/game/spider-woman.ts": "41a7d34976f7099067fd1cc438d35f2b152575f495f3934b155c58ff6a3b024f",
+    "src/game/ant-man.ts": "48f43d20af1c1853e12010c2c69ad8afb424b5ed0af08210cb860196026bc016",
+    "src/game/ant-man-pack.ts": "b342c25f38eddce2b2cecd2f73bc11ada517775ed72f6a0cbb34ffe1bfb2fe7c",
+    "src/game/card-text.ts": "193b7b3f185a11006bc5072b8926ba80127edf314b626ad1cd3c855dd8d32cfc",
     "src/game/expansion-errata.ts": "8ed5dcbae3e38e08090e097d638f76fc32b0f85e8905f162c0500f191a6e0c00",
-    "src/game/types.ts": "c17439a732cf74b01ac54770e1323d23e804117aa250f7febb7cb03209662577",
-    "src/game/payment.ts": "15bd55a6ba9d763e8059d6445bae9f9a1c94c8783a90b386d5186e34413c209f",
+    "src/game/types.ts": "7bb039dc4b57564055159a642408d30b3088c25c49809b4ae5b76ac6cd267c6d",
+    "src/game/payment.ts": "02f949bf775e2ce8916dd3a4b401b3867ae4e26e7b8d524598d22631148d71fe",
     "src/game/team.ts": "23241ac07e3372a395cb6a2d1787bafbd8507cf9c4eeb91e4f42e81f4af98261",
-    "src/game/review.ts": "b3dfe79cb8e59a2b81d4467698a54e69d70147ca6c7fead7edfbfc57f73b1516",
-    "src/game/lookahead.ts": "2c9fe8a2af94ab7ea9682f908dee3f4491d7538de188c3604795117c27666651",
-    "src/game/advisor.ts": "94304557ff40b5fad9b86d9bf2273492f54a7a6d6824ca378ccdf875d8cc5a2e",
+    "src/game/review.ts": "38ab0421399e796608da7cf88cba2f7bc1b6019d35742af37faa0a3599a9309d",
+    "src/game/lookahead.ts": "2a8b2f2f4469649040457882c7e3091b1f74ab1816e6296823007fd8d5bc8234",
+    "src/game/advisor.ts": "6df67bbc71db0450595f0df81d5e18c3dcac249a9374c11371f3928982a48d0f",
     "src/game/decks.ts": "317ca13edf9da5e96d758d3b438a14b62dcf628a000dcbe027c861ccb22af08f",
     "src/game/hero-runtime.ts": "59de76917e248883d43b34e20203893aa0ed7583564a5ddcdaa4aec6356717e0",
     "src/game/rules-code.ts": "0614b74a6d15c1a3e0b21c75f6907b2592a76233356eddb818c582020479bc2d",
@@ -289679,9 +289658,9 @@
   },
   "installedRegistryCoverage": {
     "total": 4551,
-    "executableFaces": 743,
-    "unsupportedFaces": 3808,
-    "dedicatedFaces": 264,
+    "executableFaces": 774,
+    "unsupportedFaces": 3777,
+    "dedicatedFaces": 295,
     "dedicatedCodes": [
       "02001a",
       "02001b",
@@ -289946,9 +289925,41 @@
       "10029",
       "10030",
       "10031",
-      "10032"
+      "10032",
+      "12001a",
+      "12001b",
+      "12001c",
+      "12002",
+      "12003",
+      "12004",
+      "12005",
+      "12006",
+      "12007",
+      "12008",
+      "12009",
+      "12010",
+      "12011",
+      "12012",
+      "12013",
+      "12014",
+      "12015",
+      "12016",
+      "12017",
+      "12018",
+      "12020",
+      "12024",
+      "12025",
+      "12026",
+      "12027",
+      "12028",
+      "12029",
+      "12030",
+      "12031",
+      "12032",
+      "12033"
     ],
     "registeredHeroIds": [
+      "ant",
       "black_panther",
       "black_widow",
       "captain_america",
@@ -290035,6 +290046,11 @@
         "id": "spider_woman",
         "code": "04031a",
         "alter": "04031b"
+      },
+      {
+        "id": "ant",
+        "code": "12001a",
+        "alter": "12001b"
       }
     ],
     "registeredScenarios": [
@@ -290466,41 +290482,9 @@
         "code": "ant",
         "name": "Ant-Man",
         "faceCount": 35,
-        "executableFaces": 4,
-        "unsupportedFaceCodes": [
-          "12001a",
-          "12001b",
-          "12001c",
-          "12002",
-          "12003",
-          "12004",
-          "12005",
-          "12006",
-          "12007",
-          "12008",
-          "12009",
-          "12010",
-          "12011",
-          "12012",
-          "12013",
-          "12014",
-          "12015",
-          "12016",
-          "12017",
-          "12018",
-          "12020",
-          "12024",
-          "12025",
-          "12026",
-          "12027",
-          "12028",
-          "12029",
-          "12030",
-          "12031",
-          "12032",
-          "12033"
-        ],
-        "installedCardClosure": false,
+        "executableFaces": 35,
+        "unsupportedFaceCodes": [],
+        "installedCardClosure": true,
         "automationCertification": "registration_closure_only_requires_rules_and_native_integration_evidence"
       },
       {
@@ -299197,122 +299181,122 @@
       },
       {
         "code": "12001a",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12001b",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12001c",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12002",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12003",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12004",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12005",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12006",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12007",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12008",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12009",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12010",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12011",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12012",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12013",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12014",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12015",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12016",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12017",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12018",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
@@ -299323,8 +299307,8 @@
       },
       {
         "code": "12020",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
@@ -299347,62 +299331,62 @@
       },
       {
         "code": "12024",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12025",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12026",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12027",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12028",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12029",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12030",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12031",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12032",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "12033",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {

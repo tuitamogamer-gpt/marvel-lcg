@@ -1,5 +1,4 @@
 import { doctorStrangeAbilityOptions } from "../src/game/doctor-strange";
-import { goblinIdentityLocked } from "../src/game/goblin-modules";
 import { thorAbilityOptions } from "../src/game/thor";
 import { msMarvelAbilityOptions } from "../src/game/ms-marvel";
 import { describe, expect, it } from "vitest";
@@ -15,6 +14,7 @@ import { CATALOG_HEROES, catalogDeckCodes } from "../src/game/catalog";
 import { deckErrors } from "../src/game/decks";
 import {
   abilityOptions,
+  canChangeIdentityForm,
   dispatch,
   newGame,
   playable,
@@ -42,6 +42,7 @@ const heroIds = [
   "doctor_strange",
   "hawkeye",
   "spider_woman",
+  "ant",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -183,7 +184,7 @@ function runMission(config: (typeof missions)[number]) {
       ][0];
       if (identity)
         act({ type: "ABILITY", id: "identity", action: identity.id });
-      if (!s.player.flipped && !goblinIdentityLocked(s)) act({ type: "FLIP" });
+      if (!s.player.flipped && canChangeIdentityForm(s)) act({ type: "FLIP" });
     }
     for (let actions = 0; actions < 8 && !ended(s); actions++) {
       const next = [...s.player.hand, ...hawkeyeStoredPlayable(s)]
@@ -243,7 +244,7 @@ function runMission(config: (typeof missions)[number]) {
       if (!ended(s)) basic();
     }
     if (ended(s)) break;
-    if (s.player.hp <= 3 && !s.player.flipped && !goblinIdentityLocked(s))
+    if (s.player.hp <= 3 && !s.player.flipped && canChangeIdentityForm(s))
       act({ type: "FLIP" });
     if (ended(s)) break;
     act({ type: "END_TURN", discard: s.player.hand.map((p) => p.id) });
@@ -257,7 +258,7 @@ function runMission(config: (typeof missions)[number]) {
 }
 
 describe("published expansion starters across every supported mission setting", () => {
-  it("covers eight expansion heroes, all scenarios, both difficulties and every supported encounter module", () => {
+  it("covers nine expansion heroes, all scenarios, both difficulties and every supported encounter module", () => {
     expect(missions).toHaveLength(
       heroIds.length * VILLAINS.length * 2 * MODULES.length,
     );

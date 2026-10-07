@@ -66,6 +66,7 @@ describe("complete expansion rules inventory", () => {
     });
     for (const [code, faceCount] of [
       ["bkw", 34],
+      ["ant", 35],
       ["drs", 40],
     ] as const) {
       expect(
@@ -77,10 +78,10 @@ describe("complete expansion rules inventory", () => {
         unsupportedFaceCodes: [],
       });
     }
-    expect(coverage.executableFaces).toBe(743);
-    expect(coverage.unsupportedFaces).toBe(3808);
-    expect(coverage.dedicatedFaces).toBe(264);
-    expect(coverage.registeredHeroIds).toHaveLength(13);
+    expect(coverage.executableFaces).toBe(774);
+    expect(coverage.unsupportedFaces).toBe(3777);
+    expect(coverage.dedicatedFaces).toBe(295);
+    expect(coverage.registeredHeroIds).toHaveLength(14);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
         coverage.registeredHeroes.some(

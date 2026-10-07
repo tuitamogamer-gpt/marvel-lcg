@@ -7,6 +7,7 @@ import { msMarvelAbilityOptions } from "./ms-marvel.js";
 import { card, maxHP, pieceHP } from "./cards.js";
 import {
   abilityOptions,
+  canChangeIdentityForm,
   canPay,
   dispatch,
   playable,
@@ -191,7 +192,16 @@ export function candidates(s: GameState): Command[] {
     if (!hero && s.player.hp < maxHP(s))
       list.push({ type: "BASIC", action: "recover" });
   }
-  if (!s.player.flipped) list.push({ type: "FLIP" });
+  if (!s.player.flipped && canChangeIdentityForm(s)) {
+    if (s.heroId === "ant") {
+      for (const target of ["alter", "tiny", "giant"] as const)
+        if (
+          target !==
+          (s.player.form === "alter" ? "alter" : s.player.heroForm || "tiny")
+        )
+          list.push({ type: "FLIP", target });
+    } else list.push({ type: "FLIP" });
+  }
   if (
     (s.heroId === "iron_man" && !hero && !s.flags.futurist) ||
     (s.heroId === "captain_marvel" && !hero && !s.flags.commander) ||
@@ -355,7 +365,13 @@ function describe(s: GameState, c: Command) {
           ? "Basic thwart"
           : "Recover";
     case "FLIP":
-      return s.player.form === "hero" ? "Change to alter-ego" : "Suit up";
+      return c.target === "giant"
+        ? "Change to Giant"
+        : c.target === "tiny"
+          ? "Change to Tiny"
+          : s.player.form === "hero"
+            ? "Change to alter-ego"
+            : "Suit up";
     case "ABILITY": {
       if (c.id === "identity") return "Use your identity ability";
       const piece = s.player.inPlay.find((p) => p.id === c.id);

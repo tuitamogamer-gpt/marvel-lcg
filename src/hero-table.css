@@ -242,6 +242,25 @@
     font-size: 14px;
   }
 }
+@media (max-width: 400px) {
+  .physical-table .hero-form-button {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 4px;
+    padding: 6px 5px;
+  }
+  .physical-table .hero-form-emblem {
+    width: 24px;
+    height: 24px;
+  }
+  .physical-table .hero-form-emblem > svg {
+    width: 21px;
+    height: 21px;
+  }
+  .physical-table .hero-form-copy strong {
+    font-size: 12px;
+    white-space: normal;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .physical-table .hero-form-button {
     transition: none;

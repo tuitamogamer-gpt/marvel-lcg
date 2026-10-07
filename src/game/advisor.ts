@@ -14,6 +14,7 @@ import {
 import {
   abilityOptions,
   canPay,
+  canChangeIdentityForm,
   dispatch,
   escalation,
   paymentSources,
@@ -329,7 +330,7 @@ export function adviseAction(s: GameState): Advice | null {
       };
     const play = bestPlay(s);
     if (play && (stayHome || s.player.exhausted)) return play;
-    if (!s.player.flipped && !stayHome)
+    if (!s.player.flipped && !stayHome && canChangeIdentityForm(s))
       return {
         command: { type: "FLIP" },
         title: "Suit up",
@@ -379,6 +380,7 @@ export function adviseAction(s: GameState): Advice | null {
   const room = pressure(s).room;
   if (
     !s.player.flipped &&
+    canChangeIdentityForm(s) &&
     ((hp <= incomingDamage(s, "hero") && !readyAllies(s).length) ||
       (hp <= 4 && room >= 3) ||
       (hp <= Math.ceil(max * 0.4) && !pressed && s.player.exhausted))

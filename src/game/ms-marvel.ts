@@ -1,3 +1,4 @@
+import { isTextBlank } from "./card-text.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { uniqueConflict } from "./unique.js";
@@ -511,7 +512,7 @@ export function msMarvelDamageOptions(
           )
       : []),
     ...s.player.inPlay
-      .filter((p) => p.code === "05017" && p.counters > 0)
+      .filter((p) => p.code === "05017" && p.counters > 0 && !isTextBlank(s, p))
       .map((p) =>
         option(
           p.id,
@@ -1019,7 +1020,11 @@ export function resolveMsMarvelEffect(
     case "ms:barrier": {
       const p = ownPiece(s, e.id, "05017");
       need(
-        p && p.counters > 0 && e.window.amount > 0 && !s.player.tough,
+        p &&
+          !isTextBlank(s, p) &&
+          p.counters > 0 &&
+          e.window.amount > 0 &&
+          !s.player.tough,
         "Energy Barrier is unavailable.",
       );
       p!.counters--;

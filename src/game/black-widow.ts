@@ -1,3 +1,4 @@
+import { isTextBlank } from "./card-text.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { controller, playerOrder, seatView } from "./team.js";
 import { consumeStatus } from "./keywords.js";
@@ -201,7 +202,7 @@ function controlledPreparations(s: GameState, code: string, heroOnly: boolean) {
     return heroOnly && view.player.form !== "hero"
       ? []
       : view.player.inPlay
-          .filter((p) => p.code === code)
+          .filter((p) => p.code === code && !isTextBlank(s, p))
           .map((p) => ({ p, ownerId: seat.id, view }));
   });
 }
@@ -386,6 +387,7 @@ export function blackWidowRevealOptions(
       (source) =>
         source.code === "08018" ||
         (source.code === "08008" &&
+          !isTextBlank(s, source) &&
           view.player.form === "hero" &&
           cards.get(p.code)?.type_code === "treachery"),
     )
@@ -950,7 +952,11 @@ export function resolveBlackWidowEffect(
           );
         if (s.player.exhausted && ports.canReadyIdentity(s, s.activePlayerId))
           for (const p of s.player.inPlay.filter(
-            (p) => p.code === "08009" && !p.exhausted && !used.includes(p.id),
+            (p) =>
+              p.code === "08009" &&
+              !p.exhausted &&
+              !isTextBlank(s, p) &&
+              !used.includes(p.id),
           ))
             choices.push(
               option(
