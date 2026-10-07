@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import catalogCards from "../src/data/catalog-cards.json";
 import { deckCodes } from "../src/game/cards";
+import { deckErrors, deckOptions } from "../src/game/decks";
 import { rulesCode } from "../src/game/rules-code";
 import {
   HERO_RUNTIME,
@@ -9,6 +10,7 @@ import {
   heroStarterCodes,
   heroDeckAspects,
   validateHeroDeck,
+  heroAllowsOffAspectEvent,
   isPermanent,
 } from "../src/game/hero-runtime";
 import type { Card } from "../src/game/types";
@@ -35,17 +37,23 @@ describe("imported hero definitions and printed starter legality", () => {
     expect(heroRuntime("groot")?.forms).toHaveLength(2);
     expect(heroRuntime("16029b")?.id).toBe("rocket");
     expect(heroRuntime("rocket")?.forms).toHaveLength(2);
+    expect(heroRuntime("17001b")?.id).toBe("stld");
+    expect(heroRuntime("stld")?.forms).toHaveLength(2);
+    expect(heroRuntime("18001b")?.id).toBe("gam");
+    expect(heroRuntime("gam")?.forms).toHaveLength(2);
   });
   it("imported identities stay unautomated until their full runtime is installed", () => {
     expect(
       HERO_RUNTIME.filter((h) => h.scripted).map((h) => h.id),
-    ).toHaveLength(19);
+    ).toHaveLength(21);
     expect(heroRuntime("captain_america")?.scripted).toBe(true);
     expect(heroRuntime("wsp")?.scripted).toBe(true);
     expect(heroRuntime("qsv")?.scripted).toBe(true);
     expect(heroRuntime("scw")?.scripted).toBe(true);
     expect(heroRuntime("groot")?.scripted).toBe(true);
     expect(heroRuntime("rocket")?.scripted).toBe(true);
+    expect(heroRuntime("stld")?.scripted).toBe(true);
+    expect(heroRuntime("gam")?.scripted).toBe(true);
     expect(heroRuntime("daredevil")?.scripted).toBe(false);
   });
   for (const hero of HERO_RUNTIME)
@@ -359,6 +367,142 @@ describe("imported hero definitions and printed starter legality", () => {
       hand_size: 6,
       traits: "Genius. Outlaw.",
     });
+  });
+  for (const { id, aspect, pack, quantities } of [
+    {
+      id: "stld",
+      aspect: "leadership" as const,
+      pack: "stld",
+      quantities: {
+        "17002": 1,
+        "17003": 3,
+        "17004": 2,
+        "17005": 3,
+        "17006": 1,
+        "17007": 2,
+        "17008": 1,
+        "17009": 1,
+        "17010": 1,
+        "17011": 1,
+        "17012": 1,
+        "17013": 1,
+        "17014": 3,
+        "17015": 3,
+        "17016": 2,
+        "17017": 3,
+        "17018": 2,
+        "17019": 3,
+        "17020": 1,
+        "17021": 1,
+        "17022": 1,
+        "17023": 3,
+      },
+    },
+    {
+      id: "gam",
+      aspect: "aggression" as const,
+      pack: "gam",
+      quantities: {
+        "18002": 1,
+        "18003": 2,
+        "18004": 2,
+        "18005": 2,
+        "18006": 2,
+        "18007": 2,
+        "18008": 1,
+        "18009": 2,
+        "18010": 1,
+        "18011": 1,
+        "18012": 3,
+        "18013": 3,
+        "18014": 2,
+        "18015": 3,
+        "18016": 3,
+        "18017": 2,
+        "18018": 1,
+        "18019": 1,
+        "18020": 3,
+        "18021": 1,
+        "18022": 1,
+        "18023": 1,
+      },
+    },
+  ])
+    it(`preserves ${id}'s exact forty-card retail source starter`, () => {
+      const codes = deckCodes(id, aspect);
+      expect(codes).toHaveLength(40);
+      expect(codes.slice().sort()).toEqual(heroStarterCodes(id).sort());
+      expect(heroStarterAspects(id)).toEqual([aspect]);
+      expect(validateHeroDeck(id, [aspect], codes).errors).toEqual([]);
+      expect(deckErrors(id, aspect, codes)).toEqual([]);
+      const actual: Record<string, number> = {};
+      for (const code of codes) actual[code] = (actual[code] || 0) + 1;
+      expect(actual).toEqual(quantities);
+      expect(codes.every((code) => byCode.get(code)?.pack_code === pack)).toBe(
+        true,
+      );
+    });
+  it("offers Gamora off-aspect Attack and Thwart events while retaining one chosen aspect", () => {
+    const available = new Set(
+      deckOptions("gam", "aggression").map((c) => c.code),
+    );
+    expect(available.has("01060")).toBe(true);
+    expect(available.has("01077")).toBe(true);
+    expect(available.has("01061")).toBe(false);
+    expect(available.has("01065")).toBe(false);
+    expect(heroAllowsOffAspectEvent("gam", byCode.get("17005")!)).toBe(false);
+    expect(heroAllowsOffAspectEvent("stld", byCode.get("01060")!)).toBe(false);
+    const codes = heroStarterCodes("gam");
+    expect(
+      validateHeroDeck("gam", ["aggression", "justice"], codes).errors,
+    ).toContain("Choose exactly one aspect for this hero.");
+    expect(
+      deckErrors("gam", "aggression", codes, ["aggression", "justice"]),
+    ).toEqual([
+      "Choose distinct supported aspects, including the primary aspect.",
+    ]);
+  });
+  it("counts off-aspect event copies for Gamora independently of chosen-aspect events", () => {
+    const codes = heroStarterCodes("gam");
+    expect(validateHeroDeck("gam", ["aggression"], codes).errors).toEqual([]);
+    const seventh = [...codes, "01060"];
+    expect(validateHeroDeck("gam", ["aggression"], seventh).errors).toContain(
+      "Gamora may include at most 6 off-aspect Attack/Thwart events.",
+    );
+    const chosenAspect = [...codes, "17028"];
+    expect(
+      validateHeroDeck("gam", ["aggression"], chosenAspect).errors,
+    ).toEqual([]);
+    const nonEvent = [...codes, "01065"];
+    expect(validateHeroDeck("gam", ["aggression"], nonEvent).errors).toContain(
+      "Heroic Intuition is outside this hero’s chosen aspects.",
+    );
+  });
+  it("uses only equivalent Core handlers for the seven Star-Lord and Gamora reprints", () => {
+    const aliases = {
+      "17016": "01069",
+      "17018": "01072",
+      "18014": "01054",
+      "18017": "01057",
+      "18021": "01088",
+      "18022": "01089",
+      "18023": "01090",
+    };
+    expect(
+      Object.fromEntries(
+        Object.keys(aliases).map((code) => [code, rulesCode(code)]),
+      ),
+    ).toEqual(aliases);
+    for (const code of [
+      "17014",
+      "17015",
+      "17020",
+      "17031",
+      "18015",
+      "18020",
+      "18032",
+    ])
+      expect(rulesCode(code)).toBe(code);
   });
   it("matching identity allies remain illegal across typographic differences in alter-ego names", () => {
     const codes = deckCodes("black_panther", "leadership");

@@ -2,6 +2,9 @@ import { thorResourceSources } from "./thor.js";
 import { waspPackResourceSources } from "./wasp-pack.js";
 import { quicksilverResourceSources } from "./quicksilver.js";
 import { quicksilverPackResourceSources } from "./quicksilver-pack.js";
+import { gamoraKeenInstinctsEligible } from "./gamora.js";
+import { gamoraPackResourceSources } from "./gamora-pack.js";
+import { starLordPackResourceSources } from "./star-lord-pack.js";
 import { isTextBlank } from "./card-text.js";
 import { hawkeyeResourceSources } from "./hawkeye.js";
 import { spiderWomanResourceSources } from "./spider-woman.js";
@@ -69,6 +72,16 @@ export function paymentSources(
       kind: "ability",
     });
   for (const p of s.player.inPlay.filter((p) => !p.exhausted)) {
+    if (p.code === "18009" && gamoraKeenInstinctsEligible(s, targetCode))
+      sources.push({
+        id: p.id,
+        name: card(p).name,
+        code: p.code,
+        resources: ["wild"],
+        description:
+          "Exhaust · generate 1 wild resource for an Attack or Thwart event",
+        kind: "ability",
+      });
     if (rulesCode(p) === "01008" && p.counters > 0 && s.player.form === "hero")
       sources.push({
         id: p.id,
@@ -92,6 +105,8 @@ export function paymentSources(
   sources.push(...waspPackResourceSources(s));
   sources.push(...quicksilverResourceSources(s));
   sources.push(...quicksilverPackResourceSources(s, targetCode));
+  sources.push(...gamoraPackResourceSources(s));
+  sources.push(...starLordPackResourceSources(s));
   sources.push(...hawkeyeResourceSources(s, targetCode));
   sources.push(...spiderWomanResourceSources(s, targetCode));
   sources.push(...blackWidowResourceSources(s, targetCode));

@@ -5,6 +5,13 @@ import { quicksilverStats } from "./quicksilver.js";
 import { quicksilverPackHeroStatBonus } from "./quicksilver-pack.js";
 import { rocketStats, rocketMaxHpBonus, rocketHeroTraits } from "./rocket.js";
 import {
+  starLordStats,
+  starLordHeroTraits,
+  starLordHandSizeBonus,
+} from "./star-lord.js";
+import { starLordPackModifiers } from "./star-lord-pack.js";
+import { gamoraPackAllyHP } from "./gamora-pack.js";
+import {
   antManPackAllyHP,
   antManPackStats,
   antManPackHandSize,
@@ -370,6 +377,34 @@ export const HEROES = [
     style: "Tech upgrades · Aggression",
     complexity: 3,
   },
+  {
+    id: "stld",
+    code: "17001a",
+    alter: "17001b",
+    name: "Star-Lord",
+    identity: "Peter Quill",
+    aspect: "leadership" as Aspect,
+    color: "#c45a57",
+    tag: "What could go wrong?",
+    description:
+      "Lead a team of Guardians, take bold risks with encounter cards, and power up your signature attacks and thwarts.",
+    style: "Encounter cards · Leadership",
+    complexity: 3,
+  },
+  {
+    id: "gam",
+    code: "18001a",
+    alter: "18001b",
+    name: "Gamora",
+    identity: "Gamora",
+    aspect: "aggression" as Aspect,
+    color: "#77a862",
+    tag: "The deadliest woman in the galaxy.",
+    description:
+      "Combine Attack and Thwart events, answer incoming damage with Crosscounter, and choose up to six events from other aspects.",
+    style: "Events · Flexible",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -556,6 +591,8 @@ export function deckCodes(
       (hero === "scw" && aspect === "justice") ||
       (hero === "groot" && aspect === "protection") ||
       (hero === "rocket" && aspect === "aggression") ||
+      (hero === "stld" && aspect === "leadership") ||
+      (hero === "gam" && aspect === "aggression") ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
         pair.includes("aggression") &&
@@ -662,6 +699,7 @@ export function aerial(s: GameState) {
     doctorStrangeTraits(s).includes("Aerial") ||
     spiderWomanHasAerial(s) ||
     rocketHeroTraits(s).includes("Aerial") ||
+    starLordHeroTraits(s).includes("Aerial") ||
     waspHeroTraits(textActiveState(s)).includes("Aerial")
   );
 }
@@ -687,6 +725,8 @@ export function heroStats(s: GameState) {
       waspStats(s).attack +
       quicksilverStats(s).attack +
       rocketStats(s).attack +
+      starLordStats(s).attack +
+      starLordPackModifiers(s, "hero").attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
       spiderWomanStats(s).attack +
@@ -703,6 +743,8 @@ export function heroStats(s: GameState) {
       waspStats(s).thwart +
       quicksilverStats(s).thwart +
       rocketStats(s).thwart +
+      starLordStats(s).thwart +
+      starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
       scriptedModifier(s, "thwart") +
       captainPackStats(s).thwart,
@@ -740,11 +782,13 @@ export function handSize(s: GameState) {
         scriptedModifier(s, "hand_size") +
         doctorStrangeHandSize(s) +
         spiderWomanHandSize(s) +
+        starLordHandSizeBonus(s) +
         antManPackHandSize(s)
     : heroCard(s).hand_size! +
         scriptedModifier(s, "hand_size") +
         doctorStrangeHandSize(s) +
         spiderWomanHandSize(s) +
+        starLordHandSizeBonus(s) +
         antManPackHandSize(s);
 }
 export function pieceHP(s: GameState, p: Piece) {
@@ -764,6 +808,7 @@ export function pieceHP(s: GameState, p: Piece) {
     antManPackAllyHP(s, p) +
     waspPackAllyHP(s, p) +
     waspEnemyHP(s, p) +
+    gamoraPackAllyHP(s, p) +
     captainPackModifiers(textActiveState(s), p.id).hp
   );
 }

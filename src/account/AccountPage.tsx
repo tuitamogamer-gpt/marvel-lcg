@@ -31,6 +31,7 @@ import {
   heroDeckRule,
   heroRequiredCards,
   heroStarterAspects,
+  heroAllowsOffAspectEvent,
 } from "../game/hero-runtime.js";
 import type { Aspect } from "../game/types.js";
 import type { AccountController } from "./useAccount.js";
@@ -315,6 +316,26 @@ export function DeckEditor({
   const counts = countsFor(codes);
   const errors = deckErrors(heroId, aspect, codes, aspects);
   const options = deckOptions(heroId, aspect, aspects);
+  const crossAspectEvents =
+    heroDeckRule(heroId)?.exception === "six-attack-thwart-events";
+  const offAspectCount = codes.filter((code) => {
+    const c = card(code);
+    return (
+      c && c.faction_code !== aspect && heroAllowsOffAspectEvent(heroId, c)
+    );
+  }).length;
+  const pools = [
+    "hero",
+    ...aspects,
+    ...(crossAspectEvents
+      ? ASPECTS.filter(
+          (a) =>
+            !aspects.includes(a.id) &&
+            options.some((c) => c.faction_code === a.id),
+        ).map((a) => a.id)
+      : []),
+    "basic",
+  ];
   function reset(h: string, a: Aspect, secondary?: Aspect) {
     const next = editorAspects(
       h,
@@ -418,8 +439,14 @@ export function DeckEditor({
           {dualAspect &&
             " Include equal numbers of your two chosen aspects, counting required hero cards of those colors."}
         </p>
+        {crossAspectEvents && (
+          <p className="account-hint">
+            Gamora may include up to 6 Attack or Thwart events from other
+            aspects. {offAspectCount} / 6 selected.
+          </p>
+        )}
         <div className="account-deck-columns">
-          {["hero", ...aspects, "basic"].map((faction) => (
+          {pools.map((faction) => (
             <section key={faction}>
               <h3>{faction.toUpperCase()}</h3>
               {options

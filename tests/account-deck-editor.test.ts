@@ -129,4 +129,29 @@ describe("saved deck editor", () => {
       expect(heroSection).toContain(`data-card-preview="${code}"`);
     }
   });
+  it("shows Gamora's source off-aspect events with one chosen aspect and a six-event allowance", () => {
+    const html = render(savedDeck("gam", "aggression", ["aggression"]));
+    expect(selectedOption(html, "Aspect")).toBe("aggression");
+    expect(html).not.toContain("Second aspect");
+    expect(html).toContain("up to 6 Attack or Thwart events from other");
+    expect(html).toContain("6 / 6 selected.");
+    expect(html).toContain("<h3>PROTECTION</h3>");
+    expect(html).toContain("<h3>JUSTICE</h3>");
+    expect(html).toContain('aria-label="Copies of First Hit"');
+    expect(html).toContain('aria-label="Copies of Impede"');
+    expect(html).toContain('aria-label="Copies of For Justice!"');
+    expect(html).toContain('aria-label="Copies of Counter-Punch"');
+    expect(html).not.toContain('aria-label="Copies of Heroic Intuition"');
+    expect(html).toContain("Deck ready. All card and copy limits are valid.");
+  });
+  it("counts Gamora's off-aspect copies while leaving her chosen-aspect events outside the allowance", () => {
+    const deck = savedDeck("gam", "aggression", ["aggression"]);
+    deck.cards.push("17028");
+    expect(render(deck)).toContain("6 / 6 selected.");
+    deck.cards.push("01060");
+    const html = render(deck);
+    expect(html).toContain("7 / 6 selected.");
+    expect(html).toContain("at most 6 off-aspect Attack/Thwart events");
+    expect(html).toContain('<button class="primary-button" disabled="">');
+  });
 });

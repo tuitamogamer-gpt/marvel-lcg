@@ -71,6 +71,8 @@ describe("complete expansion rules inventory", () => {
       ["qsv", 33],
       ["scw", 32],
       ["drs", 40],
+      ["stld", 32],
+      ["gam", 33],
     ] as const) {
       expect(
         coverage.products.find((pack: { code: string }) => pack.code === code),
@@ -108,10 +110,20 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(910);
-    expect(coverage.unsupportedFaces).toBe(3641);
-    expect(coverage.dedicatedFaces).toBe(431);
-    expect(coverage.registeredHeroIds).toHaveLength(19);
+    for (const id of ["stld", "gam"])
+      expect(
+        inventory.heroes.find(
+          (hero: { id: string }) => hero.id === `${id}:${id}`,
+        ),
+      ).toMatchObject({
+        registeredHeroIds: [id],
+        installedCardClosure: true,
+        installedUnsupportedDependencies: [],
+      });
+    expect(coverage.executableFaces).toBe(966);
+    expect(coverage.unsupportedFaces).toBe(3585);
+    expect(coverage.dedicatedFaces).toBe(489);
+    expect(coverage.registeredHeroIds).toHaveLength(21);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
         coverage.registeredHeroes.some(
@@ -238,6 +250,10 @@ describe("complete expansion rules inventory", () => {
       "src/game/groot.ts",
       "src/game/rocket.ts",
       "src/game/gmw-player-pack.ts",
+      "src/game/star-lord.ts",
+      "src/game/gamora.ts",
+      "src/game/star-lord-pack.ts",
+      "src/game/gamora-pack.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",
       "src/game/payment.ts",

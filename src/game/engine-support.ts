@@ -9,6 +9,10 @@ import { SCARLET_WITCH_PACK_SCRIPT_CODES } from "./scarlet-witch-pack.js";
 import { GROOT_SCRIPT_CODES } from "./groot.js";
 import { ROCKET_SCRIPT_CODES } from "./rocket.js";
 import { GMW_PLAYER_PACK_SCRIPT_CODES } from "./gmw-player-pack.js";
+import { STAR_LORD_SCRIPT_CODES } from "./star-lord.js";
+import { GAMORA_SCRIPT_CODES } from "./gamora.js";
+import { STAR_LORD_PACK_SCRIPT_CODES } from "./star-lord-pack.js";
+import { GAMORA_PACK_SCRIPT_CODES } from "./gamora-pack.js";
 import { GOBLIN_MODULE_SCRIPT_CODES } from "./goblin-modules.js";
 import { BLACK_WIDOW_SCRIPT_CODES } from "./black-widow.js";
 import { DOCTOR_STRANGE_SCRIPT_CODES } from "./doctor-strange.js";
@@ -44,6 +48,8 @@ export const SCRIPTED_HERO_IDS = new Set([
   "scw",
   "groot",
   "rocket",
+  "stld",
+  "gam",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ANT_MAN_SCRIPT_CODES,
@@ -57,6 +63,10 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...GROOT_SCRIPT_CODES,
   ...ROCKET_SCRIPT_CODES,
   ...GMW_PLAYER_PACK_SCRIPT_CODES,
+  ...STAR_LORD_SCRIPT_CODES,
+  ...GAMORA_SCRIPT_CODES,
+  ...STAR_LORD_PACK_SCRIPT_CODES,
+  ...GAMORA_PACK_SCRIPT_CODES,
   ...CAPTAIN_AMERICA_SCRIPT_CODES,
   ...HULK_SCRIPT_CODES,
   ...CAPTAIN_PACK_SCRIPT_CODES,

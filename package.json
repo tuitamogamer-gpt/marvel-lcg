@@ -31,7 +31,8 @@
     "test:wasp": "node scripts/wasp-check.mjs",
     "test:quicksilver": "node scripts/quicksilver-check.mjs",
     "test:scarlet-witch": "node scripts/scarlet-witch-check.mjs",
-    "test:gmw-heroes": "node scripts/gmw-heroes-check.mjs"
+    "test:gmw-heroes": "node scripts/gmw-heroes-check.mjs",
+    "test:star-lord-gamora": "node scripts/star-lord-gamora-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

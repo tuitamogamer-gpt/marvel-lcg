@@ -329,7 +329,7 @@ export function ContentBrowser({
   const deckSize = deck?.deckSize ?? codes.length - setupCount;
   const deckAspect =
     ASPECTS.find((aspect) => aspect.id === deck?.aspect)?.id ||
-    (hero.id === "spider_woman" && deck?.aspect === "multi"
+    (["spider_woman", "gam"].includes(hero.id) && deck?.aspect === "multi"
       ? ASPECTS.find((aspect) => aspect.id === heroStarterAspects(hero.id)[0])
           ?.id
       : undefined);

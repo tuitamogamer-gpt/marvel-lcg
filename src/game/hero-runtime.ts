@@ -249,6 +249,16 @@ const hasTrait = (c: Card, trait: string) =>
     .split(/\.\s+/)
     .some((s) => s.trim().toLowerCase() === trait.toLowerCase());
 
+/** Gamora's exception changes eligible events, not the chosen aspect count. */
+export function heroAllowsOffAspectEvent(idOrCode: string, c: Card): boolean {
+  return (
+    heroDeckRule(idOrCode)?.exception === "six-attack-thwart-events" &&
+    HERO_ASPECTS.includes(c.faction_code as HeroAspect) &&
+    c.type_code === "event" &&
+    (hasTrait(c, "Attack") || hasTrait(c, "Thwart"))
+  );
+}
+
 export interface HeroDeckValidation {
   valid: boolean;
   heroId?: string;
@@ -392,9 +402,7 @@ export function validateHeroDeck(
     let allowed = false;
     switch (rule.exception) {
       case "six-attack-thwart-events":
-        allowed =
-          c.type_code === "event" &&
-          (hasTrait(c, "Attack") || hasTrait(c, "Thwart"));
+        allowed = heroAllowsOffAspectEvent(hero.id, c);
         if (allowed) offAspectEvents++;
         break;
       case "x-men-allies":

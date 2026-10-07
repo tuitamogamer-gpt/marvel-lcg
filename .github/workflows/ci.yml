@@ -23,10 +23,24 @@ jobs:
       - run: npm run format:check
 
   browser:
-    name: Browser flow (Chromium)
+    name: Browser flow (${{ matrix.group }})
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 25
     needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: general
+            scripts: test:flow test:onboarding test:catalog test:expansion test:engine-continuation test:hero-packs
+          - group: ant-man-wasp
+            scripts: test:ant-man test:wasp
+          - group: quicksilver-scarlet-witch
+            scripts: test:quicksilver test:scarlet-witch
+          - group: gmw-heroes
+            scripts: test:gmw-heroes
+          - group: star-lord-gamora
+            scripts: test:star-lord-gamora
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,42 +57,17 @@ jobs:
             sleep 1
           done
           echo "Dev server did not start"; cat output-dev.log; exit 1
-      - run: npm run test:flow
+      - name: Verify ${{ matrix.group }}
+        run: |
+          for script in $CI_BROWSER_SCRIPTS; do
+            npm run "$script"
+          done
         env:
           BASE_URL: http://127.0.0.1:5174
-      - run: npm run test:onboarding
-        env:
-          BASE_URL: http://127.0.0.1:5174
-      - run: npm run test:catalog
-        env:
-          BASE_URL: http://127.0.0.1:5174
-      - run: npm run test:expansion
-        env:
-          BASE_URL: http://127.0.0.1:5174
-      - run: npm run test:engine-continuation
-        env:
-          BASE_URL: http://127.0.0.1:5174
-      - run: npm run test:hero-packs
-        env:
-          BASE_URL: http://127.0.0.1:5174
-      - run: npm run test:ant-man
-        env:
-          BASE_URL: http://127.0.0.1:5174
-      - run: npm run test:wasp
-        env:
-          BASE_URL: http://127.0.0.1:5174
-      - run: npm run test:quicksilver
-        env:
-          BASE_URL: http://127.0.0.1:5174
-      - run: npm run test:scarlet-witch
-        env:
-          BASE_URL: http://127.0.0.1:5174
-      - run: npm run test:gmw-heroes
-        env:
-          BASE_URL: http://127.0.0.1:5174
+          CI_BROWSER_SCRIPTS: ${{ matrix.scripts }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: browser-output
+          name: browser-output-${{ matrix.group }}-${{ github.run_attempt }}
           path: output/
           if-no-files-found: ignore

@@ -5,6 +5,7 @@ import { CAPTAIN_AMERICA_SCRIPT_CODES } from "./captain-america.js";
 import {
   heroDeckAspects,
   heroRequiredCards,
+  heroAllowsOffAspectEvent,
   validateHeroDeck,
 } from "./hero-runtime.js";
 import type { Aspect, Card } from "./types.js";
@@ -41,6 +42,7 @@ export function deckOptions(
         c.set_code === heroId &&
         c.pack_code === heroPack) ||
         selectedAspects.includes(c.faction_code as Aspect) ||
+        heroAllowsOffAspectEvent(heroId, c) ||
         c.faction_code === "basic"),
   );
 }
@@ -66,7 +68,7 @@ export function deckErrors(
       chosenAspects.some((a) => !ASPECTS.some((option) => option.id === a)))
   )
     return ["Choose distinct supported aspects, including the primary aspect."];
-  if (heroId === "spider_woman" || heroId === "hawkeye") {
+  if (["spider_woman", "hawkeye", "gam"].includes(heroId)) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);
     const errors = validateHeroDeck(heroId, selected, codes).errors;
     for (const code of codes)
