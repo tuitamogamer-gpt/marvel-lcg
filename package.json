@@ -27,7 +27,9 @@
     "audit:engine": "node scripts/audit-engine-expansion.mjs",
     "test:hero-packs": "node scripts/hero-pack-check.mjs",
     "test:rise-heroes": "node scripts/rise-heroes-check.mjs",
-    "test:ant-man": "node scripts/ant-man-check.mjs"
+    "test:ant-man": "node scripts/ant-man-check.mjs",
+    "test:wasp": "node scripts/wasp-check.mjs",
+    "test:quicksilver": "node scripts/quicksilver-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

@@ -24,12 +24,18 @@ describe("imported hero definitions and printed starter legality", () => {
     expect(heroRuntime("31002b")?.id).toBe("spdr");
     expect(heroRuntime("ironheart")?.forms).toHaveLength(6);
     expect(heroRuntime("ant")?.forms).toHaveLength(3);
+    expect(heroRuntime("13001c")?.id).toBe("wsp");
+    expect(heroRuntime("wsp")?.forms).toHaveLength(3);
+    expect(heroRuntime("14001b")?.id).toBe("qsv");
+    expect(heroRuntime("qsv")?.forms).toHaveLength(2);
   });
   it("imported identities stay unautomated until their full runtime is installed", () => {
     expect(
       HERO_RUNTIME.filter((h) => h.scripted).map((h) => h.id),
-    ).toHaveLength(14);
+    ).toHaveLength(16);
     expect(heroRuntime("captain_america")?.scripted).toBe(true);
+    expect(heroRuntime("wsp")?.scripted).toBe(true);
+    expect(heroRuntime("qsv")?.scripted).toBe(true);
     expect(heroRuntime("daredevil")?.scripted).toBe(false);
   });
   for (const hero of HERO_RUNTIME)
@@ -124,6 +130,30 @@ describe("imported hero definitions and printed starter legality", () => {
     expect(() =>
       deckCodes("spider_woman", "aggression", ["aggression", "aggression"]),
     ).toThrow("two distinct aspects");
+  });
+  it("preserves Quicksilver's exact forty-card Protection source starter and physical retail printing quantities", () => {
+    const codes = deckCodes("qsv", "protection");
+    expect(codes).toHaveLength(40);
+    expect(codes.slice().sort()).toEqual(heroStarterCodes("qsv").sort());
+    expect(validateHeroDeck("qsv", ["protection"], codes).errors).toEqual([]);
+    const quantities = new Map<string, number>();
+    for (const code of codes)
+      quantities.set(code, (quantities.get(code) || 0) + 1);
+    expect(Object.fromEntries(quantities)).toMatchObject({
+      "14003": 4,
+      "14012": 3,
+      "14014": 3,
+      "14015": 3,
+      "14016": 2,
+      "14017": 3,
+      "14018": 1,
+      "14019": 1,
+      "14020": 1,
+      "14021": 1,
+    });
+    expect(codes.every((code) => byCode.get(code)?.pack_code === "qsv")).toBe(
+      true,
+    );
   });
   it("matching identity allies remain illegal across typographic differences in alter-ego names", () => {
     const codes = deckCodes("black_panther", "leadership");

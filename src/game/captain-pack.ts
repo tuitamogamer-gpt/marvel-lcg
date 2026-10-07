@@ -1,6 +1,8 @@
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { uniqueConflict } from "./unique.js";
+import { waspAllyTraits } from "./wasp.js";
+import { isTextBlank, textActiveState } from "./card-text.js";
 import type { Card, Effect, GameState, Option, Piece } from "./types.js";
 import type { PaymentSource } from "./payment.js";
 
@@ -149,12 +151,23 @@ export function captainPackHasTrait(
           view.player.form === "hero"
             ? view.heroId === "ant" && view.player.heroForm === "giant"
               ? "12001c"
-              : hero.code
+              : view.heroId === "wsp" && view.player.heroForm === "giant"
+                ? "13001c"
+                : hero.code
             : hero.alter,
         )
       : cards.get(inPlay(s, target)?.code || "");
   return (
     hasPrintedTrait(c, name) ||
+    (!view &&
+      inPlay(s, target) &&
+      !isTextBlank(s, inPlay(s, target)!) &&
+      waspAllyTraits(
+        textActiveState(
+          controller(s, target) ? seatView(s, controller(s, target)!) : s,
+        ),
+        inPlay(s, target)!,
+      ).some((trait) => trait.toLowerCase() === name.toLowerCase())) ||
     captainPackModifiers(s, target).traits.some(
       (trait) => trait.toLowerCase() === name.toLowerCase(),
     )
@@ -255,7 +268,7 @@ export function captainPackAllyEnter(s: GameState, p: Piece): Effect[] | null {
         E("optional", {
           title: "Falcon",
           text: "Look at the top 3 encounter cards and remove threat for each treachery?",
-          effects: [pack("falcon")],
+          effects: [pack("falcon", { source: p.id })],
         }),
       ];
     case "03013":
@@ -458,6 +471,7 @@ export function resolveCaptainPackEffect(
         [
           option("continue", "Continue", [
             pack("falcon-thwart", {
+              source: e.source,
               amount: top.filter(
                 (p) => cards.get(p.code)?.type_code === "treachery",
               ).length,
@@ -478,7 +492,7 @@ export function resolveCaptainPackEffect(
           E("target", {
             group: "scheme",
             title: "Falcon",
-            action: E("thwart", { amount: 1 }),
+            action: E("thwart", { amount: 1, source: e.source }),
           }),
         ),
       );

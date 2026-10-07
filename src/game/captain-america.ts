@@ -214,7 +214,7 @@ export function captainAllyEnter(p: Piece): Effect[] {
           effects: [
             E("target", {
               group: "scheme",
-              action: E("thwart", { amount: 2 }),
+              action: E("thwart", { amount: 2, source: p.id }),
             }),
           ],
         }),

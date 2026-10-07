@@ -193,7 +193,7 @@ export function candidates(s: GameState): Command[] {
       list.push({ type: "BASIC", action: "recover" });
   }
   if (!s.player.flipped && canChangeIdentityForm(s)) {
-    if (s.heroId === "ant") {
+    if (["ant", "wsp"].includes(s.heroId)) {
       for (const target of ["alter", "tiny", "giant"] as const)
         if (
           target !==

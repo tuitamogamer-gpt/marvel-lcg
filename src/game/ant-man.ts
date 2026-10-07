@@ -180,7 +180,7 @@ export function antManPhaseEnded(s: GameState): void {
   }
 }
 function teamUp(s: GameState): boolean {
-  if (!["ant", "ant_man", "wasp"].includes(s.heroId)) return false;
+  if (!["ant", "ant_man", "wsp", "wasp"].includes(s.heroId)) return false;
   const names = new Set(
     allInPlay(s)
       .filter((p) => definition(p)?.type_code === "ally")
@@ -189,7 +189,7 @@ function teamUp(s: GameState): boolean {
   for (const seat of playerOrder(s))
     if (seatView(s, seat).player.form === "hero") {
       if (["ant", "ant_man"].includes(seat.heroId)) names.add("Ant-Man");
-      if (seat.heroId === "wasp") names.add("Wasp");
+      if (["wsp", "wasp"].includes(seat.heroId)) names.add("Wasp");
     }
   return names.has("Ant-Man") && names.has("Wasp");
 }

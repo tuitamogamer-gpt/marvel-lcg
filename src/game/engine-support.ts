@@ -1,5 +1,9 @@
 import { ANT_MAN_SCRIPT_CODES } from "./ant-man.js";
 import { ANT_MAN_PACK_SCRIPT_CODES } from "./ant-man-pack.js";
+import { WASP_SCRIPT_CODES } from "./wasp.js";
+import { WASP_PACK_SCRIPT_CODES } from "./wasp-pack.js";
+import { QUICKSILVER_SCRIPT_CODES } from "./quicksilver.js";
+import { QUICKSILVER_PACK_SCRIPT_CODES } from "./quicksilver-pack.js";
 import { GOBLIN_MODULE_SCRIPT_CODES } from "./goblin-modules.js";
 import { BLACK_WIDOW_SCRIPT_CODES } from "./black-widow.js";
 import { DOCTOR_STRANGE_SCRIPT_CODES } from "./doctor-strange.js";
@@ -30,10 +34,16 @@ export const SCRIPTED_HERO_IDS = new Set([
   "hawkeye",
   "spider_woman",
   "ant",
+  "wsp",
+  "qsv",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ANT_MAN_SCRIPT_CODES,
   ...ANT_MAN_PACK_SCRIPT_CODES,
+  ...WASP_SCRIPT_CODES,
+  ...WASP_PACK_SCRIPT_CODES,
+  ...QUICKSILVER_SCRIPT_CODES,
+  ...QUICKSILVER_PACK_SCRIPT_CODES,
   ...CAPTAIN_AMERICA_SCRIPT_CODES,
   ...HULK_SCRIPT_CODES,
   ...CAPTAIN_PACK_SCRIPT_CODES,

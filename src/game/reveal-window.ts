@@ -69,7 +69,9 @@ export function beginRevealWindow(
     : 0;
   const pending: RevealAbilityId[] = [];
   if (
-    /<b>When Revealed(?:\s*\([^)]*\))?<\/b>\s*:/i.test(card.text || "") ||
+    /<b>When Revealed(?:\s*\([^)]*\))?\s*(?::\s*<\/b>|<\/b>\s*:)/i.test(
+      card.text || "",
+    ) ||
     /(?:^|\n)When Revealed(?:\s*\([^)]*\))?\s*:/i.test(card.text || "")
   )
     pending.push("text");

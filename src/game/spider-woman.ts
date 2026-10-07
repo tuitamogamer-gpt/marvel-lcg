@@ -340,6 +340,7 @@ export function spiderWomanAllyEnter(
       effects: [
         SW(p.code === "04040" ? "spider-girl" : "spider-man", {
           actorId,
+          source: p.id,
         }),
       ],
     }),
@@ -705,7 +706,7 @@ export function resolveSpiderWomanEffect(
             option(
               p.id,
               p.label,
-              [SW("spider-man-thwart", { target: p.id })],
+              [SW("spider-man-thwart", { target: p.id, source: e.source })],
               p.code,
             ),
           ),
@@ -721,7 +722,11 @@ export function resolveSpiderWomanEffect(
       );
       ports.queue(
         s,
-        E("thwart", { target: e.target, amount: 3 * s.playerCount }),
+        E("thwart", {
+          target: e.target,
+          amount: 3 * s.playerCount,
+          source: e.source,
+        }),
       );
       break;
     case "sw:investigator": {

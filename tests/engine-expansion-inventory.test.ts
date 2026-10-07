@@ -67,6 +67,8 @@ describe("complete expansion rules inventory", () => {
     for (const [code, faceCount] of [
       ["bkw", 34],
       ["ant", 35],
+      ["wsp", 36],
+      ["qsv", 33],
       ["drs", 40],
     ] as const) {
       expect(
@@ -78,10 +80,10 @@ describe("complete expansion rules inventory", () => {
         unsupportedFaceCodes: [],
       });
     }
-    expect(coverage.executableFaces).toBe(774);
-    expect(coverage.unsupportedFaces).toBe(3777);
-    expect(coverage.dedicatedFaces).toBe(295);
-    expect(coverage.registeredHeroIds).toHaveLength(14);
+    expect(coverage.executableFaces).toBe(834);
+    expect(coverage.unsupportedFaces).toBe(3717);
+    expect(coverage.dedicatedFaces).toBe(355);
+    expect(coverage.registeredHeroIds).toHaveLength(16);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
         coverage.registeredHeroes.some(
@@ -199,6 +201,10 @@ describe("complete expansion rules inventory", () => {
     for (const file of [
       "src/game/black-widow.ts",
       "src/game/doctor-strange.ts",
+      "src/game/wasp.ts",
+      "src/game/wasp-pack.ts",
+      "src/game/quicksilver.ts",
+      "src/game/quicksilver-pack.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",
       "src/game/payment.ts",

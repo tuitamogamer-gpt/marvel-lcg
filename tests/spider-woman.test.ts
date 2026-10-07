@@ -520,7 +520,9 @@ describe("Spider-Woman's complete Rise of Red Skull hero and starter dependency 
     const side = scheme("04055", 8);
     run(spiderWomanAllyEnter(s, man, true)![0].effects[0]);
     choose(side.id);
-    expect(s.queue).toEqual([{ type: "thwart", target: side.id, amount: 6 }]);
+    expect(s.queue).toEqual([
+      { type: "thwart", target: side.id, amount: 6, source: man.id },
+    ]);
     expect(s.queue[0].action).toBeUndefined();
   });
   it("Skilled Investigator opens independent hero-only owner responses and validates its exhaust before drawing", () => {

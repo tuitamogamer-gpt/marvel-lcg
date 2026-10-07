@@ -1,4 +1,7 @@
 import { thorResourceSources } from "./thor.js";
+import { waspPackResourceSources } from "./wasp-pack.js";
+import { quicksilverResourceSources } from "./quicksilver.js";
+import { quicksilverPackResourceSources } from "./quicksilver-pack.js";
 import { isTextBlank } from "./card-text.js";
 import { hawkeyeResourceSources } from "./hawkeye.js";
 import { spiderWomanResourceSources } from "./spider-woman.js";
@@ -86,6 +89,9 @@ export function paymentSources(
       });
   }
   sources.push(...thorResourceSources(s));
+  sources.push(...waspPackResourceSources(s));
+  sources.push(...quicksilverResourceSources(s));
+  sources.push(...quicksilverPackResourceSources(s, targetCode));
   sources.push(...hawkeyeResourceSources(s, targetCode));
   sources.push(...spiderWomanResourceSources(s, targetCode));
   sources.push(...blackWidowResourceSources(s, targetCode));

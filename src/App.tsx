@@ -696,15 +696,15 @@ export default function App() {
             ...(source ? { deckOrigin: "source" as const } : {}),
           };
         }
-        return ["hawkeye", "ant"].includes(p.heroId) && aspect === "leadership"
+        return (["hawkeye", "ant"].includes(p.heroId) &&
+          aspect === "leadership") ||
+          (p.heroId === "wsp" && aspect === "aggression") ||
+          (p.heroId === "qsv" && aspect === "protection")
           ? {
               heroId: p.heroId,
               aspect,
               deckCards: deckCodes(p.heroId, aspect),
-              deckName:
-                p.heroId === "ant"
-                  ? "Ant-Man Starter Deck"
-                  : "Hawkeye Starter Deck",
+              deckName: `${HEROES.find((h) => h.id === p.heroId)!.name} Starter Deck`,
               deckOrigin: "source" as const,
             }
           : { heroId: p.heroId, aspect };
@@ -4507,7 +4507,7 @@ function Tabletop({
                 <div className="identity-info">
                   <span className="small-label">
                     {s.player.form === "hero"
-                      ? s.heroId === "ant"
+                      ? ["ant", "wsp"].includes(s.heroId)
                         ? `${(s.player.heroForm || "tiny").toUpperCase()} HERO`
                         : "YOUR HERO"
                       : "YOUR ALTER-EGO"}
@@ -4599,7 +4599,7 @@ function Tabletop({
                     </span>
                     <span className="hero-form-copy">
                       <strong>
-                        {s.heroId === "ant"
+                        {["ant", "wsp"].includes(s.heroId)
                           ? "Change form"
                           : s.player.form === "hero"
                             ? `Become ${h.identity}`

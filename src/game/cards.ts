@@ -1,4 +1,8 @@
 import { antManStats } from "./ant-man.js";
+import { waspStats, waspHeroTraits, waspEnemyHP } from "./wasp.js";
+import { waspPackAllyHP } from "./wasp-pack.js";
+import { quicksilverStats } from "./quicksilver.js";
+import { quicksilverPackHeroStatBonus } from "./quicksilver-pack.js";
 import {
   antManPackAllyHP,
   antManPackStats,
@@ -295,6 +299,34 @@ export const HEROES = [
     style: "Three forms · Leadership",
     complexity: 3,
   },
+  {
+    id: "wsp",
+    code: "13001a",
+    alter: "13001b",
+    name: "Wasp",
+    identity: "Nadia van Dyne",
+    aspect: "aggression" as Aspect,
+    color: "#d9af43",
+    tag: "Small but mighty.",
+    description:
+      "Strike precisely in Tiny form, or grow Giant to divide one basic attack or thwart among several targets.",
+    style: "Three forms · Precision",
+    complexity: 3,
+  },
+  {
+    id: "qsv",
+    code: "14001a",
+    alter: "14001b",
+    name: "Quicksilver",
+    identity: "Pietro Maximoff",
+    aspect: "protection" as Aspect,
+    color: "#49a7c9",
+    tag: "Super speed. Look it up.",
+    description:
+      "Ready after a basic power, build your speed, and protect the team with repeated defenses.",
+    style: "Ready effects · Protection",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -476,6 +508,8 @@ export function deckCodes(
   if (
     sourceStarter &&
     (((hero === "hawkeye" || hero === "ant") && aspect === "leadership") ||
+      (hero === "wsp" && aspect === "aggression") ||
+      (hero === "qsv" && aspect === "protection") ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
         pair.includes("aggression") &&
@@ -539,8 +573,9 @@ export function resources(c: Card, target?: Card): Resource[] {
   for (const k of ["energy", "mental", "physical", "wild"] as Resource[])
     r.push(...Array(c[`resource_${k}`] || 0).fill(k));
   if (
-    c.name.startsWith("The Power of ") &&
-    target?.faction_code === c.faction_code
+    (c.name.startsWith("The Power of ") &&
+      target?.faction_code === c.faction_code) ||
+    (c.name === "The Power in All of Us" && target?.faction_code === "basic")
   )
     r = r.concat(r);
   return r;
@@ -549,6 +584,8 @@ export function heroCard(s: GameState) {
   const h = HEROES.find((h) => h.id === s.heroId)!;
   if (s.heroId === "ant" && s.player.form === "hero")
     return card(s.player.heroForm === "giant" ? "12001c" : "12001a");
+  if (s.heroId === "wsp" && s.player.form === "hero")
+    return card(s.player.heroForm === "giant" ? "13001c" : "13001a");
   return card(s.player.form === "hero" ? h.code : h.alter);
 }
 export function has(s: GameState, code: string) {
@@ -576,12 +613,13 @@ export function aerial(s: GameState) {
     (s.player.form === "hero" &&
       (has(s, "01017") || !!s.flags.aerial || thorStats(s).aerial)) ||
     doctorStrangeTraits(s).includes("Aerial") ||
-    spiderWomanHasAerial(s)
+    spiderWomanHasAerial(s) ||
+    waspHeroTraits(textActiveState(s)).includes("Aerial")
   );
 }
 export function heroStats(s: GameState) {
   const h =
-    s.heroId === "ant" && s.player.form === "hero"
+    ["ant", "wsp"].includes(s.heroId) && s.player.form === "hero"
       ? heroCard(s)
       : card(HEROES.find((h) => h.id === s.heroId)!.code);
   s = textActiveState(s);
@@ -598,6 +636,9 @@ export function heroStats(s: GameState) {
       doctorStrangeStats(s).attack +
       hawkeyeStats(s).atk +
       antManStats(s).attack +
+      waspStats(s).attack +
+      quicksilverStats(s).attack +
+      quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
       spiderWomanStats(s).attack +
       captainPackStats(s).attack,
@@ -610,6 +651,9 @@ export function heroStats(s: GameState) {
       doctorStrangeStats(s).thwart +
       spiderWomanStats(s).thwart +
       antManPackStats(s).thwart +
+      waspStats(s).thwart +
+      quicksilverStats(s).thwart +
+      quicksilverPackHeroStatBonus(s, "thwart") +
       scriptedModifier(s, "thwart") +
       captainPackStats(s).thwart,
     defense:
@@ -622,6 +666,8 @@ export function heroStats(s: GameState) {
       doctorStrangeStats(s).defense +
       spiderWomanStats(s).defense +
       antManPackStats(s).defense +
+      quicksilverStats(s).defense +
+      quicksilverPackHeroStatBonus(s, "defense") +
       scriptedModifier(s, "defense"),
     recover:
       card(HEROES.find((h) => h.id === s.heroId)!.alter).recover! +
@@ -666,6 +712,8 @@ export function pieceHP(s: GameState, p: Piece) {
     scriptedModifier(s, "health", p) +
     hawkeyeAllyMaxHP(s, p) +
     antManPackAllyHP(s, p) +
+    waspPackAllyHP(s, p) +
+    waspEnemyHP(s, p) +
     captainPackModifiers(textActiveState(s), p.id).hp
   );
 }
