@@ -45,6 +45,9 @@ const heroIds = [
   "ant",
   "wsp",
   "qsv",
+  "scw",
+  "groot",
+  "rocket",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -186,6 +189,7 @@ function runMission(config: (typeof missions)[number]) {
       ][0];
       if (identity)
         act({ type: "ABILITY", id: "identity", action: identity.id });
+      if (ended(s)) break;
       if (!s.player.flipped && canChangeIdentityForm(s)) act({ type: "FLIP" });
     }
     for (let actions = 0; actions < 8 && !ended(s); actions++) {
@@ -260,14 +264,14 @@ function runMission(config: (typeof missions)[number]) {
 }
 
 describe("published expansion starters across every supported mission setting", () => {
-  it("covers eleven expansion heroes, all scenarios, both difficulties and every supported encounter module", () => {
+  it("covers fourteen expansion heroes, all scenarios, both difficulties and every supported encounter module", () => {
     expect(missions).toHaveLength(
       heroIds.length * VILLAINS.length * 2 * MODULES.length,
     );
     expect(VILLAINS).toHaveLength(5);
     expect(MODULES).toHaveLength(9);
-    expect(heroIds).toHaveLength(11);
-    expect(missions).toHaveLength(990);
+    expect(heroIds).toHaveLength(14);
+    expect(missions).toHaveLength(1260);
   });
   for (const mission of missions)
     it(

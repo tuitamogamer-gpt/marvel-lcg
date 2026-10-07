@@ -130,6 +130,7 @@ import {
   canChangeIdentityForm,
 } from "./game/engine";
 import { seatView, upgradeSave } from "./game/team";
+import { grootGrowthCounters } from "./game/groot";
 import { effectTitle } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
 import type { PaymentSource } from "./game/payment";
@@ -699,7 +700,8 @@ export default function App() {
         return (["hawkeye", "ant"].includes(p.heroId) &&
           aspect === "leadership") ||
           (p.heroId === "wsp" && aspect === "aggression") ||
-          (p.heroId === "qsv" && aspect === "protection")
+          (p.heroId === "qsv" && aspect === "protection") ||
+          (p.heroId === "scw" && aspect === "justice")
           ? {
               heroId: p.heroId,
               aspect,
@@ -3066,7 +3068,7 @@ function StatToken({
   label,
   compact = false,
 }: {
-  kind: "health" | "threat" | "attack" | "defense";
+  kind: "health" | "threat" | "attack" | "defense" | "counter";
   value: number;
   max?: number;
   label: string;
@@ -4550,6 +4552,16 @@ function Tabletop({
                     )}
                   </div>
                   <Status piece={s.player} />
+                  {s.heroId === "groot" && (
+                    <div className="identity-stats stat-row">
+                      <StatToken
+                        kind="counter"
+                        value={grootGrowthCounters(s)}
+                        label="GROWTH"
+                        compact
+                      />
+                    </div>
+                  )}
                   <p className="identity-power">{plain(heroCard(s).text)}</p>
                   {abilityActive && (
                     <button
@@ -4748,7 +4760,15 @@ function Tabletop({
                                       ? "ARROWS"
                                       : p.code === "01018"
                                         ? "ENERGY"
-                                        : "USES"}
+                                        : [
+                                              "16034",
+                                              "16036",
+                                              "16037",
+                                              "16038",
+                                              "16046",
+                                            ].includes(p.code)
+                                          ? "CHARGES"
+                                          : "USES"}
                                   </small>
                                 </span>
                               )}

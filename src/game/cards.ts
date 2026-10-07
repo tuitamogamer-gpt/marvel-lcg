@@ -3,6 +3,7 @@ import { waspStats, waspHeroTraits, waspEnemyHP } from "./wasp.js";
 import { waspPackAllyHP } from "./wasp-pack.js";
 import { quicksilverStats } from "./quicksilver.js";
 import { quicksilverPackHeroStatBonus } from "./quicksilver-pack.js";
+import { rocketStats, rocketMaxHpBonus, rocketHeroTraits } from "./rocket.js";
 import {
   antManPackAllyHP,
   antManPackStats,
@@ -327,6 +328,48 @@ export const HEROES = [
     style: "Ready effects · Protection",
     complexity: 3,
   },
+  {
+    id: "scw",
+    code: "15001a",
+    alter: "15001b",
+    name: "Scarlet Witch",
+    identity: "Wanda Maximoff",
+    aspect: "justice" as Aspect,
+    color: "#c61d22",
+    tag: "Change the odds.",
+    description:
+      "Control boost icons, cast unpredictable spells, and keep the villain's plans in check.",
+    style: "Chaos magic · Justice",
+    complexity: 3,
+  },
+  {
+    id: "groot",
+    code: "16001a",
+    alter: "16001b",
+    name: "Groot",
+    identity: "Groot",
+    aspect: "protection" as Aspect,
+    color: "#729b57",
+    tag: "I am Groot.",
+    description:
+      "Grow counters to absorb damage, protect your friends, and power your strongest attacks and thwarts.",
+    style: "Growth counters · Protection",
+    complexity: 3,
+  },
+  {
+    id: "rocket",
+    code: "16029a",
+    alter: "16029b",
+    name: "Rocket Raccoon",
+    identity: "Rocket Raccoon",
+    aspect: "aggression" as Aspect,
+    color: "#c58045",
+    tag: "A weapon for every problem.",
+    description:
+      "Build a Tech arsenal, move charge counters between upgrades, and profit from excess damage.",
+    style: "Tech upgrades · Aggression",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -510,6 +553,9 @@ export function deckCodes(
     (((hero === "hawkeye" || hero === "ant") && aspect === "leadership") ||
       (hero === "wsp" && aspect === "aggression") ||
       (hero === "qsv" && aspect === "protection") ||
+      (hero === "scw" && aspect === "justice") ||
+      (hero === "groot" && aspect === "protection") ||
+      (hero === "rocket" && aspect === "aggression") ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
         pair.includes("aggression") &&
@@ -605,6 +651,7 @@ export function maxHP(s: GameState) {
     scriptedModifier(s, "health") +
     hulkStats(s).health +
     msMarvelStats(s).health +
+    rocketMaxHpBonus(s) +
     captainPackModifiers(s, "hero").hp
   );
 }
@@ -614,6 +661,7 @@ export function aerial(s: GameState) {
       (has(s, "01017") || !!s.flags.aerial || thorStats(s).aerial)) ||
     doctorStrangeTraits(s).includes("Aerial") ||
     spiderWomanHasAerial(s) ||
+    rocketHeroTraits(s).includes("Aerial") ||
     waspHeroTraits(textActiveState(s)).includes("Aerial")
   );
 }
@@ -638,6 +686,7 @@ export function heroStats(s: GameState) {
       antManStats(s).attack +
       waspStats(s).attack +
       quicksilverStats(s).attack +
+      rocketStats(s).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
       spiderWomanStats(s).attack +
@@ -653,6 +702,7 @@ export function heroStats(s: GameState) {
       antManPackStats(s).thwart +
       waspStats(s).thwart +
       quicksilverStats(s).thwart +
+      rocketStats(s).thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
       scriptedModifier(s, "thwart") +
       captainPackStats(s).thwart,

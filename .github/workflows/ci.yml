@@ -25,7 +25,7 @@ jobs:
   browser:
     name: Browser flow (Chromium)
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 55
     needs: verify
     steps:
       - uses: actions/checkout@v4
@@ -68,6 +68,12 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:5174
       - run: npm run test:quicksilver
+        env:
+          BASE_URL: http://127.0.0.1:5174
+      - run: npm run test:scarlet-witch
+        env:
+          BASE_URL: http://127.0.0.1:5174
+      - run: npm run test:gmw-heroes
         env:
           BASE_URL: http://127.0.0.1:5174
       - uses: actions/upload-artifact@v4

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import catalogCards from "../src/data/catalog-cards.json";
 import { deckCodes } from "../src/game/cards";
+import { rulesCode } from "../src/game/rules-code";
 import {
   HERO_RUNTIME,
   heroRuntime,
@@ -28,14 +29,23 @@ describe("imported hero definitions and printed starter legality", () => {
     expect(heroRuntime("wsp")?.forms).toHaveLength(3);
     expect(heroRuntime("14001b")?.id).toBe("qsv");
     expect(heroRuntime("qsv")?.forms).toHaveLength(2);
+    expect(heroRuntime("15001b")?.id).toBe("scw");
+    expect(heroRuntime("scw")?.forms).toHaveLength(2);
+    expect(heroRuntime("16001b")?.id).toBe("groot");
+    expect(heroRuntime("groot")?.forms).toHaveLength(2);
+    expect(heroRuntime("16029b")?.id).toBe("rocket");
+    expect(heroRuntime("rocket")?.forms).toHaveLength(2);
   });
   it("imported identities stay unautomated until their full runtime is installed", () => {
     expect(
       HERO_RUNTIME.filter((h) => h.scripted).map((h) => h.id),
-    ).toHaveLength(16);
+    ).toHaveLength(19);
     expect(heroRuntime("captain_america")?.scripted).toBe(true);
     expect(heroRuntime("wsp")?.scripted).toBe(true);
     expect(heroRuntime("qsv")?.scripted).toBe(true);
+    expect(heroRuntime("scw")?.scripted).toBe(true);
+    expect(heroRuntime("groot")?.scripted).toBe(true);
+    expect(heroRuntime("rocket")?.scripted).toBe(true);
     expect(heroRuntime("daredevil")?.scripted).toBe(false);
   });
   for (const hero of HERO_RUNTIME)
@@ -154,6 +164,201 @@ describe("imported hero definitions and printed starter legality", () => {
     expect(codes.every((code) => byCode.get(code)?.pack_code === "qsv")).toBe(
       true,
     );
+  });
+  it("preserves Scarlet Witch's exact forty-card Justice source starter and physical retail printing quantities", () => {
+    const codes = deckCodes("scw", "justice");
+    expect(codes).toHaveLength(40);
+    expect(codes.slice().sort()).toEqual(heroStarterCodes("scw").sort());
+    expect(validateHeroDeck("scw", ["justice"], codes).errors).toEqual([]);
+    const quantities = new Map<string, number>();
+    for (const code of codes)
+      quantities.set(code, (quantities.get(code) || 0) + 1);
+    expect(Object.fromEntries(quantities)).toEqual({
+      "15002": 1,
+      "15003": 1,
+      "15004": 4,
+      "15005": 3,
+      "15006": 1,
+      "15007": 1,
+      "15008": 3,
+      "15009": 1,
+      "15010": 1,
+      "15011": 1,
+      "15012": 3,
+      "15013": 3,
+      "15014": 3,
+      "15015": 3,
+      "15016": 2,
+      "15017": 2,
+      "15018": 1,
+      "15019": 3,
+      "15020": 1,
+      "15021": 1,
+      "15022": 1,
+    });
+    expect(codes.every((code) => byCode.get(code)?.pack_code === "scw")).toBe(
+      true,
+    );
+    expect(byCode.get("15001a")).toMatchObject({
+      health: 10,
+      attack: 1,
+      thwart: 2,
+      defense: 2,
+      hand_size: 5,
+      traits: "Avenger. Mystic.",
+    });
+    expect(byCode.get("15001b")).toMatchObject({
+      recover: 3,
+      hand_size: 6,
+      traits: "Mystic.",
+    });
+  });
+  it("uses only whole-equivalent Core handlers for Scarlet Witch's five retail reprints", () => {
+    expect(
+      Object.fromEntries(
+        ["15016", "15017", "15020", "15021", "15022"].map((code) => [
+          code,
+          rulesCode(code),
+        ]),
+      ),
+    ).toEqual({
+      "15016": "01062",
+      "15017": "01065",
+      "15020": "01088",
+      "15021": "01089",
+      "15022": "01090",
+    });
+  });
+  for (const { id, aspect, quantities } of [
+    {
+      id: "groot",
+      aspect: "protection" as const,
+      quantities: {
+        "16002": 2,
+        "16003": 2,
+        "16004": 2,
+        "16005": 3,
+        "16006": 1,
+        "16007": 1,
+        "16008": 1,
+        "16009": 1,
+        "16010": 1,
+        "16011": 1,
+        "16012": 1,
+        "16013": 3,
+        "16014": 3,
+        "16015": 2,
+        "16016": 3,
+        "16017": 3,
+        "16018": 2,
+        "16019": 1,
+        "16020": 1,
+        "16021": 1,
+        "16022": 1,
+        "16023": 1,
+        "16024": 3,
+      },
+    },
+    {
+      id: "rocket",
+      aspect: "aggression" as const,
+      quantities: {
+        "16030": 2,
+        "16031": 2,
+        "16032": 1,
+        "16033": 2,
+        "16034": 2,
+        "16035": 1,
+        "16036": 1,
+        "16037": 1,
+        "16038": 2,
+        "16039": 1,
+        "16040": 1,
+        "16041": 2,
+        "16042": 3,
+        "16043": 3,
+        "16044": 2,
+        "16045": 3,
+        "16046": 3,
+        "16047": 1,
+        "16048": 1,
+        "16049": 1,
+        "16050": 1,
+        "16051": 1,
+        "16052": 3,
+      },
+    },
+  ])
+    it(`preserves ${id}'s exact forty-card GMW source starter and physical printing quantities`, () => {
+      const codes = deckCodes(id, aspect);
+      expect(codes).toHaveLength(40);
+      expect(codes.slice().sort()).toEqual(heroStarterCodes(id).sort());
+      expect(validateHeroDeck(id, [aspect], codes).errors).toEqual([]);
+      const actual: Record<string, number> = {};
+      for (const code of codes) actual[code] = (actual[code] || 0) + 1;
+      expect(actual).toEqual(quantities);
+      expect(codes.every((code) => byCode.get(code)?.pack_code === "gmw")).toBe(
+        true,
+      );
+    });
+  it("uses the ten exact Core GMW player reprints without aliasing new operative clauses", () => {
+    const aliases = {
+      "16015": "01079",
+      "16018": "01082",
+      "16021": "01088",
+      "16022": "01089",
+      "16023": "01090",
+      "16041": "01052",
+      "16044": "01053",
+      "16049": "01088",
+      "16050": "01089",
+      "16051": "01090",
+    };
+    expect(
+      Object.fromEntries(
+        Object.keys(aliases).map((code) => [code, rulesCode(code)]),
+      ),
+    ).toEqual(aliases);
+    for (const code of [
+      "16012",
+      "16013",
+      "16014",
+      "16016",
+      "16019",
+      "16024",
+      "16042",
+      "16043",
+      "16052",
+    ])
+      expect(rulesCode(code)).toBe(code);
+  });
+  it("keeps Guardian eligibility tied to the two actual hero faces", () => {
+    expect(byCode.get("16001a")).toMatchObject({
+      health: 10,
+      attack: 2,
+      thwart: 1,
+      defense: 3,
+      hand_size: 5,
+      traits: "Guardian.",
+    });
+    expect(byCode.get("16001b")).toMatchObject({
+      recover: 4,
+      hand_size: 6,
+      traits: "Outlaw.",
+    });
+    expect(byCode.get("16029a")).toMatchObject({
+      health: 9,
+      attack: 1,
+      thwart: 2,
+      defense: 1,
+      hand_size: 5,
+      traits: "Guardian.",
+    });
+    expect(byCode.get("16029b")).toMatchObject({
+      recover: 3,
+      hand_size: 6,
+      traits: "Genius. Outlaw.",
+    });
   });
   it("matching identity allies remain illegal across typographic differences in alter-ego names", () => {
     const codes = deckCodes("black_panther", "leadership");

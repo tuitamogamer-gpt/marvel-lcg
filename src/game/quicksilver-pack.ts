@@ -34,6 +34,7 @@ const own = (s: GameState, id: string, code?: string) =>
     (p) => p.id === id && (!code || p.code === code) && !isTextBlank(s, p),
   );
 const traits = (c?: Card) => (c?.traits || "").split(/\.\s*/).filter(Boolean);
+const orderAndChaosCodes = ["14018", "15018"];
 
 export const QUICKSILVER_PACK_CORE_ALIASES = [
   "14016",
@@ -221,7 +222,7 @@ export function quicksilverPackPlayRestriction(
   p: Piece,
   ports: QuicksilverPackPorts,
 ): string | null {
-  if (["14014", "14015", "14018"].includes(p.code))
+  if (["14014", "14015", ...orderAndChaosCodes].includes(p.code))
     return "Available automatically during its interrupt window.";
   if (["14017", "14030"].includes(p.code) && !controlSeats(s, p).length)
     return cards.get(p.code)!.name + " is limited to 1 per player.";
@@ -259,6 +260,7 @@ export function quicksilverPackEvent(
       return [pack("never-bonus")];
     case "14015":
     case "14018":
+    case "15018":
       return [];
     case "14031":
       return [
@@ -427,7 +429,7 @@ export function quicksilverPackEncounterOptions(
   return s.player.hand
     .filter(
       (event) =>
-        event.code === "14018" &&
+        orderAndChaosCodes.includes(event.code) &&
         ports.canPay(s, ports.cardCost(s, event), event.id, event.code),
     )
     .map((event) =>
@@ -681,7 +683,9 @@ export function resolveQuicksilverPackEffect(
       break;
     }
     case "quicksilver-pack:order-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "14018");
+      const p = s.player.hand.find(
+        (p) => p.id === e.id && orderAndChaosCodes.includes(p.code),
+      );
       need(
         p &&
           quicksilverPackEncounterOptions(

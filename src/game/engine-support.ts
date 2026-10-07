@@ -4,6 +4,11 @@ import { WASP_SCRIPT_CODES } from "./wasp.js";
 import { WASP_PACK_SCRIPT_CODES } from "./wasp-pack.js";
 import { QUICKSILVER_SCRIPT_CODES } from "./quicksilver.js";
 import { QUICKSILVER_PACK_SCRIPT_CODES } from "./quicksilver-pack.js";
+import { SCARLET_WITCH_SCRIPT_CODES } from "./scarlet-witch.js";
+import { SCARLET_WITCH_PACK_SCRIPT_CODES } from "./scarlet-witch-pack.js";
+import { GROOT_SCRIPT_CODES } from "./groot.js";
+import { ROCKET_SCRIPT_CODES } from "./rocket.js";
+import { GMW_PLAYER_PACK_SCRIPT_CODES } from "./gmw-player-pack.js";
 import { GOBLIN_MODULE_SCRIPT_CODES } from "./goblin-modules.js";
 import { BLACK_WIDOW_SCRIPT_CODES } from "./black-widow.js";
 import { DOCTOR_STRANGE_SCRIPT_CODES } from "./doctor-strange.js";
@@ -36,6 +41,9 @@ export const SCRIPTED_HERO_IDS = new Set([
   "ant",
   "wsp",
   "qsv",
+  "scw",
+  "groot",
+  "rocket",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ANT_MAN_SCRIPT_CODES,
@@ -44,6 +52,11 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...WASP_PACK_SCRIPT_CODES,
   ...QUICKSILVER_SCRIPT_CODES,
   ...QUICKSILVER_PACK_SCRIPT_CODES,
+  ...SCARLET_WITCH_SCRIPT_CODES,
+  ...SCARLET_WITCH_PACK_SCRIPT_CODES,
+  ...GROOT_SCRIPT_CODES,
+  ...ROCKET_SCRIPT_CODES,
+  ...GMW_PLAYER_PACK_SCRIPT_CODES,
   ...CAPTAIN_AMERICA_SCRIPT_CODES,
   ...HULK_SCRIPT_CODES,
   ...CAPTAIN_PACK_SCRIPT_CODES,

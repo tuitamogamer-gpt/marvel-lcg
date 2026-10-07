@@ -610,6 +610,41 @@ describe("Quicksilver identity and signature runtime", () => {
     expect(s.player.exhausted).toBe(false);
     expect(ports.discardEncounterTop).toHaveBeenCalledOnce();
   });
+  it("Scarlet Witch awaits native boost counting with the original exhausted ally and saved basic power", () => {
+    const { s, ports, resolve } = fixture();
+    const witch = piece("14002", { exhausted: true }),
+      encounter = piece("01118");
+    s.player.inPlay.push(witch);
+    s.encounter.deck.push(encounter, piece("01123"));
+    const after = [
+      {
+        type: "allyAction",
+        id: witch.id,
+        kind: "attack",
+        amount: 1,
+        target: s.villain.id,
+        qsvHandled: true,
+      },
+    ];
+    ports.countBoostIcons = vi.fn();
+    resolve(Q("scarlet", { id: witch.id, power: "attack", after }));
+    expect(ports.countBoostIcons).toHaveBeenCalledExactlyOnceWith(
+      s,
+      [encounter],
+      [Q("scarlet-counted", { after })],
+    );
+    expect(s.queue).toEqual([]);
+    expect(witch.exhausted).toBe(true);
+    expect(s.encounter.discard).toEqual([encounter]);
+    expect(ports.discardEncounterTop).toHaveBeenCalledOnce();
+    const continuation = JSON.parse(
+      JSON.stringify(Q("scarlet-counted", { after, boostTotal: 4 })),
+    );
+    resolve(continuation);
+    expect(s.queue).toEqual([{ ...after[0], amount: 5 }]);
+    expect(witch.exhausted).toBe(true);
+    expect(ports.discardEncounterTop).toHaveBeenCalledOnce();
+  });
   it("Scarlet Witch's canceled basic power never opens its interrupt", () => {
     const { s, ports } = fixture();
     const witch = piece("14002", { stunned: true, confused: true });

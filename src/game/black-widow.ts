@@ -134,6 +134,9 @@ export interface BlackWidowPorts {
    * clauses and all attack aftermath) before after. Overrides event-wide scope. */
   attackProgram(s: GameState, effects: Effect[], after: Effect[]): void;
   numericBoostIcons(s: GameState, id: string): number;
+  /** Finish numeric-count interrupts for this actual boost face before after.
+   * The host retains the effective count for cancelBoostIcons to consume. */
+  countBoostIcons?(s: GameState, id: string, after: Effect[]): void;
   cancelBoostIcons(s: GameState, id: string): number;
   hasBoostAbility(s: GameState, id: string): boolean;
   cancelBoostAbility(s: GameState, id: string): void;
@@ -838,6 +841,16 @@ export function resolveBlackWidowEffect(
       const after = blackWidowPreparationResolved(s, p!, e.after || []);
       switch (e.kind) {
         case "attacrobatics": {
+          if (ports.countBoostIcons) {
+            ports.countBoostIcons(s, e.boostId, [
+              B("attacrobatics", {
+                boostId: e.boostId,
+                after,
+                actorId: s.activePlayerId,
+              }),
+            ]);
+            break;
+          }
           const cancelled = ports.cancelBoostIcons(s, e.boostId);
           ports.attackProgram(
             s,
@@ -926,6 +939,22 @@ export function resolveBlackWidowEffect(
         default:
           throw Error(`Unknown Preparation: ${e.kind}`);
       }
+      break;
+    }
+    case "bw:attacrobatics": {
+      const cancelled = ports.cancelBoostIcons(s, e.boostId);
+      ports.attackProgram(
+        s,
+        [
+          E("damage", {
+            target: s.villain.id,
+            amount: cancelled,
+            source: "hero",
+            attack: true,
+          }),
+        ],
+        e.after || [],
+      );
       break;
     }
     case "bw:replacement":

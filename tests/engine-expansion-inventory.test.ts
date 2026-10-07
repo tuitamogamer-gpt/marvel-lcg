@@ -69,6 +69,7 @@ describe("complete expansion rules inventory", () => {
       ["ant", 35],
       ["wsp", 36],
       ["qsv", 33],
+      ["scw", 32],
       ["drs", 40],
     ] as const) {
       expect(
@@ -80,10 +81,37 @@ describe("complete expansion rules inventory", () => {
         unsupportedFaceCodes: [],
       });
     }
-    expect(coverage.executableFaces).toBe(834);
-    expect(coverage.unsupportedFaces).toBe(3717);
-    expect(coverage.dedicatedFaces).toBe(355);
-    expect(coverage.registeredHeroIds).toHaveLength(16);
+    const gmw = coverage.products.find(
+      (pack: { code: string }) => pack.code === "gmw",
+    );
+    expect(gmw).toMatchObject({
+      faceCount: 207,
+      executableFaces: 60,
+      installedCardClosure: false,
+    });
+    expect(gmw.unsupportedFaceCodes).toHaveLength(147);
+    expect(gmw.unsupportedFaceCodes).toContain("16058");
+    const gmwPlayerFaces = cards.filter(
+      (entry: { pack_code: string; position: number }) =>
+        entry.pack_code === "gmw" && entry.position <= 57,
+    );
+    expect(gmwPlayerFaces).toHaveLength(59);
+    for (const entry of gmwPlayerFaces)
+      expect(gmw.unsupportedFaceCodes, entry.code).not.toContain(entry.code);
+    for (const id of ["groot", "rocket"])
+      expect(
+        inventory.heroes.find(
+          (hero: { id: string }) => hero.id === `gmw:${id}`,
+        ),
+      ).toMatchObject({
+        registeredHeroIds: [id],
+        installedCardClosure: true,
+        installedUnsupportedDependencies: [],
+      });
+    expect(coverage.executableFaces).toBe(910);
+    expect(coverage.unsupportedFaces).toBe(3641);
+    expect(coverage.dedicatedFaces).toBe(431);
+    expect(coverage.registeredHeroIds).toHaveLength(19);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
         coverage.registeredHeroes.some(
@@ -205,6 +233,11 @@ describe("complete expansion rules inventory", () => {
       "src/game/wasp-pack.ts",
       "src/game/quicksilver.ts",
       "src/game/quicksilver-pack.ts",
+      "src/game/scarlet-witch.ts",
+      "src/game/scarlet-witch-pack.ts",
+      "src/game/groot.ts",
+      "src/game/rocket.ts",
+      "src/game/gmw-player-pack.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",
       "src/game/payment.ts",

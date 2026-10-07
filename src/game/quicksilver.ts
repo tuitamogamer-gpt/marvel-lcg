@@ -44,6 +44,9 @@ export interface QuicksilverPorts extends AntManPorts {
   /** Discard the actual top card, reveal hidden information, and immediately
    * recycle an exhausted encounter deck. No boost ability is resolved. */
   discardEncounterTop(s: GameState): { piece?: Piece; emptied: boolean };
+  /** Count the already-discarded physical cards through native boost-icon
+   * interrupts, then resume each saved effect with its boostTotal. */
+  countBoostIcons?(s: GameState, pieces: Piece[], after: Effect[]): void;
 }
 export const QUICKSILVER_SCRIPT_CODES = [
   "14001a",
@@ -322,8 +325,9 @@ export function quicksilverCyclonePaymentOptions(
   return options;
 }
 
-/** The host passes the selected-target basic continuation. Only printed dots
- * modify this one power: star abilities and Amplify are not counted. */
+/** The host passes the selected-target basic continuation. Numeric boost icons
+ * modify this one power; star abilities and Amplify are not counted. Native
+ * count interrupts may modify that count before the basic power resumes. */
 export function quicksilverBeforeAllyBasic(
   s: GameState,
   p: Piece,
@@ -712,6 +716,12 @@ export function resolveQuicksilverEffect(
         "Scarlet Witch's basic interrupt is unavailable.",
       );
       const discarded = ports.discardEncounterTop(s).piece;
+      if (ports.countBoostIcons) {
+        ports.countBoostIcons(s, discarded ? [discarded] : [], [
+          Q("scarlet-counted", { after: e.after }),
+        ]);
+        break;
+      }
       const bonus = discarded ? definition(discarded)?.boost || 0 : 0;
       ports.queue(
         s,
@@ -722,6 +732,15 @@ export function resolveQuicksilverEffect(
       );
       break;
     }
+    case "qsv:scarlet-counted":
+      ports.queue(
+        s,
+        ...e.after.map((action: Effect) => ({
+          ...action,
+          amount: Number(action.amount || 0) + Number(e.boostTotal || 0),
+        })),
+      );
+      break;
     case "qsv:obligation":
       need(
         active(s) && e.piece?.code === "14024",

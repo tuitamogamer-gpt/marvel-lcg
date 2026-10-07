@@ -6,7 +6,7 @@ import {
   paymentSources,
 } from "../src/game/engine";
 import { paymentStatus } from "../src/game/payment";
-import { boardSnapshot, recordReview } from "../src/game/review";
+import { boardSnapshot, mergeReviews, recordReview } from "../src/game/review";
 import { attachmentsFor } from "../src/game/presentation";
 import type { Command, Effect, GameState } from "../src/game/types";
 
@@ -315,5 +315,78 @@ describe("visible encounters and boosts", () => {
     const total = s.review!.calculation!.total;
     s = send(JSON.parse(JSON.stringify(s)), { type: "PROCEED" });
     expect(s.player.hp).toBe(hp - total);
+  });
+  it("uses committed numeric counts and canceled zero counts for distinct copies of the same boost printing", () => {
+    const s = game();
+    attack(s);
+    const first = makePiece(s, "01101"),
+      second = makePiece(s, "01101");
+    s.attack!.boostCodes = [first.code, second.code];
+    s.attack!.boostIds = [first.id, second.id];
+    s.attack!.boostValues = { [first.id]: 4, [second.id]: 0 };
+    s.attack!.base = 6;
+    s.attack!.defense = 1;
+    s.attack!.prevented = 1;
+    recordReview(s, boardSnapshot(s), { type: "damageWindow" });
+    expect(s.review?.calculation).toMatchObject({
+      parts: [
+        { label: "Base ATK", value: 2 },
+        { label: "Boost", value: 4 },
+        { label: "DEF", value: -1 },
+        { label: "Prevented", value: -1 },
+      ],
+      total: 4,
+    });
+    s.scheming = {
+      attacker: s.villain.id,
+      boostCodes: [first.code, second.code],
+      boostIds: [first.id, second.id],
+      boostValues: { [first.id]: 4, [second.id]: 0 },
+      pendingBoosts: [],
+    };
+    recordReview(s, boardSnapshot(s), { type: "finishScheme" });
+    expect(s.review?.calculation).toMatchObject({
+      unit: "threat",
+      parts: [
+        { label: "Base SCH", value: 1 },
+        { label: "Boost", value: 4 },
+      ],
+      total: 5,
+    });
+  });
+  it("updates the original boost card's visible count after native counting and preserves that label when it is discarded", () => {
+    const s = game();
+    attack(s);
+    const boost = makePiece(s, "01101");
+    s.attack!.boostCodes = [boost.code];
+    s.attack!.boostIds = [boost.id];
+    s.attack!.boostValues = { [boost.id]: 0 };
+    const before = boardSnapshot(s);
+    recordReview(s, before, { type: "scarletBoostCounted", id: boost.id });
+    expect(s.review?.cards).toContainEqual(
+      expect.objectContaining({
+        id: boost.id,
+        code: boost.code,
+        kind: "boost",
+        label: "+0 boost",
+      }),
+    );
+    const counted = s.review!;
+    const previous = {
+      ...counted,
+      cards: counted.cards!.map((p) => ({ ...p, label: "+1 boost" })),
+    };
+    const merged = mergeReviews(previous, counted);
+    expect(merged.cards?.[0].label).toBe("+0 boost");
+    expect(
+      mergeReviews(merged, {
+        ...counted,
+        cards: counted.cards!.map((p) => ({
+          ...p,
+          kind: "discarded" as const,
+          label: "Discarded",
+        })),
+      }).cards?.[0],
+    ).toMatchObject({ id: boost.id, kind: "boost", label: "+0 boost" });
   });
 });

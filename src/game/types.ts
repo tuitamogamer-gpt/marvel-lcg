@@ -121,6 +121,11 @@ export interface Prompt {
   selectAction?: Effect;
 }
 export interface Attack {
+  /** Flora Colossus applies once to each incoming identity damage packet. */
+  grootDamageHandled?: boolean;
+  grootOverkillHandled?: boolean;
+  /** The declared defender returned to hand before its damage was placed. */
+  gmwReturnedDefender?: string;
   /** Printed boost grants and whole-attack prevention survive defender choice. */
   piercing?: boolean;
   preventAllDamage?: boolean;
@@ -143,6 +148,8 @@ export interface Attack {
   attacker: string;
   base: number;
   boostCodes: string[];
+  /** Committed numeric counts for original physical activation boost cards. */
+  boostValues?: Record<string, number>;
   boostIds?: string[];
   pendingBoosts?: Piece[];
   boostEffects: Effect[];
@@ -257,6 +264,7 @@ export interface GameState {
     threatBefore?: number;
     attacker: string;
     boostCodes: string[];
+    boostValues?: Record<string, number>;
     boostIds: string[];
     pendingBoosts: Piece[];
     extra?: string;

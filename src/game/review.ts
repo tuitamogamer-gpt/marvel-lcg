@@ -354,6 +354,11 @@ const plumbing = new Set([
   "resumePrompt",
   "ds:invocation-finish",
   "heroAttackResponses",
+  "attackAction",
+  "gmwDistributedExcess",
+  "gmwOverkillDamage",
+  "gmwCaptainStrikeAfter",
+  "rocketDamageResponses",
   "attackAftermathOrder",
   "target",
   "optional",
@@ -370,6 +375,13 @@ const plumbing = new Set([
   "thor:basic-window",
   "basicPower",
   "quicksilverBasicUsed",
+  "scarletBoostCounted",
+  "scarletEnemyActivated",
+  "scarletHeroThwartResponse",
+  "scarletAfterAllyAttack",
+  "scw:count-window",
+  "scw:count-crest",
+  "scw:count-done",
   "wasp:basic",
   "wasp:basic-window",
   "wasp:basic-resolve",
@@ -535,7 +547,11 @@ export function mergeReviews(
     const index = cards.findIndex((p) => p.id === c.id);
     if (index < 0) cards.push(c);
     // Preserve the useful identity of a boost/payment after mechanical disposal.
-    else if (!["boost", "spent"].includes(cards[index].kind)) cards[index] = c;
+    else if (
+      !["boost", "spent"].includes(cards[index].kind) ||
+      (cards[index].kind === "boost" && c.kind === "boost")
+    )
+      cards[index] = c;
   }
   return {
     ...next,
@@ -729,6 +745,20 @@ export function recordReview(
     });
   }
   const a = s.attack || before.attack;
+  const boostCount = (
+    activation: {
+      boostCodes: string[];
+      boostIds?: string[];
+      boostValues?: Record<string, number>;
+    },
+    index: number,
+  ) => {
+    const id = activation.boostIds?.[index];
+    return (
+      (id ? activation.boostValues?.[id] : undefined) ??
+      (card(activation.boostCodes[index]).boost || 0)
+    );
+  };
   const boostCodes =
     effect.type === "revealBoost" || effect.type === "boostAttack"
       ? (s.attack?.boostCodes || []).slice(
@@ -741,18 +771,31 @@ export function recordReview(
     ))
       boostCodes.push(p.code!);
   }
+  const boostActivation =
+    effect.type === "revealSchemeBoost" || effect.type === "scarletBoostCounted"
+      ? s.scheming || s.attack
+      : s.attack;
+  if (effect.type === "scarletBoostCounted" && boostActivation) {
+    const index = boostActivation.boostIds?.indexOf(effect.id) ?? -1;
+    if (index >= 0) boostCodes.push(boostActivation.boostCodes[index]);
+  }
   for (const [i, code] of boostCodes.entries()) {
     const existing = cards.findIndex((c) => c.code === code);
     const boostId = existing >= 0 ? cards[existing].id : undefined;
     if (existing >= 0) cards.splice(existing, 1);
+    const boostIndex =
+      effect.type === "scarletBoostCounted"
+        ? (boostActivation?.boostIds?.indexOf(effect.id) ?? -1)
+        : (boostActivation?.boostCodes.length || 0) - boostCodes.length + i;
+    const id =
+      boostActivation?.boostIds?.[boostIndex] ||
+      boostId ||
+      `boost-${s.reviewCount}-${i}`;
     cards.unshift({
-      id:
-        s.attack?.boostIds?.at(-boostCodes.length + i) ||
-        boostId ||
-        `boost-${s.reviewCount}-${i}`,
+      id,
       code,
       name: card(code).name,
-      label: `+${card(code).boost || 0} boost`,
+      label: `+${boostActivation && boostIndex >= 0 ? boostCount(boostActivation, boostIndex) : card(code).boost || 0} boost`,
       detail: card(code).boost_star
         ? "Star ability follows on Proceed"
         : "Only the boost icons apply",
@@ -767,7 +810,7 @@ export function recordReview(
     )
   ) {
     const boost = a.boostCodes.reduce(
-      (n, code) => n + (card(code).boost || 0),
+      (n, _code, index) => n + boostCount(a, index),
       0,
     );
     calculation = {
@@ -799,7 +842,7 @@ export function recordReview(
         .filter((p) => p.attachedTo === attacker?.id)
         .reduce((n, p) => n + (card(p).scheme || 0), 0);
     const boost = s.scheming.boostCodes.reduce(
-      (n, code) => n + (card(code).boost || 0),
+      (n, _code, index) => n + boostCount(s.scheming!, index),
       0,
     );
     calculation = {

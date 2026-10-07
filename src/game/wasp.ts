@@ -37,6 +37,7 @@ export interface WaspPacket {
 export interface WaspDistributionOptions {
   basic: boolean;
   piercing: boolean;
+  overkill?: boolean;
 }
 export interface WaspPorts extends AntManPorts {
   select(
@@ -301,9 +302,10 @@ export function waspBasicPower(
   s: GameState,
   power: "attack" | "thwart",
   bonus = 0,
+  options: { overkill?: boolean } = {},
 ): Effect[] | null {
   return active(s) && s.player.form === "hero"
-    ? [W("basic", { power, bonus })]
+    ? [W("basic", { power, bonus, overkill: !!options.overkill })]
     : null;
 }
 function rapidOptions(
@@ -396,6 +398,7 @@ function beginDistribution(
   amount: number,
   basic: boolean,
   ports: WaspPorts,
+  overkill = false,
 ) {
   const legal =
     power === "attack"
@@ -410,6 +413,7 @@ function beginDistribution(
       remaining: amount,
       total: amount,
       basic,
+      overkill,
       piercing: basic && waspBasicPiercing(s),
       legal,
       packets: [],
@@ -514,13 +518,22 @@ export function resolveWaspEffect(
       }
       ports.queue(
         s,
-        W("basic-window", { power, bonus: e.bonus || 0, used: [] }),
+        W("basic-window", {
+          power,
+          bonus: e.bonus || 0,
+          overkill: !!e.overkill,
+          used: [],
+        }),
       );
       break;
     }
     case "wasp:basic-window": {
       const after = [
-        W("basic-resolve", { power: e.power, bonus: e.bonus || 0 }),
+        W("basic-resolve", {
+          power: e.power,
+          bonus: e.bonus || 0,
+          overkill: !!e.overkill,
+        }),
       ];
       const options = rapidOptions(s, e.power, after, e.used || [], ports);
       if (options.length)
@@ -547,6 +560,7 @@ export function resolveWaspEffect(
           amount,
           true,
           ports,
+          !!e.overkill,
         );
       else
         select(
@@ -564,6 +578,7 @@ export function resolveWaspEffect(
                   attack: true,
                   attackInitiated: true,
                   piercing: waspBasicPiercing(s),
+                  overkill: !!e.overkill,
                 }
               : { action: true, thwartInitiated: true }),
           }),
@@ -598,6 +613,7 @@ export function resolveWaspEffect(
                       W("basic-window", {
                         power: e.power,
                         bonus: Number(e.after?.[0]?.bonus || 0) + 2,
+                        overkill: !!e.after?.[0]?.overkill,
                         used: [...(e.used || []), p!.id],
                       }),
                     ],
@@ -740,6 +756,7 @@ export function resolveWaspEffect(
         ports.attackDistribution(s, packets, {
           basic: !!e.basic,
           piercing: !!e.piercing,
+          ...(e.overkill ? { overkill: true } : {}),
         });
       else ports.thwartDistribution(s, packets);
       break;

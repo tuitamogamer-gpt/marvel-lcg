@@ -399,6 +399,7 @@ describe("Black Widow's complete retail product contracts", () => {
   });
   it("Stunned still pays the preparation discard cost but cancels icons/damage and all preparation followers", () => {
     const { s, ports, play, run } = fixture();
+    ports.countBoostIcons = vi.fn();
     const p = play("08006");
     s.player.stunned = true;
     const o = blackWidowBoostOptions(
@@ -412,7 +413,67 @@ describe("Black Widow's complete retail product contracts", () => {
     expect(s.player.discard).toEqual([p]);
     expect(s.player.stunned).toBe(false);
     expect(ports.cancelBoostIcons).not.toHaveBeenCalled();
+    expect(ports.countBoostIcons).not.toHaveBeenCalled();
     expect(s.queue).toEqual([{ type: "resume", actorId: "p1" }]);
+  });
+  it("Attacrobatics pays its discard before async count interrupts and resumes the counted attack with its original actor and aftermath", () => {
+    const { s, ports, play, run } = fixture(true);
+    const preparation = play("08006", "p2");
+    const boost = { ...makePiece(s, "08026"), id: "numeric" };
+    const originalAfter = [{ type: "fixture-resume" }];
+    let pending: Effect[] = [];
+    ports.countBoostIcons = vi.fn((state, id, after) => {
+      expect(id).toBe(boost.id);
+      expect(state.player.discard).toContain(preparation);
+      expect(state.player.inPlay).not.toContain(preparation);
+      pending = JSON.parse(JSON.stringify(after));
+    });
+    run(
+      blackWidowBoostOptions(s, boost, "interrupt", originalAfter, ports)[0]
+        .effects[0],
+    );
+    expect(ports.countBoostIcons).toHaveBeenCalledOnce();
+    expect(ports.cancelBoostIcons).not.toHaveBeenCalled();
+    expect(ports.attackProgram).not.toHaveBeenCalled();
+    expect(pending).toEqual([
+      {
+        type: "bw:attacrobatics",
+        boostId: boost.id,
+        actorId: "p2",
+        after: [
+          {
+            type: "bw:after-preparation",
+            used: [],
+            after: [{ type: "fixture-resume", actorId: "p1" }],
+          },
+        ],
+      },
+    ]);
+    vi.mocked(ports.cancelBoostIcons).mockReturnValue(5);
+    activateSeat(s, "p1");
+    run(pending[0]);
+    expect(s.activePlayerId).toBe("p2");
+    expect(ports.cancelBoostIcons).toHaveBeenCalledWith(s, boost.id);
+    expect(ports.attackProgram).toHaveBeenCalledWith(
+      s,
+      [
+        {
+          type: "damage",
+          target: s.villain.id,
+          amount: 5,
+          source: "hero",
+          attack: true,
+        },
+      ],
+      [
+        {
+          type: "bw:after-preparation",
+          used: [],
+          after: [{ type: "fixture-resume", actorId: "p1" }],
+        },
+      ],
+    );
+    expect(ports.cancelBoostAbility).not.toHaveBeenCalled();
   });
   it("Target Acquired independently cancels a pending boost ability without canceling numeric icons", () => {
     const { s, ports, play, run } = fixture();

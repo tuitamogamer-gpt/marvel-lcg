@@ -3,6 +3,11 @@ import * as antPack from "./ant-man-pack.js";
 import * as wasp from "./wasp.js";
 import * as quicksilver from "./quicksilver.js";
 import * as quicksilverPack from "./quicksilver-pack.js";
+import * as scarletWitch from "./scarlet-witch.js";
+import * as scarletPack from "./scarlet-witch-pack.js";
+import * as groot from "./groot.js";
+import * as rocket from "./rocket.js";
+import * as gmwPack from "./gmw-player-pack.js";
 import * as waspPack from "./wasp-pack.js";
 import {
   hawkeyePlayRestriction,
@@ -458,7 +463,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
       (name === "Retaliate"
         ? captainStats(s).retaliate +
           hulkStats(s).retaliate +
-          wasp.waspRetaliate(textActiveState(s))
+          wasp.waspRetaliate(textActiveState(s)) +
+          gmwPack.gmwPlayerPackRetaliate(textActiveState(s), gmwPorts)
         : 0)
     );
   const p = find(s, source);
@@ -793,6 +799,7 @@ function discardPiece(s: GameState, id: string) {
     if (p.code === "10010") view.player.hp -= 4;
     if (
       cardScript(p)?.implementation === "script" ||
+      p.code === "16035" ||
       (p.code === "03025" && p.attachedTo?.startsWith("hero:"))
     )
       view.player.hp -= healthBefore - maxHP(view);
@@ -1004,6 +1011,63 @@ function heal(s: GameState, target: string, n: number): number {
   }
   return n;
 }
+interface DamageTraits {
+  piercing?: boolean;
+  ranged?: boolean;
+  excessToMain?: boolean;
+  excessBonus?: number;
+  grootHandled?: boolean;
+  aftermathChooser?: string;
+}
+interface DamageResult {
+  actualDamage: number;
+  excessDamage: number;
+}
+function attackExcess(s: GameState, packet: Effect): number {
+  const target = find(s, packet.target);
+  if (!target || !packet.attack) return 0;
+  const source = packet.source || "hero";
+  let amount = Number(packet.amount || 0);
+  if (["hero", `hero:${s.activePlayerId}`].includes(source))
+    amount += msMarvelEventAmountModifier(s, s.currentEventId, "damage");
+  const resistance = s.attachments.filter(
+    (p) =>
+      p.code === "14027" && p.attachedTo === target.id && !isTextBlank(s, p),
+  ).length;
+  const used = s.currentAttackProgramId
+    ? Number(
+        s.flags[`qsvVibration:${s.currentAttackProgramId}:${target.id}`] || 0,
+      )
+    : 0;
+  amount = Math.max(0, amount - Math.max(0, resistance - used));
+  if (
+    target.tough &&
+    !(packet.piercing ?? !!sourceKeyword(s, source, "Piercing"))
+  )
+    return 0;
+  if (msMarvelDamageImmune(s, target.id)) return 0;
+  if (target.id === s.villain.id) {
+    if (
+      riskyDamageReplacement(s, target.id, amount) ||
+      villainAt(s, "01098").length ||
+      (s.villainId === "ultron" &&
+        s.villain.stage === 3 &&
+        s.minions.some((p) => card(p).traits?.includes("Drone.")))
+    )
+      return 0;
+  } else if (
+    (rulesCode(target) === "01157" && packet.panther) ||
+    (rulesCode(target) === "01181" &&
+      s.sideSchemes.some((p) => rulesCode(p) === "01180"))
+  )
+    return 0;
+  const remaining =
+    target.id === s.villain.id
+      ? s.villain.hp
+      : pieceHP(s, target) - target.damage;
+  const excess = Math.max(0, amount - remaining);
+  return excess > 0 ? excess + Number(packet.excessBonus || 0) : 0;
+}
 function dealDamage(
   s: GameState,
   target: string,
@@ -1012,8 +1076,8 @@ function dealDamage(
   attack = false,
   overkill = false,
   panther = false,
-  traits: { piercing?: boolean; ranged?: boolean; excessToMain?: boolean } = {},
-) {
+  traits: DamageTraits = {},
+): DamageResult {
   if (
     attack &&
     n > 0 &&
@@ -1024,11 +1088,9 @@ function dealDamage(
     n += msMarvelEventAmountModifier(s, s.currentEventId, "damage");
   const original = find(s, target);
   const code = original?.code;
-  const originalHP = original
-    ? target === s.villain.id
-      ? s.villain.hp
-      : pieceHP(s, original) - original.damage
-    : 0;
+  const originalStage = target === s.villain.id ? s.villain.stage : undefined;
+  const sourceIsIdentity = rocket.rocketIsIdentitySource(s, source);
+  const wasHero = s.player.form === "hero";
   const targetPiece = target === "hero" ? s.player : original;
   if (targetPiece && attack)
     discardToughForPiercing(
@@ -1056,16 +1118,27 @@ function dealDamage(
     }
   }
   const previousQueue = new Set(s.queue);
-  applyDamage(s, target, n, source, attack, overkill, panther);
+  const result = applyDamage(
+    s,
+    target,
+    n,
+    source,
+    attack,
+    overkill,
+    panther,
+    traits,
+  );
   if (
     traits.excessToMain &&
     original &&
     card(original).type_code === "minion" &&
-    original.damage >= pieceHP(s, original) &&
-    n > originalHP
+    result.excessDamage > 0
   ) {
     // This is a removal effect, so Crisis still protects the main scheme.
-    add(s, E("thwart", { target: "main", amount: n - originalHP, source }));
+    add(
+      s,
+      E("thwart", { target: "main", amount: result.excessDamage, source }),
+    );
   }
   if (
     attack &&
@@ -1079,9 +1152,32 @@ function dealDamage(
         target,
         wasMinion: card(original).type_code === "minion",
         defeatedCode: code,
-        excessDamage: Math.max(0, n - originalHP),
+        excessDamage: result.excessDamage,
         mandatory: false,
         afterAttack: true,
+      }),
+    );
+  if (
+    s.heroId === "rocket" &&
+    sourceIsIdentity &&
+    original &&
+    (target === s.villain.id || card(original).type_code === "minion") &&
+    result.actualDamage > 0 &&
+    !["won", "lost"].includes(s.phase)
+  )
+    add(
+      s,
+      E("rocketDamageResponses", {
+        snapshot: {
+          target,
+          code,
+          stage: originalStage,
+          playerId: s.activePlayerId,
+          ...result,
+          sourceIsIdentity,
+          wasHero,
+        },
+        mandatory: true,
       }),
     );
   // Retaliate responds to the attack, even when its damage is prevented.
@@ -1119,6 +1215,9 @@ function dealDamage(
       );
   }
   if (attack && original && !["won", "lost"].includes(s.phase)) {
+    const aftermathChooser =
+      traits.aftermathChooser ||
+      (s.flags.waspDeferDefeats ? s.activePlayerId : undefined);
     const generated = s.queue.filter((e) => !previousQueue.has(e));
     const continuation = s.queue.filter((e) => previousQueue.has(e));
     const responseGroup = s.currentAttackProgramId
@@ -1141,6 +1240,11 @@ function dealDamage(
         : -1;
     if (finish >= 0) {
       const immediate = effects.filter((e) => !e.afterAttack);
+      immediate.sort(
+        (a, b) =>
+          Number(a.type === "rocketDamageResponses") -
+          Number(b.type === "rocketDamageResponses"),
+      );
       const previousAfter = continuation.filter(
         (e) => e.responseGroup === responseGroup && e.afterAttack,
       );
@@ -1170,10 +1274,8 @@ function dealDamage(
         0,
         E("attackAftermathOrder", {
           responseGroup,
-          actorId: s.flags.waspDeferDefeats
-            ? s.activePlayerId
-            : s.firstPlayerId,
-          chooserId: s.flags.waspDeferDefeats ? s.activePlayerId : undefined,
+          actorId: aftermathChooser || s.firstPlayerId,
+          chooserId: aftermathChooser,
           mandatory: true,
         }),
         ...after.filter((e) => e.mandatory),
@@ -1191,21 +1293,29 @@ function dealDamage(
         ...immediate.filter((e) => !e.mandatory),
         ...remaining,
       ];
-    } else
+    } else {
+      const immediate = effects.filter((e) => !e.afterAttack);
+      immediate.sort(
+        (a, b) =>
+          Number(a.type === "rocketDamageResponses") -
+          Number(b.type === "rocketDamageResponses"),
+      );
       s.queue = [
+        ...immediate.filter((e) => e.mandatory),
+        ...immediate.filter((e) => !e.mandatory),
         E("attackAftermathOrder", {
           responseGroup,
-          actorId: s.flags.waspDeferDefeats
-            ? s.activePlayerId
-            : s.firstPlayerId,
-          chooserId: s.flags.waspDeferDefeats ? s.activePlayerId : undefined,
+          actorId: aftermathChooser || s.firstPlayerId,
+          chooserId: aftermathChooser,
           mandatory: true,
         }),
-        ...effects.filter((e) => e.mandatory),
-        ...effects.filter((e) => !e.mandatory),
+        ...effects.filter((e) => e.afterAttack && e.mandatory),
+        ...effects.filter((e) => e.afterAttack && !e.mandatory),
         ...continuation,
       ];
+    }
   }
+  return result;
 }
 function applyDamage(
   s: GameState,
@@ -1215,35 +1325,48 @@ function applyDamage(
   attack = false,
   overkill = false,
   panther = false,
-) {
+  traits: DamageTraits = {},
+): DamageResult {
+  const none = { actualDamage: 0, excessDamage: 0 };
   if (target?.startsWith("hero:")) {
     const prev = s.activePlayerId;
     activateSeat(s, target.slice(5));
-    dealDamage(s, "hero", n, source, attack, overkill, panther);
+    const result = dealDamage(
+      s,
+      "hero",
+      n,
+      source,
+      attack,
+      overkill,
+      panther,
+      traits,
+    );
     activateSeat(s, prev);
-    return;
+    return result;
   }
-  if (n <= 0) return;
+  if (n <= 0) return none;
   const p = target === "hero" ? s.player : find(s, target);
-  if (!p) return;
+  if (!p) return none;
   if (p.tough && !s.flags.ignoreToughPacket) {
     consumeTough(p);
     log(s, "Tough prevents the damage.");
-    return;
+    return none;
   }
   if (target === "hero") {
+    if (!traits.grootHandled) n -= groot.grootPreventDamage(s, "hero", n);
+    if (n <= 0) return none;
     s.player.hp -= n;
     track(s, "damageTaken", n);
     log(s, `You take ${n} damage.`, "bad");
     check(s);
-    return;
+    return { actualDamage: n, excessDamage: 0 };
   }
-  if (msMarvelDamageImmune(s, target)) return;
+  if (msMarvelDamageImmune(s, target)) return none;
   if (target === s.villain.id) {
     const replaced = riskyDamageReplacement(s, target, n);
     if (replaced) {
       add(s, ...replaced);
-      return;
+      return none;
     }
     if (
       s.villainId === "ultron" &&
@@ -1251,7 +1374,7 @@ function applyDamage(
       s.minions.some((p) => card(p).traits?.includes("Drone."))
     ) {
       log(s, "Ultron is protected by his drones.");
-      return;
+      return none;
     }
     const armor = villainAt(s, "01098")[0];
     if (armor) {
@@ -1259,33 +1382,43 @@ function applyDamage(
       track(s, "damageDealt", n);
       log(s, `Armored Rhino Suit absorbs ${n} damage.`);
       if (armor.damage >= 5) discardPiece(s, armor.id);
-      return;
+      return none;
     }
+    const excess = Math.max(0, n - s.villain.hp);
+    const result = {
+      actualDamage: n,
+      excessDamage: excess > 0 ? excess + Number(traits.excessBonus || 0) : 0,
+    };
     s.villain.hp -= n;
     track(s, "damageDealt", n);
     log(s, `${card(s.villain).name} takes ${n} damage.`, "good");
     if (s.villain.hp <= 0) {
-      if (s.flags.waspDeferDefeats) return;
+      if (s.flags.waspDeferDefeats) return result;
       advanceVillain(s);
-      return;
+      return result;
     }
     if (villainAt(s, "01152").length)
       giveCharacterStatus(s, s.villain, "tough");
-    return;
+    return result;
   }
   const m = find(s, target)!;
   if (rulesCode(m) === "01157" && panther) {
     log(s, "Killmonger is immune to Black Panther upgrades.");
-    return;
+    return none;
   }
   if (
     rulesCode(m) === "01181" &&
     s.sideSchemes.some((x) => rulesCode(x) === "01180")
   ) {
     log(s, "Legions of Hydra protects Madame Hydra.");
-    return;
+    return none;
   }
   const remain = pieceHP(s, m) - m.damage;
+  const excess = Math.max(0, n - remain);
+  const result = {
+    actualDamage: n,
+    excessDamage: excess > 0 ? excess + Number(traits.excessBonus || 0) : 0,
+  };
   m.damage += n;
   track(
     s,
@@ -1294,26 +1427,32 @@ function applyDamage(
   );
   log(s, `${card(m).name} takes ${n} damage.`, "good");
   if (m.damage >= pieceHP(s, m)) {
-    if (s.flags.waspDeferDefeats) return;
-    const defeated = defeatCharacter(s, m, source, attack);
-    if (defeated && overkill && n > remain) {
+    const deferred = !!s.flags.waspDeferDefeats;
+    const defeated = deferred || defeatCharacter(s, m, source, attack);
+    if (
+      card(m).type_code === "minion" &&
+      defeated &&
+      overkill &&
+      result.excessDamage > 0
+    ) {
+      // RRG 1.8 requires an actual defeat. A saved Loki or a minion healed
+      // by Biomechanical Upgrades still dealt excess, but does not spill it.
+      const spill = E("gmwOverkillDamage", {
+        actorId: s.activePlayerId,
+        minionId: m.id,
+        target: s.villain.id,
+        amount: result.excessDamage,
+        source,
+      });
       if (m.pendingDefeat) {
         const i = s.queue.findIndex(
           (e) => e.type === "finishDefeat" && e.id === m.id,
         );
-        s.queue.splice(
-          i + 1,
-          0,
-          E("damage", {
-            actorId: s.activePlayerId,
-            target: s.villain.id,
-            amount: n - remain,
-            source,
-          }),
-        );
-      } else dealDamage(s, s.villain.id, n - remain, source, false);
+        s.queue.splice(i + 1, 0, effectContext(s, spill));
+      } else add(s, spill);
     }
   }
+  return result;
 }
 function defeatCharacter(
   s: GameState,
@@ -1831,6 +1970,7 @@ function scriptContext(
   };
 }
 export function cardCost(s: GameState, c: Card) {
+  if (s.flags.scwIgnoreResourceCost) return 0;
   return Math.max(
     0,
     (c.cost || 0) * (c.cost_per_hero ? s.playerCount : 1) -
@@ -1838,9 +1978,11 @@ export function cardCost(s: GameState, c: Card) {
       captainAllyDiscount(s, c) -
       captainPackDiscount(s, c) -
       msMarvelDiscount(s) -
+      gmwPack.gmwPlayerPackCardCostReduction(s, c) -
       thorAllyDiscount(s, c) -
       blackWidowAllyDiscount(s, c) +
-      doctorStrangeCostModifier(s, c),
+      doctorStrangeCostModifier(s, c) +
+      scarletWitch.scarletWitchCardCostBonus(s),
   );
 }
 function targetPrompt(s: GameState, e: Effect) {
@@ -1886,6 +2028,8 @@ function attackAction(
     ranged?: boolean;
     initiated?: boolean;
     excessToMain?: boolean;
+    excessBonus?: number;
+    aftermathChooser?: string;
   } = {},
 ) {
   const p = source === "hero" ? s.player : find(s, source);
@@ -1934,6 +2078,7 @@ function thwartAction(
   source = "hero",
   initiated = false,
   ignoreCrisis = false,
+  statusChecked = false,
 ) {
   const p = source === "hero" ? s.player : find(s, source);
   if (!p) return;
@@ -1941,7 +2086,7 @@ function thwartAction(
     log(s, "Baron Zemo prevents this identity from thwarting.");
     return;
   }
-  if (p.confused) {
+  if (p.confused && !statusChecked) {
     consumeStatus(p, "confused");
     log(s, "Confused is removed instead of thwarting.");
     return;
@@ -1954,7 +2099,52 @@ function thwartAction(
     ).some((entry) => entry.id === target)
   )
     return;
-  thwart(s, target, n, ignoreCrisis, source);
+  const beforeThreat =
+    target === "main"
+      ? s.scheme.threat
+      : s.sideSchemes.find((piece) => piece.id === target)?.counters || 0;
+  const wasHero = source === "hero" && s.player.form === "hero";
+  const previousQueue = new Set(s.queue);
+  const removed = thwart(s, target, n, ignoreCrisis, source);
+  if (!wasHero || removed <= 0 || removed !== beforeThreat) return;
+
+  const responseGroup = s.currentEventId
+    ? `eventThwart:${s.currentEventId}`
+    : s.currentResponseGroup || `thwart${s.nextId++}`;
+  const generated = s.queue
+    .filter((effect) => !previousQueue.has(effect))
+    .map((effect) => ({
+      ...effect,
+      responseGroup,
+      mandatory: effect.mandatory ?? true,
+    }));
+  const continuation = s.queue.filter((effect) => previousQueue.has(effect));
+  const response = effectContext(
+    s,
+    E("scarletHeroThwartResponse", {
+      snapshot: {
+        scheme: target,
+        beforeThreat,
+        removed,
+        playerId: s.activePlayerId,
+        wasHero,
+      },
+      responseGroup,
+      mandatory: false,
+    }),
+  );
+  const finish = s.currentEventId
+    ? continuation.findIndex(
+        (effect) =>
+          effect.type === "finishResolution" && effect.id === s.currentEventId,
+      )
+    : -1;
+  // Finish every printed clause of the triggering event before its optional
+  // response. Scheme defeats remain immediate; their nested mandatory effects
+  // share this group and also finish before Turn the Tide can be chosen.
+  if (finish >= 0) continuation.splice(finish, 0, response);
+  else continuation.unshift(response);
+  s.queue = [...generated, ...continuation];
 }
 /** Whether the hero's hand and resource abilities can meet a cost right now. */
 export function canPay(
@@ -2037,6 +2227,7 @@ function pay(s: GameState, ids: string[], wildAs: Resource = "energy") {
       const spent = discardHand(s, id);
       spentResponses.push(...antMan.antManResourceSpent(s, spent, antManPorts));
       spentResponses.push(...wasp.waspResourceSpent(s, spent, waspPorts));
+      spentResponses.push(...rocket.rocketResourceSpent(s, spent));
     } else {
       const source = find(s, id)!;
       const msSpent = msMarvelResourceSpent(s, source);
@@ -2361,6 +2552,12 @@ export function playable(s: GameState, p: Piece): string | null {
   if (c.type_code === "resource")
     return "Spend this card to pay for another card.";
   if (
+    c.type_code === "event" &&
+    /<b>(?:Hero )?Action\s*\(thwart\)/i.test(c.text || "") &&
+    captainThwartBlocked(s)
+  )
+    return "Baron Zemo prevents this identity from thwarting.";
+  if (
     p.code === "06006" &&
     !thorLightningPaymentOptions(s, p, cardCost(s, c), thorPorts).length
   )
@@ -2383,7 +2580,16 @@ export function playable(s: GameState, p: Piece): string | null {
     wasp.waspPlayRestriction(s, p, waspPorts) ||
     waspPack.waspPackPlayRestriction(s, p, waspPackPorts) ||
     quicksilver.quicksilverPlayRestriction(s, p, quicksilverPorts) ||
-    quicksilverPack.quicksilverPackPlayRestriction(s, p, quicksilverPackPorts);
+    quicksilverPack.quicksilverPackPlayRestriction(
+      s,
+      p,
+      quicksilverPackPorts,
+    ) ||
+    scarletWitch.scarletWitchPlayRestriction(s, p, scarletPorts) ||
+    scarletPack.scarletWitchPackPlayRestriction(s, p, scarletPackPorts) ||
+    rocket.rocketPlayRestriction(s, p) ||
+    groot.grootPlayRestriction(s, p, grootPorts) ||
+    gmwPack.gmwPlayerPackPlayRestriction(s, p, gmwPorts);
   if (antRestriction) return antRestriction;
   const hawkeyeRestriction = hawkeyePlayRestriction(s, p, hawkeyePorts);
   if (hawkeyeRestriction) return hawkeyeRestriction;
@@ -2538,6 +2744,7 @@ function play(
   msMarvelCardPlayed(s);
   captainCardPlayed(s, c);
   captainPackCardPlayed(s, c);
+  gmwPack.gmwPlayerPackCardPlayed(s, c);
   s.flags.discount = 0;
   track(s, "cardsPlayed", 1);
   log(s, `Play ${c.name}.`, "good");
@@ -2547,15 +2754,19 @@ function play(
     beginResolution(s, p);
     add(
       s,
-      ...msMarvelBeforeEvent(s, p, [
-        E("eventResolve", {
-          piece: p,
-          paid,
-          lightningX,
-          masterInvocationId,
-          eventId: p.id,
-        }),
-      ]),
+      ...gmwPack.gmwPlayerPackBeforeEvent(
+        s,
+        p,
+        msMarvelBeforeEvent(s, p, [
+          E("eventResolve", {
+            piece: p,
+            paid,
+            lightningX,
+            masterInvocationId,
+            eventId: p.id,
+          }),
+        ]),
+      ),
       E("finishResolution", { id: p.id, eventId: p.id }),
     );
   } else {
@@ -2575,6 +2786,8 @@ function play(
       ...antMan.antManCardEntered(s, p, antManPorts),
       ...antPack.antManPackCardEntered(s, p),
       ...quicksilverPack.quicksilverPackCardEntered(s, p),
+      ...(rocket.rocketEnterPlay(s, p) || []),
+      ...gmwPack.gmwPlayerPackCardEntered(s, p),
       ...captainPackCardEntered(s, p),
       ...hulkPackCardEntered(s, p),
       ...msMarvelCardEntered(s, p),
@@ -2583,7 +2796,7 @@ function play(
       ...blackWidowCardPlayed(s, p),
       ...hawkeyeCardEntered(s, p),
     );
-    if (cardScript(p)?.implementation === "script")
+    if (cardScript(p)?.implementation === "script" || p.code === "16035")
       s.player.hp += maxHP(s) - healthBefore;
     if (["01057", "01065", "01081"].includes(rulesCode(p)) && s.playerCount > 1)
       choosePlayer(
@@ -2667,9 +2880,19 @@ function allyEnter(
   fromHand = false,
 ) {
   if (isTextBlank(s, p)) return;
+  const gmwAlly = gmwPack.gmwPlayerPackAllyEnter(s, p);
+  if (gmwAlly !== null) {
+    add(s, ...gmwAlly);
+    return;
+  }
   const quicksilverAlly = quicksilverPack.quicksilverPackAllyEnter(s, p);
   if (quicksilverAlly !== null) {
     add(s, ...quicksilverAlly);
+    return;
+  }
+  const scarletAlly = scarletPack.scarletWitchPackAllyEnter(s, p);
+  if (scarletAlly !== null) {
+    add(s, ...scarletAlly);
     return;
   }
   const waspAlly =
@@ -2794,7 +3017,12 @@ function event(
     wasp.waspEvent(s, p) ??
     waspPack.waspPackEvent(s, p, paid) ??
     quicksilver.quicksilverEvent(s, p, lightningX) ??
-    quicksilverPack.quicksilverPackEvent(s, p, paid);
+    quicksilverPack.quicksilverPackEvent(s, p, paid) ??
+    scarletWitch.scarletWitchEvent(s, p) ??
+    scarletPack.scarletWitchPackEvent(s, p, paid) ??
+    rocket.rocketEvent(s, p) ??
+    groot.grootEvent(s, p) ??
+    gmwPack.gmwPlayerPackEvent(s, p);
   if (ant !== null) {
     add(s, ...ant);
     return;
@@ -3161,6 +3389,8 @@ export function abilityOptions(
   const attachmentOptions = [
     ...goblinModuleAttachmentActions(s, p),
     ...mutagenAttachmentActions(s, p),
+    ...scarletWitch.scarletWitchAttachmentActions(s, p, scarletPorts),
+    ...rocket.rocketAttachmentActions(s, p, rocketPorts),
   ];
   if (attachmentOptions.length)
     return attachmentOptions.map(({ id, label }) => ({ id, label }));
@@ -3295,7 +3525,8 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
     antPack.antManPackModifiers(s, p.id, { maxAllyHP: pieceHP })[kind] +
     (kind === "attack"
       ? captainPackModifiers(textActiveState(s), p.id).attack +
-        hulkPackModifiers(textActiveState(s), p.id).attack
+        hulkPackModifiers(textActiveState(s), p.id).attack +
+        scarletPack.scarletWitchPackAllyAttackBonus(s, p)
       : 0)
   );
 }
@@ -3332,11 +3563,38 @@ function ability(s: GameState, id: string, action = "special") {
       id,
       action === "special" ? undefined : action,
       quicksilverPorts,
+    ) ??
+    scarletWitch.scarletWitchAbility(
+      s,
+      id,
+      action === "special" ? undefined : action,
+      scarletPorts,
+    ) ??
+    rocket.rocketAbility(
+      s,
+      id,
+      action === "special" ? undefined : action,
+      rocketPorts,
+    ) ??
+    groot.grootAbility(
+      s,
+      id,
+      action === "special" ? undefined : action,
+      grootPorts,
     );
   if (ant) {
     add(s, ...ant);
     return;
   }
+  if (
+    gmwPack.gmwPlayerPackAbility(
+      s,
+      id,
+      gmwPorts,
+      action === "special" ? undefined : action,
+    )
+  )
+    return;
   if (
     quicksilverPack.quicksilverPackAbility(
       s,
@@ -3850,6 +4108,13 @@ function openMsDamageWindow(s: GameState, packet: Effect): boolean {
   );
   const used = String(s.flags[`msUsed:${key}`] || "").split(",");
   const options = [
+    ...scarletWitch.scarletWitchDamageOptions(
+      s,
+      packet,
+      amount,
+      [packet],
+      scarletPorts,
+    ),
     ...wasp.waspDamageOptions(s, packet, amount, [packet], waspPorts),
     ...quicksilverPack.quicksilverPackDamageOptions(
       s,
@@ -3907,6 +4172,47 @@ function openMsDamageWindow(s: GameState, packet: Effect): boolean {
   );
   return true;
 }
+function activationAmplify(s: GameState): number {
+  const definitions = [
+    card(s.scheme.code),
+    ...[
+      s.villain,
+      ...s.minions,
+      ...s.sideSchemes,
+      ...s.attachments,
+      ...(s.environments || []),
+    ]
+      .filter((p) => !isTextBlank(s, p))
+      .map(card),
+  ];
+  return definitions.filter(
+    (c) => (c as Card & { scheme_amplify?: boolean }).scheme_amplify,
+  ).length;
+}
+function activationBoostValue(s: GameState, id: string, code?: string): number {
+  const activation = s.scheming || s.attack;
+  const printedCode = code || s.resolving.find((p) => p.id === id)?.code;
+  return (
+    activation?.boostValues?.[id] ??
+    (printedCode ? card(printedCode).boost || 0 : 0)
+  );
+}
+function countActivationBoost(s: GameState, id: string, after: Effect[]): void {
+  const p = s.resolving.find((piece) => piece.id === id) || find(s, id);
+  if (!p) {
+    add(s, ...after);
+    return;
+  }
+  add(
+    s,
+    ...scarletWitch.scarletWitchCountBoosts(
+      s,
+      [p],
+      [E("scarletBoostCounted", { id, after })],
+      { sourceTitle: "Boost icons", amplify: activationAmplify(s) },
+    ),
+  );
+}
 const bwPorts: BlackWidowPorts = {
   queue: add,
   choose,
@@ -3949,13 +4255,19 @@ const bwPorts: BlackWidowPorts = {
   },
   numericBoostIcons: (s, id) => {
     const p = s.resolving.find((p) => p.id === id);
-    return !p || s.boostCancellations?.[id]?.icons ? 0 : card(p).boost || 0;
+    return !p || s.boostCancellations?.[id]?.icons
+      ? 0
+      : ((s.scheming || s.attack)?.boostValues?.[id] ??
+          (card(p).boost || 0) +
+            scarletWitch.scarletWitchBoostIconBonus(textActiveState(s)) +
+            activationAmplify(s));
   },
+  countBoostIcons: countActivationBoost,
   cancelBoostIcons: (s, id) => {
     const amount = bwPorts.numericBoostIcons(s, id);
     const a = s.scheming || s.attack;
     need(a, "No activation owns this boost.");
-    a!.extraBoostIcons = (a!.extraBoostIcons || 0) - amount;
+    (a!.boostValues ||= {})[id] = 0;
     ((s.boostCancellations ||= {})[id] ||= {}).icons = true;
     return amount;
   },
@@ -4488,6 +4800,13 @@ const quicksilverPorts: quicksilver.QuicksilverPorts = {
   },
   shufflePlayerDeck: hawkeyePorts.shufflePlayerDeck,
   discardEncounterTop: mutagenPorts.discardTop,
+  countBoostIcons: (s, pieces, after) =>
+    add(
+      s,
+      ...scarletWitch.scarletWitchCountBoosts(s, pieces, after, {
+        sourceTitle: "Scarlet Witch",
+      }),
+    ),
 };
 const quicksilverPackPorts: quicksilverPack.QuicksilverPackPorts = {
   queue: add,
@@ -4541,12 +4860,181 @@ const quicksilverPackPorts: quicksilverPack.QuicksilverPackPorts = {
     add(s, ...after.filter((e) => e.type !== "reveal"), ...window);
   },
 };
+const scarletPorts: scarletWitch.ScarletWitchPorts = {
+  ...antManPorts,
+  select: (s, title, text, pieces, min, max, action) => {
+    select(s, title, text, pieces, min, max, action);
+    if (action.type === "scw:siblings-discard") s.prompt!.cancelable = true;
+  },
+  shufflePlayerDeck: hawkeyePorts.shufflePlayerDeck,
+  discardEncounterTop: mutagenPorts.discardTop,
+  friendlyTargets: antPackPorts.friendlyTargets,
+  cardCost: antPackPorts.cardCost,
+  canPlayIgnoringCost: (s, p) => {
+    // Requirement is an absolute play restriction, even when the resource
+    // cost is ignored. Other costs before an arrow still use ordinary play.
+    if (/\bRequirement\s*\(/i.test(card(p).text || "")) return false;
+    // An inner Chaos Magic can choose another legal card. Remove this exact
+    // prospective event from its future hand so recursive legality always
+    // terminates, including two Chaos Magics with no other playable card.
+    const view = {
+      ...s,
+      player:
+        p.code === "15003"
+          ? {
+              ...s.player,
+              hand: s.player.hand.filter((card) => card.id !== p.id),
+            }
+          : s.player,
+      prompt: null,
+      review: null,
+      flags: { ...s.flags, scwIgnoreResourceCost: true },
+    };
+    if (
+      p.code === "15012" &&
+      !s.player.confused &&
+      s.sideSchemes.some((piece) => card(piece).scheme_crisis)
+    )
+      return false;
+    return !playable(view, p);
+  },
+  playIgnoringCost: (s, p, after) => {
+    need(
+      s.player.hand.some((piece) => piece.id === p.id) &&
+        scarletPorts.canPlayIgnoringCost(s, p),
+      "This card cannot be played by Chaos Magic.",
+    );
+    add(s, E("scwFreePlayRequest", { piece: p, after }));
+  },
+  preventDamage: (s, packet, amount) => {
+    if (packet?.kind === "attack" && s.attack) s.attack.prevented += amount;
+    else resolve(s, E("ms:prevent-damage", { packet, amount }));
+  },
+  searchEncounter: (s, code) => {
+    revealHidden(s);
+    let found: Piece | undefined;
+    for (const pile of [s.encounter.deck, s.encounter.discard]) {
+      const index = pile.findIndex((piece) => piece.code === code);
+      if (index >= 0) {
+        found = pile.splice(index, 1)[0];
+        break;
+      }
+    }
+    s.encounter.deck = shuffle(s, s.encounter.deck);
+    return found;
+  },
+  putMinion: mutagenPorts.putMinion,
+  cancelEncounter: bwPorts.cancelEncounter,
+};
+const scarletPackPorts: scarletPack.ScarletWitchPackPorts = {
+  queue: add,
+  choose,
+  discardPiece,
+  hasTrait: antPackPorts.hasTrait,
+  enemyTargets: (s, attack = false) => targets(s, "enemy", attack),
+  schemeTargets: (s, ignoreCrisis = false) =>
+    captainThwartBlocked(s)
+      ? []
+      : ignoreCrisis
+        ? hawkeyePorts.schemeTargets(s, true)
+        : targets(s, "scheme", false, true),
+  cardCost: antPackPorts.cardCost,
+  canPay: (s, cost, exclude, code, requirements = []) =>
+    canPay(s, cost, requirements, exclude, code),
+  heroREC: (s) => heroStats(s).recover,
+  discardEncounterTop: mutagenPorts.discardTop,
+};
+const grootPorts: groot.GrootPorts = {
+  ...antManPorts,
+  friendlyTargets: antPackPorts.friendlyTargets,
+};
+const rocketPorts: rocket.RocketPorts = {
+  ...antManPorts,
+  select,
+  cardCost: antPackPorts.cardCost,
+  discardEncounterTop: mutagenPorts.discardTop,
+  damageBatch: (s, ids, amount, source) => {
+    s.flags.waspDeferDefeats = true;
+    try {
+      for (const id of ids) dealDamage(s, id, amount, source);
+    } finally {
+      delete s.flags.waspDeferDefeats;
+    }
+    for (const p of s.minions.filter((p) => p.damage >= pieceHP(s, p)))
+      defeatCharacter(s, p, source);
+    if (s.villain.hp <= 0) advanceVillain(s);
+  },
+};
+const gmwPorts: gmwPack.GmwPlayerPackPorts = {
+  queue: add,
+  choose,
+  discardPiece,
+  hasTrait: captainPackHasTrait,
+  cardCost: antPackPorts.cardCost,
+  canPay: (s, cost, exclude, code, requirements = []) =>
+    canPay(s, cost, requirements, exclude, code),
+  minionTargets: (s) =>
+    targets(s, "enemy", true).filter((t) =>
+      s.minions.some((p) => p.id === t.id),
+    ),
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  startingHeroHP: (s) =>
+    card(HEROES.find((h) => h.id === s.heroId)!.code).health || 0,
+  allyMaxHP: pieceHP,
+  discardEncounterTop: mutagenPorts.discardTop,
+  putMinion: mutagenPorts.putMinion,
+  discardPlayerTop: (s) => mill(s, 1)[0],
+  preventDamage: (s, amount, packet) => {
+    if (packet?.kind === "attack" && s.attack) s.attack.prevented += amount;
+    else resolve(s, E("ms:prevent-damage", { packet, amount }));
+  },
+  returnAllyToHand: (s, id) => {
+    const p = allInPlay(s).find((p) => p.id === id);
+    need(p, "The ally is no longer in play.");
+    const owner =
+      s.players.find((seat) => seat.id === p!.ownerId) || controller(s, id)!;
+    if (s.attack?.defender === id) s.attack.gmwReturnedDefender = id;
+    discardPiece(s, id);
+    const view = seatView(s, owner);
+    const index = view.player.discard.findIndex((p) => p.id === id);
+    need(index >= 0, "The returned ally's physical card is missing.");
+    view.player.hand.push(view.player.discard.splice(index, 1)[0]);
+  },
+  transferControl: hulkPackPorts.transferControl,
+  canRemoveMainThreat: (s) =>
+    s.scheme.threat > 0 &&
+    !s.sideSchemes.some((p) => card(p).scheme_crisis) &&
+    rulesCode(s.scheme) !== "01139b" &&
+    !hulkThreatLocked(s, "main"),
+  canReady: (s, target) =>
+    target === "hero"
+      ? canReadyIdentity(s)
+      : !target.startsWith("hero:") ||
+        canReadyIdentity(seatView(s, target.slice(5))),
+  growthCounters: (s, target) =>
+    target.startsWith("hero:")
+      ? groot.grootGrowthCounters(seatView(s, target.slice(5)))
+      : find(s, target)?.counters || 0,
+  addGrowthCounters: (s, target, amount) => {
+    if (target.startsWith("hero:"))
+      groot.grootAddGrowthCounters(seatView(s, target.slice(5)), amount);
+    else {
+      const p = find(s, target);
+      if (p) p.counters += amount;
+    }
+  },
+  attackExcess: (s, packet) => attackExcess(s, packet),
+};
 export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
   return [
     ...antMan.antManAbilityOptions(s, id, antManPorts),
     ...antPack.antManPackAbilityOptions(s, id, antPackPorts),
     ...wasp.waspAbilityOptions(s, id, waspPorts),
     ...quicksilver.quicksilverAbilityOptions(s, id, quicksilverPorts),
+    ...scarletWitch.scarletWitchAbilityOptions(s, id, scarletPorts),
+    ...rocket.rocketAbilityOptions(s, id, rocketPorts),
+    ...groot.grootAbilityOptions(s, id, grootPorts),
+    ...gmwPack.gmwPlayerPackAbilityOptions(s, id, gmwPorts),
     ...quicksilverPack.quicksilverPackAbilityOptions(
       s,
       id,
@@ -4897,6 +5385,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     bonus +
     attachments +
     blackWidowEnemyModifier(s, p, originalPlayerId) +
+    rocket.rocketEnemyStats(s, p).attack +
     antMan.antManEnemyStats(s, p).attack -
     s.attachments
       .filter((a) => a.code === "12028" && a.attachedTo === p.id)
@@ -5027,6 +5516,9 @@ function declareDefense(s: GameState) {
 }
 function boostEffects(s: GameState, p: Piece) {
   const rise =
+    rocket.rocketBoost(s, p) ??
+    groot.grootBoost(s, p) ??
+    scarletWitch.scarletWitchBoost(s, p) ??
     quicksilver.quicksilverBoost(s, p) ??
     hawkeyeBoost(s, p) ??
     spiderWomanBoost(s, p);
@@ -5139,9 +5631,15 @@ function boostEffects(s: GameState, p: Piece) {
       break;
     case "01123":
     case "01168":
-    case "01173":
-    case "01178":
       if (s.attack) s.attack.boostEffects.push(E("afterBoost", { code }));
+      break;
+    case "01173":
+      if (s.attack?.defender === "none")
+        add(s, E("chooseDiscard", { filter: "upgrade" }));
+      break;
+    case "01178":
+      if (s.attack?.defender === "none")
+        add(s, E("threat", { target: "main", amount: 1 }));
       break;
   }
 }
@@ -5225,7 +5723,11 @@ function finishScheme(s: GameState) {
         s.attachments
           .filter((a) => a.attachedTo === id)
           .reduce((n, a) => n + (card(a).scheme || 0), 0)) +
-    activation.boostCodes.reduce((n, code) => n + (card(code).boost || 0), 0);
+    activation.boostCodes.reduce(
+      (n, code, index) =>
+        n + activationBoostValue(s, activation.boostIds[index], code),
+      0,
+    );
   log(s, `${card(p).name} schemes for ${amount} threat.`, "bad");
   activation.threatBefore = s.stats?.threatPlaced || 0;
   const after = [
@@ -5242,6 +5744,7 @@ function finishScheme(s: GameState) {
     ...antMan.antManEnemyActivated(s, id),
     ...(activation.afterActivation || []),
     ...activation.boostIds.map((id) => E("finishResolution", { id })),
+    E("scarletEnemyActivated", { id }),
     E("bwMinionSchemeResponses", { id }),
     E("endScheme"),
   ];
@@ -5260,7 +5763,11 @@ function calculateAttack(s: GameState) {
       ) +
       (a.modifier || 0) +
       (a.extraBoostIcons || 0) +
-      a.boostCodes.reduce((n, code) => n + (card(code).boost || 0), 0);
+      a.boostCodes.reduce(
+        (n, code, index) =>
+          n + activationBoostValue(s, a.boostIds?.[index] || "", code),
+        0,
+      );
   if (
     a.defender &&
     !["none", "hero"].includes(a.defender) &&
@@ -5312,7 +5819,7 @@ function schemeWindow(
     ]);
   else add(s, ...follow);
 }
-function finishAttack(s: GameState) {
+function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
   const a = s.attack!;
   if (!a) return;
   const p = find(s, a.attacker);
@@ -5322,9 +5829,10 @@ function finishAttack(s: GameState) {
       : a.originalTarget || "hero";
   const visualAttacker = combatCharacter(s, a.attacker);
   const visualTarget = combatCharacter(s, target);
-  const damage = a.preventAllDamage
-    ? 0
-    : Math.max(0, a.base - a.defense - a.prevented);
+  const damage =
+    a.gmwReturnedDefender === target || a.preventAllDamage
+      ? 0
+      : Math.max(0, a.base - a.defense - a.prevented);
   const before =
     target === "hero"
       ? s.player.hp
@@ -5339,6 +5847,25 @@ function finishAttack(s: GameState) {
       !!sourceKeyword(s, a.attacker, "Piercing"),
     );
   const wasTough = receiving?.tough;
+  if (receiving && target !== "hero" && !effect.gmwStarhawkHandled) {
+    const continuation = { ...effect, gmwStarhawkHandled: true };
+    const options = gmwPack.gmwPlayerPackStarhawkDamageOptions(
+      s,
+      receiving as Piece,
+      damage,
+      [continuation],
+      gmwPorts,
+    );
+    if (options.length) {
+      choose(
+        s,
+        "Starhawk",
+        "Return Starhawk before this exact attack damage packet?",
+        [...options, option("allow", `Take ${damage} damage`, [continuation])],
+      );
+      return;
+    }
+  }
   log(
     s,
     `${a.base} ATK − ${a.defense} DEF − ${Math.min(a.prevented, Math.max(0, a.base - a.defense))} prevented = ${damage} incoming damage to ${target === "hero" ? heroCard(s).name : find(s, target) ? card(find(s, target)!).name : "the defender"}.`,
@@ -5346,14 +5873,27 @@ function finishAttack(s: GameState) {
   );
   const recipientId = s.activePlayerId;
   const identityBefore = seatView(s, recipientId).player.hp;
-  dealDamage(s, target, damage, a.attacker);
-  a.damage = wasTough ? 0 : damage;
+  const result = dealDamage(
+    s,
+    target,
+    damage,
+    a.attacker,
+    false,
+    false,
+    false,
+    { grootHandled: !!a.grootDamageHandled },
+  );
+  a.damage = result.actualDamage;
   if (a.overkill && target !== "hero" && damage > before && !wasTough)
     dealDamage(
       s,
       "hero",
       Math.max(0, damage - before - (a.identityPrevented || 0)),
       a.attacker,
+      false,
+      false,
+      false,
+      { grootHandled: !!a.grootOverkillHandled },
     );
   a.identityDamage = Math.max(
     0,
@@ -5474,6 +6014,10 @@ function finishAttack(s: GameState) {
     }),
     ...a.boostEffects,
     ...(a.boostIds || []).map((id) => E("finishResolution", { id })),
+    E("scarletEnemyActivated", {
+      id: a.attacker,
+      actorId: a.originalPlayerId || recipientId,
+    }),
     E("defenseResponses", {
       defended: target === "hero" && a.defender !== "none",
       attacker: a.attacker,
@@ -5485,6 +6029,7 @@ function finishAttack(s: GameState) {
           : undefined,
         isVillain: a.isVillain,
         playerId: s.activePlayerId,
+        defender: target,
         heroDamage: a.identityDamage || 0,
         heroDefended: target === "hero" && a.defender !== "none",
         basicDefense: !!a.basicDefense,
@@ -5563,6 +6108,31 @@ function reveal(
     );
     for (const seat of playerOrder(s)) {
       const view = seatView(s, seat);
+      opts.push(
+        ...scarletWitch
+          .scarletWitchRevealOptions(
+            view,
+            p,
+            [
+              E("reveal", {
+                piece: p,
+                skip: true,
+                actorId: revealing,
+                fromEncounterDeck,
+              }),
+            ],
+            scarletPorts,
+            fromEncounterDeck,
+          )
+          .map((o) => ({
+            ...o,
+            id: `${seat.id}:${o.id}`,
+            effects: o.effects.map((effect) => ({
+              ...effect,
+              actorId: seat.id,
+            })),
+          })),
+      );
       opts.push(
         ...quicksilverPack
           .quicksilverPackEncounterOptions(
@@ -5705,6 +6275,9 @@ function reveal(
       ...HAWKEYE_SCRIPT_CODES,
       ...SPIDER_WOMAN_SCRIPT_CODES,
       ...quicksilver.QUICKSILVER_SCRIPT_CODES,
+      ...scarletWitch.SCARLET_WITCH_SCRIPT_CODES,
+      ...rocket.ROCKET_SCRIPT_CODES,
+      ...groot.GROOT_SCRIPT_CODES,
     ].some((code) => code === p.code) ||
       CARDS.some(
         (core) => core.code === rulesCode(p) && core.type_code === "treachery",
@@ -5774,6 +6347,9 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    rocket.rocketEncounterReveal(s, p) ??
+    groot.grootEncounterReveal(s, p) ??
+    scarletWitch.scarletWitchEncounterReveal(s, p) ??
     quicksilver.quicksilverEncounterReveal(s, p) ??
     wasp.waspEncounterReveal(s, p) ??
     antMan.antManEncounterReveal(s, p) ??
@@ -6333,6 +6909,10 @@ function treachery(s: GameState, p: Piece) {
 }
 function resolve(s: GameState, e: Effect) {
   if (e.retaliateSource && !find(s, e.retaliateSource)) return;
+  if (e.type === "ms:preemptive" && !e.scarletCounted) {
+    countActivationBoost(s, e.boostId, [{ ...e, scarletCounted: true }]);
+    return;
+  }
   if (
     e.type === "wasp:basic-resolve" &&
     !e.thorWindowHandled &&
@@ -6355,6 +6935,11 @@ function resolve(s: GameState, e: Effect) {
   if (quicksilver.resolveQuicksilverEffect(s, e, quicksilverPorts)) return;
   if (quicksilverPack.resolveQuicksilverPackEffect(s, e, quicksilverPackPorts))
     return;
+  if (scarletWitch.resolveScarletWitchEffect(s, e, scarletPorts)) return;
+  if (scarletPack.resolveScarletWitchPackEffect(s, e, scarletPackPorts)) return;
+  if (rocket.resolveRocketEffect(s, e, rocketPorts)) return;
+  if (groot.resolveGrootEffect(s, e, grootPorts)) return;
+  if (gmwPack.resolveGmwPlayerPackEffect(s, e, gmwPorts)) return;
   if (resolveHawkeyeEffect(s, e, hawkeyePorts)) return;
   if (resolveSpiderWomanEffect(s, e, swPorts)) return;
   if (resolveDoctorStrangeEffect(s, e, dsPorts)) return;
@@ -6372,6 +6957,9 @@ function resolve(s: GameState, e: Effect) {
           mutagenEncounterReveal(state, piece) ??
           blackWidowEncounterReveal(state, piece) ??
           doctorStrangeEncounterReveal(state, piece) ??
+          rocket.rocketEncounterReveal(state, piece) ??
+          groot.grootEncounterReveal(state, piece) ??
+          scarletWitch.scarletWitchEncounterReveal(state, piece) ??
           quicksilver.quicksilverEncounterReveal(state, piece) ??
           wasp.waspEncounterReveal(state, piece) ??
           antMan.antManEncounterReveal(state, piece) ??
@@ -6462,6 +7050,30 @@ function resolve(s: GameState, e: Effect) {
             ),
           "Illegal attack targets.",
         );
+        if (
+          state.player.inPlay.some(
+            (p) => p.code === "16045" && !isTextBlank(state, p),
+          )
+        ) {
+          const target = find(state, ids[0]);
+          add(
+            state,
+            E("waspDistributedAttack", {
+              packets: ids.map((target) => ({ target, amount })),
+              chooserId: state.firstPlayerId,
+            }),
+            ...(e.type === "cap:strike" && e.physical && target
+              ? [
+                  E("gmwCaptainStrikeAfter", {
+                    target: target.id,
+                    code: target.code,
+                  }),
+                ]
+              : []),
+          );
+          // The saved continuation applies Heroic Strike's status after damage.
+          return false;
+        }
         const previousQueue = new Set(state.queue);
         for (const id of ids) {
           dealDamage(state, id, amount, "hero", true);
@@ -6513,6 +7125,42 @@ function resolve(s: GameState, e: Effect) {
     return;
   }
   switch (e.type) {
+    case "scarletBoostCounted": {
+      const activation = s.scheming || s.attack;
+      if (activation) (activation.boostValues ||= {})[e.id] = e.boostTotal;
+      add(s, ...(e.after || []));
+      break;
+    }
+    case "scarletEnemyActivated": {
+      const p = find(s, e.id);
+      if (p)
+        add(
+          s,
+          ...groot.grootEnemyActivated(s, p, grootPorts),
+          ...scarletWitch.scarletWitchEnemyActivated(s, p),
+        );
+      break;
+    }
+    case "scarletHeroThwartResponse": {
+      const options = scarletPack.scarletWitchPackAfterHeroThwart(
+        s,
+        e.snapshot,
+        [],
+        scarletPackPorts,
+      );
+      if (options.length)
+        choose(
+          s,
+          "Turn the Tide",
+          "Respond after removing all threat from a scheme?",
+          [...options, option("continue", "Continue", [])],
+        );
+      break;
+    }
+    case "scarletAfterAllyAttack": {
+      add(s, ...scarletPack.scarletWitchPackAfterAllyAttack(s, e.id));
+      break;
+    }
     case "scriptCheckpoint": {
       const p = find(s, e.target);
       const snapshot = {
@@ -6640,6 +7288,7 @@ function resolve(s: GameState, e: Effect) {
     case "eventResolve": {
       const p: Piece = e.piece,
         c = card(p);
+      if (c.text?.includes("(thwart)") && captainThwartBlocked(s)) break;
       if (p.code === "09016") {
         need(
           maxHP(s) - s.player.hp >= 2,
@@ -6703,6 +7352,7 @@ function resolve(s: GameState, e: Effect) {
       msMarvelCardPlayed(s);
       captainCardPlayed(s, card(p));
       captainPackCardPlayed(s, card(p));
+      gmwPack.gmwPlayerPackCardPlayed(s, card(p));
       track(s, "cardsPlayed", 1);
       log(s, `Play ${card(p).name}.`, "good");
       const statusCanceled =
@@ -6758,7 +7408,55 @@ function resolve(s: GameState, e: Effect) {
       if (power === "attack") s.flags.basicAttack = true;
       const replaced =
         power === "attack" ? s.player.stunned : s.player.confused;
-      const native = wasp.waspBasicPower(s, power);
+      const base = heroStats(s)[power];
+      const continuation = {
+        ...e,
+        basic: true,
+        amount: e.amount ?? base,
+        basicStatAmount: e.basicStatAmount ?? base,
+      };
+      if (!replaced && !e.grootBasicHandled) {
+        const after = [{ ...continuation, grootBasicHandled: true }];
+        const options = groot.grootBasicOptions(s, power, after, grootPorts);
+        if (options.length) {
+          choose(
+            s,
+            "Basic power interrupts",
+            "Use a Vines upgrade before resolving this basic power?",
+            [...options, option("continue", "Continue", after)],
+          );
+          break;
+        }
+      }
+      if (!replaced && power === "attack" && !e.gmwBasicHandled) {
+        const packet = { ...continuation, grootBasicHandled: true };
+        const options = gmwPack.gmwPlayerPackBasicAttackOptions(
+          s,
+          packet,
+          [],
+          gmwPorts,
+        );
+        if (options.length) {
+          choose(
+            s,
+            "Basic attack interrupts",
+            "Use a Hand Cannon before resolving this basic attack?",
+            [
+              ...options,
+              option("continue", "Continue", [
+                { ...packet, gmwBasicHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
+      }
+      const native = wasp.waspBasicPower(
+        s,
+        power,
+        continuation.amount - continuation.basicStatAmount,
+        { overkill: !!e.overkill },
+      );
       if (native)
         add(
           s,
@@ -6766,7 +7464,7 @@ function resolve(s: GameState, e: Effect) {
           ...(!replaced ? [E("quicksilverBasicUsed", { power })] : []),
         );
       else {
-        const amount = heroStats(s)[power];
+        const amount = continuation.amount;
         add(
           s,
           E("target", {
@@ -6774,11 +7472,12 @@ function resolve(s: GameState, e: Effect) {
             title: power === "attack" ? "Basic attack" : "Basic thwart",
             action: E(power === "attack" ? "damage" : "thwart", {
               amount,
-              basicStatAmount: amount,
+              basicStatAmount: continuation.basicStatAmount,
               basic: true,
               ...(power === "attack"
                 ? {
                     attack: true,
+                    overkill: !!e.overkill,
                     piercing: quicksilverPack.quicksilverPackBasicPiercing(
                       textActiveState(s),
                     ),
@@ -6795,7 +7494,15 @@ function resolve(s: GameState, e: Effect) {
       add(
         s,
         ...(e.power === "attack"
-          ? quicksilverPack.quicksilverPackAfterBasicAttack(s)
+          ? [
+              ...quicksilverPack.quicksilverPackAfterBasicAttack(s),
+              ...gmwPack.gmwPlayerPackAfterBasicAttack(s),
+            ]
+          : []),
+        ...groot.grootAfterBasicPower(s, e.power, grootPorts),
+        ...(e.power === "thwart" &&
+        rocket.rocketAfterBasicThwart(s, [], rocketPorts).length
+          ? [E("rocket:plan-window", { after: [] })]
           : []),
         ...quicksilver.quicksilverBasicUsed(s, e.power),
       );
@@ -6831,6 +7538,30 @@ function resolve(s: GameState, e: Effect) {
     }
     case "waspDistributedAttack": {
       const packets = e.packets as wasp.WaspPacket[];
+      if (!e.gmwExcessHandled) {
+        const index = packets.findIndex(
+          (_, i) => !(e.gmwExcessChecked || []).includes(i),
+        );
+        if (index >= 0) {
+          const packet = packets[index] as wasp.WaspPacket & {
+            excessBonus?: number;
+          };
+          add(
+            s,
+            E("gmwDistributedExcess", {
+              target: packet.target,
+              amount: packet.amount,
+              excessBonus: packet.excessBonus,
+              attack: true,
+              source: "hero",
+              piercing: e.piercing,
+              batch: e,
+              index,
+            }),
+          );
+          break;
+        }
+      }
       const legal = targets(s, "enemy", true);
       need(
         packets.every(
@@ -6846,16 +7577,97 @@ function resolve(s: GameState, e: Effect) {
       s.flags.waspDeferDefeats = true;
       try {
         for (const packet of packets)
-          attackAction(s, packet.target, packet.amount, "hero", false, false, {
-            initiated: true,
-            piercing: e.piercing,
-          });
+          attackAction(
+            s,
+            packet.target,
+            packet.amount,
+            "hero",
+            !!e.overkill,
+            false,
+            {
+              initiated: true,
+              piercing: e.piercing,
+              excessBonus: (
+                packet as wasp.WaspPacket & { excessBonus?: number }
+              ).excessBonus,
+              aftermathChooser: e.chooserId,
+            },
+          );
       } finally {
         delete s.flags.waspDeferDefeats;
       }
       const defeated = s.minions.filter((p) => p.damage >= pieceHP(s, p));
       for (const p of defeated) defeatCharacter(s, p, "hero", true);
       if (s.villain.hp <= 0) advanceVillain(s);
+      break;
+    }
+    case "gmwDistributedExcess": {
+      const options = gmwPack.gmwPlayerPackExcessOptions(
+        s,
+        e,
+        attackExcess(s, e),
+        [],
+        gmwPorts,
+      );
+      const packets = [...e.batch.packets];
+      packets[e.index] = {
+        ...packets[e.index],
+        excessBonus: Number(e.excessBonus || 0),
+      };
+      const continuation = {
+        ...e.batch,
+        packets,
+        gmwExcessChecked: [...(e.batch.gmwExcessChecked || []), e.index],
+      };
+      if (options.length)
+        choose(s, "Follow Through", "Increase this attack's excess damage?", [
+          ...options,
+          option("continue", "Continue", [continuation]),
+        ]);
+      else add(s, continuation);
+      break;
+    }
+    case "gmwOverkillDamage":
+      if (!find(s, e.minionId)) add(s, { ...e, type: "damage" });
+      break;
+    case "gmwCaptainStrikeAfter": {
+      const target = find(s, e.target);
+      if (
+        target &&
+        (target.code === e.code ||
+          (target.id === s.villain.id &&
+            card(target).name === card(e.code).name))
+      )
+        giveCharacterStatus(s, target, "stunned");
+      break;
+    }
+    case "rocketDamageResponses": {
+      const effects = rocket.rocketDamageResolved(s, e.snapshot);
+      if (!effects.length) break;
+      // Finish a final event sentence before its damage response. Other
+      // sentences retain their physical event in the resolving area.
+      const finish = s.queue.findIndex(
+        (x) => x.type === "finishResolution" && x.id === e.eventId,
+      );
+      const pendingSentence = s.queue
+        .slice(0, finish)
+        .some(
+          (x) =>
+            !x.afterAttack &&
+            ![
+              "attackAftermathOrder",
+              "rocketDamageResponses",
+              "heroAttackResponses",
+              "attackProgramEnd",
+            ].includes(x.type),
+        );
+      const discard =
+        finish >= 0 && !pendingSentence ? s.queue.splice(finish, 1) : [];
+      add(
+        s,
+        ...discard,
+        ...effects.map((x) => ({ ...x, responseGroup: undefined })),
+      );
       break;
     }
     case "heroAttackResponses":
@@ -7138,6 +7950,9 @@ function resolve(s: GameState, e: Effect) {
     case "mill":
       mill(s, e.amount);
       break;
+    case "attackAction":
+      add(s, { ...e, type: "damage", attack: true });
+      break;
     case "damage":
       if (
         e.basic &&
@@ -7188,6 +8003,22 @@ function resolve(s: GameState, e: Effect) {
         add(s, { ...e, target: "hero", actorId: e.target.slice(5) });
         break;
       }
+      if (e.target === "hero" && !e.grootDamageHandled) {
+        if (e.attack)
+          discardToughForPiercing(
+            s.player,
+            e.amount,
+            e.piercing ?? !!sourceKeyword(s, e.source || "hero", "Piercing"),
+          );
+        const prevented = groot.grootPreventDamage(s, "hero", e.amount);
+        e.amount = Math.max(0, e.amount - prevented);
+        e.grootDamageHandled = true;
+        if (prevented)
+          log(
+            s,
+            `Flora Colossus prevents ${prevented} damage with growth counters.`,
+          );
+      }
       if (
         !e.attack &&
         e.target === "hero" &&
@@ -7195,6 +8026,44 @@ function resolve(s: GameState, e: Effect) {
         openMsDamageWindow(s, e)
       )
         break;
+      if (
+        !e.attack &&
+        e.target !== "hero" &&
+        !e.scarletDamageDone &&
+        e.amount > 0
+      ) {
+        const friendly = allInPlay(s).find(
+          (p) => p.id === e.target && card(p).type_code === "ally",
+        );
+        if (friendly && !friendly.tough) {
+          e.damageWindowId ||= `damage${s.nextId++}`;
+          const amount = Math.max(
+            0,
+            e.amount - Number(s.flags[`msPrevent:${e.damageWindowId}`] || 0),
+          );
+          const options = scarletWitch.scarletWitchDamageOptions(
+            s,
+            e,
+            amount,
+            [e],
+            scarletPorts,
+          );
+          if (options.length) {
+            choose(
+              s,
+              "Incoming damage",
+              `${card(friendly).name} would take ${amount} damage.`,
+              [
+                ...options,
+                option("allow", `Take ${amount} damage`, [
+                  { ...e, scarletDamageDone: true },
+                ]),
+              ],
+            );
+            break;
+          }
+        }
+      }
       if (e.damageWindowId) {
         e.amount = Math.max(
           0,
@@ -7259,6 +8128,63 @@ function resolve(s: GameState, e: Effect) {
         e.amount += heroStats(s).attack - e.basicStatAmount;
         delete e.basicStatAmount;
       }
+      if (!e.attack && !e.gmwStarhawkHandled && e.amount > 0) {
+        const ally = allInPlay(s).find(
+          (p) => p.id === e.target && card(p).type_code === "ally",
+        );
+        if (ally) {
+          const continuation = { ...e, gmwStarhawkHandled: true };
+          const options = gmwPack.gmwPlayerPackStarhawkDamageOptions(
+            s,
+            ally,
+            e.amount,
+            [continuation],
+            gmwPorts,
+          );
+          if (options.length) {
+            choose(
+              s,
+              "Starhawk",
+              "Return Starhawk before this exact damage packet?",
+              [
+                ...options,
+                option("allow", `Take ${e.amount} damage`, [continuation]),
+              ],
+            );
+            break;
+          }
+        }
+      }
+      if (
+        e.attack &&
+        !e.gmwExcessHandled &&
+        !(
+          e.source && !["hero", `hero:${s.activePlayerId}`].includes(e.source)
+        ) &&
+        !s.player.stunned
+      ) {
+        const packet = {
+          ...e,
+          source: e.source || "hero",
+          attackInitiated: true,
+        };
+        const options = gmwPack.gmwPlayerPackExcessOptions(
+          s,
+          packet,
+          attackExcess(s, packet),
+          [],
+          gmwPorts,
+        );
+        if (options.length) {
+          choose(s, "Follow Through", "Increase this attack's excess damage?", [
+            ...options,
+            option("continue", "Continue", [
+              { ...packet, gmwExcessHandled: true },
+            ]),
+          ]);
+          break;
+        }
+      }
       if (e.attack)
         attackAction(
           s,
@@ -7271,6 +8197,7 @@ function resolve(s: GameState, e: Effect) {
             piercing: e.piercing,
             ranged: e.ranged,
             excessToMain: e.excessToMain,
+            excessBonus: e.excessBonus,
             initiated: e.attackInitiated || e.attackAlreadyInitiated,
           },
         );
@@ -7284,6 +8211,7 @@ function resolve(s: GameState, e: Effect) {
           e.attack,
           e.overkill,
           e.panther,
+          { grootHandled: !!e.grootDamageHandled },
         );
         delete s.flags.ignoreToughPacket;
       }
@@ -7339,6 +8267,7 @@ function resolve(s: GameState, e: Effect) {
           e.source,
           e.thwartInitiated,
           !!e.ignoreCrisis,
+          !!e.thwartStatusChecked,
         );
       else thwart(s, e.target, e.amount, !!e.ignoreCrisis, e.source);
       delete s.flags.additionalThwartPacket;
@@ -7470,6 +8399,114 @@ function resolve(s: GameState, e: Effect) {
         [],
         p,
         true,
+      );
+      break;
+    }
+    case "scwFreePlayRequest": {
+      const p: Piece = e.piece;
+      need(
+        s.player.hand.some((piece) => piece.id === p.id) &&
+          (e.additionalPaid ||
+            e.lightningX !== undefined ||
+            scarletPorts.canPlayIgnoringCost(s, p)),
+        "Chaos Magic's selected card is no longer legal.",
+      );
+      const after = e.after || [];
+      if (p.code === "14006" && e.cycloneX === undefined) {
+        const enemies = quicksilverPorts
+          .enemyTargets(s, false)
+          .filter((target) =>
+            quicksilverPorts.canGiveStatus(s, target.id, "stunned"),
+          );
+        need(enemies.length, "Speed Cyclone has no legal stun target.");
+        choose(
+          s,
+          "Speed Cyclone",
+          "Choose X. Chaos Magic ignores the resource cost, then discards X encounter cards.",
+          enemies.map((_, index) => {
+            const x = index + 1;
+            return option(
+              String(x),
+              `X = ${x} · stun ${x} ${x === 1 ? "enemy" : "enemies"}`,
+              [E("scwFreePlayRequest", { piece: p, after, cycloneX: x })],
+              undefined,
+              p.code,
+            );
+          }),
+        );
+        break;
+      }
+      if (p.code === "06006" && e.lightningX === undefined) {
+        // The printed resource cost is ignored, but the X-energy cost before
+        // the event's arrow remains payable and is committed atomically.
+        const options = thorLightningPaymentOptions(s, p, 0, thorPorts).map(
+          (option) => ({
+            ...option,
+            effects: option.effects.map((effect) => ({
+              ...effect,
+              cancelable: false,
+              after: [
+                E("scwFreePlayRequest", {
+                  piece: p,
+                  after,
+                  lightningX: effect.after[0].lightningX,
+                }),
+              ],
+            })),
+          }),
+        );
+        need(
+          options.length,
+          "Lightning Strike still requires its additional X-energy cost.",
+        );
+        choose(
+          s,
+          "Lightning Strike",
+          "Choose X and pay the additional energy cost. Chaos Magic ignores the printed card cost.",
+          options,
+        );
+        break;
+      }
+      const masterInvocationId =
+        e.masterInvocationId || doctorStrangeMasterInvocation(s, p)?.id;
+      const additionalCost = doctorStrangeAdditionalPlayCost(s, p);
+      if (additionalCost > 0 && !e.additionalPaid) {
+        requestPayment(
+          s,
+          "Master of the Mystic Arts · Invocation cost",
+          additionalCost,
+          [
+            E("scwFreePlayRequest", {
+              piece: p,
+              after,
+              masterInvocationId,
+              additionalPaid: true,
+            }),
+          ],
+          [],
+          p,
+          false,
+        );
+        break;
+      }
+      const printedCost =
+        card(p).cost === -1
+          ? Number(e.cycloneX || 0)
+          : Math.max(0, Number(card(p).cost || 0));
+      add(
+        s,
+        E("play", {
+          piece: p,
+          paid: p.code === "06006" ? e.paid || [] : [],
+          lightningX: e.lightningX,
+          cycloneX: e.cycloneX,
+          masterInvocationId,
+        }),
+        ...after.map((effect: Effect) =>
+          effect.type === "scw:discard-batch"
+            ? { ...effect, amount: printedCost }
+            : effect,
+        ),
       );
       break;
     }
@@ -7675,6 +8712,52 @@ function resolve(s: GameState, e: Effect) {
       const p = find(s, e.id);
       if (!p) break;
       const attack = e.kind === "attack";
+      if (attack && !e.gmwRocketAllyHandled && !p.stunned) {
+        const packet = { ...e, amount: e.amount ?? allyStat(s, p, "attack") };
+        const options = gmwPack.gmwPlayerPackAllyAttackOptions(
+          s,
+          p,
+          packet,
+          [],
+          gmwPorts,
+        );
+        if (options.length) {
+          p.exhausted = true;
+          choose(
+            s,
+            "Rocket Raccoon",
+            "Use Rocket's interrupt against this minion?",
+            [
+              ...options,
+              option("continue", "Continue", [
+                { ...packet, gmwRocketAllyHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
+      }
+      if (attack && !e.scarletLastHandled && !p.stunned) {
+        const continuation = {
+          ...e,
+          amount: e.amount ?? allyStat(s, p, "attack"),
+          scarletLastHandled: true,
+        };
+        const options = scarletPack.scarletWitchPackAllyAttackOptions(
+          s,
+          p,
+          [continuation],
+          scarletPackPorts,
+        );
+        if (options.length) {
+          p.exhausted = true;
+          choose(s, "Last Stand", "Increase this ally's attack?", [
+            ...options,
+            option("continue", "Continue", [continuation]),
+          ]);
+          break;
+        }
+      }
       if (
         p.code === "14002" &&
         !e.quicksilverAllyHandled &&
@@ -7714,8 +8797,13 @@ function resolve(s: GameState, e: Effect) {
       if (p.code === "03014" && attack) p.exhausted = true;
       const stunned = attack ? p.stunned : p.confused;
       const queuedBefore = s.queue.length;
-      const amount = e.amount ?? allyStat(s, p, attack ? "attack" : "thwart");
-      if (attack) attackAction(s, e.target, amount, p.id);
+      const bonus = attack
+        ? scarletPack.scarletWitchPackAllyAttackBonus(s, p)
+        : 0;
+      const amount =
+        (e.amount ?? allyStat(s, p, attack ? "attack" : "thwart") - bonus) +
+        bonus;
+      if (attack) attackAction(s, e.target, amount, p.id, !!e.overkill);
       else thwartAction(s, e.target, amount, p.id);
       if (stunned) break;
       const responses = s.queue.splice(0, s.queue.length - queuedBefore);
@@ -7730,12 +8818,15 @@ function resolve(s: GameState, e: Effect) {
               captainPackModifiers(s, p.id).consequentialAttack
             : card(p).thwart_cost || 0,
         }),
+        ...(attack ? [E("scarletAfterAllyAttack", { id: p.id })] : []),
       );
       break;
     }
     case "allyResponse": {
       const p = find(s, e.id);
       if (!p) break;
+      if (!e.attack)
+        add(s, ...scarletPack.scarletWitchPackAfterAllyThwart(s, p));
       add(s, ...hulkPackAllyResponse(s, p, !!e.attack));
       add(
         s,
@@ -7757,7 +8848,15 @@ function resolve(s: GameState, e: Effect) {
     }
     case "allyConsequence": {
       const p = find(s, e.id);
-      if (p && e.amount) dealDamage(s, p.id, e.amount, "consequential");
+      if (p && e.amount)
+        add(
+          s,
+          E("damage", {
+            target: p.id,
+            amount: e.amount,
+            source: "consequential",
+          }),
+        );
       break;
     }
     case "hulk": {
@@ -7873,7 +8972,17 @@ function resolve(s: GameState, e: Effect) {
         break;
       }
       heal(s, "hero", e.amount);
-      dealDamage(s, e.target, e.amount, "hero", true, false, true);
+      add(
+        s,
+        E("damage", {
+          target: e.target,
+          amount: e.amount,
+          source: "hero",
+          attack: true,
+          panther: true,
+          attackInitiated: true,
+        }),
+      );
       break;
     case "emergency": {
       const reduction = s.player.confused ? 0 : 1;
@@ -7976,6 +9085,12 @@ function resolve(s: GameState, e: Effect) {
       if (!a) break;
       if (!e.expertChecked) {
         const options = [
+          ...groot.grootDefenseOptions(s, [E("boostAttack")], grootPorts),
+          ...gmwPack.gmwPlayerPackDefenseOptions(
+            s,
+            [E("boostAttack")],
+            gmwPorts,
+          ),
           ...wasp.waspDefenseOptions(s, [E("boostAttack")], waspPorts),
           ...quicksilverPack.quicksilverPackDefenseOptions(
             s,
@@ -7988,7 +9103,7 @@ function resolve(s: GameState, e: Effect) {
         if (options.length) {
           choose(
             s,
-            "Expert Defense",
+            "Defense interrupts",
             "Use a defense interrupt before revealing boost cards?",
             [
               ...options,
@@ -8016,7 +9131,11 @@ function resolve(s: GameState, e: Effect) {
         e.piece || (legacy ? drawEncounter(s) : a.pendingBoosts!.shift());
       if (p) {
         beginResolution(s, p);
-        (a.boostIds ||= []).push(p.id);
+        const boostIds = (a.boostIds ||= []);
+        // Legacy saves retained already revealed codes without physical IDs.
+        // Keep their positions aligned before adding this newly revealed face.
+        while (boostIds.length < a.boostCodes.length) boostIds.push("");
+        boostIds.push(p.id);
         a.base += card(p).boost || 0;
         a.boostCodes.push(p.code);
         add(s, E("boostInterruptWindow", { piece: p, legacy }));
@@ -8110,6 +9229,10 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "completeBoost":
+      if (!e.scarletCounted && !s.boostCancellations?.[e.id]?.icons) {
+        countActivationBoost(s, e.id, [{ ...e, scarletCounted: true }]);
+        break;
+      }
       if (s.boostCancellations) delete s.boostCancellations[e.id];
       if (s.attack?.targetPlayerId && !e.scheme)
         activateSeat(s, s.attack.targetPlayerId);
@@ -8147,6 +9270,51 @@ function resolve(s: GameState, e: Effect) {
         break;
       }
       calculateAttack(s);
+      const damageTarget =
+        a.defender && a.defender !== "none"
+          ? a.defender
+          : a.originalTarget || "hero";
+      const heroTarget = damageTarget === "hero";
+      const receiving = heroTarget ? s.player : find(s, damageTarget);
+      const incoming = a.preventAllDamage
+        ? 0
+        : Math.max(0, a.base - a.defense - a.prevented);
+      if (receiving)
+        discardToughForPiercing(
+          receiving,
+          incoming,
+          !!sourceKeyword(s, a.attacker, "Piercing"),
+        );
+      if (heroTarget && !a.grootDamageHandled) {
+        const prevented = groot.grootPreventDamage(s, "hero", incoming);
+        a.prevented += prevented;
+        a.grootDamageHandled = true;
+        if (prevented)
+          log(
+            s,
+            `Flora Colossus prevents ${prevented} damage with growth counters.`,
+          );
+      }
+      if (!heroTarget && a.overkill && !a.grootOverkillHandled) {
+        const ally = find(s, damageTarget);
+        const excess =
+          ally && !ally.tough
+            ? Math.max(
+                0,
+                incoming -
+                  (pieceHP(s, ally) - ally.damage) -
+                  (a.identityPrevented || 0),
+              )
+            : 0;
+        const prevented = groot.grootPreventDamage(s, "hero", excess);
+        a.identityPrevented = (a.identityPrevented || 0) + prevented;
+        a.grootOverkillHandled = true;
+        if (prevented)
+          log(
+            s,
+            `Flora Colossus prevents ${prevented} overkill damage with growth counters.`,
+          );
+      }
       const opts = [
         option(
           "resolve",
@@ -8154,8 +9322,27 @@ function resolve(s: GameState, e: Effect) {
           [E("finishAttack")],
         ),
       ];
-      const heroTarget =
-        !a.defender || a.defender === "none" || a.defender === "hero";
+      const shieldTarget = damageTarget;
+      if (!(heroTarget ? s.player.tough : find(s, shieldTarget)?.tough))
+        opts.unshift(
+          ...scarletWitch.scarletWitchDamageOptions(
+            s,
+            { type: "attackDamage", kind: "attack", target: shieldTarget },
+            Math.max(0, a.base - a.defense - a.prevented),
+            [E("damageWindow")],
+            scarletPorts,
+          ),
+        );
+      if (heroTarget)
+        opts.unshift(
+          ...gmwPack.gmwPlayerPackDamageOptions(
+            s,
+            { type: "attackDamage", kind: "attack", target: "hero" },
+            Math.max(0, a.base - a.defense - a.prevented),
+            [E("damageWindow")],
+            gmwPorts,
+          ),
+        );
       if (heroTarget)
         opts.unshift(
           ...quicksilverPack.quicksilverPackDamageOptions(
@@ -8231,7 +9418,7 @@ function resolve(s: GameState, e: Effect) {
             })),
         );
       if (!heroTarget && a.overkill) {
-        const ally = find(s, a.defender!);
+        const ally = find(s, damageTarget);
         const excess =
           ally && !ally.tough
             ? Math.max(
@@ -8243,6 +9430,25 @@ function resolve(s: GameState, e: Effect) {
                   (a.identityPrevented || 0),
               )
             : 0;
+        if (!s.player.tough)
+          opts.unshift(
+            ...scarletWitch.scarletWitchDamageOptions(
+              s,
+              { type: "damage", kind: "overkill", target: "hero" },
+              excess,
+              [E("damageWindow")],
+              scarletPorts,
+            ),
+          );
+        opts.unshift(
+          ...gmwPack.gmwPlayerPackDamageOptions(
+            s,
+            { type: "damage", kind: "overkill", target: "hero" },
+            excess,
+            [E("damageWindow")],
+            gmwPorts,
+          ),
+        );
         opts.unshift(
           ...quicksilverPack.quicksilverPackDamageOptions(
             s,
@@ -8383,7 +9589,7 @@ function resolve(s: GameState, e: Effect) {
       }
       break;
     case "finishAttack":
-      finishAttack(s);
+      finishAttack(s, e);
       break;
     case "afterBoost": {
       const a = s.attack;
@@ -8401,14 +9607,21 @@ function resolve(s: GameState, e: Effect) {
             : s.player;
         if (p) giveCharacterStatus(s, p, "stunned");
       }
-      if (rulesCode(e.code) === "01173" && a.defender === "none")
-        add(s, E("chooseDiscard", { filter: "upgrade" }));
-      if (rulesCode(e.code) === "01178" && a.defender === "none")
-        add(s, E("threat", { target: "main", amount: 1 }));
       break;
     }
     case "defenseResponses": {
       s.attack = null;
+      if (!e.gmwHandled && e.snapshot) {
+        add(
+          s,
+          ...gmwPack.gmwPlayerPackAfterDefense(s, e.snapshot, gmwPorts),
+          ...(e.snapshot.basicDefense
+            ? groot.grootAfterBasicPower(s, "defense", grootPorts)
+            : []),
+          { ...e, gmwHandled: true },
+        );
+        break;
+      }
       if (!e.quicksilverHandled) {
         add(
           s,
@@ -8775,6 +9988,8 @@ function resolve(s: GameState, e: Effect) {
       log(s, `${heroCard(s).name} and their cards are ready.`, "phase");
       break;
     case "beginVillain":
+      scarletWitch.scarletWitchPhaseEnded(s);
+      rocket.rocketPhaseEnded(s);
       for (const seat of s.players) {
         antPack.antManPackPhaseEnded(seatView(s, seat));
         waspPack.waspPackPhaseEnded(seatView(s, seat));
@@ -8788,6 +10003,7 @@ function resolve(s: GameState, e: Effect) {
       log(s, "Villain phase · threat, activations, then encounters.", "phase");
       add(
         s,
+        ...groot.grootVillainPhaseBegin(s, grootPorts),
         E("villainStepOne"),
         ...eachPlayer(s, E("villainActivate")),
         E("dealEncounters"),
@@ -8853,6 +10069,24 @@ function resolve(s: GameState, e: Effect) {
         );
       break;
     }
+    case "minionActivate": {
+      const p = s.minions.find((p) => p.id === e.id);
+      if (p) {
+        const playerId = e.playerId || p.engagedWith || s.activePlayerId;
+        const view = seatView(s, playerId);
+        add(
+          s,
+          E(view.player.form === "hero" ? "enemyAttack" : "enemyScheme", {
+            id: p.id,
+            actorId: playerId,
+          }),
+        );
+      }
+      break;
+    }
+    case "dealEncounter":
+      dealEncounter(s, e.playerId || s.activePlayerId);
+      break;
     case "dealEncounters": {
       s.villainStep = "encounters";
       const order = playerOrder(s);
@@ -8883,6 +10117,9 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "newRound": {
+      scarletWitch.scarletWitchPhaseEnded(s);
+      rocket.rocketPhaseEnded(s);
+      rocket.rocketRoundEnded(s);
       for (const seat of s.players) {
         waspPack.waspPackPhaseEnded(seatView(s, seat));
         quicksilver.quicksilverPhaseEnded(seatView(s, seat));
@@ -8901,6 +10138,9 @@ function resolve(s: GameState, e: Effect) {
           discardPiece(s, p.id);
         s.flags = {
           nemesis: s.flags.nemesis || false,
+          ...(s.heroId === "groot"
+            ? { grootGrowthCounters: groot.grootGrowthCounters(s) }
+            : {}),
           ...(s.flags.qsvCannotReadyUntilTurnEnd
             ? { qsvCannotReadyUntilTurnEnd: s.flags.qsvCannotReadyUntilTurnEnd }
             : {}),
@@ -9329,7 +10569,13 @@ export function dispatch(state: GameState, command: Command): GameState {
           return s;
         }
         const requirements: Resource[] =
-          p!.code === "10002" ? Array(cost).fill("physical") : [];
+          p!.code === "10002"
+            ? Array(cost).fill("physical")
+            : p!.code === "15012" &&
+                !s.player.confused &&
+                s.sideSchemes.some((piece) => card(piece).scheme_crisis)
+              ? ["mental"]
+              : [];
         need(
           canPay(s, cost, requirements, p!.id, p!.code),
           `You cannot pay ${cost} for ${card(p!).name} right now.`,
@@ -9393,6 +10639,8 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
               ...goblinModuleAttachmentActions(s, p),
               ...mutagenAttachmentActions(s, p),
+              ...scarletWitch.scarletWitchAttachmentActions(s, p, scarletPorts),
+              ...rocket.rocketAttachmentActions(s, p, rocketPorts),
               ...quicksilver.quicksilverAttachmentActions(
                 s,
                 p,
@@ -9449,6 +10697,8 @@ export function dispatch(state: GameState, command: Command): GameState {
           const seat = s.players.find((p) => p.id === s.activePlayerId)!;
           antMan.antManTurnEnded(s);
           quicksilver.quicksilverTurnEnded(s);
+          rocket.rocketTurnEnded(s);
+          gmwPack.gmwPlayerPackTurnEnded(s);
           seat.ended = true;
           log(s, `${heroCard(s).name} ends their turn.`, "phase");
           const next = playerOrder(s).find((p) => !p.ended);

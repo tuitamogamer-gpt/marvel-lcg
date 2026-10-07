@@ -29,7 +29,9 @@
     "test:rise-heroes": "node scripts/rise-heroes-check.mjs",
     "test:ant-man": "node scripts/ant-man-check.mjs",
     "test:wasp": "node scripts/wasp-check.mjs",
-    "test:quicksilver": "node scripts/quicksilver-check.mjs"
+    "test:quicksilver": "node scripts/quicksilver-check.mjs",
+    "test:scarlet-witch": "node scripts/scarlet-witch-check.mjs",
+    "test:gmw-heroes": "node scripts/gmw-heroes-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

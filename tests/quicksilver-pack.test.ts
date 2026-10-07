@@ -642,26 +642,36 @@ describe("Quicksilver Hero Pack supplementary cards", () => {
     ).toEqual([]);
   });
 
-  it("Order and Chaos cancels only When Revealed text and resumes physical keyword resolution after non-attack damage", () => {
-    const { s, hand, play, run, ports } = fixture();
-    s.heroId = "qsv";
-    s.players[0].heroId = "qsv";
-    const [order] = hand("14018");
-    play("14002");
-    const p = makePiece(s, "14028"),
-      after = [{ type: "reveal", piece: p, skip: true }];
-    run(P("order-pay", { id: order.id, piece: p, fromDeck: true, after }));
-    expect(s.queue[0]).toMatchObject({
-      type: "payRequest",
-      piece: order,
-      cancelable: false,
-    });
-    run(P("order", { piece: p, after }));
-    expect(ports.cancelWhenRevealed).toHaveBeenCalledWith(s, p, [
-      { type: "damage", target: s.villain.id, amount: 2, source: "hero" },
-      ...after,
-    ]);
-  });
+  it.each(["14018", "15018"])(
+    "Order and Chaos %s preserves its physical printing, cancels only When Revealed text and resumes keywords after non-attack damage",
+    (code) => {
+      const { s, hand, play, run, ports } = fixture();
+      s.heroId = code === "14018" ? "qsv" : "scw";
+      s.players[0].heroId = s.heroId;
+      const [order] = hand(code);
+      play(code === "14018" ? "14002" : "15002");
+      const p = makePiece(s, "14028"),
+        after = [{ type: "reveal", piece: p, skip: true }];
+      expect(
+        quicksilverPackEncounterOptions(s, p, true, after, ports).map(
+          (option) => ({ id: option.id, image: option.image }),
+        ),
+      ).toEqual([{ id: order.id, image: code }]);
+      run(P("order-pay", { id: order.id, piece: p, fromDeck: true, after }));
+      expect(s.queue[0]).toMatchObject({
+        type: "payRequest",
+        piece: order,
+        cancelable: false,
+      });
+      expect(s.queue[0].piece).toBe(order);
+      expect(s.queue[0].after[0].id).toBe(order.id);
+      run(P("order", { piece: p, after }));
+      expect(ports.cancelWhenRevealed).toHaveBeenCalledWith(s, p, [
+        { type: "damage", target: s.villain.id, amount: 2, source: "hero" },
+        ...after,
+      ]);
+    },
+  );
 
   it("United We Stand heals different friendly characters across teammates, with a stage cap of three", () => {
     const { s, play, run, choose } = fixture(true);
@@ -741,10 +751,11 @@ describe("Quicksilver Hero Pack supplementary cards", () => {
 
   it("reaction cards are unavailable as ordinary actions and unrelated effects remain host-owned", () => {
     const { s, run, ports } = fixture();
-    for (const code of ["14014", "14015", "14018"])
+    for (const code of ["14014", "14015", "14018", "15018"])
       expect(
         quicksilverPackPlayRestriction(s, makePiece(s, code), ports),
       ).toContain("interrupt window");
+    expect(quicksilverPackEvent(s, makePiece(s, "15018"))).toEqual([]);
     expect(run({ type: "heal", target: "hero", amount: 1 })).toBe(false);
     expect(quicksilverPackEvent(s, makePiece(s, "01059"))).toBeNull();
     expect(() => run(P("unknown"))).toThrow(/Unknown Quicksilver/);
