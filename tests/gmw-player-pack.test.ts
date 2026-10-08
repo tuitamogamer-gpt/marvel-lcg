@@ -333,7 +333,13 @@ describe("Galaxy's Most Wanted original player packs", () => {
       { heroDefended: true, heroDamage: 0, playerId: "p1" },
       ports,
     );
-    run(opts[0].effects[0]);
+    run(opts[0]);
+    const optional = s.queue.shift()!;
+    expect(optional).toMatchObject({
+      type: "optional",
+      title: "Hard to Ignore",
+    });
+    run(optional.effects[0]);
     expect(p.exhausted).toBe(true);
     expect(s.queue[0]).toMatchObject({
       type: "thwart",

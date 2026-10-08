@@ -360,6 +360,20 @@ export function gmwPlayerPackAfterBasicAttack(s: GameState): Effect[] {
         )
     : [];
 }
+function hardToIgnoreSource(
+  s: GameState,
+  id: string,
+  ports: GmwPlayerPackPorts,
+): Piece | undefined {
+  const p = own(s, id, "16017");
+  return p &&
+    !p.exhausted &&
+    s.player.form === "hero" &&
+    s.scheme.threat > 0 &&
+    (ports.canRemoveMainThreat?.(s) ?? true)
+    ? p
+    : undefined;
+}
 export function gmwPlayerPackAfterDefense(
   s: GameState,
   snapshot: GmwPlayerPackDefenseSnapshot,
@@ -386,13 +400,7 @@ export function gmwPlayerPackAfterDefense(
     for (const p of s.player.inPlay.filter(
       (p) => p.code === "16017" && !p.exhausted && !isTextBlank(s, p),
     ))
-      effects.push(
-        E("optional", {
-          title: "Hard to Ignore",
-          text: "Exhaust Hard to Ignore to remove 1 threat from the main scheme?",
-          effects: [P("hard", { id: p.id })],
-        }),
-      );
+      effects.push(P("hard-offer", { id: p.id }));
   const groot =
     snapshot.defender &&
     allInPlay(s).find(
@@ -691,16 +699,22 @@ export function resolveGmwPlayerPackEffect(
       if (p) ports.queue(s, E("heal", { target: p.id, amount: 2 }));
       break;
     }
+    case "gmw-pack:hard-offer": {
+      // An earlier copy can remove the last threat before this response opens.
+      if (hardToIgnoreSource(s, e.id, ports))
+        ports.queue(
+          s,
+          E("optional", {
+            title: "Hard to Ignore",
+            text: "Exhaust Hard to Ignore to remove 1 threat from the main scheme?",
+            effects: [P("hard", { id: e.id })],
+          }),
+        );
+      break;
+    }
     case "gmw-pack:hard": {
-      const p = own(s, e.id, "16017");
-      need(
-        p &&
-          !p.exhausted &&
-          s.player.form === "hero" &&
-          s.scheme.threat > 0 &&
-          (ports.canRemoveMainThreat?.(s) ?? true),
-        "Hard to Ignore is unavailable.",
-      );
+      const p = hardToIgnoreSource(s, e.id, ports);
+      need(p, "Hard to Ignore is unavailable.");
       p!.exhausted = true;
       ports.queue(
         s,
