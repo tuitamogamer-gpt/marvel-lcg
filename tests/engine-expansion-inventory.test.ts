@@ -122,6 +122,7 @@ describe("complete expansion rules inventory", () => {
       ["drax", 34],
       ["vnm", 30],
       ["nebu", 36],
+      ["warm", 36],
     ] as const) {
       expect(
         coverage.products.find((pack: { code: string }) => pack.code === code),
@@ -159,7 +160,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    for (const id of ["stld", "gam", "drax", "vnm", "nebu"])
+    for (const id of ["stld", "gam", "drax", "vnm", "nebu", "warm"])
       expect(
         inventory.heroes.find(
           (hero: { id: string }) => hero.id === `${id}:${id}`,
@@ -196,10 +197,10 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(1109);
-    expect(coverage.unsupportedFaces).toBe(3442);
-    expect(coverage.dedicatedFaces).toBe(634);
-    expect(coverage.registeredHeroIds).toHaveLength(26);
+    expect(coverage.executableFaces).toBe(1140);
+    expect(coverage.unsupportedFaces).toBe(3411);
+    expect(coverage.dedicatedFaces).toBe(665);
+    expect(coverage.registeredHeroIds).toHaveLength(27);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
         coverage.registeredHeroes.some(
@@ -279,7 +280,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(67);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(69);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
@@ -354,6 +355,8 @@ describe("complete expansion rules inventory", () => {
       "src/game/mts-player-pack.ts",
       "src/game/nebula.ts",
       "src/game/nebula-pack.ts",
+      "src/game/war-machine.ts",
+      "src/game/war-machine-pack.ts",
       "src/game/printed-card-metadata.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",

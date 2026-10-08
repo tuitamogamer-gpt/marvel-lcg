@@ -38,6 +38,7 @@ import { warlockStats } from "./warlock.js";
 import { mtsPlayerPackHeroStats } from "./mts-player-pack.js";
 import { nebulaStats, nebulaNamedCharacterModifiers } from "./nebula.js";
 import { nebulaPackModifiers } from "./nebula-pack.js";
+import { warMachineTraits } from "./war-machine.js";
 import { msMarvelStats } from "./ms-marvel.js";
 import { identityMatch, uniqueMatches } from "./unique.js";
 import { rulesCode } from "./rules-code.js";
@@ -483,6 +484,20 @@ export const HEROES = [
     style: "Technique upgrades · Justice",
     complexity: 3,
   },
+  {
+    id: "warm",
+    code: "23001a",
+    alter: "23001b",
+    name: "War Machine",
+    identity: "James Rhodes",
+    aspect: "leadership" as Aspect,
+    color: "#8c969f",
+    tag: "Arsenal ready.",
+    description:
+      "Load ammo when you change to War Machine, deploy Tech weapons, and coordinate allies to answer enemy attacks and schemes.",
+    style: "Ammo counters · Leadership",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -675,6 +690,7 @@ export function deckCodes(
       (hero === "vnm" && aspect === "justice") ||
       (hero === "spectrum" && aspect === "leadership") ||
       (hero === "nebu" && aspect === "justice") ||
+      (hero === "warm" && aspect === "leadership") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
@@ -784,6 +800,7 @@ export function aerial(s: GameState) {
     spiderWomanHasAerial(s) ||
     rocketHeroTraits(s).includes("Aerial") ||
     starLordHeroTraits(s).includes("Aerial") ||
+    warMachineTraits(s).includes("Aerial") ||
     waspHeroTraits(textActiveState(s)).includes("Aerial")
   );
 }

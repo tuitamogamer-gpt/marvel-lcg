@@ -10,6 +10,8 @@ import { venomPackResourceSources } from "./venom-pack.js";
 import { venomResourceSources } from "./venom.js";
 import { spectrumResourceSources } from "./spectrum.js";
 import { warlockResourceSources } from "./warlock.js";
+import { warMachineResourceSources } from "./war-machine.js";
+import { warMachinePackResourceSources } from "./war-machine-pack.js";
 import { mtsPlayerPackCardResources } from "./mts-player-pack.js";
 import { isTextBlank } from "./card-text.js";
 import { hawkeyeResourceSources } from "./hawkeye.js";
@@ -19,7 +21,7 @@ import { doctorStrangeResourceSources } from "./doctor-strange.js";
 import { msMarvelResourceSources } from "./ms-marvel.js";
 import { rulesCode } from "./rules-code.js";
 import { CARDS, card, heroCard, resources } from "./cards.js";
-import { allInPlay } from "./team.js";
+import { allInPlay, playerOrder, seatView } from "./team.js";
 import { captainResourceSources } from "./captain-america.js";
 import { hulkResourceSources, hulkCanSpendCard } from "./hulk.js";
 import { hulkPackResourceSources } from "./hulk-pack.js";
@@ -46,6 +48,9 @@ export interface PaymentSource {
   resources: Resource[];
   description: string;
   kind: "card" | "ability";
+  /** Alliance contributions retain their actual seat and native source ID. */
+  playerId?: string;
+  localId?: string;
 }
 
 /** TAKE costs require the full damage to reach the identity. Tough prevents
@@ -63,7 +68,7 @@ export function resourcesFor(
   return mtsPlayerPackCardResources(s, p) ?? resources(card(p), target);
 }
 
-export function paymentSources(
+function localPaymentSources(
   s: GameState,
   exclude?: string,
   targetCode?: string,
@@ -138,6 +143,8 @@ export function paymentSources(
   );
   sources.push(...spectrumResourceSources(s, { isTextBlank }));
   sources.push(...warlockResourceSources(s, { isTextBlank }));
+  sources.push(...warMachineResourceSources(s, targetCode, { isTextBlank }));
+  sources.push(...warMachinePackResourceSources(s, { isTextBlank }));
   sources.push(...hawkeyeResourceSources(s, targetCode));
   sources.push(...spiderWomanResourceSources(s, targetCode));
   sources.push(...blackWidowResourceSources(s, targetCode));
@@ -169,6 +176,35 @@ export function paymentSources(
   );
 }
 
+/** An Alliance payment may use resources from any surviving player. Local
+ * IDs keep the ordinary API; teammate IDs encode their actual native source. */
+export function paymentSources(
+  s: GameState,
+  exclude?: string,
+  targetCode?: string,
+  handOnly = false,
+  alliance = false,
+): PaymentSource[] {
+  const sources = localPaymentSources(s, exclude, targetCode, handOnly);
+  if (!alliance) return sources;
+  for (const seat of playerOrder(s)) {
+    if (seat.id === s.activePlayerId) continue;
+    const view = seatView(s, seat);
+    sources.push(
+      ...localPaymentSources(view, exclude, targetCode, handOnly).map(
+        (source) => ({
+          ...source,
+          id: `alliance:${seat.id}:${source.id}`,
+          localId: source.id,
+          playerId: seat.id,
+          name: `${heroCard(view).name} · ${source.name}`,
+        }),
+      ),
+    );
+  }
+  return sources;
+}
+
 /**
  * Proposes a payment with the least overpayment, then the lowest total `rank`,
  * then the fewest sources. Printed types and wilds satisfy the requirements.
@@ -179,6 +215,8 @@ export function suggestPayment(
   cost: number,
   requirements: Resource[] = [],
   rank: (source: PaymentSource) => number = () => 0,
+  retainOneOfIds: string[] = [],
+  sourceRequirement?: Prompt["sourceRequirement"],
 ) {
   type Selection = { ids: string[]; printed: Resource[]; value: number };
   const types: Resource[] = ["energy", "mental", "physical", "wild"];
@@ -189,9 +227,20 @@ export function suggestPayment(
   );
   // Keep one cheapest selection for each total and relevant resource mix.
   // Capping typed counts avoids enumerating every subset of a large hand.
-  const key = (printed: Resource[]) =>
+  const key = (printed: Resource[], ids: string[] = []) =>
     [
       printed.length,
+      ...(sourceRequirement
+        ? [
+            Math.min(
+              sourceRequirement.minimum,
+              ids.filter((id) => sourceRequirement.ids.includes(id)).length,
+            ),
+          ]
+        : []),
+      ...(retainOneOfIds.length
+        ? [ids.filter((id) => retainOneOfIds.includes(id)).length]
+        : []),
       ...types.map((type, i) =>
         Math.min(caps[i], printed.filter((r) => r === type).length),
       ),
@@ -208,14 +257,23 @@ export function suggestPayment(
         printed: [...current.printed, ...source.resources],
         value: current.value + rank(source),
       };
-      const k = key(next.printed);
+      const k = key(next.printed, next.ids);
       const previous = states.get(k);
       if (!previous || cheaper(next, previous)) states.set(k, next);
     }
   }
   let best: Selection | undefined;
   for (const selection of states.values()) {
-    if (!paymentStatus(sources, selection.ids, cost, requirements).ready)
+    if (
+      !paymentStatus(
+        sources,
+        selection.ids,
+        cost,
+        requirements,
+        retainOneOfIds,
+        sourceRequirement,
+      ).ready
+    )
       continue;
     if (
       !best ||
@@ -234,6 +292,8 @@ export function paymentStatus(
   ids: string[],
   cost: number,
   requirements: Resource[] = [],
+  retainOneOfIds: string[] = [],
+  sourceRequirement?: Prompt["sourceRequirement"],
 ) {
   const selected = sources.filter((s) => ids.includes(s.id));
   const printed = selected.flatMap((s) => s.resources);
@@ -245,12 +305,24 @@ export function paymentStatus(
     if (index < 0) missing.push(resource);
     else available.splice(index, 1);
   }
+  const retained =
+    !retainOneOfIds.length || retainOneOfIds.some((id) => !ids.includes(id));
+  const sourceRequirementMet =
+    !sourceRequirement ||
+    sourceRequirement.ids.filter((id) => ids.includes(id)).length >=
+      sourceRequirement.minimum;
   return {
     selected,
     printed,
+    sourceRequirementMet,
     total: printed.length,
     missing,
-    ready: printed.length >= cost && !missing.length,
+    retained,
+    ready:
+      printed.length >= cost &&
+      !missing.length &&
+      retained &&
+      sourceRequirementMet,
   };
 }
 

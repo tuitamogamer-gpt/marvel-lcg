@@ -132,6 +132,7 @@ import {
   newGame,
   paymentSources,
   canPay,
+  warMachinePackStoredPlayable,
   playable,
   cardCost,
   summarize,
@@ -142,6 +143,7 @@ import {
 } from "./game/engine";
 import { seatView, upgradeSave } from "./game/team";
 import { grootGrowthCounters } from "./game/groot";
+import { warMachineAmmo } from "./game/war-machine";
 import { effectTitle } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
 import type { PaymentSource } from "./game/payment";
@@ -2615,8 +2617,21 @@ function PaymentDecision({
   const [selected, setSelected] = useState<string[]>([]);
   const [wild, setWild] = useState<Resource>(p.wildAs || "energy");
   const [preview, setPreview] = useState<string | null>(null);
-  const sources = paymentSources(s, p.card?.id, p.paymentTarget, p.handOnly);
-  const status = paymentStatus(sources, selected, p.cost || 0, p.requirements);
+  const sources = paymentSources(
+    s,
+    p.card?.id,
+    p.paymentTarget,
+    p.handOnly,
+    p.alliance,
+  );
+  const status = paymentStatus(
+    sources,
+    selected,
+    p.cost || 0,
+    p.requirements,
+    p.retainOneOfIds,
+    p.sourceRequirement,
+  );
   const subject = paymentSubject(s, p);
   // Spend the least valuable resources first: Scientist and printed resource
   // cards, then cards that cannot be played this turn, then playable cards by cost.
@@ -2629,7 +2644,14 @@ function PaymentDecision({
     const open = { ...s, prompt: null, review: null };
     return (playable(open, piece) ? 2 : 3) + (c.cost || 0) / 100;
   };
-  const suggestion = suggestPayment(sources, p.cost || 0, p.requirements, rank);
+  const suggestion = suggestPayment(
+    sources,
+    p.cost || 0,
+    p.requirements,
+    rank,
+    p.retainOneOfIds,
+    p.sourceRequirement,
+  );
   const discards = status.selected.filter((x) => x.kind === "card").length;
   const abilities = status.selected.length - discards;
   const toggle = (id: string) =>
@@ -2740,11 +2762,17 @@ function PaymentDecision({
                     <Lightning size={14} />
                   )}
                   <b>
-                    {kind === "card" ? "FROM YOUR HAND" : "RESOURCE ABILITIES"}
+                    {kind === "card"
+                      ? p.alliance
+                        ? "FROM PLAYERS’ HANDS"
+                        : "FROM YOUR HAND"
+                      : "RESOURCE ABILITIES"}
                   </b>
                   <span>
                     {kind === "card"
-                      ? "Selected cards go to your discard pile"
+                      ? p.alliance
+                        ? "Selected cards go to their owner’s discard pile"
+                        : "Selected cards go to your discard pile"
                       : "Use the ability shown below each card"}
                   </span>
                 </div>
@@ -2820,7 +2848,11 @@ function PaymentDecision({
                 ? `Choose ${(p.cost || 0) - status.total} more resource${(p.cost || 0) - status.total === 1 ? "" : "s"}`
                 : status.missing.length
                   ? `Still need ${status.missing.join(" + ")}`
-                  : "Payment ready to confirm"}
+                  : !status.retained
+                    ? "Keep an eligible ally in hand for Sneak Attack"
+                    : !status.sourceRequirementMet
+                      ? p.sourceRequirement?.label
+                      : "Payment ready to confirm"}
             </b>
             <small>
               {selected.length
@@ -4650,6 +4682,16 @@ function Tabletop({
                       />
                     </div>
                   )}
+                  {s.heroId === "warm" && (
+                    <div className="identity-stats stat-row">
+                      <StatToken
+                        kind="counter"
+                        value={warMachineAmmo(s)}
+                        label="AMMO"
+                        compact
+                      />
+                    </div>
+                  )}
                   <p className="identity-power">{plain(heroCard(s).text)}</p>
                   {abilityActive && (
                     <button
@@ -4996,6 +5038,54 @@ function Tabletop({
                               }
                             >
                               Play Arrow · {cardCost(s, card(arrow))}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+                {warMachinePackStoredPlayable(s).length > 0 && (
+                  <section
+                    className="invocation-area"
+                    aria-label="Black Panther attached events"
+                  >
+                    <span className="table-group-label">
+                      ATTACHED EVENTS · BLACK PANTHER
+                    </span>
+                    <div className="attached-card-list">
+                      {warMachinePackStoredPlayable(s).map((event) => {
+                        const reason = playable(s, event);
+                        return (
+                          <div className="attached-piece" key={event.id}>
+                            <button
+                              className="attached-card"
+                              aria-label={`Inspect ${card(event).name} attached to Black Panther`}
+                              onClick={() =>
+                                inspect({
+                                  code: event.code,
+                                  piece: event,
+                                  hand: true,
+                                  playerId: s.activePlayerId,
+                                })
+                              }
+                            >
+                              <CardImage code={event.code} />
+                              <span>{card(event).name}</span>
+                            </button>
+                            <button
+                              className="ability-button"
+                              aria-label={`Play from Black Panther: ${card(event).name}`}
+                              title={
+                                reason ||
+                                `Pay ${cardCost(s, card(event))} resources`
+                              }
+                              disabled={!canUseAction || !!reason}
+                              onClick={() =>
+                                sendAction({ type: "PLAY", id: event.id })
+                              }
+                            >
+                              Play Event · {cardCost(s, card(event))}
                             </button>
                           </div>
                         );

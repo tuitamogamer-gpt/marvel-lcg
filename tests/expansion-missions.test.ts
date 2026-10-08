@@ -57,6 +57,7 @@ const heroIds = [
   "spectrum",
   "warlock",
   "nebu",
+  "warm",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -310,8 +311,8 @@ describe("published expansion starters across every supported mission setting", 
     );
     expect(VILLAINS).toHaveLength(5);
     expect(MODULES).toHaveLength(9);
-    expect(heroIds).toHaveLength(21);
-    expect(missions).toHaveLength(1890);
+    expect(heroIds).toHaveLength(22);
+    expect(missions).toHaveLength(1980);
   });
   for (const mission of missions)
     it(

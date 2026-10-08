@@ -47,6 +47,8 @@ jobs:
             scripts: test:mts-heroes
           - group: nebula
             scripts: test:nebula
+          - group: war-machine
+            scripts: test:war-machine
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

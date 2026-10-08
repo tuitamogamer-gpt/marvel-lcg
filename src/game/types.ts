@@ -119,6 +119,12 @@ export interface Prompt {
   paymentTarget?: string;
   /** Printed costs such as Blade must spend cards from hand. */
   handOnly?: boolean;
+  /** Printed Alliance permits contributions from other surviving seats. */
+  alliance?: boolean;
+  /** At least one actual additional-cost hand ally must remain unspent. */
+  retainOneOfIds?: string[];
+  /** Selected resource abilities must also fund the pending additional cost. */
+  sourceRequirement?: { ids: string[]; minimum: number; label: string };
   /** The physical payment subject is using an ability, not being played. */
   abilityCost?: boolean;
   wildAs?: Resource;

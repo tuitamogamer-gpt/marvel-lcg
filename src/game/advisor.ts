@@ -21,7 +21,9 @@ import {
   playable,
   schemeLimit,
   targets,
+  warMachinePackSneakAllies,
 } from "./engine.js";
+import { printedKeyword } from "./keywords.js";
 import { suggestPayment } from "./payment.js";
 import type { PaymentSource } from "./payment.js";
 import { engaged } from "./team.js";
@@ -143,9 +145,25 @@ function bestPlay(s: GameState): Advice | null {
   for (const p of s.player.hand) {
     if (playable(s, p)) continue;
     const cost = playCost(s, p);
-    const sources = paymentSources(s, p.id, p.code);
+    const sources = paymentSources(
+      s,
+      p.id,
+      p.code,
+      false,
+      printedKeyword(card(p), "Alliance") > 0,
+    );
     const requirements = /Power of/.test(card(p).name) ? [] : undefined;
-    const ids = suggestPayment(sources, cost, requirements, rankSource(s));
+    const retained =
+      p.code === "23017"
+        ? warMachinePackSneakAllies(s).map((ally) => ally.id)
+        : [];
+    const ids = suggestPayment(
+      sources,
+      cost,
+      requirements,
+      rankSource(s),
+      retained,
+    );
     if (!ids) continue;
     // Hands refill every round, so spending cards is cheap; only avoid burning
     // something clearly better than what it buys.
@@ -410,12 +428,20 @@ export function advisePrompt(s: GameState): Advice | null {
   const p = s.prompt;
   if (!p) return null;
   if (p.kind === "payment") {
-    const sources = paymentSources(s, p.card?.id, p.paymentTarget, p.handOnly);
+    const sources = paymentSources(
+      s,
+      p.card?.id,
+      p.paymentTarget,
+      p.handOnly,
+      p.alliance,
+    );
     const ids = suggestPayment(
       sources,
       p.cost || 0,
       p.requirements,
       rankSource(s),
+      p.retainOneOfIds,
+      p.sourceRequirement,
     );
     if (ids)
       return {
