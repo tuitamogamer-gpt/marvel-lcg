@@ -1,0 +1,64 @@
+.milestone-animation {
+  position: fixed;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(600px, calc(100vw - 24px));
+  z-index: 1200;
+  pointer-events: none;
+  user-select: none;
+  font-family: var(--display, "Exo 2", sans-serif);
+}
+.milestone-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 170px;
+  padding: 24px;
+  background: #f8f4e8;
+  border: 3px solid #172033;
+  border-radius: 8px;
+  box-shadow: 6px 6px 0 #172033;
+  color: #172033;
+  overflow: hidden;
+}
+.milestone-title {
+  font-size: 48px;
+  font-weight: 900;
+  font-style: italic;
+  line-height: 1.05;
+  text-align: center;
+  position: relative;
+}
+.milestone-detail {
+  font-size: 24px;
+  font-weight: 700;
+  position: relative;
+}
+.milestone-ink {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  opacity: 0.7;
+}
+.milestone-defeat {
+  border-color: #cf2330;
+}
+@media (prefers-reduced-motion: reduce) {
+  .milestone-animation .milestone-panel {
+    min-height: 90px;
+    padding: 16px;
+    gap: 6px;
+  }
+  .milestone-animation .milestone-title {
+    font-size: clamp(22px, 5vw, 36px);
+  }
+  .milestone-animation .milestone-detail {
+    font-size: clamp(14px, 3vw, 20px);
+  }
+}

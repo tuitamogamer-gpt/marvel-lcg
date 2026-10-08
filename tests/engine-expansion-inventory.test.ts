@@ -222,9 +222,9 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(1321);
-    expect(coverage.unsupportedFaces).toBe(3230);
-    expect(coverage.dedicatedFaces).toBe(848);
+    expect(coverage.executableFaces).toBe(1326);
+    expect(coverage.unsupportedFaces).toBe(3225);
+    expect(coverage.dedicatedFaces).toBe(853);
     expect(coverage.registeredHeroIds).toHaveLength(33);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
@@ -305,7 +305,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(79);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(80);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

@@ -29,7 +29,14 @@ import {
   goblinModuleAttachmentActions,
   goblinIdentityLocked,
 } from "./game/goblin-modules";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { CardPreview } from "./CardPreview";
 import {
   Collection,
@@ -43,7 +50,8 @@ import { hulkAbilityOptions } from "./game/hulk";
 import { AccountPage } from "./account/AccountPage";
 import { useAccount, useMissionSync } from "./account/useAccount";
 import type { SavedDeck, MissionRecord } from "./account/types";
-import { CombatCinematic } from "./CombatCinematic";
+import { significantEvent, type Milestone } from "./milestones";
+const MilestoneAnimation = lazy(() => import("./MilestoneAnimation"));
 import { HeroEmblem } from "./HeroEmblem";
 import { KeywordGuide, TutorialCoach } from "./Onboarding";
 import { readTutorial, saveTutorial, TUTORIAL_SETUP } from "./tutorial";
@@ -159,7 +167,6 @@ import { planAction } from "./game/lookahead";
 import { attachmentsFor, attackContext } from "./game/presentation";
 import type {
   ActionReview,
-  CombatEvent,
   Aspect,
   Command,
   GameState,
@@ -683,7 +690,7 @@ export default function App() {
   const account = useAccount();
   const [combat, setCombat] = useState<{
     id: number;
-    events: CombatEvent[];
+    event: Milestone;
   } | null>(null);
   const combatId = useRef(0);
   const finishCombat = useCallback(() => setCombat(null), []);
@@ -1012,8 +1019,8 @@ export default function App() {
       history.current = [...history.current.slice(-19), game];
     setUndoDepth(history.current.length);
     setGame(next);
-    if (next.combatEvents?.length)
-      setCombat({ id: ++combatId.current, events: next.combatEvents });
+    const milestone = significantEvent(game, next);
+    if (milestone) setCombat({ id: ++combatId.current, event: milestone });
     tone();
   }
   function undo() {
@@ -2517,11 +2524,13 @@ export default function App() {
         )}
       <CardPreview />
       {screen === "game" && combat && (
-        <CombatCinematic
-          key={combat.id}
-          events={combat.events}
-          onComplete={finishCombat}
-        />
+        <Suspense fallback={null}>
+          <MilestoneAnimation
+            key={combat.id}
+            event={combat.event}
+            onComplete={finishCombat}
+          />
+        </Suspense>
       )}
       {(toast || storageError) && (
         <div className="toast" role="alert">

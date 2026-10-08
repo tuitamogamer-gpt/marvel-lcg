@@ -56,7 +56,7 @@ jobs:
           - group: sinister-heroes
             scripts: test:sinister-heroes
           - group: nova-ironheart
-            scripts: test:nova-ironheart
+            scripts: test:nova-ironheart test:milestones
             timeout: 45
     steps:
       - uses: actions/checkout@v4

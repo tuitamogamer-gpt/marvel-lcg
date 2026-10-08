@@ -687,6 +687,7 @@ export const MODULES = [
   { id: "under_attack", name: "Under Attack", difficulty: 3 },
   { id: "legions_of_hydra", name: "Legions of Hydra", difficulty: 4 },
   { id: "the_doomsday_chair", name: "The Doomsday Chair", difficulty: 5 },
+  { id: "armadillo", name: "Armadillo", difficulty: 3 },
 ];
 export const ASPECTS: {
   id: Aspect;

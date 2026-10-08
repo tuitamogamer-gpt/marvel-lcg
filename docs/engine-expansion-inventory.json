@@ -123298,8 +123298,8 @@
       },
       "installedRegistry": {
         "code": "28028",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -123337,8 +123337,8 @@
       },
       "installedRegistry": {
         "code": "28029",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -123374,8 +123374,8 @@
       },
       "installedRegistry": {
         "code": "28030",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -123415,8 +123415,8 @@
       },
       "installedRegistry": {
         "code": "28031",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -123454,8 +123454,8 @@
       },
       "installedRegistry": {
         "code": "28032",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -265153,15 +265153,15 @@
     "src/data/catalog-decks.json": "6d75a9c883223b59a9b9d950696de7b6876f8921ffe025d40e352495c1a2b886",
     "src/data/core-player.json": "451c26f5ca50fd7b9c4bfc167675a23031b411c291bc546ad011c608603bbfa2",
     "src/data/core-encounter.json": "db9ec82bf2b9aa6b00bc813bc6b64aac3d0237996e3393f47d8dbd3645ddd2da",
-    "src/game/engine.ts": "1e8c29d95526f67b1838fbe67859026bc910ded07a96054f1b484ac7a967411a",
+    "src/game/engine.ts": "346a87cad824d4bdf93bcfd40f99303ff802f43c21b3e54a41cce0ad861f392c",
     "src/data/catalog-provenance.json": "8dddd4de54508b44039d4cf196a98550503486efdaf2ac9771de55992a77b7e4",
     "src/game/scripts/compiler.ts": "33feb608b78cc98fa23bfca85926b8213dd82b4a056d419fa459e6bef5363e87",
     "src/game/scripts/runtime.ts": "60ed7040b44d97589d6eb3e0583e6153680757c1de50fe8788c5dd48d1c355ac",
     "src/game/scripts/types.ts": "7c911c5060b6d6945391256137de71ac00a4adb75b5765040b7a6f0a71dbe2fc",
     "src/game/script-registry.ts": "ef1a70d1b07d46a9165045e38cbaeb6acecbffc303bda84db9a810bc44d9d0f5",
     "src/game/keywords.ts": "773badc9609fc065a43227235c04609b4525e25cf25bdebe3bc216411a2e693d",
-    "src/game/engine-support.ts": "17701eff9eda776bc22c99472d26e12d005d31830201aec7967d4091d5da4b79",
-    "src/game/cards.ts": "3f1a0ff31305fbb29c1a504ccbe4dd496db622517cfd09080abb86086db8bc41",
+    "src/game/engine-support.ts": "5dff14bca5129cad0e89b1fbfbf62342925ac277352b500b2c4d1a33edaf360a",
+    "src/game/cards.ts": "0a4bb791d7a455cb9a580ebcebef38b891c6c8c927c799b56a9e63de3fe2d74e",
     "src/game/captain-america.ts": "bf6d11942c8933b64cce049b3ff13291d8271338b553e1482d542ceb6ecddb9e",
     "src/game/captain-pack.ts": "5da521a1e13a0eccca9b0821dc9418dc452947b1ed15ef81db550a362c8029ba",
     "src/game/hulk.ts": "b450aa1dc93bbc55150db96af40ac71e2c0cae858270018b73ebfc880e8b26e7",
@@ -265171,6 +265171,7 @@
     "src/game/ms-marvel.ts": "05944e87c819b710191bfdbe1f639e115ba8c7f4a4b08ce673846c5e9d499341",
     "src/game/risky-business.ts": "e4071b93fec1d38e97140e34f44ff18549a265f9ec45d0933e70106303500807",
     "src/game/goblin-modules.ts": "5fff1e7a55eaae31de9ec43a0d5885113162cc32fcbbf0a7a444ab1a05b5a8b9",
+    "src/game/armadillo.ts": "3e10d9863ea703eb3bfba8e4dfbbdf15f39f324f25fdea345580a9105cd24ff8",
     "src/game/reveal-window.ts": "6470de86e3628972490e6184c23dc5bb5585b6b766c12fbeee7d56046807d5a2",
     "src/game/black-widow.ts": "9644c2efe568b503964463371367da404328ef5eae334db28cbd5a76459c3f03",
     "src/game/doctor-strange.ts": "2e9c7f17016401b3e152f5a8565c9e03174c369193d6580a71e9f3b183fa74ff",
@@ -289404,9 +289405,9 @@
   },
   "installedRegistryCoverage": {
     "total": 4551,
-    "executableFaces": 1321,
-    "unsupportedFaces": 3230,
-    "dedicatedFaces": 848,
+    "executableFaces": 1326,
+    "unsupportedFaces": 3225,
+    "dedicatedFaces": 853,
     "dedicatedCodes": [
       "02001a",
       "02001b",
@@ -290220,6 +290221,11 @@
       "28025",
       "28026",
       "28027",
+      "28028",
+      "28029",
+      "28030",
+      "28031",
+      "28032",
       "29001a",
       "29001b",
       "29002a",
@@ -291552,15 +291558,9 @@
         "code": "nova",
         "name": "Nova",
         "faceCount": 33,
-        "executableFaces": 28,
-        "unsupportedFaceCodes": [
-          "28028",
-          "28029",
-          "28030",
-          "28031",
-          "28032"
-        ],
-        "installedCardClosure": false,
+        "executableFaces": 33,
+        "unsupportedFaceCodes": [],
+        "installedCardClosure": true,
         "automationCertification": "registration_closure_only_requires_rules_and_native_integration_evidence"
       },
       {
@@ -305924,32 +305924,32 @@
       },
       {
         "code": "28028",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "28029",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "28030",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "28031",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "28032",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {

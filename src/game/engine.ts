@@ -1,3 +1,4 @@
+import * as armadillo from "./armadillo.js";
 import * as antMan from "./ant-man.js";
 import * as antPack from "./ant-man-pack.js";
 import * as wasp from "./wasp.js";
@@ -474,7 +475,9 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
 function nativeStatusModifiers(s: GameState, p: StatusState) {
   return "code" in p && isTextBlank(s, p as Piece)
     ? { stalwart: false, steady: false }
-    : {};
+    : "code" in p
+      ? armadillo.armadilloStatusModifiers(s, p as Piece)
+      : {};
 }
 function giveCharacterStatus(
   s: GameState,
@@ -722,8 +725,10 @@ function choose(
       const actorId =
         o.effects.find((e) => e.actorId)?.actorId || s.activePlayerId;
       return (
-        !c?.text?.includes("(defense)") ||
-        vision.visionCanDefend(seatView(s, actorId))
+        (!c?.text?.includes("(defense)") ||
+          vision.visionCanDefend(seatView(s, actorId))) &&
+        (!/\([^)]*\bdefense\b/i.test(c?.text || "") ||
+          !armadillo.armadilloDefenseBlocked(s, s.attack!.attacker))
       );
     });
   if (!options.length) {
@@ -1401,6 +1406,9 @@ function check(s: GameState) {
       add(
         s,
         ...antMan.antManEnemyActivated(s, s.attack.attacker),
+        ...armadillo
+          .armadilloActivationResponses(s, s.attack.attacker)
+          .flatMap((r) => r.effects),
         ...(s.attack.afterActivation || []),
         ...(s.attack.visionAfterAttack || []),
       );
@@ -3075,6 +3083,14 @@ function requestPayment(
   abilityCost = false,
 ) {
   const paymentTarget = abilityCost ? targetCode : targetCode || piece?.code;
+  need(
+    !s.attack ||
+      !armadillo.armadilloDefenseBlocked(s, s.attack.attacker) ||
+      !/\([^)]*\bdefense\b/i.test(
+        paymentTarget ? card(paymentTarget).text || "" : "",
+      ),
+    "Rollin’, Rollin’ prevents characters from defending this attack.",
+  );
   if (!abilityCost && piece) {
     const printedRequirements = sinisterPlayRequirements(piece);
     for (const resource of new Set(printedRequirements)) {
@@ -3900,14 +3916,16 @@ export function newGame(config: {
         c.faction_code === "encounter" &&
         ((((c.set_code === s.module &&
           c.pack_code ===
-            ([
-              "goblin_gimmicks",
-              "a_mess_of_things",
-              "power_drain",
-              "running_interference",
-            ].includes(s.module)
-              ? "gob"
-              : "core")) ||
+            (s.module === "armadillo"
+              ? "nova"
+              : [
+                    "goblin_gimmicks",
+                    "a_mess_of_things",
+                    "power_drain",
+                    "running_interference",
+                  ].includes(s.module)
+                ? "gob"
+                : "core")) ||
           (c.set_code === v.id && c.pack_code === scenarioPack) ||
           (c.set_code === "standard" && c.pack_code === "core") ||
           (difficulty === "expert" &&
@@ -4016,6 +4034,12 @@ const reactionCards = [
 ];
 export function playable(s: GameState, p: Piece): string | null {
   const c = card(p);
+  if (
+    s.attack &&
+    /\([^)]*\bdefense\b/i.test(c.text || "") &&
+    armadillo.armadilloDefenseBlocked(s, s.attack.attacker)
+  )
+    return "Rollin’, Rollin’ prevents characters from defending this attack.";
   if (c.type_code === "event" && ghostSpider.ghostSpiderCannotPlayEvents(s))
     return "In Cold Blood prevents this player from playing events during the attack.";
   if (goblinIdentityLocked(s) && ["01024", "01025"].includes(rulesCode(p)))
@@ -7366,6 +7390,10 @@ const gamoraPorts: gamora.GamoraPorts = {
       (packet.target && packet.target !== "hero")
     )
       return;
+    need(
+      !armadillo.armadilloDefenseBlocked(s, a.attacker),
+      "Rollin’, Rollin’ prevents characters from defending this attack.",
+    );
     if (!a.defender || a.defender === "none") {
       a.defender = "hero";
       a.basicDefense = false;
@@ -8608,6 +8636,17 @@ const msPorts: MsMarvelPorts = {
   flip,
 };
 const goblinPorts: GoblinModuleEnginePorts = { ...mutagenPorts, discardHand };
+const armadilloPorts: armadillo.ArmadilloPorts = {
+  ...mutagenPorts,
+  shuffleEncounter: (s) => {
+    revealHidden(s);
+    mutagenPorts.shuffleEncounter(s);
+  },
+  giveTough: (s, id) => {
+    const p = find(s, id);
+    return !!p && giveCharacterStatus(s, p, "tough");
+  },
+};
 const riskyPorts: RiskyBusinessEnginePorts = {
   queue: add,
   choose,
@@ -10013,6 +10052,7 @@ const valkyriePorts: valkyrie.ValkyriePorts = {
       !!seat &&
       seatView(s, seat).player.form === "hero" &&
       !attackTargetsEnemy(s, s.attack) &&
+      !armadillo.armadilloDefenseBlocked(s, s.attack.attacker) &&
       !(
         rulesCode(find(s, s.attack.attacker) || s.attack.attackerSnapshot!) ===
           "01132" && friends(seatView(s, seat)).some((p) => !p.exhausted)
@@ -10322,7 +10362,10 @@ function enemyAttack(
 }
 function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
   if (riskyBlankPower(s, "attack", p.id)) return 0;
-  const bonus = (p.bonusAtk || 0) + mutagenAttackModifiers(s, p).goblinNation;
+  const bonus =
+    (p.bonusAtk || 0) +
+    mutagenAttackModifiers(s, p).goblinNation +
+    armadillo.armadilloAttackBonus(s, p);
   const attachments = s.attachments
     .filter((a) => a.attachedTo === p.id)
     .reduce((n, a) => n + (card(a).attack || 0), 0);
@@ -10366,6 +10409,9 @@ function abortAttack(s: GameState) {
   add(
     s,
     ...antMan.antManEnemyActivated(s, a.attacker),
+    ...armadillo
+      .armadilloActivationResponses(s, a.attacker)
+      .flatMap((r) => r.effects),
     ...(a.afterActivation || []),
     ...(a.visionAfterAttack || []),
     ...(a.basicDefense
@@ -10467,6 +10513,7 @@ function declareDefense(s: GameState) {
     ),
   ];
   for (const seat of playerOrder(s)) {
+    if (armadillo.armadilloDefenseBlocked(s, a.attacker)) break;
     const view = seatView(s, seat);
     if (
       view.player.form === "hero" &&
@@ -10767,6 +10814,7 @@ function finishScheme(s: GameState) {
           .map((p) => E("threat", { target: p.id, amount: 2 }))
       : []),
     ...antMan.antManEnemyActivated(s, id),
+    ...armadillo.armadilloActivationResponses(s, id).flatMap((r) => r.effects),
     ...spectrum.spectrumEnemyActivated(s, p, s.activePlayerId, spectrumPorts),
     ...(activation.afterActivation || []),
     ...activation.boostIds.map((id) => E("finishResolution", { id })),
@@ -11094,6 +11142,7 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
               },
             ]
           : []),
+        ...armadillo.armadilloActivationResponses(s, a.attacker),
         ...goblinModuleAttackResponses(s, {
           attacker: a.attackerSnapshot || p!,
           playerId: recipientId,
@@ -11518,6 +11567,7 @@ function reveal(
     /<b>When Revealed(?:\s*\([^)]*\))?<\/b>\s*:/i.test(c.text || "") &&
     ([
       ...GOBLIN_MODULE_SCRIPT_CODES,
+      ...armadillo.ARMADILLO_SCRIPT_CODES,
       ...RISKY_BUSINESS_SCRIPT_CODES,
       ...MUTAGEN_FORMULA_SCRIPT_CODES,
       ...BLACK_WIDOW_SCRIPT_CODES,
@@ -11562,9 +11612,11 @@ function reveal(
   if (
     !repeat &&
     c.type_code === "attachment" &&
-    [...GOBLIN_MODULE_SCRIPT_CODES, ...MUTAGEN_FORMULA_SCRIPT_CODES].some(
-      (code) => code === p.code,
-    )
+    [
+      ...GOBLIN_MODULE_SCRIPT_CODES,
+      ...MUTAGEN_FORMULA_SCRIPT_CODES,
+      ...armadillo.ARMADILLO_SCRIPT_CODES,
+    ].some((code) => code === p.code)
   ) {
     const window = beginRevealWindow(
       s,
@@ -11573,7 +11625,10 @@ function reveal(
       s.activePlayerId,
       1 + goblinWhenRevealedCopies(s),
     );
-    const entry = goblinModuleReveal(s, p) ?? mutagenEncounterReveal(s, p);
+    const entry =
+      goblinModuleReveal(s, p) ??
+      mutagenEncounterReveal(s, p) ??
+      armadillo.armadilloReveal(s, p);
     need(entry !== null, "No native encounter attachment entry handler.");
     add(s, ...entry!.map((e) => ({ ...e, revealWindowId: p.id })), ...window);
     return;
@@ -11616,6 +11671,7 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    armadillo.armadilloReveal(s, p) ??
     starLord.starLordEncounterReveal(s, p) ??
     gamora.gamoraEncounterReveal(s, p) ??
     drax.draxEncounterReveal(s, p) ??
@@ -12357,6 +12413,7 @@ function resolve(s: GameState, e: Effect) {
         const previous = state.currentRevealWindowId;
         state.currentRevealWindowId = windowId;
         const effects =
+          armadillo.armadilloReveal(state, piece) ??
           goblinModuleReveal(state, piece) ??
           riskyEncounterReveal(state, piece) ??
           mutagenEncounterReveal(state, piece) ??
@@ -12403,6 +12460,7 @@ function resolve(s: GameState, e: Effect) {
     })
   )
     return;
+  if (armadillo.resolveArmadilloEffect(s, e, armadilloPorts)) return;
   if (resolveGoblinModuleEffect(s, e, goblinPorts)) return;
   if (resolveThorEffect(s, e, thorPorts)) return;
   if (resolveMsMarvelEffect(s, e, msPorts)) return;
@@ -17450,7 +17508,10 @@ function resolve(s: GameState, e: Effect) {
     case "preventAttack":
       if (s.attack) {
         s.attack.prevented += e.amount;
-        if (!s.attack.defender || s.attack.defender === "none") {
+        if (
+          (!s.attack.defender || s.attack.defender === "none") &&
+          !armadillo.armadilloDefenseBlocked(s, s.attack.attacker)
+        ) {
           s.attack.defender = "hero";
           add(s, E("quicksilverLateDefense"));
         }
