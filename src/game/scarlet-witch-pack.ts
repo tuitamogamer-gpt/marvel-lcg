@@ -1,3 +1,4 @@
+import { eventPlaySources } from "./card-text.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, engaged, seatView } from "./team.js";
 import { isTextBlank } from "./card-text.js";
@@ -285,7 +286,7 @@ export function scarletWitchPackAfterHeroThwart(
   ports: ScarletWitchPackPorts,
 ): Option[] {
   if (!tideQualifies(s, snapshot)) return [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter(
       (p) =>
         p.code === "15015" &&
@@ -316,7 +317,7 @@ export function scarletWitchPackAllyAttackOptions(
     p.stunned
   )
     return [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter(
       (event) =>
         event.code === "15029" &&
@@ -547,7 +548,9 @@ export function resolveScarletWitchPackEffect(
       break;
     }
     case "scarlet-pack:tide-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "15015");
+      const p = eventPlaySources(s).find(
+        (p) => p.id === e.id && p.code === "15015",
+      );
       need(
         p &&
           tideQualifies(s, e.snapshot) &&
@@ -584,7 +587,9 @@ export function resolveScarletWitchPackEffect(
       break;
     }
     case "scarlet-pack:last-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "15029"),
+      const p = eventPlaySources(s).find(
+          (p) => p.id === e.id && p.code === "15029",
+        ),
         ally = own(s, e.allyId);
       need(
         p &&

@@ -136,6 +136,7 @@ import {
   canPay,
   warMachinePackStoredPlayable,
   visionPackStoredPlayable,
+  ghostSpiderStoredPlayable,
   playable,
   cardCost,
   summarize,
@@ -2243,6 +2244,11 @@ export default function App() {
                   form. Current energy form: {inspectedEnergyForm.current}.
                   {!inspectedEnergyForm.faceup &&
                     " Its text is inactive while facedown."}
+                </p>
+              )}
+              {(inspect.piece?.accelerationTokens || 0) > 0 && (
+                <p className="modal-intro" role="status">
+                  Acceleration tokens: {inspect.piece!.accelerationTokens}
                 </p>
               )}
               <p className="rules-text">
@@ -4399,7 +4405,10 @@ function Tabletop({
                     {escalation(s) +
                       s.encounter.acceleration +
                       s.sideSchemes.reduce(
-                        (n, p) => n + (card(p).scheme_acceleration || 0),
+                        (n, p) =>
+                          n +
+                          (card(p).scheme_acceleration || 0) +
+                          (p.accelerationTokens || 0),
                         0,
                       )}{" "}
                     threat each villain phase
@@ -4435,7 +4444,7 @@ function Tabletop({
                     <span className="table-group-label">SIDE SCHEME</span>
                     <button
                       className="scheme-card"
-                      onClick={() => inspect({ code: p.code })}
+                      onClick={() => inspect({ code: p.code, piece: p })}
                       aria-label={`Inspect ${card(p).name}`}
                     >
                       <CardImage code={p.code} />
@@ -4454,6 +4463,9 @@ function Tabletop({
                               ? "ACCELERATION"
                               : "THREAT"}
                       </span>
+                      {(p.accelerationTokens || 0) > 0 && (
+                        <span>Acceleration tokens: {p.accelerationTokens}</span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -5097,6 +5109,52 @@ function Tabletop({
                               }
                             >
                               Play Event · {cardCost(s, card(event))}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+                {ghostSpiderStoredPlayable(s).length > 0 && (
+                  <section
+                    className="attached-event-area"
+                    aria-label="George Stacy stored events"
+                  >
+                    <span className="table-group-label">
+                      GEORGE STACY · STORED EVENTS
+                    </span>
+                    <div className="attached-card-list">
+                      {ghostSpiderStoredPlayable(s).map((event) => {
+                        const reason = playable(s, event);
+                        const cost = cardCost(s, card(event), event);
+                        return (
+                          <div className="attached-piece" key={event.id}>
+                            <button
+                              className="attached-card"
+                              aria-label={`Inspect ${card(event).name} stored with George Stacy`}
+                              onClick={() =>
+                                inspect({
+                                  code: event.code,
+                                  piece: event,
+                                  hand: true,
+                                  playerId: s.activePlayerId,
+                                })
+                              }
+                            >
+                              <CardImage code={event.code} />
+                              <span>{card(event).name}</span>
+                            </button>
+                            <button
+                              className="ability-button"
+                              aria-label={`Play from George Stacy: ${card(event).name}`}
+                              title={reason || `Pay ${cost} resources`}
+                              disabled={!canUseAction || !!reason}
+                              onClick={() =>
+                                sendAction({ type: "PLAY", id: event.id })
+                              }
+                            >
+                              Play Event · {cost}
                             </button>
                           </div>
                         );

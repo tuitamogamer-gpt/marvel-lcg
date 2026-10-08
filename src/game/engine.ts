@@ -19,6 +19,8 @@ import * as warlock from "./warlock.js";
 import * as warMachine from "./war-machine.js";
 import * as valkyrie from "./valkyrie.js";
 import * as vision from "./vision.js";
+import * as miles from "./miles-morales.js";
+import * as ghostSpider from "./ghost-spider.js";
 import * as nebula from "./nebula.js";
 import { isPermanent } from "./hero-runtime.js";
 import * as venomPack from "./venom-pack.js";
@@ -27,6 +29,7 @@ import * as nebulaPack from "./nebula-pack.js";
 import * as warmPack from "./war-machine-pack.js";
 import * as valkPack from "./valkyrie-pack.js";
 import * as visionPack from "./vision-pack.js";
+import * as sinisterPlayerPack from "./sinister-player-pack.js";
 import { spectrumResourceSpent } from "./spectrum.js";
 import { warlockResourceSpent } from "./warlock.js";
 import * as spectrum from "./spectrum.js";
@@ -208,6 +211,7 @@ import {
   isTextBlank,
   textActiveState,
   defenseEventSources,
+  eventPlaySources,
 } from "./card-text.js";
 import { rulesCode } from "./rules-code.js";
 import {
@@ -557,6 +561,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         (granted.piercing ||
           nebula.nebulaNamedCharacterModifiers(s, card(p).name).piercing ||
           warMachine.warMachineEnemyKeywords(s, p).piercing ||
+          miles.milesEnemyAttackKeywords(s, p, { isTextBlank }).piercing ||
           allyTraits.piercing ||
           nebulaPack.nebulaPackModifiers(s, p.id, nebulaPackPorts).piercing ||
           (s.attack?.attacker === p.id && s.attack.piercing)),
@@ -912,6 +917,35 @@ function movePieceFromPlay(
     )
   )
     return;
+  if (
+    removedSource &&
+    controlling &&
+    ["27017", "27048"].includes(removedSource.code) &&
+    !seatView(s, controlling).flags[`sinisterLeaveCommitted:${id}`] &&
+    !controlling.eliminated
+  ) {
+    removedSource.pendingDefeat = true;
+    add(
+      s,
+      E("sinisterNativeLeave", {
+        id,
+        removed,
+        setAsideOwnerId,
+        actorId: controlling.id,
+      }),
+    );
+    return;
+  }
+  const leaveReceipt =
+    removedSource && controlling && card(removedSource).type_code === "ally"
+      ? {
+          token: `leave:${s.nextId++}`,
+          playerId: controlling.id,
+          pieceId: removedSource.id,
+          code: removedSource.code,
+          traits: sinisterNativeTraits(viewBefore, removedSource),
+        }
+      : undefined;
   const blankBefore = !!removedSource && isTextBlank(s, removedSource);
   const teamHealthBefore =
     removedSource?.code === "12026"
@@ -932,6 +966,18 @@ function movePieceFromPlay(
     }
   }
   if (!p) return;
+  if (leaveReceipt)
+    for (const seat of playerOrder(s))
+      add(
+        s,
+        ...(
+          sinisterPlayerPack.sinisterPlayerPackAllyLeftPlay(
+            seatView(s, seat),
+            leaveReceipt,
+            sinisterPlayerPackPorts,
+          ) || []
+        ).map((e) => ({ ...e, actorId: seat.id })),
+      );
   warmPack.warMachinePackCardLeftPlay(s, p);
   visionPack.visionPackCardLeftPlay(s, p);
   add(s, ...valkyrie.valkyrieAttachmentDiscarded(s, p));
@@ -981,6 +1027,7 @@ function movePieceFromPlay(
       cardScript(p)?.implementation === "script" ||
       p.code === "16035" ||
       p.code === "25007" ||
+      p.code === "27191" ||
       (p.code === "22035" && p.attachedTo?.startsWith("hero:")) ||
       (p.code === "03025" && p.attachedTo?.startsWith("hero:"))
     )
@@ -1293,6 +1340,17 @@ interface DamageTakenResult {
 }
 interface DamageResult extends DamageTakenResult {
   damageDealt: number;
+}
+function recordMilesEnemyAttackDefeat(
+  s: GameState,
+  source: string,
+  enemyAttack: boolean,
+) {
+  const after = s.attack?.activationAfter;
+  if (enemyAttack && after?.milesAttackToken && source === s.attack?.attacker)
+    seatView(s, after.actorId || s.activePlayerId).flags[
+      `milesAttackDefeat:${after.milesAttackToken}`
+    ] = true;
 }
 function damageProhibition(s: GameState, target: string, panther: boolean) {
   if (msMarvelDamageImmune(s, target)) return "This enemy cannot take damage.";
@@ -1682,6 +1740,8 @@ function applyDamage(
     if (!traits.grootHandled) n -= groot.grootPreventDamage(s, "hero", n);
     if (n <= 0) return none;
     s.player.hp -= n;
+    if (s.player.hp <= 0)
+      recordMilesEnemyAttackDefeat(s, source, !!traits.enemyAttack);
     track(s, "damageTaken", n);
     log(s, `You take ${n} damage.`, "bad");
     check(s);
@@ -1906,6 +1966,7 @@ function defeatCharacter(
   );
   const name = card(m).name;
   const allyController = controller(s, m.id)?.id;
+  if (!minion) recordMilesEnemyAttackDefeat(s, source, enemyAttack);
   discardPiece(s, m.id);
   if (!minion && allyController)
     add(
@@ -2429,6 +2490,13 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
         mtsPlayerPackPorts,
       ) -
       (physical ? starLord.starLordCardCostReduction(s, physical) : 0) -
+      (physical
+        ? sinisterPlayerPack.sinisterPlayerPackCostReduction(
+            s,
+            physical,
+            sinisterPlayerPackPorts,
+          )
+        : 0) -
       gmwPack.gmwPlayerPackCardCostReduction(s, c) -
       thorAllyDiscount(s, c) -
       blackWidowAllyDiscount(s, c) +
@@ -2442,6 +2510,14 @@ function captainPackHasTrait(
   trait: string,
 ): boolean {
   if (captainPrintedHasTrait(s, target, trait)) return true;
+  const enemy = s.minions.find((p) => p.id === target);
+  if (
+    enemy &&
+    ghostSpider
+      .ghostSpiderEnemyModifiers(s, enemy)
+      .traits.some((t) => t.toLowerCase() === trait.toLowerCase())
+  )
+    return true;
   if (
     trait.toLowerCase() === "guardian" &&
     nebulaPack.nebulaPackModifiers(s, target, nebulaPackPorts).guardian
@@ -2707,6 +2783,12 @@ export function canPayAlliance(
     requirements,
   ).ready;
 }
+function sinisterPlayRequirements(p: Piece): Resource[] {
+  return [
+    ...sinisterPlayerPack.sinisterPlayerPackRequirements(p),
+    ...ghostSpider.ghostSpiderEventRequirements(p),
+  ];
+}
 function requestPayment(
   s: GameState,
   title: string,
@@ -2724,6 +2806,23 @@ function requestPayment(
   abilityCost = false,
 ) {
   const paymentTarget = abilityCost ? targetCode : targetCode || piece?.code;
+  if (!abilityCost && piece) {
+    for (const resource of sinisterPlayRequirements(piece)) {
+      if (!requirements.includes(resource))
+        requirements = [...requirements, resource];
+    }
+  }
+  if (!abilityCost && piece?.code === "27032" && !milesPorts.canChangeForm(s)) {
+    if (cost === 0) {
+      log(
+        s,
+        `${title}: a zero-cost payment cannot allocate Physical to ready under a form lock.`,
+      );
+      return;
+    }
+    if (!requirements.includes("physical"))
+      requirements = [...requirements, "physical"];
+  }
   if (
     !abilityCost &&
     !starLordCostHandled &&
@@ -2819,7 +2918,16 @@ function requestPayment(
     const zeroAfter = after.map((e) => ({
       ...e,
       paid: [],
-      ...(["20002", "20003", "20006", "26019"].includes(piece?.code || "")
+      ...([
+        "20002",
+        "20003",
+        "20006",
+        "26019",
+        "27014",
+        "27032",
+        "27033",
+        "27034",
+      ].includes(piece?.code || "")
         ? { paidForCard: [] }
         : {}),
     }));
@@ -3014,9 +3122,18 @@ function pay(
   );
   let paidForCard: Resource[] | undefined;
   if (
-    ["14015", "20002", "20003", "20006", "22011", "26019"].includes(
-      p.card?.code || "",
-    )
+    [
+      "14015",
+      "20002",
+      "20003",
+      "20006",
+      "22011",
+      "26019",
+      "27014",
+      "27032",
+      "27033",
+      "27034",
+    ].includes(p.card?.code || "")
   ) {
     const allocations = paidResourceAllocations(
       printed,
@@ -3076,6 +3193,16 @@ function pay(
     } else paidForCard = allocations[0];
   }
   const spentResponses: Effect[] = [];
+  need(
+    !p.card ||
+      miles.milesPaymentAllowed(
+        s,
+        p.card,
+        { paidForCard: paidForCard ?? [] },
+        milesPorts,
+      ),
+    "Double Life needs an actual Physical allocation to ready under this form lock.",
+  );
   const paymentActor = s.activePlayerId;
   const contributors = new Set<string>([paymentActor]);
   for (const selectedSource of selected) {
@@ -3357,6 +3484,8 @@ export function newGame(config: {
     warMachine.warMachineInitializeNemesis(s, { makePiece });
     valkyrie.valkyrieInitializeNemesis(s, { makePiece });
     vision.visionInitializeNemesis(s, { makePiece });
+    miles.milesInitializeNemesis(s, { makePiece });
+    ghostSpider.ghostSpiderInitializeNemesis(s, { makePiece });
     // Extract the SAME three source-composition IDs before drawing an opening
     // hand. The ordinary40-card deck never contains the setup upgrades.
     for (const effect of spectrum.spectrumSetup(s))
@@ -3469,6 +3598,7 @@ function initialSetup(s: GameState) {
   );
 }
 const reactionCards = [
+  "27014",
   "26012",
   "23034",
   "01003",
@@ -3485,6 +3615,8 @@ const reactionCards = [
 ];
 export function playable(s: GameState, p: Piece): string | null {
   const c = card(p);
+  if (c.type_code === "event" && ghostSpider.ghostSpiderCannotPlayEvents(s))
+    return "In Cold Blood prevents this player from playing events during the attack.";
   if (goblinIdentityLocked(s) && ["01024", "01025"].includes(rulesCode(p)))
     return "All Tied Up prevents this identity from readying or changing form.";
   if (s.phase !== "player" || s.prompt || s.review)
@@ -3562,6 +3694,8 @@ export function playable(s: GameState, p: Piece): string | null {
     warMachine.warMachinePlayRestriction(s, p, warMachinePorts) ||
     valkyrie.valkyriePlayRestriction(s, p, valkyriePorts) ||
     vision.visionPlayRestriction(s, p, visionPorts) ||
+    miles.milesPlayRestriction(s, p, milesPorts) ||
+    ghostSpider.ghostSpiderPlayRestriction(s, p) ||
     nebula.nebulaPlayRestriction(s, p, nebulaPorts) ||
     spectrum.spectrumPlayRestriction(s, p) ||
     starLordPack.starLordPackPlayRestriction(s, p, starLordPackPorts) ||
@@ -3572,7 +3706,12 @@ export function playable(s: GameState, p: Piece): string | null {
     nebulaPack.nebulaPackPlayRestriction(s, p, nebulaPackPorts) ||
     warmPack.warMachinePackPlayRestriction(s, p, warMachinePackPorts) ||
     valkPack.valkyriePackPlayRestriction(s, p, valkyriePackPorts) ||
-    visionPack.visionPackPlayRestriction(s, p, visionPackPorts);
+    visionPack.visionPackPlayRestriction(s, p, visionPackPorts) ||
+    sinisterPlayerPack.sinisterPlayerPackPlayRestriction(
+      s,
+      p,
+      sinisterPlayerPackPorts,
+    );
   if (antRestriction) return antRestriction;
   const hawkeyeRestriction = hawkeyePlayRestriction(s, p, hawkeyePorts);
   if (hawkeyeRestriction) return hawkeyeRestriction;
@@ -3685,6 +3824,18 @@ export function playable(s: GameState, p: Piece): string | null {
     )
   )
     return "Crushing Blow can only be paid with physical resources.";
+  const printedRequirements = sinisterPlayRequirements(p);
+  if (
+    printedRequirements.length &&
+    !canPay(
+      s,
+      Math.max(0, cardCost(s, c, p) - maximumAllyUpgradeDiscount(s, p)),
+      printedRequirements,
+      p.id,
+      p.code,
+    )
+  )
+    return "The printed resource requirements must still be paid after discounts.";
   return null;
 }
 function requestPlay(s: GameState, p: Piece, discountHandled = false) {
@@ -3702,7 +3853,7 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
             !s.player.confused &&
             s.sideSchemes.some((scheme) => card(scheme).scheme_crisis)
           ? ["mental"]
-          : [];
+          : sinisterPlayRequirements(p);
     const ordinary = canPay(
       s,
       Math.max(0, cost - maximumAllyUpgradeDiscount(s, p)),
@@ -3831,7 +3982,7 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
           !s.player.confused &&
           s.sideSchemes.some((piece) => card(piece).scheme_crisis)
         ? ["mental"]
-        : [];
+        : sinisterPlayRequirements(p!);
   need(
     canPay(s, cost, requirements, p!.id, p!.code, false),
     `You cannot pay ${cost} for ${card(p!).name} right now.`,
@@ -3849,6 +4000,40 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
     [],
     true,
   );
+}
+function nativeCardPlayCommitted(s: GameState, p: Piece) {
+  const playToken = `play:${s.nextId++}`;
+  miles.milesCardPlayCommitted(s, p, playToken);
+  if (card(p).type_code === "event") {
+    const kind = /Interrupt/i.test(card(p).text || "")
+      ? "interrupt"
+      : /Response/i.test(card(p).text || "")
+        ? "response"
+        : "action";
+    s.flags[`ghostEvent:${p.id}`] = JSON.stringify({
+      token: playToken,
+      playerId: s.activePlayerId,
+      eventId: p.id,
+      code: p.code,
+      kind,
+      resolved: false,
+    });
+    delete s.flags[`ghostCancelled:${p.id}`];
+  }
+  add(
+    s,
+    E("sinisterNativePlayed", {
+      receipt: {
+        token: playToken,
+        playerId: s.activePlayerId,
+        pieceId: p.id,
+        code: p.code,
+        traits: sinisterNativeTraits(s, p),
+        fromHand: true,
+      },
+    }),
+  );
+  return playToken;
 }
 function play(
   s: GameState,
@@ -3891,7 +4076,10 @@ function play(
     .some((x) => x.id === p.id);
   const fromSetAside =
     p.code === "25002" && !!s.player.setAside?.some((x) => x.id === p.id);
-  const stored = storedArrow || storedPanther || storedDefense;
+  const storedGeorge = ghostSpider
+    .ghostSpiderStoredPlayable(s, ghostSpiderPorts)
+    .some((x) => x.id === p.id);
+  const stored = storedArrow || storedPanther || storedDefense || storedGeorge;
   const fromHand = s.player.hand.some((x) => x.id === p.id);
   const zone = fromHand
     ? s.player.hand
@@ -3916,7 +4104,13 @@ function play(
       visionPack.visionPackTakeStoredForPlay(s, p.id, visionPackPorts),
       "The stored Jocasta Defense event is unavailable.",
     );
+  else if (storedGeorge)
+    need(
+      ghostSpider.ghostSpiderTakeStoredForPlay(s, p.id, ghostSpiderPorts),
+      "The stored George Stacy event is unavailable.",
+    );
   else zone.splice(i, 1);
+  const playToken = nativeCardPlayCommitted(s, p);
   starLord.starLordHandPlayFinished(s, p.id);
   for (const e of doctorStrangeCardPlayed(s, c)) discardPiece(s, e.id);
   msMarvelCardPlayed(s);
@@ -3955,12 +4149,18 @@ function play(
                 lightningX,
                 masterInvocationId,
                 eventId: p.id,
+                playToken,
               }),
             ]),
           ),
         ),
       ),
-      E("finishResolution", { id: p.id, eventId: p.id, playedEvent: { ...p } }),
+      E("finishResolution", {
+        id: p.id,
+        eventId: p.id,
+        playToken,
+        playedEvent: { ...p },
+      }),
     );
   } else {
     const healthBefore = maxHP(s);
@@ -3968,6 +4168,8 @@ function play(
     if (attachedTarget && !["22032", "22035", "23035"].includes(p.code))
       p.attachedTo = attachedTarget;
     s.player.inPlay.push(p);
+    miles.milesCardEntered(s, p);
+    add(s, ...ghostSpider.ghostSpiderCardEntered(s, p));
     if (attachedTarget && ["22032", "22035", "23035"].includes(p.code))
       attachPackUpgrade(s, p.id, attachedTarget);
     antPack.antManPackAllyPlayed(s, p, overpaid);
@@ -3992,6 +4194,7 @@ function play(
       ...warmPack.warMachinePackCardEntered(s, p),
       ...valkPack.valkyriePackCardEntered(s, p),
       ...visionPack.visionPackCardEntered(s, p),
+      ...sinisterPlayerPack.sinisterPlayerPackCardEntered(s, p),
       ...valkyrie.valkyrieCardEntered(s, p),
       ...nebulaPack
         .nebulaPackCardEntered(s, p)
@@ -4016,7 +4219,8 @@ function play(
     if (
       cardScript(p)?.implementation === "script" ||
       p.code === "16035" ||
-      p.code === "25007"
+      p.code === "25007" ||
+      p.code === "27191"
     )
       s.player.hp += maxHP(s) - healthBefore;
     if (["01057", "01065", "01081"].includes(rulesCode(p)) && s.playerCount > 1)
@@ -4137,6 +4341,21 @@ function allyEnter(
   const gamoraAlly = gamora.gamoraAllyEnter(s, p, gamoraPorts);
   if (gamoraAlly !== null) {
     add(s, ...gamoraAlly);
+    return;
+  }
+  const sinisterAlly = sinisterPlayerPack.sinisterPlayerPackAllyEntered(
+    s,
+    p,
+    fromHand,
+    sinisterPlayerPackPorts,
+  );
+  if (
+    sinisterAlly !== null ||
+    (
+      sinisterPlayerPack.SINISTER_PLAYER_PACK_SCRIPT_CODES as readonly string[]
+    ).includes(p.code)
+  ) {
+    add(s, ...(sinisterAlly || []));
     return;
   }
   const playerPackAlly =
@@ -4295,6 +4514,7 @@ function event(
   warMachinePackReceipt: { allyId?: string; amount?: number } = {},
   valkyriePackReceipt: { amount?: number } = {},
   visionMeditationCostPaid = false,
+  playToken?: string,
 ) {
   const ant =
     antMan.antManEvent(s, p.code === "13020" ? { ...p, code: "12020" } : p) ??
@@ -4314,6 +4534,8 @@ function event(
     warMachine.warMachineEvent(s, p, warMachineTarget) ??
     valkyrie.valkyrieEvent(s, p) ??
     vision.visionEvent(s, p) ??
+    miles.milesEvent(s, p, { paid, paidForCard, playToken }) ??
+    ghostSpider.ghostSpiderEvent(s, p) ??
     warlock.warlockEvent(s, p, warlockDiscarded) ??
     nebula.nebulaEvent(s, p, lightningX ?? 0) ??
     spectrum.spectrumEvent(s, p) ??
@@ -4328,7 +4550,8 @@ function event(
     valkPack.valkyriePackEvent(s, p, valkyriePackReceipt) ??
     visionPack.visionPackEvent(s, p, {
       meditationCostPaid: visionMeditationCostPaid,
-    });
+    }) ??
+    sinisterPlayerPack.sinisterPlayerPackEvent(s, p, paidForCard ?? paid);
   if (ant !== null) {
     add(s, ...ant);
     return;
@@ -4652,6 +4875,20 @@ function flip(
     s.player.form,
     warMachinePorts,
   );
+  const formToken = `form:${s.nextId++}`;
+  add(
+    s,
+    ...miles.milesFormChanged(
+      s,
+      {
+        token: formToken,
+        playerId: s.activePlayerId,
+        from: previousForm,
+        to: s.player.form,
+      },
+      milesPorts,
+    ),
+  );
   add(s, ...hulkFormChanged(s));
   add(s, ...drax.draxChangedForm(s, previousForm));
   const responses = antMan.antManFormChanged(s, antManPorts);
@@ -4893,6 +5130,25 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   );
 }
 function ability(s: GameState, id: string, action = "special") {
+  if (
+    miles.milesAbility(
+      s,
+      id,
+      milesPorts,
+      action === "special" ? undefined : action,
+    )
+  )
+    return;
+  if (ghostSpider.ghostSpiderAbility(s, id, ghostSpiderPorts, action)) return;
+  if (
+    sinisterPlayerPack.sinisterPlayerPackAbility(
+      s,
+      id,
+      sinisterPlayerPackPorts,
+      action === "special" ? undefined : action,
+    )
+  )
+    return;
   if (
     visionPack.visionPackAbility(
       s,
@@ -5915,7 +6171,7 @@ function visionPackNativeDamageOptions(
   if (!owner) return [];
   const inAttack =
     packet.kind === "attack" || packet.kind === "overkill" || !!packet.inAttack;
-  return visionPack
+  const options = visionPack
     .visionPackDamageOptions(
       seatView(s, owner),
       {
@@ -5934,6 +6190,7 @@ function visionPackNativeDamageOptions(
       id: `vision:${owner.id}:${o.id}`,
       effects: o.effects.map((e) => ({ ...e, actorId: owner.id })),
     }));
+  return [...options, ...sinisterNativeDamageOptions(s, packet, after)];
 }
 function allyUpgradeTargets(s: GameState, p: Piece) {
   if (p.code === "26034")
@@ -6951,6 +7208,8 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
     Object.assign(p, resetPiece(p, true));
     s.player.inPlay.push(p);
     s.player.hp += maxHP(s) - before;
+    miles.milesCardEntered(s, p);
+    add(s, ...ghostSpider.ghostSpiderCardEntered(s, p));
     add(
       s,
       ...antMan.antManCardEntered(s, p, antManPorts),
@@ -6966,6 +7225,7 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
       ...warmPack.warMachinePackCardEntered(s, p),
       ...valkPack.valkyriePackCardEntered(s, p),
       ...visionPack.visionPackCardEntered(s, p),
+      ...sinisterPlayerPack.sinisterPlayerPackCardEntered(s, p),
       ...captainPackCardEntered(s, p),
       ...hulkPackCardEntered(s, p),
       ...msMarvelCardEntered(s, p),
@@ -7678,6 +7938,8 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...warMachine.warMachineAbilityOptions(s, id, warMachinePorts),
     ...valkyrie.valkyrieAbilityOptions(s, id, valkyriePorts),
     ...vision.visionAbilityOptions(s, id, visionPorts),
+    ...miles.milesAbilityOptions(s, id, milesPorts),
+    ...ghostSpider.ghostSpiderAbilityOptions(s, id, ghostSpiderPorts),
     ...(s.attachments.find((p) => p.id === id)
       ? valkyrie.valkyrieAttachmentActions(
           s,
@@ -7694,6 +7956,11 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...warmPack.warMachinePackAbilityOptions(s, id, warMachinePackPorts),
     ...valkPack.valkyriePackAbilityOptions(s, id, valkyriePackPorts),
     ...visionPack.visionPackAbilityOptions(s, id, visionPackPorts),
+    ...sinisterPlayerPack.sinisterPlayerPackAbilityOptions(
+      s,
+      id,
+      sinisterPlayerPackPorts,
+    ),
     ...quicksilverPack.quicksilverPackAbilityOptions(
       s,
       id,
@@ -7710,6 +7977,8 @@ export const warMachinePackSneakAllies = (s: GameState) =>
   warmPack.warMachinePackSneakAllies(s, warMachinePackPorts);
 export const visionPackStoredPlayable = (s: GameState) =>
   visionPack.visionPackStoredPlayable(s, visionPackPorts);
+export const ghostSpiderStoredPlayable = (s: GameState) =>
+  ghostSpider.ghostSpiderStoredPlayable(s, ghostSpiderPorts);
 
 const thorPorts: ThorEnginePorts = {
   queue: add,
@@ -7969,6 +8238,664 @@ function nebulaNativeAttackStrength(
   }
   return enemyATK(s, p, recipientId);
 }
+function sinisterNativeTraits(s: GameState, p: Piece): string[] {
+  const traits = (card(p).traits || "")
+    .split(/\.\s+/)
+    .map((t) => t.replace(/\.$/, ""))
+    .filter(Boolean);
+  if ((card(p).traits || "").includes("S.H.I.E.L.D."))
+    traits.push("S.H.I.E.L.D.");
+  for (const t of [
+    "Avenger",
+    "Guardian",
+    "Aerial",
+    "Web-Warrior",
+    "S.H.I.E.L.D.",
+  ])
+    if (captainPackHasTrait(s, p.id, t) && !traits.includes(t)) traits.push(t);
+  return traits;
+}
+function sinisterNativeHasTrait(s: GameState, id: string, trait: string) {
+  const identityId =
+    id === "hero"
+      ? s.activePlayerId
+      : id.startsWith("hero:")
+        ? id.slice(5)
+        : undefined;
+  const printed = identityId
+    ? heroCard(seatView(s, identityId))
+    : card(find(s, id)!);
+  return (
+    (trait === "S.H.I.E.L.D." && !!printed.traits?.includes(trait)) ||
+    captainPackHasTrait(s, id, trait)
+  );
+}
+function sinisterNativePiece(s: GameState, id: string) {
+  return [
+    ...allInPlay(s),
+    ...s.minions,
+    ...s.sideSchemes,
+    ...s.attachments,
+    ...(s.environments || []),
+    ...s.resolving,
+    ...s.encounter.deck,
+    ...s.encounter.discard,
+    ...s.encounter.dealt,
+    ...s.players.flatMap((seat) => {
+      const p = seatView(s, seat).player;
+      return [...p.hand, ...p.deck, ...p.discard];
+    }),
+  ].find((p) => p.id === id);
+}
+function sinisterNativeDamageOptions(
+  s: GameState,
+  packet: Effect,
+  after: Effect[],
+): Option[] {
+  const actor = s.activePlayerId;
+  const target = packet.target === "hero" ? `hero:${actor}` : packet.target;
+  if (!target?.startsWith("hero:")) return [];
+  const owner = target.slice(5);
+  const token =
+    packet.damageWindowId ||
+    (packet.sinisterDamageToken ||= `sinister-damage:${s.nextId++}`);
+  const receipt: sinisterPlayerPack.SinisterPlayerDamageReceipt = {
+    token,
+    playerId: owner,
+    target,
+    amount: packet.amount,
+    attack:
+      packet.kind === "attack" ||
+      packet.kind === "overkill" ||
+      !!packet.inAttack ||
+      !!packet.attack,
+  };
+  seatView(s, owner).flags[`sinisterDamage:${token}`] = JSON.stringify(packet);
+  return sinisterPlayerPack
+    .sinisterPlayerPackJumpFlipOptions(
+      seatView(s, owner),
+      receipt,
+      after.map((e) => ({ ...e, actorId: actor })),
+      sinisterPlayerPackPorts,
+    )
+    .map((o) => ({
+      ...o,
+      id: `sinister:${owner}:${o.id}`,
+      effects: o.effects.map((e) => ({ ...e, actorId: owner })),
+    }));
+}
+const sinisterPlayerPackPorts: sinisterPlayerPack.SinisterPlayerPackPorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  traits: sinisterNativeTraits,
+  identityHasTrait: (s, trait) => sinisterNativeHasTrait(s, "hero", trait),
+  identityName: (s) => card(HEROES.find((h) => h.id === s.heroId)!.alter).name,
+  identityMaxHP: maxHP,
+  canReadyIdentity: (s, id) => {
+    const v = seatView(s, id);
+    return v.player.exhausted && canReadyIdentity(v);
+  },
+  canReadyPiece: (s, p) =>
+    !!p.exhausted && warMachinePackPorts.canReady(s, p.id),
+  canGiveStatus: dsPorts.canAddStatus,
+  controlledTraitCards: (s, trait, readyOnly) => {
+    const list = s.player.inPlay
+      .filter(
+        (p) =>
+          sinisterNativeHasTrait(s, p.id, trait) &&
+          (!readyOnly || !p.exhausted),
+      )
+      .map((p) => ({ id: p.id, label: card(p).name, code: p.code }));
+    if (
+      sinisterNativeHasTrait(s, "hero", trait) &&
+      (!readyOnly || !s.player.exhausted)
+    )
+      list.unshift({
+        id: `hero:${s.activePlayerId}`,
+        label: heroCard(s).name,
+        code: heroCard(s).code,
+      });
+    return list;
+  },
+  characterTargets: (s, trait, exclude) =>
+    targets(s, "friendly")
+      .map((t) => ({
+        ...t,
+        id: t.id === "hero" ? `hero:${s.activePlayerId}` : t.id,
+      }))
+      .filter(
+        (t) =>
+          t.id !== exclude &&
+          sinisterNativeHasTrait(s, t.id, trait) &&
+          (t.id.startsWith("hero:")
+            ? sinisterPlayerPackPorts.canReadyIdentity(s, t.id.slice(5))
+            : !!find(s, t.id)?.exhausted &&
+              card(find(s, t.id)!).type_code === "ally" &&
+              sinisterPlayerPackPorts.canReadyPiece(s, find(s, t.id)!)),
+      ),
+  exhaustCards: (s, ids) => {
+    need(
+      new Set(ids).size === ids.length &&
+        ids.every((id) =>
+          id === `hero:${s.activePlayerId}`
+            ? !s.player.exhausted
+            : s.player.inPlay.some((p) => p.id === id && !p.exhausted),
+        ),
+      "The additional cost needs distinct ready controlled cards.",
+    );
+    for (const id of ids)
+      if (id === `hero:${s.activePlayerId}`) s.player.exhausted = true;
+      else s.player.inPlay.find((p) => p.id === id)!.exhausted = true;
+  },
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  handPlayableCards: (s) => [
+    ...s.player.hand,
+    ...visionPack.visionPackStoredPlayable(s, visionPackPorts),
+    ...ghostSpider.ghostSpiderStoredPlayable(s, ghostSpiderPorts),
+  ],
+  canPlayWithDiscount: (s, p, discount, exhaustId) => {
+    const costSource = exhaustId
+      ? s.player.inPlay.find((p) => p.id === exhaustId)
+      : undefined;
+    const wasExhausted = costSource?.exhausted;
+    if (costSource) costSource.exhausted = true;
+    try {
+      return antPackPorts.playableWithDiscount(s, p, discount);
+    } finally {
+      if (costSource) costSource.exhausted = !!wasExhausted;
+    }
+  },
+  canPay: (s, cost, requirements = [], exclude, code) =>
+    canPay(s, cost, requirements, exclude, code),
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  schemeTargets: (s, thwart) => targets(s, "scheme", false, thwart),
+  attackProgram: bwPorts.attackProgram,
+  attackVillain: (s, playerId, after) =>
+    add(s, E("sinisterNativeAttack", { playerId, after })),
+  discardHand: (s, id) => {
+    const i = s.player.hand.findIndex((p) => p.id === id);
+    need(i >= 0, "The actual hand discard cost is unavailable.");
+    s.player.discard.push(resetPiece(s.player.hand.splice(i, 1)[0]));
+  },
+  discardControlled: discardPiece,
+  discardRandomHand: (s, after) => {
+    revealHidden(s);
+    randomDiscard(s);
+    add(s, ...after);
+  },
+  revealHidden,
+  shuffleEncounter: (s, after) => {
+    mutagenPorts.shuffleEncounter(s);
+    add(s, ...after);
+  },
+  shufflePlayerDeck: warMachinePortsShufflePlayer,
+  discardTopEncounter: (s, count, after) => {
+    const ids: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const p = drawEncounter(s);
+      if (!p) break;
+      s.encounter.discard.push(p);
+      ids.push(p.id);
+    }
+    add(s, ...after.map((e) => ({ ...e, discardedIds: ids })));
+  },
+  discardUntilTreachery: (s, after) => {
+    let found: Piece | undefined;
+    const available = s.encounter.deck.length + s.encounter.discard.length;
+    for (let i = 0; i < available; i++) {
+      const p = drawEncounter(s);
+      if (!p) break;
+      s.encounter.discard.push(p);
+      if (card(p).type_code === "treachery") {
+        found = p;
+        break;
+      }
+    }
+    add(s, ...after.map((e) => ({ ...e, treacheryId: found?.id })));
+  },
+  revealDiscardedCost: (s, id, after) => {
+    const p = s.encounter.discard.find((p) => p.id === id);
+    need(
+      p && card(p).type_code === "treachery",
+      "The actual discarded treachery is unavailable.",
+    );
+    removeEncounterInstance(s, id);
+    add(s, E("reveal", { piece: p }), ...after);
+  },
+  countEncounterIcons: (s, ids, includeStar, after) => {
+    const pieces = ids
+      .map((id) => sinisterNativePiece(s, id))
+      .filter((p): p is Piece => !!p);
+    add(
+      s,
+      ...scarletWitch.scarletWitchCountBoosts(s, pieces, after, {
+        sourceTitle: "Encounter icons",
+        includeStar,
+      }),
+    );
+  },
+  healIdentityCost: (s, amount, after) =>
+    add(s, E("heal", { target: `hero:${s.activePlayerId}`, amount }), ...after),
+  damageAllyCost: (s, id, amount, after) =>
+    add(
+      s,
+      E("damage", { target: id, amount, source: id, attack: false }),
+      ...after,
+    ),
+  canPutCard: (s, p) =>
+    ["ally", "support", "upgrade"].includes(card(p).type_code) &&
+    !uniqueConflict(s, card(p)),
+  putCard: (s, id, after) => add(s, E("sinisterNativePut", { id, after })),
+  playFromHand: (s, id, discount, after) =>
+    add(
+      s,
+      E("visionPackMeditationPlay", {
+        id,
+        discount,
+        after,
+        sinisterGovernment: true,
+      }),
+    ),
+  payRepeat: (s, playerId, cost, afterSuccess, afterDecline) =>
+    add(
+      s,
+      E("payRequest", {
+        actorId: playerId,
+        title: "Across the Spider-Verse · repeat ability",
+        cost,
+        abilityCost: true,
+        cancelable: true,
+        after: afterSuccess,
+        cancellationQueue: afterDecline,
+      }),
+    ),
+  addBasicPowerBonus: (s, receipt, amount) => {
+    s.flags[`sinisterPower:${receipt.token}`] =
+      Number(s.flags[`sinisterPower:${receipt.token}`] || 0) + amount;
+  },
+  damageAvailable: (s, receipt) =>
+    !!s.flags[`sinisterDamage:${receipt.token}`] && receipt.amount > 0,
+  preventDamage: (s, receipt, amount, after) => {
+    const packet = JSON.parse(
+      String(s.flags[`sinisterDamage:${receipt.token}`] || "null"),
+    ) as Effect;
+    need(packet, "This actual damage window has ended.");
+    preventNativeIdentityDamage(s, packet, amount);
+    add(s, ...after);
+  },
+  playJumpFlip: (s, id, receipt, after) => {
+    const p = sinisterPlayerPackPorts.handPlayableCards!(s).find(
+      (p) => p.id === id,
+    );
+    need(p && p.code === "27014", "Jump Flip needs its actual playable event.");
+    const packet = JSON.parse(
+      String(s.flags[`sinisterDamage:${receipt.token}`] || "null"),
+    ) as Effect;
+    add(
+      s,
+      E("payRequest", {
+        title: "Jump Flip",
+        cost: cardCost(s, card(p!), p),
+        piece: p,
+        cancelable: true,
+        after: [
+          E("resolveHandEvent", {
+            id,
+            after: [E("sinisterNativeJump", { receipt })],
+            continuation: after,
+          }),
+        ],
+        commit: receipt.attack
+          ? [E("sinisterNativeClaimDefense", { packet })]
+          : [],
+        cancellationQueue: after,
+      }),
+    );
+  },
+  consequentialAvailable: (s, receipt) =>
+    !!find(s, receipt.allyId) &&
+    Number(s.flags[`sinisterConsequential:${receipt.token}`]) > 0,
+  preventConsequential: (s, receipt, amount, after) => {
+    const key = `sinisterConsequential:${receipt.token}`;
+    need(
+      sinisterPlayerPackPorts.consequentialAvailable(s, receipt),
+      "This consequential damage packet is no longer pending.",
+    );
+    s.flags[key] = Math.max(0, Number(s.flags[key]) - amount);
+    add(s, ...after);
+  },
+  lookDeck: (s, playerId, encounter, count, after) => {
+    revealHidden(s);
+    const deck = encounter
+      ? s.encounter.deck
+      : seatView(s, playerId!).player.deck;
+    const deckReceipt = {
+      token: `look:${s.nextId++}`,
+      playerId,
+      encounter,
+      ids: deck.slice(0, count).map((p) => p.id),
+    };
+    add(s, ...after.map((e) => ({ ...e, deckReceipt })));
+  },
+  arrangeDeck: (s, receipt, discard, top, bottom, after) => {
+    const ids = [...discard, ...top, ...bottom];
+    need(
+      ids.length === receipt.ids.length &&
+        new Set(ids).size === ids.length &&
+        ids.every((id) => receipt.ids.includes(id)),
+      "Global Logistics must arrange every actual looked-at card once.",
+    );
+    const view = receipt.encounter ? s : seatView(s, receipt.playerId!);
+    const deck = receipt.encounter ? s.encounter.deck : view.player.deck;
+    need(
+      receipt.ids.every((id) => deck.some((p) => p.id === id)),
+      "A looked-at card is no longer in the actual deck.",
+    );
+    const held = new Map(
+      deck.filter((p) => receipt.ids.includes(p.id)).map((p) => [p.id, p]),
+    );
+    const rest = deck.filter((p) => !held.has(p.id));
+    deck.splice(
+      0,
+      deck.length,
+      ...top.map((id) => held.get(id)!),
+      ...rest,
+      ...bottom.map((id) => held.get(id)!),
+    );
+    const pile = receipt.encounter ? s.encounter.discard : view.player.discard;
+    pile.push(...discard.map((id) => resetPiece(held.get(id)!)));
+    if (receipt.encounter) recycleEncounter(s);
+    else {
+      const actor = s.activePlayerId;
+      activateSeat(s, receipt.playerId!);
+      recyclePlayer(s);
+      activateSeat(s, actor);
+    }
+    add(s, ...after);
+  },
+};
+
+function ghostNativeActivationWindow(
+  s: GameState,
+  enemyId: string,
+  kind: "attack" | "scheme",
+  continuation: Effect,
+): boolean {
+  if (s.flags.ghostActivationResuming) return false;
+  const actor = s.activePlayerId;
+  const receipt: ghostSpider.GhostSpiderActivationReceipt = {
+    token: `activation:${s.nextId++}`,
+    enemyId,
+    playerId: actor,
+    kind,
+  };
+  const next = E("ghostNativeActivationResume", {
+    receipt,
+    continuation,
+    actorId: actor,
+  });
+  s.flags[`ghostActivation:${receipt.token}`] = true;
+  const options = playerOrder(s).flatMap((seat) =>
+    ghostSpider
+      .ghostSpiderActivationOptions(
+        seatView(s, seat),
+        receipt,
+        [next],
+        ghostSpiderPorts,
+      )
+      .map((o) => ({
+        ...o,
+        id: `${seat.id}:${o.id}`,
+        effects: o.effects.map((e) => ({ ...e, actorId: seat.id })),
+      })),
+  );
+  if (!options.length) {
+    delete s.flags[`ghostActivation:${receipt.token}`];
+    return false;
+  }
+  choose(
+    s,
+    "Enemy would activate",
+    "Choose an interrupt before this actual activation.",
+    [...options, option("continue", "Continue activation", [next])],
+  );
+  return true;
+}
+function ghostNativeEventReceipt(
+  s: GameState,
+  id?: string,
+): ghostSpider.GhostSpiderEventReceipt | undefined {
+  if (!id || !s.flags[`ghostEvent:${id}`]) return;
+  return JSON.parse(String(s.flags[`ghostEvent:${id}`]));
+}
+function ghostNativeEventOptions(
+  s: GameState,
+  id: string | undefined,
+  after: Effect[],
+  resolved: boolean,
+): Option[] {
+  const receipt = ghostNativeEventReceipt(s, id);
+  return receipt && !s.flags[`ghostCancelled:${id}`]
+    ? ghostSpider.ghostSpiderEventResolutionOptions(
+        s,
+        { ...receipt, resolved },
+        after,
+        ghostSpiderPorts,
+      )
+    : [];
+}
+const ghostSpiderPorts: ghostSpider.GhostSpiderPorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  isIdentityTextBlank: (s) => isTextBlank(s, heroCard(s)),
+  canReadyIdentity: (s, id) => canReadyIdentity(seatView(s, id)),
+  canReadyPiece: (s, p) => warMachinePackPorts.canReady(s, p.id),
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  canPay: (s, cost, req = [], exclude, code) =>
+    canPay(s, Math.max(cost, req.length), req, exclude, code),
+  canPlayReaction: (s, p, context) =>
+    !ghostSpider.ghostSpiderCannotPlayEvents(s) &&
+    !(
+      context.kind === "reveal" &&
+      context.reveal.playerId !== s.activePlayerId &&
+      /Peril/i.test(
+        card(sinisterNativePiece(s, context.reveal.pieceId)!).text || "",
+      )
+    ),
+  playReaction: (s, id, context, after) => {
+    const p = [
+      ...s.player.hand,
+      ...ghostSpider.ghostSpiderStoredPlayable(s, ghostSpiderPorts),
+    ].find((p) => p.id === id);
+    need(p, "The actual Ghost-Spider event is unavailable.");
+    add(
+      s,
+      E("payRequest", {
+        title: card(p!).name,
+        cost: cardCost(s, card(p!), p),
+        requirements: ghostSpider.ghostSpiderEventRequirements(p!),
+        piece: p,
+        cancelable: true,
+        after: [
+          E("resolveHandEvent", {
+            id,
+            ghostContext: context,
+            after: ghostSpider.ghostSpiderReactionEffects(s, p!, context),
+            continuation: after,
+          }),
+        ],
+        cancellationQueue: after,
+      }),
+    );
+  },
+  enemyTargets: (s, attacking) => targets(s, "enemy", attacking),
+  schemeTargets: (s, thwarting) =>
+    thwarting && captainThwartBlocked(s)
+      ? []
+      : targets(s, "scheme", false, thwarting),
+  attackProgram: bwPorts.attackProgram,
+  countEncounterBoostIcons: (s, id, after) => {
+    const p = sinisterNativePiece(s, id);
+    need(p, "The actual revealed encounter is unavailable.");
+    add(
+      s,
+      ...scarletWitch.scarletWitchCountBoosts(s, [p!], after, {
+        sourceTitle: "Pirouette and Punch",
+      }),
+    );
+  },
+  cancelWhenRevealed: (s, receipt, after) => {
+    const p = sinisterNativePiece(s, receipt.pieceId);
+    need(p, "The actual encounter is unavailable.");
+    s.flags[`ghostCancelReveal:${p!.id}`] = true;
+    add(s, ...after);
+  },
+  activationAvailable: (s, receipt) =>
+    !!seatView(s, receipt.playerId).flags[`ghostActivation:${receipt.token}`],
+  cancelActivation: (s, receipt) => {
+    const flags = seatView(s, receipt.playerId).flags;
+    if (!flags[`ghostActivation:${receipt.token}`]) return false;
+    flags[`ghostActivationCancelled:${receipt.token}`] = true;
+    return true;
+  },
+  discardHand,
+  removeControlledCard: (s, id) => {
+    const p = find(s, id);
+    need(p && !isPermanent(card(p)), "This actual card cannot be removed.");
+    movePieceFromPlay(s, p!.id, true);
+    if (card(p!).faction_code === "encounter") {
+      const i = s.encounter.discard.findIndex((x) => x.id === id);
+      if (i >= 0) s.removed.push(s.encounter.discard.splice(i, 1)[0]);
+    }
+  },
+  shufflePlayerDeck: warMachinePortsShufflePlayer,
+  shuffleDiscardIntoDeck: (s, after) => {
+    s.player.deck.push(...s.player.discard.splice(0));
+    warMachinePortsShufflePlayer(s, after);
+  },
+  handSize,
+  revealHidden,
+  makePiece,
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  enemyRemainingHP: (s, p) => Math.max(0, pieceHP(s, p) - p.damage),
+  captureGeorgeForObligation: (s, id) => {
+    const ob = s.player.inPlay.find((p) => p.id === id);
+    need(ob, "The actual obligation is unavailable.");
+    const zones = [
+      s.player.hand,
+      s.player.deck,
+      s.player.discard,
+      s.player.inPlay,
+    ];
+    const zone = zones.find((z) => z.some((p) => p.code === "27007"));
+    if (!zone) return;
+    const g = zone.find((p) => p.code === "27007")!;
+    for (const event of g.storedCards || []) {
+      const owner = seatView(s, event.ownerId || s.activePlayerId);
+      owner.player.discard.push(resetPiece(event));
+    }
+    g.storedCards = [];
+    if (zone === s.player.inPlay) {
+      movePieceFromPlay(s, g.id, true);
+      const i = s.removed.findIndex((p) => p.id === g.id);
+      need(i >= 0, "George must leave play once.");
+      const left = s.removed.splice(i, 1)[0];
+      left.storedCards = [];
+      (ob!.storedCards ||= []).push(left);
+    } else (ob!.storedCards ||= []).push(zone.splice(zone.indexOf(g), 1)[0]);
+  },
+  attackLizard: (s, enemyId, playerId, completion) =>
+    enemyAttack(s, enemyId, undefined, {
+      playerId,
+      enemyId,
+      kind: "attack",
+      modifier: 0,
+      after: completion,
+    }),
+};
+
+const milesPorts: miles.MilesMoralesPorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  isIdentityTextBlank: (s) => isTextBlank(s, heroCard(s)),
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  schemeTargets: (s, thwarting) =>
+    thwarting && captainThwartBlocked(s)
+      ? []
+      : targets(s, "scheme", false, thwarting),
+  canGiveStatus: dsPorts.canAddStatus,
+  canReadyIdentity: (s, id) => canReadyIdentity(seatView(s, id)),
+  canChangeForm: canChangeIdentityForm,
+  canPay: (s, cost, requirements = [], exclude, code) =>
+    !(code === "27032" && cost < requirements.length) &&
+    canPay(s, cost, requirements, exclude, code),
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  canDiscardPiece: (s, p) =>
+    !isPermanent(card(p)) && valkyrie.valkyrieCanDiscardAttachment(s, p),
+  discardPiece,
+  discardHand,
+  flip: (s, counts, after, target) => {
+    const before = s.queue.length;
+    flip(s, counts, target === "alter" ? "alter" : undefined);
+    const generated = s.queue.splice(0, s.queue.length - before);
+    add(s, ...generated, ...after);
+  },
+  shufflePlayerDeck: warMachinePortsShufflePlayer,
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  makePiece,
+  attackProgram: bwPorts.attackProgram,
+  enemyAttack: (s, enemyId, playerId, allowAlter, continuation) => {
+    const seat = s.players.find(
+      (seat) => seat.id === playerId && !seat.eliminated,
+    );
+    if (
+      !seat ||
+      !s.minions.some((p) => p.id === enemyId) ||
+      (!allowAlter && seatView(s, seat).player.form !== "hero")
+    )
+      return false;
+    const token = `miles-attack:${s.nextId++}`;
+    add(
+      s,
+      E("milesNativeAttackStart", {
+        enemyId,
+        playerId,
+        continuation,
+        token,
+        returnPlayerId: s.activePlayerId,
+        actorId: playerId,
+      }),
+    );
+    return true;
+  },
+  placeAccelerationToken: (s, id, amount) => {
+    const p = s.sideSchemes.find((p) => p.id === id);
+    need(p, "Tracking Prey needs its actual side scheme.");
+    p!.accelerationTokens = Number(p!.accelerationTokens || 0) + amount;
+  },
+  attachEncounter: (s, p, id) => {
+    removeEncounterInstance(s, p.id);
+    p.attachedTo = id;
+    if (!s.attachments.some((a) => a.id === p.id)) s.attachments.push(p);
+  },
+  giveObligation: spectrumPorts.giveObligation,
+  removeEncounter: (s, p) => {
+    if (allInPlay(s).some((a) => a.id === p.id)) discardPiece(s, p.id);
+    removeEncounterInstance(s, p.id);
+    s.removed.push(resetPiece(p));
+  },
+  discardEncounter: (s, p) => {
+    if (allInPlay(s).some((a) => a.id === p.id)) discardPiece(s, p.id);
+    else {
+      removeEncounterInstance(s, p.id);
+      s.encounter.discard.push(resetPiece(p));
+    }
+  },
+};
+
 const visionPorts: vision.VisionPorts = {
   defenseEventSources: (s) =>
     visionPack.visionPackDefenseEvents(s, visionPackPorts),
@@ -8238,6 +9165,17 @@ function enemyAttack(
   activation?: MutagenActivation,
   originalTarget?: string,
 ) {
+  if (
+    !activation?.after?.nebulaGamoraSource &&
+    find(s, id) &&
+    ghostNativeActivationWindow(
+      s,
+      id,
+      "attack",
+      E("ghostNativeEnemyAttack", { id, extra, activation, originalTarget }),
+    )
+  )
+    return;
   const canceled = () => {
     if (activation?.after)
       add(s, {
@@ -8568,6 +9506,8 @@ function boostEffects(s: GameState, p: Piece) {
     warMachine.warMachineBoost(s, p) ??
     valkyrie.valkyrieBoost(s, p) ??
     vision.visionBoost(s, p) ??
+    miles.milesBoost(s, p) ??
+    ghostSpider.ghostSpiderBoost(s, p) ??
     spectrum.spectrumBoost(s, p) ??
     warlock.warlockBoost(s, p) ??
     mtsPlayerPack.mtsPlayerPackBoost(s, p) ??
@@ -8706,6 +9646,15 @@ function enemyScheme(
 ) {
   const p = find(s, id);
   if (!p) return;
+  if (
+    ghostNativeActivationWindow(
+      s,
+      id,
+      "scheme",
+      E("ghostNativeEnemyScheme", { id, extra, request }),
+    )
+  )
+    return;
   if (p.confused) {
     consumeStatus(p, "confused");
     log(s, `${card(p).name} loses confused instead of scheming.`);
@@ -9194,6 +10143,17 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
       id: a.attacker,
       actorId: a.originalPlayerId || recipientId,
     }),
+    ...(a.activationAfter?.type === "ghost-spider:cold-blood-after"
+      ? [
+          {
+            ...a.activationAfter,
+            performed: true,
+            attackedPlayerId: recipientId,
+            damagePlaced: a.damagePlaced || 0,
+            threatPlaced: 0,
+          },
+        ]
+      : []),
     E("defenseResponses", {
       defended: target === "hero" && a.defender !== "none",
       attacker: a.attacker,
@@ -9215,7 +10175,8 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
             .neverBackDownCount || 0,
       },
     }),
-    ...(a.activationAfter
+    ...(a.activationAfter &&
+    a.activationAfter.type !== "ghost-spider:cold-blood-after"
       ? [
           {
             ...a.activationAfter,
@@ -9256,6 +10217,18 @@ function reveal(
   const knifeSurge = repeat
     ? 0
     : (savedKnifeSurge ?? starLord.starLordTreacherySurge(s, p));
+  if (!repeat && !skip)
+    add(
+      s,
+      E("sinisterNativeRevealed", {
+        receipt: {
+          token: `reveal:${s.nextId++}`,
+          playerId: s.activePlayerId,
+          pieceId: p.id,
+          code: p.code,
+        },
+      }),
+    );
   if (!repeat) beginResolution(s, p);
   s.lastEncounter = p.code;
   log(s, `${skip ? "Resolve" : "Encounter"}: ${card(p).name}.`, "bad");
@@ -9293,6 +10266,34 @@ function reveal(
     );
     for (const seat of playerOrder(s)) {
       const view = seatView(s, seat);
+      opts.push(
+        ...ghostSpider
+          .ghostSpiderRevealOptions(
+            view,
+            {
+              token: `reveal:${p.id}`,
+              pieceId: p.id,
+              code: p.code,
+              playerId: revealing,
+              fromEncounterDeck,
+            },
+            [
+              E("reveal", {
+                piece: p,
+                skip: true,
+                actorId: revealing,
+                fromEncounterDeck,
+                knifeSurge,
+              }),
+            ],
+            ghostSpiderPorts,
+          )
+          .map((o) => ({
+            ...o,
+            id: `${seat.id}:${o.id}`,
+            effects: o.effects.map((e) => ({ ...e, actorId: seat.id })),
+          })),
+      );
       opts.push(
         ...scarletWitch
           .scarletWitchRevealOptions(
@@ -9347,7 +10348,7 @@ function reveal(
       );
       if (card(p).type_code === "treachery" && view.player.form === "hero")
         for (const code of ["01004", "01078"]) {
-          const interrupt = view.player.hand.find(
+          const interrupt = eventPlaySources(view).find(
             (x) => rulesCode(x) === rulesCode(code),
           );
           if (interrupt && affordable(view, 1, [], interrupt.id))
@@ -9431,6 +10432,36 @@ function reveal(
   }
   const c = card(p);
   const revealCard = knifeSurge ? { ...c, text: `Surge.\n${c.text || ""}` } : c;
+  if (!repeat && s.flags[`ghostCancelReveal:${p.id}`]) {
+    delete s.flags[`ghostCancelReveal:${p.id}`];
+    if (c.type_code === "minion") {
+      s.resolving = s.resolving.filter((x) => x.id !== p.id);
+      p.engagedWith = s.activePlayerId;
+      s.minions.push(p);
+      minionWillEnter(s, p);
+      minionEntered(s, p);
+    } else if (c.type_code === "side_scheme") {
+      s.resolving = s.resolving.filter((x) => x.id !== p.id);
+      p.counters =
+        (c.base_threat || 0) * (c.base_threat_fixed ? 1 : s.playerCount);
+      s.sideSchemes.push(p);
+    } else if (c.type_code === "attachment") {
+      s.resolving = s.resolving.filter((x) => x.id !== p.id);
+      s.attachments.push(p);
+    }
+    const effects = beginRevealWindow(
+      s,
+      p,
+      revealCard,
+      s.activePlayerId,
+      1 + goblinWhenRevealedCopies(s),
+    );
+    s.revealWindows![p.id].pending = s.revealWindows![p.id].pending.filter(
+      (id) => id !== "text",
+    );
+    add(s, ...effects);
+    return;
+  }
   const cosmic = mtsPlayerPack.mtsPlayerPackEncounterReveal(s, p);
   if (cosmic !== null) {
     add(s, ...cosmic);
@@ -9545,6 +10576,11 @@ function reveal(
   const incite = scaledKeyword(c, "Incite", s.playerCount);
   if (incite) add(s, E("threat", { target: "main", amount: incite }));
   const ds = doctorStrangeEncounterReveal(s, p);
+  const milesReveal = miles.milesEncounterReveal(s, p);
+  if (milesReveal !== null && c.type_code === "attachment") {
+    add(s, ...milesReveal);
+    return;
+  }
   if (ds !== null && c.type_code === "attachment") {
     add(s, ...ds);
     return;
@@ -9567,6 +10603,8 @@ function reveal(
     warMachine.warMachineEncounterReveal(s, p) ??
     valkyrie.valkyrieEncounterReveal(s, p) ??
     vision.visionEncounterReveal(s, p) ??
+    miles.milesEncounterReveal(s, p) ??
+    ghostSpider.ghostSpiderEncounterReveal(s, p) ??
     warlock.warlockEncounterReveal(s, p) ??
     rocket.rocketEncounterReveal(s, p) ??
     groot.grootEncounterReveal(s, p) ??
@@ -10112,6 +11150,11 @@ function treachery(s: GameState, p: Piece) {
       else surge();
       break;
     case "01190": {
+      const ghostNemesis = ghostSpider.ghostSpiderShadowOfPast(s);
+      if (ghostNemesis !== null) {
+        add(s, ...ghostNemesis);
+        break;
+      }
       const visionNemesis = vision.visionShadowOfPast(s);
       if (visionNemesis !== null) {
         add(s, ...visionNemesis);
@@ -10123,6 +11166,11 @@ function treachery(s: GameState, p: Piece) {
         break;
       }
       const warMachineNemesis = warMachine.warMachineShadowOfPast(s);
+      const milesNemesis = miles.milesShadowOfPast(s);
+      if (milesNemesis !== null) {
+        add(s, ...milesNemesis);
+        break;
+      }
       if (warMachineNemesis !== null) {
         add(s, ...warMachineNemesis);
         break;
@@ -10194,6 +11242,16 @@ function treachery(s: GameState, p: Piece) {
   }
 }
 function resolve(s: GameState, e: Effect) {
+  if (
+    sinisterPlayerPack.resolveSinisterPlayerPackEffect(
+      s,
+      e,
+      sinisterPlayerPackPorts,
+    )
+  )
+    return;
+  if (miles.resolveMilesMoralesEffect(s, e, milesPorts)) return;
+  if (ghostSpider.resolveGhostSpiderEffect(s, e, ghostSpiderPorts)) return;
   if (e.retaliateSource && !find(s, e.retaliateSource)) return;
   if (e.type === "ms:preemptive" && !e.scarletCounted) {
     countActivationBoost(s, e.boostId, [{ ...e, scarletCounted: true }]);
@@ -10272,6 +11330,8 @@ function resolve(s: GameState, e: Effect) {
           warMachine.warMachineEncounterReveal(state, piece) ??
           valkyrie.valkyrieEncounterReveal(state, piece) ??
           vision.visionEncounterReveal(state, piece) ??
+          miles.milesEncounterReveal(state, piece) ??
+          ghostSpider.ghostSpiderEncounterReveal(state, piece) ??
           warlock.warlockEncounterReveal(state, piece) ??
           rocket.rocketEncounterReveal(state, piece) ??
           groot.grootEncounterReveal(state, piece) ??
@@ -10484,6 +11544,7 @@ function resolve(s: GameState, e: Effect) {
         nebulaPackPorts,
       );
       const options = [
+        ...ghostNativeEventOptions(s, e.eventId, after, true),
         ...scarletPack.scarletWitchPackAfterHeroThwart(
           s,
           e.snapshot,
@@ -10646,6 +11707,17 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "eventResolve": {
+      if (!e.sinisterAdditionalCostPaid) {
+        const cost = sinisterPlayerPack.sinisterPlayerPackBeforeEvent(
+          s,
+          e.piece,
+          [{ ...e, sinisterAdditionalCostPaid: true }],
+        );
+        if (cost) {
+          add(s, ...cost);
+          break;
+        }
+      }
       if (!e.visionMeditationCostPaid) {
         const cost = visionPack.visionPackBeforeEvent(s, e.piece, [e]);
         if (cost) {
@@ -10779,6 +11851,7 @@ function resolve(s: GameState, e: Effect) {
         e.warMachinePackReceipt,
         e.valkyriePackReceipt,
         !!e.visionMeditationCostPaid,
+        e.playToken,
       );
       break;
     }
@@ -10800,6 +11873,9 @@ function resolve(s: GameState, e: Effect) {
         s.player.hand[i] ||
         visionPack
           .visionPackStoredPlayable(s, visionPackPorts)
+          .find((p) => p.id === e.id) ||
+        ghostSpider
+          .ghostSpiderStoredPlayable(s, ghostSpiderPorts)
           .find((p) => p.id === e.id);
       need(available, "The reaction card is no longer available.");
       const agility = !e.agilityHandled
@@ -10812,7 +11888,15 @@ function resolve(s: GameState, e: Effect) {
       const p =
         i >= 0
           ? s.player.hand.splice(i, 1)[0]
-          : visionPack.visionPackTakeStoredForPlay(s, e.id, visionPackPorts)!;
+          : visionPack.visionPackTakeStoredForPlay(s, e.id, visionPackPorts) ||
+            ghostSpider.ghostSpiderTakeStoredForPlay(
+              s,
+              e.id,
+              ghostSpiderPorts,
+            )!;
+      const playToken = nativeCardPlayCommitted(s, p);
+      if (e.ghostContext)
+        ghostSpider.ghostSpiderCommitReaction(s, p, e.ghostContext);
       starLord.starLordHandPlayFinished(s, p.id);
       beginResolution(s, p);
       s.flags.discount = 0;
@@ -10850,11 +11934,13 @@ function resolve(s: GameState, e: Effect) {
             paid: e.paid || [],
             paidForCard: e.paidForCard,
             eventId: p.id,
+            playToken,
           }),
           E("finishResolution", {
             id: p.id,
             eventId: p.id,
             playedEvent: { ...p },
+            playToken,
           }),
           ...(e.continuation || e.resume || []).map((x: Effect) => ({
             ...x,
@@ -10877,11 +11963,13 @@ function resolve(s: GameState, e: Effect) {
       ]);
       for (const e of doctorStrangeCardPlayed(s, card(p)))
         discardPiece(s, e.id);
+      if (statusCanceled) s.flags[`ghostCancelled:${p.id}`] = true;
       const eventEffects: Effect[] = e.after ?? [
         E("nativeEvent", {
           piece: p,
           paid: e.paid || [],
           paidForCard: e.paidForCard,
+          playToken,
         }),
       ];
       add(
@@ -10899,6 +11987,7 @@ function resolve(s: GameState, e: Effect) {
                   paid: x.paid ?? e.paid ?? [],
                   paidForCard: x.paidForCard ?? e.paidForCard,
                   eventId: p.id,
+                  playToken,
                 })),
               ),
         ),
@@ -10906,6 +11995,7 @@ function resolve(s: GameState, e: Effect) {
           id: p.id,
           eventId: p.id,
           playedEvent: { ...p },
+          playToken,
         }),
         ...(e.continuation || e.resume || []).map((x: Effect) => ({
           ...x,
@@ -10932,6 +12022,8 @@ function resolve(s: GameState, e: Effect) {
         );
         break;
       }
+      e.basicUseToken ||= `basic:${s.nextId++}`;
+      e.basicWasHero ??= s.player.form === "hero";
       s.player.exhausted = true;
       if (power === "attack") s.flags.basicAttack = true;
       const replaced =
@@ -11062,7 +12154,15 @@ function resolve(s: GameState, e: Effect) {
         add(
           s,
           ...native,
-          ...(!replaced ? [E("quicksilverBasicUsed", { power })] : []),
+          ...(!replaced
+            ? [
+                E("quicksilverBasicUsed", {
+                  power,
+                  basicUseToken: e.basicUseToken,
+                  basicWasHero: e.basicWasHero,
+                }),
+              ]
+            : []),
         );
       else {
         const amount = continuation.amount;
@@ -11090,7 +12190,15 @@ function resolve(s: GameState, e: Effect) {
                 : { action: true }),
             }),
           }),
-          ...(!replaced ? [E("quicksilverBasicUsed", { power })] : []),
+          ...(!replaced
+            ? [
+                E("quicksilverBasicUsed", {
+                  power,
+                  basicUseToken: e.basicUseToken,
+                  basicWasHero: e.basicWasHero,
+                }),
+              ]
+            : []),
         );
       }
       break;
@@ -11098,6 +12206,24 @@ function resolve(s: GameState, e: Effect) {
     case "quicksilverBasicUsed":
       add(
         s,
+        ...miles.milesAfterBasicPower(
+          s,
+          {
+            token: e.basicUseToken || `basic:${s.nextId++}`,
+            playerId: s.activePlayerId,
+            power: e.power,
+            performed: true,
+            wasHero: !!e.basicWasHero,
+          },
+          milesPorts,
+        ),
+        ...ghostSpider.ghostSpiderAfterBasicPower(s, {
+          token: e.basicUseToken || `basic:${s.nextId++}`,
+          playerId: s.activePlayerId,
+          power: e.power,
+          performed: true,
+          wasHero: !!e.basicWasHero,
+        }),
         ...(e.power === "attack"
           ? [
               ...quicksilverPack.quicksilverPackAfterBasicAttack(s),
@@ -11477,6 +12603,28 @@ function resolve(s: GameState, e: Effect) {
         const previous = s.activePlayerId;
         if (e.actorId || p.ownerId) activateSeat(s, e.actorId || p.ownerId);
         mtsPlayerPack.mtsPlayerPackEventFinished(s, p);
+        const pendingFlow = s.queue.find(
+          (effect) =>
+            effect.type === "visionPackFlowPlayed" && effect.piece?.id === p.id,
+        );
+        s.queue = s.queue.filter(
+          (effect) =>
+            !(
+              effect.type === "visionPackFlowPlayed" &&
+              effect.piece?.id === p.id
+            ),
+        );
+        add(
+          s,
+          E("nativeEventPlayResponses", {
+            id: p.id,
+            piece: p,
+            attacker: pendingFlow?.attacker,
+            usedFlow: [],
+            playToken: e.playToken,
+            ghostAllowed: !s.flags[`ghostCancelled:${p.id}`],
+          }),
+        );
         add(
           s,
           ...gamora.gamoraAfterEvent(
@@ -11488,6 +12636,39 @@ function resolve(s: GameState, e: Effect) {
         );
         activateSeat(s, previous);
       }
+      break;
+    }
+    case "nativeEventPlayResponses": {
+      const again = { ...e };
+      const ghostOptions = e.ghostAllowed
+        ? ghostNativeEventOptions(s, e.id, [again], true)
+        : [];
+      const flow = visionPack.visionPackCardPlayed(
+        s,
+        e.piece,
+        e.attacker,
+        visionPackPorts,
+      );
+      const flowOptions = flow
+        .filter((effect) => !e.usedFlow.includes(effect.effects?.[0]?.source))
+        .map((effect) => {
+          const id = effect.effects[0].source;
+          return option(
+            `flow:${id}`,
+            "Flow Like Water · deal 1 damage",
+            [...effect.effects, { ...e, usedFlow: [...e.usedFlow, id] }],
+            undefined,
+            "26016",
+          );
+        });
+      const options = [...ghostOptions, ...flowOptions];
+      if (options.length)
+        choose(
+          s,
+          "After resolving the event",
+          "Resolve the available event and play responses in any order.",
+          [...options, option("pass", "Continue", [])],
+        );
       break;
     }
     case "retaliateAfterAttack":
@@ -11694,10 +12875,16 @@ function resolve(s: GameState, e: Effect) {
       );
       break;
     case "visionPackMeditationPlay": {
-      const p = s.player.hand.find((p) => p.id === e.id);
+      const p = (
+        e.sinisterGovernment
+          ? sinisterPlayerPackPorts.handPlayableCards!(s)
+          : s.player.hand
+      ).find((p) => p.id === e.id);
       need(
         p && visionPackPorts.canPlayWithDiscount(s, p, e.discount),
-        "Meditation needs its actual playable hand card.",
+        e.sinisterGovernment
+          ? "Government Liaison needs its actual playable S.H.I.E.L.D. hand card."
+          : "Meditation needs its actual playable hand card.",
       );
       const prior = Number(s.flags.discount || 0),
         queued = s.queue.length;
@@ -11934,7 +13121,7 @@ function resolve(s: GameState, e: Effect) {
         !e.strangeBasicHandled &&
         s.player.form === "hero" &&
         !s.player.stunned &&
-        s.player.hand.some(
+        eventPlaySources(s).some(
           (p) =>
             p.code === "09037" &&
             canPay(s, cardCost(s, card(p)), [], p.id, p.code),
@@ -12140,8 +13327,6 @@ function resolve(s: GameState, e: Effect) {
           break;
         }
       }
-      // Keep negative basic ATK modifiers until all later ATK bonuses have
-      // resolved. Victor Mancha reduces the completed damage packet.
       if (e.attack && !e.visionPackManchaHandled) {
         const recipient = find(s, e.target);
         const reduction = recipient
@@ -13050,6 +14235,34 @@ function resolve(s: GameState, e: Effect) {
           break;
         }
       }
+      if (!e.sinisterPowerHandled && !(attack ? p.stunned : p.confused)) {
+        const packet = {
+          ...e,
+          sinisterPowerHandled: true,
+          sinisterPowerToken:
+            e.sinisterPowerToken || `ally-basic:${s.nextId++}`,
+        };
+        const receipt = {
+          token: packet.sinisterPowerToken,
+          playerId: s.activePlayerId,
+          allyId: p.id,
+          power: attack ? ("attack" as const) : ("thwart" as const),
+          performed: true,
+          basic: true,
+        };
+        const effects =
+          sinisterPlayerPack.sinisterPlayerPackBasicPowerInterrupt(
+            s,
+            receipt,
+            sinisterPlayerPackPorts,
+            [packet],
+          );
+        if (effects) {
+          p.exhausted = true;
+          add(s, ...effects);
+          break;
+        }
+      }
       if (!e.visionPackMachineHandled) {
         const packet = { ...e, visionPackMachineHandled: true };
         const options = visionPack.visionPackAllyUseOptions(
@@ -13084,7 +14297,13 @@ function resolve(s: GameState, e: Effect) {
       const bonus = attack
         ? scarletPack.scarletWitchPackAllyAttackBonus(s, p)
         : 0;
+      const sinisterBonus = Number(
+        s.flags[`sinisterPower:${e.sinisterPowerToken}`] || 0,
+      );
+      if (e.sinisterPowerToken)
+        delete s.flags[`sinisterPower:${e.sinisterPowerToken}`];
       const amount =
+        sinisterBonus +
         (e.amount ?? allyStat(s, p, attack ? "attack" : "thwart") - bonus) +
         bonus +
         (e.visionPackMachineId === p.id &&
@@ -13110,6 +14329,8 @@ function resolve(s: GameState, e: Effect) {
         E("allyResponse", {
           id: p.id,
           attack,
+          sinisterPowerToken:
+            e.sinisterPowerToken || `ally-basic:${s.nextId++}`,
           attackedMinion: minionTarget
             ? { id: minionTarget.id, code: minionTarget.code }
             : undefined,
@@ -13136,6 +14357,21 @@ function resolve(s: GameState, e: Effect) {
     case "allyResponse": {
       const p = find(s, e.id);
       if (!p) break;
+      add(
+        s,
+        ...(sinisterPlayerPack.sinisterPlayerPackAllyPowerResponses(
+          s,
+          {
+            token: e.sinisterPowerToken || `ally-basic:${s.nextId++}`,
+            playerId: s.activePlayerId,
+            allyId: p.id,
+            power: e.attack ? "attack" : "thwart",
+            performed: true,
+            basic: true,
+          },
+          sinisterPlayerPackPorts,
+        ) || []),
+      );
       add(
         s,
         ...starLordPack.starLordPackAfterAllyBasic(s, p, {
@@ -13189,6 +14425,54 @@ function resolve(s: GameState, e: Effect) {
             nebulaPackPorts,
           )
         : 0;
+      if (p && amount) {
+        const token = `consequence:${s.nextId++}`;
+        s.flags[`sinisterConsequential:${token}`] = amount;
+        add(
+          s,
+          E("sinisterNativeConsequential", {
+            token,
+            id: p.id,
+            attack: !!e.attack,
+            beforeDamage: p.damage,
+            defeatedEnemy,
+            amount,
+          }),
+        );
+      }
+      break;
+    }
+    case "sinisterNativeConsequential": {
+      const p = find(s, e.id);
+      const amount = Number(s.flags[`sinisterConsequential:${e.token}`] || 0);
+      const receipt = { token: e.token, allyId: e.id, amount };
+      const options = sinisterPlayerPack.sinisterPlayerPackConsequentialOptions(
+        s,
+        receipt,
+        [e],
+        sinisterPlayerPackPorts,
+      );
+      if (options.length) {
+        choose(
+          s,
+          "Consequential damage",
+          "Prevent this actual consequential damage?",
+          [
+            ...options,
+            option("continue", "Take consequential damage", [
+              { ...e, type: "sinisterNativeConsequentialFinish" },
+            ]),
+          ],
+        );
+        break;
+      }
+      add(s, { ...e, type: "sinisterNativeConsequentialFinish" });
+      break;
+    }
+    case "sinisterNativeConsequentialFinish": {
+      const p = find(s, e.id);
+      const amount = Number(s.flags[`sinisterConsequential:${e.token}`] || 0);
+      delete s.flags[`sinisterConsequential:${e.token}`];
       if (p && amount)
         add(
           s,
@@ -13201,7 +14485,7 @@ function resolve(s: GameState, e: Effect) {
             id: p.id,
             beforeDamage: p.damage,
             attack: !!e.attack,
-            defeatedEnemy,
+            defeatedEnemy: e.defeatedEnemy,
           }),
         );
       break;
@@ -13432,9 +14716,186 @@ function resolve(s: GameState, e: Effect) {
     case "drone":
       addDrone(s);
       break;
+    case "ghostNativeActivationResume": {
+      const key = `ghostActivation:${e.receipt.token}`;
+      const canceled = !!s.flags[`ghostActivationCancelled:${e.receipt.token}`];
+      delete s.flags[key];
+      delete s.flags[`ghostActivationCancelled:${e.receipt.token}`];
+      if (!canceled) add(s, e.continuation);
+      else if (
+        e.continuation.activation?.after ||
+        e.continuation.request?.after
+      )
+        add(s, {
+          ...(e.continuation.activation?.after ||
+            e.continuation.request?.after),
+          performed: false,
+          damagePlaced: 0,
+          threatPlaced: 0,
+        });
+      break;
+    }
+    case "ghostNativeEnemyAttack":
+      s.flags.ghostActivationResuming = true;
+      try {
+        enemyAttack(s, e.id, e.extra, e.activation, e.originalTarget);
+      } finally {
+        delete s.flags.ghostActivationResuming;
+      }
+      break;
+    case "ghostNativeEnemyScheme":
+      s.flags.ghostActivationResuming = true;
+      try {
+        enemyScheme(s, e.id, e.extra, e.request);
+      } finally {
+        delete s.flags.ghostActivationResuming;
+      }
+      break;
     case "enemyAttack":
       enemyAttack(s, e.id, e.extra);
       break;
+    case "sinisterNativePlayed":
+      add(
+        s,
+        ...(sinisterPlayerPack.sinisterPlayerPackCardPlayed(
+          s,
+          e.receipt,
+          sinisterPlayerPackPorts,
+        ) || []),
+      );
+      break;
+    case "sinisterNativeRevealed":
+      add(
+        s,
+        ...(sinisterPlayerPack.sinisterPlayerPackEncounterRevealed(
+          s,
+          e.receipt,
+          sinisterPlayerPackPorts,
+        ) || []),
+      );
+      break;
+    case "sinisterNativeClaimDefense":
+      gamoraPorts.claimDefense(s, e.packet);
+      break;
+    case "sinisterNativeJump": {
+      const p = s.resolving.find((p) => p.id === s.currentEventId);
+      need(
+        p && p.code === "27014",
+        "The actual Jump Flip event is no longer resolving.",
+      );
+      add(
+        s,
+        ...(sinisterPlayerPack.sinisterPlayerPackEvent(
+          s,
+          p!,
+          e.paidForCard ?? e.paid ?? [],
+          e.receipt,
+        ) || []),
+      );
+      break;
+    }
+    case "sinisterNativeAttack":
+      enemyAttack(s, s.villain.id, undefined, {
+        playerId: e.playerId,
+        enemyId: s.villain.id,
+        kind: "attack",
+        modifier: 0,
+        after: E("sinisterNativeAfter", { after: e.after }),
+      });
+      break;
+    case "sinisterNativeAfter":
+      add(s, ...(e.after || []));
+      break;
+    case "sinisterNativePut": {
+      let p: Piece | undefined;
+      for (const zone of [s.player.hand, s.player.deck, s.player.discard]) {
+        const i = zone.findIndex((p) => p.id === e.id);
+        if (i >= 0) {
+          p = zone.splice(i, 1)[0];
+          break;
+        }
+      }
+      need(
+        p && sinisterPlayerPackPorts.canPutCard(s, p),
+        "The actual owned card cannot enter play.",
+      );
+      Object.assign(p!, resetPiece(p!, true));
+      s.player.inPlay.push(p!);
+      if (rulesCode(p!) === "01064") p!.counters = 3;
+      add(
+        s,
+        ...sinisterPlayerPack.sinisterPlayerPackCardEntered(s, p!),
+        ...mtsPlayerPack.mtsPlayerPackCardEntered(s, p!),
+        ...(card(p!).type_code === "ally"
+          ? [E("allyLimit"), E("allyEnter", { id: p!.id })]
+          : []),
+        ...(e.after || []),
+      );
+      break;
+    }
+    case "sinisterNativeLeave": {
+      const p = find(s, e.id);
+      if (!p) break;
+      const receipt = {
+        token: `leave:${s.nextId++}`,
+        playerId: s.activePlayerId,
+        pieceId: p.id,
+        code: p.code,
+        traits: sinisterNativeTraits(s, p),
+      };
+      const effects = sinisterPlayerPack.sinisterPlayerPackAllyLeaveInterrupt(
+        s,
+        receipt,
+        sinisterPlayerPackPorts,
+        [
+          E("sinisterNativeLeaveCommit", {
+            id: e.id,
+            removed: e.removed,
+            setAsideOwnerId: e.setAsideOwnerId,
+          }),
+        ],
+      );
+      if (effects) add(s, ...effects);
+      else
+        add(
+          s,
+          E("sinisterNativeLeaveCommit", {
+            id: e.id,
+            removed: e.removed,
+            setAsideOwnerId: e.setAsideOwnerId,
+          }),
+        );
+      break;
+    }
+    case "sinisterNativeLeaveCommit":
+      s.flags[`sinisterLeaveCommitted:${e.id}`] = true;
+      movePieceFromPlay(s, e.id, !!e.removed, e.setAsideOwnerId);
+      delete s.flags[`sinisterLeaveCommitted:${e.id}`];
+      break;
+    case "milesNativeAttackStart":
+      enemyAttack(s, e.enemyId, undefined, {
+        playerId: e.playerId,
+        enemyId: e.enemyId,
+        kind: "attack",
+        modifier: 0,
+        after: E("milesNativeAttackComplete", {
+          continuation: e.continuation,
+          milesAttackToken: e.token,
+          actorId: e.returnPlayerId,
+        }),
+      });
+      break;
+    case "milesNativeAttackComplete": {
+      const key = `milesAttackDefeat:${e.milesAttackToken}`;
+      const defeatedCharacter = !!s.flags[key];
+      delete s.flags[key];
+      add(s, {
+        ...e.continuation,
+        performed: !!e.performed,
+        defeatedCharacter,
+      });
+      break;
+    }
     case "enemyTargetAttackComplete": {
       const a = e.snapshot as NonNullable<GameState["attack"]>;
       s.attack = null;
@@ -13773,6 +15234,16 @@ function resolve(s: GameState, e: Effect) {
           const p = find(s, e.id);
           if (p) p.exhausted = true;
         }
+        if (e.id !== "none" && e.id !== "hero")
+          add(
+            s,
+            ...(sinisterPlayerPack.sinisterPlayerPackAllyDefenseInterrupt(
+              s,
+              e.id,
+              s.attack.attacker,
+              sinisterPlayerPackPorts,
+            ) || []),
+          );
         if (e.id === "hero") add(s, E("spectrumDefenseWindow", { used: [] }));
       }
       break;
@@ -14617,6 +16088,22 @@ function resolve(s: GameState, e: Effect) {
     }
     case "defenseResponses": {
       s.attack = null;
+      if (e.snapshot?.basicDefense && !e.ghostBasicReceipt)
+        e.ghostBasicReceipt = {
+          token: `basic:${s.nextId++}`,
+          playerId: e.snapshot.playerId,
+          power: "defense",
+          performed: true,
+          wasHero: true,
+        };
+      if (e.snapshot?.basicDefense && !e.milesBasicReceipt)
+        e.milesBasicReceipt = {
+          token: `basic:${s.nextId++}`,
+          playerId: e.snapshot.playerId,
+          power: "defense",
+          performed: true,
+          wasHero: true,
+        };
       if (!e.gmwHandled && e.snapshot) {
         add(
           s,
@@ -14685,21 +16172,36 @@ function resolve(s: GameState, e: Effect) {
             draxPorts,
           )
         : [];
+      const ghostOptions = e.ghostBasicReceipt
+        ? ghostSpider.ghostSpiderBasicPowerOptions(
+            s,
+            e.ghostBasicReceipt,
+            [e],
+            ghostSpiderPorts,
+          )
+        : [];
+      const milesOptions = e.milesBasicReceipt
+        ? miles.milesBasicPowerOptions(s, e.milesBasicReceipt, [e], milesPorts)
+        : [];
       if (
         !e.defended &&
         !packOptions.length &&
         !bwOptions.length &&
         !gamoraOptions.length &&
-        !draxOptions.length
+        !draxOptions.length &&
+        !milesOptions.length &&
+        !ghostOptions.length
       )
         break;
       const ind = s.player.inPlay.find((p) => rulesCode(p) === "01082");
-      const counter = s.player.hand.find((p) => rulesCode(p) === "01077");
+      const counter = eventPlaySources(s).find((p) => rulesCode(p) === "01077");
       const opts = [
         option("pass", "Continue", []),
         ...bwOptions,
         ...gamoraOptions,
         ...draxOptions,
+        ...milesOptions,
+        ...ghostOptions,
         ...packOptions.map((o) => ({
           ...o,
           effects: [
@@ -15075,6 +16577,7 @@ function resolve(s: GameState, e: Effect) {
       add(
         s,
         ...groot.grootVillainPhaseBegin(s, grootPorts),
+        ...ghostSpider.ghostSpiderVillainPhaseBegins(s, ghostSpiderPorts),
         ...gamora.gamoraVillainPhaseBegin(s, gamoraPorts),
         E("villainStepOne"),
         ...eachPlayer(s, E("villainActivate")),
@@ -15085,7 +16588,7 @@ function resolve(s: GameState, e: Effect) {
     case "villainStepOne":
       log(
         s,
-        `Place ${escalation(s)} threat for ${s.playerCount} starting hero(es), plus ${s.encounter.acceleration + s.sideSchemes.reduce((n, p) => n + (card(p).scheme_acceleration || 0), 0)} acceleration.`,
+        `Place ${escalation(s)} threat for ${s.playerCount} starting hero(es), plus ${s.encounter.acceleration + s.sideSchemes.reduce((n, p) => n + (card(p).scheme_acceleration || 0) + Number(p.accelerationTokens || 0), 0)} acceleration.`,
         "bad",
       );
       add(
@@ -15096,7 +16599,10 @@ function resolve(s: GameState, e: Effect) {
             escalation(s) +
             s.encounter.acceleration +
             s.sideSchemes.reduce(
-              (n, p) => n + (card(p).scheme_acceleration || 0),
+              (n, p) =>
+                n +
+                (card(p).scheme_acceleration || 0) +
+                Number(p.accelerationTokens || 0),
               0,
             ),
         }),
@@ -15165,6 +16671,7 @@ function resolve(s: GameState, e: Effect) {
       for (const seat of order)
         for (let i = 0; i <= (s.heroic || 0); i++) dealEncounter(s, seat.id);
       const hazard =
+        sinisterPlayerPack.sinisterPlayerPackHazards(s) +
         (card(s.scheme.code).scheme_hazard || 0) +
         s.sideSchemes.reduce((n, p) => n + (card(p).scheme_hazard || 0), 0);
       for (let i = 0; i < hazard; i++)
@@ -15649,6 +17156,9 @@ export function dispatch(state: GameState, command: Command): GameState {
             .find((p) => p.id === command.id) ||
           visionPack
             .visionPackStoredPlayable(s, visionPackPorts)
+            .find((p) => p.id === command.id) ||
+          ghostSpider
+            .ghostSpiderStoredPlayable(s, ghostSpiderPorts)
             .find((p) => p.id === command.id);
         need(p, "Card is not available to play.");
         const reason = playable(s, p!);

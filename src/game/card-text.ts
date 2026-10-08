@@ -50,10 +50,25 @@ export function isTextBlank(
   );
 }
 
+/** Event sources available only for native PLAY. George permits the actual
+ * attached event as if in hand; random discards, resource sources and explicit
+ * hand costs continue to use the physical hand directly. */
+export function eventPlaySources(s: GameState): Piece[] {
+  if (Number(s.flags.ghostSpiderColdBloodLock || 0) > 0) return [];
+  const event = (p: Piece) => definitions.get(p.code)?.type_code === "event";
+  return [
+    ...s.player.hand.filter(event),
+    ...s.player.inPlay
+      .filter((p) => p.code === "27007" && !isTextBlank(s, p))
+      .flatMap((p) => (p.storedCards || []).filter(event)),
+  ];
+}
+
 /** Actual Defense events available to this controller. Jocasta permits playing
  * its attached events as if they were in hand, without exposing or moving them
  * before the native PLAY resolves. Stored cards remain separate from resources. */
 export function defenseEventSources(s: GameState): Piece[] {
+  if (Number(s.flags.ghostSpiderColdBloodLock || 0) > 0) return [];
   const defense = (p: Piece) => {
     const c = definitions.get(p.code);
     return (
@@ -64,7 +79,7 @@ export function defenseEventSources(s: GameState): Piece[] {
   return [
     ...s.player.hand.filter(defense),
     ...s.player.inPlay
-      .filter((p) => p.code === "26013" && !isTextBlank(s, p))
+      .filter((p) => ["26013", "27007"].includes(p.code) && !isTextBlank(s, p))
       .flatMap((p) => (p.storedCards || []).filter(defense)),
   ];
 }

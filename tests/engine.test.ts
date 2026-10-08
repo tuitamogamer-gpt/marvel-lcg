@@ -167,11 +167,17 @@ describe("core set and setup", () => {
             quantity,
           );
         const counts: Record<string, number> = {};
+        const nameKey = (code: string) => {
+          const c = card(code);
+          return c.is_unique ? `${c.name}|${c.subname || ""}` : c.name;
+        };
         for (const c of codes)
-          counts[card(c).name] = (counts[card(c).name] || 0) + 1;
+          counts[nameKey(c)] = (counts[nameKey(c)] || 0) + 1;
         for (const c of new Set(codes)) {
-          if (card(c).name !== "Wakanda Forever!")
-            expect(counts[card(c).name]).toBeLessThanOrEqual(
+          // Mandatory identity quantities are checked above against the actual
+          // original source, including Web-Bracelet's two required copies.
+          if (!Object.hasOwn(required, c))
+            expect(counts[nameKey(c)]).toBeLessThanOrEqual(
               card(c).deck_limit || 3,
             );
         }

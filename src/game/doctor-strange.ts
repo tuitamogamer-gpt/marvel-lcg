@@ -1,3 +1,4 @@
+import { eventPlaySources } from "./card-text.js";
 import { defenseEventSources } from "./card-text.js";
 import { printedCardMetadata } from "./printed-card-metadata.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
@@ -374,6 +375,8 @@ export function doctorStrangeBeforeEvent(
   after: Effect[],
 ): Effect[] {
   const counter = attached(s, "09030")[0];
+  if (counter && s.flags[`ghostEvent:${p.id}`])
+    s.flags[`ghostCancelled:${p.id}`] = true;
   return counter ? [E("discardPiece", { id: counter.id })] : after;
 }
 export function doctorStrangeStats(s: GameState) {
@@ -766,7 +769,7 @@ export function doctorStrangeDamageOptions(
     !["hero", `hero:${window.playerId}`].includes(window.target)
   )
     return [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter(
       (p) =>
         p.code === "09021" &&
@@ -788,7 +791,7 @@ export function doctorStrangeSchemeBoostOptions(
   ports: DoctorStrangePorts,
 ): Option[] {
   if (!s.scheming || Number(cards.get(p.code)?.boost || 0) === 0) return [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter(
       (p) =>
         p.code === "09038" &&
@@ -810,7 +813,7 @@ export function doctorStrangeBasicAttackWindow(
 ): Effect[] {
   if (!attack.basic || s.player.form !== "hero" || s.player.stunned)
     return [attack];
-  const available = s.player.hand.filter(
+  const available = eventPlaySources(s).filter(
     (p) =>
       p.code === "09037" && ports.canPay(s, ports.cardCost(s, p), p.id, p.code),
   );
@@ -825,7 +828,7 @@ export function doctorStrangeTreacheryOptions(
 ): Option[] {
   return s.player.form === "hero" &&
     cards.get(p.code)?.type_code === "treachery"
-    ? s.player.hand
+    ? eventPlaySources(s)
         .filter(
           (p) =>
             p.code === "09007" &&
@@ -1543,7 +1546,9 @@ export function resolveDoctorStrangeEffect(
       s.flags.dsDesperateDefense = true;
       break;
     case "ds:warning-cost": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "09021");
+      const p = eventPlaySources(s).find(
+        (p) => p.id === e.id && p.code === "09021",
+      );
       need(
         p &&
           doctorStrangeDamageOptions(s, e.window, e.after, ports).some(
@@ -1568,7 +1573,9 @@ export function resolveDoctorStrangeEffect(
       break;
     }
     case "ds:foiled-cost": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "09038");
+      const p = eventPlaySources(s).find(
+        (p) => p.id === e.id && p.code === "09038",
+      );
       need(p && s.scheming, "Foiled! is unavailable.");
       eventPayment(
         s,
@@ -1589,7 +1596,7 @@ export function resolveDoctorStrangeEffect(
         amount: e.attack.amount + Number(s.flags.dsSkilledBonus || 0),
       };
       delete s.flags.dsSkilledBonus;
-      const opts = s.player.hand
+      const opts = eventPlaySources(s)
         .filter(
           (p) =>
             p.code === "09037" &&
@@ -1621,7 +1628,9 @@ export function resolveDoctorStrangeEffect(
       break;
     }
     case "ds:skilled-cost": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "09037");
+      const p = eventPlaySources(s).find(
+        (p) => p.id === e.id && p.code === "09037",
+      );
       need(
         p && e.attack.basic && !s.player.stunned && s.player.form === "hero",
         "Skilled Strike is unavailable.",
@@ -1722,7 +1731,9 @@ export function resolveDoctorStrangeEffect(
       break;
     }
     case "ds:ward-cost": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "09007");
+      const p = eventPlaySources(s).find(
+        (p) => p.id === e.id && p.code === "09007",
+      );
       need(p && s.player.form === "hero", "Protective Ward is unavailable.");
       eventPayment(
         s,

@@ -1,3 +1,4 @@
+import { eventPlaySources } from "./card-text.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { isTextBlank } from "./card-text.js";
 import { giveStatus } from "./keywords.js";
@@ -439,7 +440,7 @@ export function nebulaPackAfterThwartOptions(
         ),
       );
   if (snapshot.basic)
-    for (const p of s.player.hand.filter(
+    for (const p of eventPlaySources(s).filter(
       (p) =>
         p.code === "22018" &&
         ports.canPay(s, ports.cardCost(s, p), p.id, p.code),
@@ -726,7 +727,9 @@ export function resolveNebulaPackEffect(
       break;
     }
     case "nebula-pack:brains-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "22018");
+      const p = eventPlaySources(s).find(
+        (p) => p.id === e.id && p.code === "22018",
+      );
       need(
         p &&
           s.player.form === "hero" &&

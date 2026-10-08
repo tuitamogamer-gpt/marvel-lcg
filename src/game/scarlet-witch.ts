@@ -124,6 +124,7 @@ export function scarletWitchCountBoosts(
     sourceTitle?: string;
     numericOverrides?: (number | undefined)[];
     amplify?: number;
+    includeStar?: boolean;
   } = {},
 ): Effect[] {
   return [
@@ -526,7 +527,8 @@ export function resolveScarletWitchEffect(
         ? 0
         : !e.replaced && original !== undefined
           ? Number(original)
-          : Number(definition(p)?.boost || 0);
+          : Number(definition(p)?.boost || 0) +
+            (e.includeStar && definition(p)?.boost_star ? 1 : 0);
       const amount =
         e.countAmount === undefined
           ? Math.max(

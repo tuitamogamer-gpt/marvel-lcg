@@ -1,3 +1,4 @@
+import { eventPlaySources } from "./card-text.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { isTextBlank } from "./card-text.js";
 import { allInPlay, playerOrder, seatView } from "./team.js";
@@ -483,7 +484,7 @@ export function warMachinePackDamageOptions(
     !pairs(s, ports).length
   )
     return [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter(
       (p) =>
         p.code === "23034" &&

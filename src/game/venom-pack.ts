@@ -1,3 +1,4 @@
+import { eventPlaySources } from "./card-text.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { isTextBlank } from "./card-text.js";
@@ -304,7 +305,7 @@ export function venomPackBasicThwartOptions(
 ): Option[] {
   if (s.player.form !== "hero" || s.player.confused || !packet.basic) return [];
   const used: string[] = packet.venomPackEntrances || [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter(
       (p) =>
         p.code === "20013" &&
@@ -353,7 +354,7 @@ export function venomPackAfterAttackDamageOptions(
     !ports.canGiveTough(s, snapshot.target)
   )
     return [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter(
       (p) =>
         p.code === "20028" &&
@@ -573,7 +574,9 @@ export function resolveVenomPackEffect(
       break;
     }
     case "venom-pack:entrance-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "20013");
+      const p = eventPlaySources(s).find(
+        (p) => p.id === e.id && p.code === "20013",
+      );
       need(
         p &&
           venomPackBasicThwartOptions(s, e.packet, e.after || [], ports).some(
@@ -609,7 +612,9 @@ export function resolveVenomPackEffect(
       );
       break;
     case "venom-pack:shake-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "20028");
+      const p = eventPlaySources(s).find(
+        (p) => p.id === e.id && p.code === "20028",
+      );
       need(
         p &&
           venomPackAfterAttackDamageOptions(

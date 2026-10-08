@@ -98,6 +98,8 @@ export function deckErrors(
       "warm",
       "valk",
       "vision",
+      "ghost_spider",
+      "spider_man_morales",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

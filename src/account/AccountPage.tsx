@@ -408,6 +408,11 @@ export function DeckEditor({
               {HEROES.map((h) => (
                 <option key={h.id} value={h.id}>
                   {h.name}
+                  {HEROES.some(
+                    (other) => other.id !== h.id && other.name === h.name,
+                  )
+                    ? ` · ${h.identity}`
+                    : ""}
                 </option>
               ))}
             </select>

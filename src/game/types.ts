@@ -67,6 +67,8 @@ export interface Piece {
   treatedAsMinion?: boolean;
   /** Actual owned cards tucked beneath this instance; faces stay private. */
   storedCards?: Piece[];
+  /** Physical acceleration tokens on this side scheme leave with its instance. */
+  accelerationTokens?: number;
   pendingDefeat?: boolean;
   id: string;
   code: string;

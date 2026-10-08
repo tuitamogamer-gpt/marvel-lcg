@@ -38,7 +38,8 @@
     "test:nebula": "node scripts/nebula-check.mjs",
     "test:war-machine": "node scripts/war-machine-check.mjs",
     "test:valkyrie": "node scripts/valkyrie-check.mjs",
-    "test:vision": "node scripts/vision-check.mjs"
+    "test:vision": "node scripts/vision-check.mjs",
+    "test:sinister-heroes": "node scripts/sinister-heroes-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

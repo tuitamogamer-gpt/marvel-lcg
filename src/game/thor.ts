@@ -1,3 +1,4 @@
+import { eventPlaySources } from "./card-text.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { consumeStatus } from "./keywords.js";
@@ -842,7 +843,7 @@ export function resolveThorEffect(
         break;
       }
       const playable: Option[] = [];
-      for (const p of s.player.hand) {
+      for (const p of eventPlaySources(s)) {
         if (p.code === "06015" && e.kind === "attack" && readyWeapons(s).length)
           playable.push(
             option(
@@ -876,7 +877,7 @@ export function resolveThorEffect(
       break;
     }
     case "thor:basic-cost": {
-      const p = s.player.hand.find(
+      const p = eventPlaySources(s).find(
         (p) => p.id === e.id && ["06015", "06032"].includes(p.code),
       );
       need(p, "Basic-power interrupt is no longer in hand.");
@@ -912,7 +913,7 @@ export function resolveThorEffect(
       break;
     }
     case "thor:basic-paid": {
-      const p = s.player.hand.find((p) => p.id === e.id);
+      const p = eventPlaySources(s).find((p) => p.id === e.id);
       need(
         p && ["06015", "06032"].includes(p.code),
         "Basic-power interrupt is no longer in hand.",

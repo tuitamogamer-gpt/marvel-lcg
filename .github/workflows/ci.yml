@@ -53,6 +53,8 @@ jobs:
             scripts: test:valkyrie
           - group: vision
             scripts: test:vision
+          - group: sinister-heroes
+            scripts: test:sinister-heroes
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

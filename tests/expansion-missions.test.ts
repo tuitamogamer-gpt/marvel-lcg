@@ -1,5 +1,5 @@
-import { valkyrieCannotBasicAttack } from "../src/game/valkyrie";
 import { visionCanAttack } from "../src/game/vision";
+import { valkyrieCannotBasicAttack } from "../src/game/valkyrie";
 import { doctorStrangeAbilityOptions } from "../src/game/doctor-strange";
 import { thorAbilityOptions } from "../src/game/thor";
 import { msMarvelAbilityOptions } from "../src/game/ms-marvel";
@@ -62,6 +62,8 @@ const heroIds = [
   "warm",
   "valk",
   "vision",
+  "ghost_spider",
+  "spider_man_morales",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -327,8 +329,8 @@ describe("published expansion starters across every supported mission setting", 
     );
     expect(VILLAINS).toHaveLength(5);
     expect(MODULES).toHaveLength(9);
-    expect(heroIds).toHaveLength(24);
-    expect(missions).toHaveLength(2160);
+    expect(heroIds).toHaveLength(26);
+    expect(missions).toHaveLength(2340);
   });
   for (const mission of missions)
     it(

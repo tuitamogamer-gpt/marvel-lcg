@@ -1,3 +1,4 @@
+import { eventPlaySources } from "./card-text.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { isTextBlank } from "./card-text.js";
@@ -335,7 +336,7 @@ export function draxPackDamageOptions(
     amount <= 0
   )
     return [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter(
       (p) =>
         p.code === "19015" &&
@@ -364,7 +365,7 @@ export function draxPackBasicAttackOptions(
   )
     return [];
   const used: string[] = packet.draxPackLeadingBlows || [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter(
       (p) =>
         p.code === "19017" &&
@@ -407,7 +408,7 @@ export function draxPackAttackInitiatedOptions(
   )
     return [];
   const used: string[] = packet.draxPackSubdues || [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter(
       (p) =>
         p.code === "19018" &&
@@ -609,7 +610,9 @@ export function resolveDraxPackEffect(
       break;
     }
     case "drax-pack:deflect-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "19015");
+      const p = eventPlaySources(s).find(
+        (p) => p.id === e.id && p.code === "19015",
+      );
       need(
         p &&
           draxPackDamageOptions(
@@ -657,7 +660,9 @@ export function resolveDraxPackEffect(
       break;
     }
     case "drax-pack:leading-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "19017");
+      const p = eventPlaySources(s).find(
+        (p) => p.id === e.id && p.code === "19017",
+      );
       need(
         p &&
           draxPackBasicAttackOptions(s, e.packet, e.after || [], ports).some(
@@ -707,7 +712,9 @@ export function resolveDraxPackEffect(
       break;
     }
     case "drax-pack:subdue-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "19018"),
+      const p = eventPlaySources(s).find(
+          (p) => p.id === e.id && p.code === "19018",
+        ),
         enemy = [s.villain, ...s.minions].find((p) => p.id === e.enemyId);
       need(
         p &&

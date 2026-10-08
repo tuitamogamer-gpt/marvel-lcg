@@ -1,3 +1,4 @@
+import { eventPlaySources } from "./card-text.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { defenseEventSources, isTextBlank } from "./card-text.js";
@@ -426,7 +427,7 @@ export function quicksilverPackEncounterOptions(
     !teamUp(s)
   )
     return [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter(
       (event) =>
         orderAndChaosCodes.includes(event.code) &&
@@ -688,7 +689,7 @@ export function resolveQuicksilverPackEffect(
       break;
     }
     case "quicksilver-pack:order-pay": {
-      const p = s.player.hand.find(
+      const p = eventPlaySources(s).find(
         (p) => p.id === e.id && orderAndChaosCodes.includes(p.code),
       );
       need(

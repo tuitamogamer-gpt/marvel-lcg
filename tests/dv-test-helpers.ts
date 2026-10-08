@@ -109,21 +109,41 @@ export function starting(heroId: Hero, other?: Hero | "spider_man" | "stld") {
   });
 }
 export function physical(s: GameState, playerId = s.activePlayerId) {
-  const v = seatView(s, playerId);
   return [
-    ...v.player.hand,
-    ...v.player.deck,
-    ...v.player.discard,
-    ...s.players.flatMap((seat) =>
-      seatView(s, seat).player.inPlay.filter(
+    ...s.players.flatMap((seat) => {
+      const p = seatView(s, seat).player;
+      return nestedPieces([
+        ...p.hand,
+        ...p.deck,
+        ...p.discard,
+        ...p.inPlay,
+      ]).filter(
         (p) => p.ownerId === playerId || (!p.ownerId && seat.id === playerId),
-      ),
-    ),
-    ...s.resolving.filter((p) => p.ownerId === playerId),
-    ...s.removed.filter(
-      (p) => p.ownerId === playerId && card(p).faction_code !== "encounter",
-    ),
-  ];
+      );
+    }),
+    ...nestedPieces([
+      ...s.resolving,
+      ...s.removed,
+      ...s.minions,
+      ...s.sideSchemes,
+      ...s.attachments,
+      ...(s.environments || []),
+      ...s.encounter.deck,
+      ...s.encounter.dealt,
+      ...s.encounter.discard,
+    ]).filter((p) => p.ownerId === playerId),
+  ].filter((p) => card(p).faction_code !== "encounter");
+}
+/** Count actual nested cards, without deduplicating IDs or hiding two-zone
+ * ownership defects. Stored events and George beneath an obligation are
+ * physical sources even though those nested cards are not in play. */
+function nestedPieces(pieces: Piece[]): Piece[] {
+  return pieces.flatMap((p) => [
+    p,
+    ...nestedPieces(p.storedCards || []),
+    ...nestedPieces(p.captured || []),
+    ...(p.droneCard ? nestedPieces([p.droneCard]) : []),
+  ]);
 }
 /** Focused positions retain all forty original starter instances. Source cards
  * are moved into the requested zones; extra fixture cards are explicitly owned.
@@ -312,17 +332,19 @@ export function conserved(
     ).toHaveLength(1);
 }
 export function encounterPhysical(s: GameState) {
-  return [
+  return nestedPieces([
     ...s.encounter.deck,
     ...s.encounter.discard,
     ...s.encounter.dealt,
     ...s.minions,
     ...s.sideSchemes,
     ...s.attachments,
+    ...(s.environments || []),
+    ...s.players.flatMap((seat) => seatView(s, seat).player.inPlay),
     ...s.players.flatMap((seat) => seatView(s, seat).player.setAside || []),
     ...s.resolving.filter((p) => card(p).faction_code === "encounter"),
     ...s.removed.filter((p) => card(p).faction_code === "encounter"),
-  ];
+  ]).filter((p) => card(p).faction_code === "encounter");
 }
 export function encounterConserved(s: GameState, pieces: Piece[]) {
   const all = encounterPhysical(s);

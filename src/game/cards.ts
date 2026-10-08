@@ -1,3 +1,4 @@
+import { ghostSpiderEnemyModifiers } from "./ghost-spider.js";
 import { antManStats } from "./ant-man.js";
 import { waspStats, waspHeroTraits, waspEnemyHP } from "./wasp.js";
 import { waspPackAllyHP } from "./wasp-pack.js";
@@ -46,6 +47,7 @@ import {
   visionTraits,
 } from "./vision.js";
 import { warMachineTraits } from "./war-machine.js";
+import { sinisterPlayerPackIdentityModifiers } from "./sinister-player-pack.js";
 import { msMarvelStats } from "./ms-marvel.js";
 import { identityMatch, uniqueMatches } from "./unique.js";
 import { rulesCode } from "./rules-code.js";
@@ -543,6 +545,34 @@ export const HEROES = [
     style: "Mass forms · Protection",
     complexity: 3,
   },
+  {
+    id: "ghost_spider",
+    code: "27001a",
+    alter: "27001b",
+    name: "Ghost-Spider",
+    identity: "Gwen Stacy",
+    aspect: "protection" as Aspect,
+    color: "#aa91ae",
+    tag: "React, recover, repeat.",
+    description:
+      "Ready after your event responses, protect your team, and keep useful events with George Stacy.",
+    style: "Event responses · Protection",
+    complexity: 3,
+  },
+  {
+    id: "spider_man_morales",
+    code: "27030a",
+    alter: "27030b",
+    name: "Spider-Man",
+    identity: "Miles Morales",
+    aspect: "justice" as Aspect,
+    color: "#cb686c",
+    tag: "A different kind of Spider-Man.",
+    description:
+      "Combine Venom Blast and Spider Camouflage with your events, Web-Shooters, and basic powers.",
+    style: "Venom Blast · Justice",
+    complexity: 2,
+  },
 ];
 export const VILLAINS = [
   {
@@ -738,6 +768,8 @@ export function deckCodes(
       (hero === "warm" && aspect === "leadership") ||
       (hero === "valk" && aspect === "aggression") ||
       (hero === "vision" && aspect === "protection") ||
+      (hero === "ghost_spider" && aspect === "protection") ||
+      (hero === "spider_man_morales" && aspect === "justice") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
@@ -839,6 +871,7 @@ export function maxHP(s: GameState) {
     rocketMaxHpBonus(s) +
     nebulaPackModifiers(s, "hero").health +
     valkyrieHPBonus(s) +
+    sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).health +
     captainPackModifiers(s, "hero").hp
   );
 }
@@ -893,6 +926,7 @@ export function heroStats(s: GameState) {
       nebulaStats(s).attack +
       valkyrieStats(s).attack +
       visionStats(s).attack +
+      sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).attack +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
@@ -917,6 +951,7 @@ export function heroStats(s: GameState) {
       nebulaStats(s).thwart +
       valkyrieStats(s).thwart +
       visionStats(s).thwart +
+      sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).thwart +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
@@ -939,6 +974,7 @@ export function heroStats(s: GameState) {
       nebulaStats(s).defense +
       valkyrieStats(s).defense +
       visionStats(s).defense +
+      sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).defense +
       nebulaNamedCharacterModifiers(s, h.name).defense +
       quicksilverPackHeroStatBonus(s, "defense") +
       scriptedModifier(s, "defense"),
@@ -947,7 +983,8 @@ export function heroStats(s: GameState) {
       scriptedModifier(s, "recover") +
       hulkStats(s).recover +
       msMarvelStats(s).recover +
-      visionAlterStats(s).recover,
+      visionAlterStats(s).recover +
+      sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).recover,
   };
 }
 export function handSize(s: GameState) {
@@ -965,14 +1002,16 @@ export function handSize(s: GameState) {
         doctorStrangeHandSize(s) +
         spiderWomanHandSize(s) +
         starLordHandSizeBonus(s) +
-        antManPackHandSize(s)
+        antManPackHandSize(s) +
+        sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).handSize
     : heroCard(s).hand_size! +
         scriptedModifier(s, "hand_size") +
         doctorStrangeHandSize(s) +
         spiderWomanHandSize(s) +
         starLordHandSizeBonus(s) +
         antManPackHandSize(s) +
-        visionAlterStats(s).handSize;
+        visionAlterStats(s).handSize +
+        sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).handSize;
 }
 export function pieceHP(s: GameState, p: Piece) {
   return (
@@ -992,6 +1031,7 @@ export function pieceHP(s: GameState, p: Piece) {
     antManPackAllyHP(s, p) +
     waspPackAllyHP(s, p) +
     waspEnemyHP(s, p) +
+    ghostSpiderEnemyModifiers(s, p).health +
     gamoraPackAllyHP(s, p) +
     nebulaPackModifiers(s, p.id).health +
     captainPackModifiers(textActiveState(s), p.id).hp
