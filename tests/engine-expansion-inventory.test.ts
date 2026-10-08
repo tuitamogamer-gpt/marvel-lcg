@@ -34,6 +34,7 @@ describe("complete expansion rules inventory", () => {
       "19027",
       "19028",
       "19029",
+      "22030",
     ]);
     for (const [code, boost] of [
       ["19025", 2],
@@ -61,6 +62,10 @@ describe("complete expansion rules inventory", () => {
       imported: null,
       runtime: 2,
     });
+    expect(
+      corrections.find((entry: { code: string }) => entry.code === "22030")
+        .changes,
+    ).toEqual([{ field: "attack", imported: null, runtime: 1 }]);
     expect(
       corrections.some((entry: { code: string }) =>
         entry.code.startsWith("20"),
@@ -116,6 +121,7 @@ describe("complete expansion rules inventory", () => {
       ["gam", 33],
       ["drax", 34],
       ["vnm", 30],
+      ["nebu", 36],
     ] as const) {
       expect(
         coverage.products.find((pack: { code: string }) => pack.code === code),
@@ -153,7 +159,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    for (const id of ["stld", "gam", "drax", "vnm"])
+    for (const id of ["stld", "gam", "drax", "vnm", "nebu"])
       expect(
         inventory.heroes.find(
           (hero: { id: string }) => hero.id === `${id}:${id}`,
@@ -190,10 +196,10 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(1080);
-    expect(coverage.unsupportedFaces).toBe(3471);
-    expect(coverage.dedicatedFaces).toBe(604);
-    expect(coverage.registeredHeroIds).toHaveLength(25);
+    expect(coverage.executableFaces).toBe(1109);
+    expect(coverage.unsupportedFaces).toBe(3442);
+    expect(coverage.dedicatedFaces).toBe(634);
+    expect(coverage.registeredHeroIds).toHaveLength(26);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
         coverage.registeredHeroes.some(
@@ -273,7 +279,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(65);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(67);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
@@ -307,6 +313,22 @@ describe("complete expansion rules inventory", () => {
         correction.importedText,
       );
     }
+    const eros = inventory.runtimeRuleCorrections.find(
+      (entry: { code: string }) => entry.code === "22011",
+    );
+    expect(eros).toMatchObject({
+      code: "22011",
+      reference: "FFG Rules Reference 1.8, p. 67",
+    });
+    expect(eros.url).toContain("#page=67");
+    expect(eros.importedText).toContain("confuse a minion for each");
+    expect(eros.runtimeText).toContain(
+      "for each [mental] resource you used to pay for him, choose a minion and confuse it",
+    );
+    expect(normalizeRules(runtime.get("22011")?.text)).toBe(eros.runtimeText);
+    expect(normalizeRules((byCode.get("22011") as { text: string }).text)).toBe(
+      eros.importedText,
+    );
     for (const file of [
       "src/game/black-widow.ts",
       "src/game/doctor-strange.ts",
@@ -330,6 +352,8 @@ describe("complete expansion rules inventory", () => {
       "src/game/spectrum.ts",
       "src/game/warlock.ts",
       "src/game/mts-player-pack.ts",
+      "src/game/nebula.ts",
+      "src/game/nebula-pack.ts",
       "src/game/printed-card-metadata.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",

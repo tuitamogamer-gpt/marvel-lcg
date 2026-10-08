@@ -36,6 +36,8 @@ import { printedCardMetadata } from "./printed-card-metadata.js";
 import { spectrumStats } from "./spectrum.js";
 import { warlockStats } from "./warlock.js";
 import { mtsPlayerPackHeroStats } from "./mts-player-pack.js";
+import { nebulaStats, nebulaNamedCharacterModifiers } from "./nebula.js";
+import { nebulaPackModifiers } from "./nebula-pack.js";
 import { msMarvelStats } from "./ms-marvel.js";
 import { identityMatch, uniqueMatches } from "./unique.js";
 import { rulesCode } from "./rules-code.js";
@@ -467,6 +469,20 @@ export const HEROES = [
     style: "Battle Mage · Four aspects",
     complexity: 4,
   },
+  {
+    id: "nebu",
+    code: "22001a",
+    alter: "22001b",
+    name: "Nebula",
+    identity: "Nebula",
+    aspect: "justice" as Aspect,
+    color: "#8675a8",
+    tag: "Combat protocols engaged.",
+    description:
+      "Build a set of Techniques, resolve their Special abilities when your turn begins, and adapt to the villain's next move.",
+    style: "Technique upgrades · Justice",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -658,6 +674,7 @@ export function deckCodes(
       (hero === "drax" && aspect === "protection") ||
       (hero === "vnm" && aspect === "justice") ||
       (hero === "spectrum" && aspect === "leadership") ||
+      (hero === "nebu" && aspect === "justice") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
@@ -755,6 +772,7 @@ export function maxHP(s: GameState) {
     hulkStats(s).health +
     msMarvelStats(s).health +
     rocketMaxHpBonus(s) +
+    nebulaPackModifiers(s, "hero").health +
     captainPackModifiers(s, "hero").hp
   );
 }
@@ -778,6 +796,12 @@ export function heroStats(s: GameState) {
   return {
     attack:
       h.attack! +
+      s.attachments
+        .filter(
+          (p) =>
+            p.code === "22030" && p.attachedTo === `hero:${s.activePlayerId}`,
+        )
+        .reduce((n, p) => n + (card(p).attack || 0), 0) +
       (has(s, "01057") ? 1 : 0) +
       s.player.inPlay.filter((p) => rulesCode(p) === "01028").length * 2 +
       Number(s.flags.lead || 0) +
@@ -797,6 +821,8 @@ export function heroStats(s: GameState) {
       spectrumStats(s).attack +
       warlockStats(s).attack +
       mtsPlayerPackHeroStats(s).attack +
+      nebulaStats(s).attack +
+      nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
       spiderWomanStats(s).attack +
@@ -817,6 +843,8 @@ export function heroStats(s: GameState) {
       spectrumStats(s).thwart +
       warlockStats(s).thwart +
       mtsPlayerPackHeroStats(s).thwart +
+      nebulaStats(s).thwart +
+      nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
       scriptedModifier(s, "thwart") +
@@ -835,6 +863,8 @@ export function heroStats(s: GameState) {
       spectrumStats(s).defense +
       warlockStats(s).defense +
       mtsPlayerPackHeroStats(s).defense +
+      nebulaStats(s).defense +
+      nebulaNamedCharacterModifiers(s, h.name).defense +
       quicksilverPackHeroStatBonus(s, "defense") +
       scriptedModifier(s, "defense"),
     recover:
@@ -885,6 +915,7 @@ export function pieceHP(s: GameState, p: Piece) {
     waspPackAllyHP(s, p) +
     waspEnemyHP(s, p) +
     gamoraPackAllyHP(s, p) +
+    nebulaPackModifiers(s, p.id).health +
     captainPackModifiers(textActiveState(s), p.id).hp
   );
 }

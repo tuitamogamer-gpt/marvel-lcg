@@ -16,8 +16,11 @@ import * as drax from "./drax.js";
 import * as draxPack from "./drax-pack.js";
 import * as venom from "./venom.js";
 import * as warlock from "./warlock.js";
+import * as nebula from "./nebula.js";
+import { isPermanent } from "./hero-runtime.js";
 import * as venomPack from "./venom-pack.js";
 import * as mtsPlayerPack from "./mts-player-pack.js";
+import * as nebulaPack from "./nebula-pack.js";
 import { spectrumResourceSpent } from "./spectrum.js";
 import { warlockResourceSpent } from "./warlock.js";
 import * as spectrum from "./spectrum.js";
@@ -452,7 +455,21 @@ function giveCharacterStatus(
   definition?: Card,
 ) {
   const c = definition || ("code" in p ? card(p as Piece) : heroCard(s));
-  const changed = giveStatus(p, c, kind);
+  const identity = playerOrder(s)
+    .map((seat) => seatView(s, seat))
+    .find((view) => view.player === p);
+  const changed = giveStatus(
+    p,
+    c,
+    kind,
+    identity
+      ? {
+          stalwart:
+            !!printedKeyword(heroCard(identity), "Stalwart") ||
+            nebula.nebulaAttackKeywords(identity).stalwart,
+        }
+      : {},
+  );
   if (
     changed &&
     "code" in p &&
@@ -463,6 +480,13 @@ function giveCharacterStatus(
   return changed;
 }
 /** All identity-ready effects share absolute restrictions and actual ready responses. */
+function syncNebulaIdentityStatuses(s: GameState) {
+  for (const seat of playerOrder(s)) {
+    const view = seatView(s, seat);
+    if (nebula.nebulaAttackKeywords(view).stalwart)
+      syncStatuses(view.player, heroCard(view), { stalwart: true });
+  }
+}
 function canReadyIdentity(s: GameState) {
   return !goblinIdentityLocked(s) && quicksilver.quicksilverCanReady(s);
 }
@@ -478,6 +502,13 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
   if (source === "hero")
     return (
       printedKeyword(heroCard(s), name) +
+      Number(name === "Stalwart" && nebula.nebulaAttackKeywords(s).stalwart) +
+      Number(
+        name === "Piercing" &&
+          (nebula.nebulaAttackKeywords(s).piercing ||
+            nebula.nebulaNamedCharacterModifiers(s, heroCard(s).name).piercing),
+      ) +
+      Number(name === "Overkill" && nebula.nebulaAttackKeywords(s).overkill) +
       (name === "Ranged" && s.player.inPlay.some((p) => p.code === "04002")
         ? 1
         : 0) +
@@ -486,6 +517,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           hulkStats(s).retaliate +
           drax.draxStats(s).retaliate +
           spectrum.spectrumRetaliate(s) +
+          nebula.nebulaRetaliate(s) +
           wasp.waspRetaliate(textActiveState(s)) +
           gmwPack.gmwPlayerPackRetaliate(textActiveState(s), gmwPorts)
         : 0)
@@ -504,7 +536,9 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     Number(
       name === "Piercing" &&
         (granted.piercing ||
+          nebula.nebulaNamedCharacterModifiers(s, card(p).name).piercing ||
           allyTraits.piercing ||
+          nebulaPack.nebulaPackModifiers(s, p.id, nebulaPackPorts).piercing ||
           (s.attack?.attacker === p.id && s.attack.piercing)),
     ),
     Number(
@@ -644,6 +678,7 @@ export function allyLimit(s: GameState) {
     captainPackAllyLimit(s) +
     starLordPack.starLordPackAllyLimit(s) +
     mtsPlayerPack.mtsPlayerPackAllyLimit(s, mtsPlayerPackPorts) +
+    nebulaPack.nebulaPackAllyLimit(s, nebulaPackPorts) +
     scriptedModifier(s, "ally_limit")
   );
 }
@@ -882,6 +917,7 @@ function movePieceFromPlay(s: GameState, id: string, removed: boolean) {
     if (
       cardScript(p)?.implementation === "script" ||
       p.code === "16035" ||
+      (p.code === "22035" && p.attachedTo?.startsWith("hero:")) ||
       (p.code === "03025" && p.attachedTo?.startsWith("hero:"))
     )
       view.player.hp -= healthBefore - maxHP(view);
@@ -2022,7 +2058,9 @@ function thwart(
     return 0;
   if (target === "main") {
     if (
-      (!ignoreCrisis && s.sideSchemes.some((p) => card(p).scheme_crisis)) ||
+      (!ignoreCrisis &&
+        !nebula.nebulaIgnoresRestrictions(s).crisis &&
+        s.sideSchemes.some((p) => card(p).scheme_crisis)) ||
       rulesCode(s.scheme) === "01139b"
     ) {
       log(s, "Threat cannot be removed from the main scheme.");
@@ -2086,7 +2124,9 @@ export function targets(
       return [...targets(s, "friendly"), ...targets(s, "enemy")];
     case "enemy":
       return [
-        ...(!attack || !engaged(s).some((p) => card(p).text?.includes("Guard."))
+        ...(!attack ||
+        nebula.nebulaIgnoresRestrictions(s).guard ||
+        !engaged(s).some((p) => keyword(p, "Guard"))
           ? [
               {
                 id: s.villain.id,
@@ -2109,8 +2149,13 @@ export function targets(
       }));
     case "scheme":
       return [
-        ...(!s.sideSchemes.some((p) => card(p).scheme_crisis) &&
-        !(thwarting && engaged(s).some((p) => keyword(p, "Patrol"))) &&
+        ...((!s.sideSchemes.some((p) => card(p).scheme_crisis) ||
+          nebula.nebulaIgnoresRestrictions(s).crisis) &&
+        !(
+          thwarting &&
+          !nebula.nebulaIgnoresRestrictions(s).patrol &&
+          engaged(s).some((p) => keyword(p, "Patrol"))
+        ) &&
         rulesCode(s.scheme) !== "01139b" &&
         s.scheme.threat > 0
           ? [
@@ -2250,6 +2295,11 @@ function captainPackHasTrait(
   trait: string,
 ): boolean {
   if (captainPrintedHasTrait(s, target, trait)) return true;
+  if (
+    trait.toLowerCase() === "guardian" &&
+    nebulaPack.nebulaPackModifiers(s, target, nebulaPackPorts).guardian
+  )
+    return true;
   const identityId =
     target === "hero"
       ? s.activePlayerId
@@ -2380,6 +2430,7 @@ function thwartAction(
   initiated = false,
   ignoreCrisis = false,
   statusChecked = false,
+  basic = false,
 ) {
   const p = source === "hero" ? s.player : find(s, source);
   if (!p) return;
@@ -2407,7 +2458,7 @@ function thwartAction(
   const wasHero = source === "hero" && s.player.form === "hero";
   const previousQueue = new Set(s.queue);
   const removed = thwart(s, target, n, ignoreCrisis, source);
-  if (!wasHero || removed <= 0 || removed !== beforeThreat) return removed;
+  if (!wasHero) return removed;
 
   const responseGroup = s.currentEventId
     ? `eventThwart:${s.currentEventId}`
@@ -2429,6 +2480,10 @@ function thwartAction(
         removed,
         playerId: s.activePlayerId,
         wasHero,
+        source,
+        basic,
+        thwart: true,
+        removedAllThreat: beforeThreat > 0 && removed === beforeThreat,
       },
       responseGroup,
       mandatory: false,
@@ -2570,7 +2625,8 @@ function requestPayment(
         s,
         spentResponseCards,
         mtsPlayerPackPorts,
-      ).length
+      ).length ||
+      nebulaPack.nebulaPackResourcesSpent(s, spentResponseCards).length
     ) {
       choose(
         s,
@@ -2664,12 +2720,13 @@ function pay(
     "Crushing Blow can only be paid with physical resources.",
   );
   let paidForCard: Resource[] | undefined;
-  if (["20002", "20003", "20006"].includes(p.card?.code || "")) {
+  if (["20002", "20003", "20006", "22011"].includes(p.card?.code || "")) {
     const allocations = paidResourceAllocations(
       printed,
       p.cost || 0,
       req,
       wildAs,
+      p.card?.code === "22011",
     );
     need(
       allocations.length,
@@ -2734,6 +2791,7 @@ function pay(
       spentResponses.push(...antMan.antManResourceSpent(s, spent, antManPorts));
       spentResponses.push(...wasp.waspResourceSpent(s, spent, waspPorts));
       spentResponses.push(...rocket.rocketResourceSpent(s, spent));
+      spentResponses.push(...nebulaPack.nebulaPackResourcesSpent(s, [spent]));
       spentResponses.push(
         ...mtsPlayerPack.mtsPlayerPackResourcesSpent(
           s,
@@ -2752,6 +2810,7 @@ function pay(
       venomPack.venomPackResourceSpent(s, source.id, { discardPiece });
       spectrumResourceSpent(s, source.id, { isTextBlank });
       warlockResourceSpent(s, source.id, { isTextBlank });
+      nebula.nebulaResourceSpent(s, source.id, { isTextBlank });
       source.exhausted = true;
       for (const effect of [
         ...(msSpent || []),
@@ -3104,6 +3163,11 @@ export function playable(s: GameState, p: Piece): string | null {
     !thorLightningPaymentOptions(s, p, cardCost(s, c), thorPorts).length
   )
     return "Lightning Strike requires its card cost and at least one energy.";
+  if (
+    p.code === "22010" &&
+    !canPay(s, cardCost(s, { ...c, cost: 1 }, p), [], p.id, p.code, false)
+  )
+    return "Lethal Intent requires a payable positive X.";
   const dsRestriction = doctorStrangePlayRestriction(s, p, dsPorts);
   if (dsRestriction) return dsRestriction;
   const bwRestriction = blackWidowPlayRestriction(s, p, bwPorts);
@@ -3137,12 +3201,14 @@ export function playable(s: GameState, p: Piece): string | null {
     drax.draxPlayRestriction(s, p, draxPorts) ||
     venom.venomPlayRestriction(s, p) ||
     warlock.warlockPlayRestriction(s, p) ||
+    nebula.nebulaPlayRestriction(s, p, nebulaPorts) ||
     spectrum.spectrumPlayRestriction(s, p) ||
     starLordPack.starLordPackPlayRestriction(s, p, starLordPackPorts) ||
     gamoraPack.gamoraPackPlayRestriction(s, p, gamoraPackPorts) ||
     draxPack.draxPackPlayRestriction(s, p, draxPackPorts) ||
     venomPack.venomPackPlayRestriction(s, p, venomPackPorts) ||
-    mtsPlayerPack.mtsPlayerPackPlayRestriction(s, p, mtsPlayerPackPorts);
+    mtsPlayerPack.mtsPlayerPackPlayRestriction(s, p, mtsPlayerPackPorts) ||
+    nebulaPack.nebulaPackPlayRestriction(s, p, nebulaPackPorts);
   if (antRestriction) return antRestriction;
   const hawkeyeRestriction = hawkeyePlayRestriction(s, p, hawkeyePorts);
   if (hawkeyeRestriction) return hawkeyeRestriction;
@@ -3314,6 +3380,52 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
   const masterInvocationId = doctorStrangeMasterInvocation(s, p!)?.id;
   const cost =
     cardCost(s, card(p!), p) + doctorStrangeAdditionalPlayCost(s, p!);
+  if (p.code === "22010") {
+    const techniques = s.player.inPlay.filter(
+      (piece) =>
+        card(piece).type_code === "upgrade" &&
+        card(piece).traits?.includes("Technique."),
+    );
+    need(
+      techniques.some((piece) =>
+        nebula.nebulaSpecialAvailable(s, piece, nebulaPorts),
+      ),
+      "Lethal Intent has no Technique Special to resolve.",
+    );
+    const options = techniques.flatMap((_, index) => {
+      const x = index + 1;
+      const xCost = cardCost(s, { ...card(p), cost: x }, p);
+      return canPay(s, xCost, [], p.id, p.code, false)
+        ? [
+            option(
+              String(x),
+              `X = ${x} · resolve up to ${x} ${x === 1 ? "Technique" : "Techniques"}`,
+              [
+                E("payRequest", {
+                  title: card(p).name,
+                  cost: xCost,
+                  piece: p,
+                  after: [E("play", { piece: p, lightningX: x })],
+                  cancelable: true,
+                  starLordCostHandled: true,
+                }),
+              ],
+              undefined,
+              p.code,
+            ),
+          ]
+        : [];
+    });
+    need(options.length, "Lethal Intent requires a payable positive X.");
+    choose(
+      s,
+      "Lethal Intent",
+      "Choose X before paying its cost.",
+      options,
+      true,
+    );
+    return;
+  }
   if (p!.code === "14006") {
     const options = quicksilver.quicksilverCyclonePaymentOptions(
       s,
@@ -3423,6 +3535,7 @@ function play(
   gamoraPack.gamoraPackCardPlayed(s, p);
   venomPack.venomPackCardPlayed(s, c);
   mtsPlayerPack.mtsPlayerPackCardPlayed(s, c);
+  nebulaPack.nebulaPackCardPlayed(s, p);
   s.flags.discount = 0;
   track(s, "cardsPlayed", 1);
   log(s, `Play ${c.name}.`, "good");
@@ -3459,8 +3572,11 @@ function play(
   } else {
     const healthBefore = maxHP(s);
     Object.assign(p, resetPiece(p, true));
-    if (attachedTarget) p.attachedTo = attachedTarget;
+    if (attachedTarget && !["22032", "22035"].includes(p.code))
+      p.attachedTo = attachedTarget;
     s.player.inPlay.push(p);
+    if (attachedTarget && ["22032", "22035"].includes(p.code))
+      attachPackUpgrade(s, p.id, attachedTarget);
     antPack.antManPackAllyPlayed(s, p, overpaid);
     waspPack.waspPackAllyPlayed(
       s,
@@ -3480,6 +3596,9 @@ function play(
       ...draxPack.draxPackCardEntered(s, p),
       ...venomPack.venomPackCardEntered(s, p),
       ...mtsPlayerPack.mtsPlayerPackCardEntered(s, p),
+      ...nebulaPack
+        .nebulaPackCardEntered(s, p)
+        .filter((e) => !attachedTarget || e.type !== "nebula-pack:attach"),
       ...captainPackCardEntered(s, p),
       ...hulkPackCardEntered(s, p),
       ...msMarvelCardEntered(s, p),
@@ -3487,6 +3606,15 @@ function play(
       ...doctorStrangeCardEntered(s, p),
       ...blackWidowCardPlayed(s, p),
       ...hawkeyeCardEntered(s, p),
+      ...nebula.nebulaCardPlayed(s, p, nebulaPorts),
+      ...(c.type_code === "upgrade"
+        ? [
+            E("nebulaPackUpgradePlayed", {
+              id: p.id,
+              playedPlayerId: s.activePlayerId,
+            }),
+          ]
+        : []),
     );
     if (cardScript(p)?.implementation === "script" || p.code === "16035")
       s.player.hp += maxHP(s) - healthBefore;
@@ -3512,7 +3640,12 @@ function play(
       add(
         s,
         E("allyLimit"),
-        E("allyEnter", { id: p.id, paid, fromHand }),
+        E("allyEnter", { id: p.id, paid, paidForCard, fromHand }),
+        E("nebulaPackAllyPlayed", {
+          id: p.id,
+          playedPlayerId: s.activePlayerId,
+        }),
+        ...(nebula.nebulaAllyPlayed(s, p, nebulaPorts) || []),
         ...starLordPack.starLordPackAllyPlayed(
           s,
           p,
@@ -3580,8 +3713,10 @@ function allyEnter(
   p: Piece,
   paid: Resource[] = [],
   fromHand = false,
+  paidForCard: Resource[] = [],
 ) {
   if (isTextBlank(s, p)) return;
+  if (p.code === "22002") return;
   if (p.code === "21005") {
     add(s, ...spectrum.spectrumAllyEntersPlay(s, p, spectrumPorts));
     return;
@@ -3601,7 +3736,14 @@ function allyEnter(
     gamoraPack.gamoraPackAllyEnter(s, p) ??
     draxPack.draxPackAllyEnter(s, p) ??
     venomPack.venomPackAllyEnter(s, p) ??
-    mtsPlayerPack.mtsPlayerPackAllyEnter(s, p, fromHand);
+    mtsPlayerPack.mtsPlayerPackAllyEnter(s, p, fromHand) ??
+    nebulaPack.nebulaPackAllyEnter(
+      s,
+      p,
+      fromHand,
+      paidForCard,
+      nebulaPackPorts,
+    );
   if (playerPackAlly !== null) {
     add(s, ...playerPackAlly);
     return;
@@ -3755,13 +3897,15 @@ function event(
     drax.draxEvent(s, p) ??
     venom.venomEvent(s, p, paidForCard ?? paid) ??
     warlock.warlockEvent(s, p, warlockDiscarded) ??
+    nebula.nebulaEvent(s, p, lightningX ?? 0) ??
     spectrum.spectrumEvent(s, p) ??
     gmwPack.gmwPlayerPackEvent(s, p) ??
     starLordPack.starLordPackEvent(s, p) ??
     gamoraPack.gamoraPackEvent(s, p) ??
     draxPack.draxPackEvent(s, p) ??
     venomPack.venomPackEvent(s, p) ??
-    mtsPlayerPack.mtsPlayerPackEvent(s, p);
+    mtsPlayerPack.mtsPlayerPackEvent(s, p) ??
+    nebulaPack.nebulaPackEvent(s, p);
   if (ant !== null) {
     add(s, ...ant);
     return;
@@ -4144,6 +4288,7 @@ export function abilityOptions(
     ...rocket.rocketAttachmentActions(s, p, rocketPorts),
     ...gamora.gamoraAttachmentActions(s, p, gamoraPorts),
     ...spectrum.spectrumAttachmentOptions(s, p.id, spectrumPorts),
+    ...nebula.nebulaAttachmentActions(s, p, nebulaPorts),
   ];
   if (attachmentOptions.length)
     return attachmentOptions.map(({ id, label }) => ({ id, label }));
@@ -4284,6 +4429,21 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
     antPack.antManPackModifiers(s, p.id, { maxAllyHP: pieceHP })[kind] +
     starLordPack.starLordPackModifiers(s, p.id, starLordPackPorts)[kind] +
     mtsPlayerPack.mtsPlayerPackModifiers(s, p.id, mtsPlayerPackPorts)[kind] +
+    (kind === "attack"
+      ? nebulaPack.nebulaPackModifiers(s, p.id, nebulaPackPorts).attack
+      : 0) +
+    nebula.nebulaNamedCharacterModifiers(s, card(p).name)[kind] +
+    (kind === "attack"
+      ? s.attachments
+          .filter(
+            (attachment) =>
+              attachment.code === "22030" && attachment.attachedTo === p.id,
+          )
+          .reduce(
+            (total, attachment) => total + (card(attachment).attack || 0),
+            0,
+          )
+      : 0) +
     (kind === "thwart"
       ? starLord.starLordAllyThwartBonus(
           controller(s, p.id) ? seatView(s, controller(s, p.id)!) : s,
@@ -4298,6 +4458,15 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   );
 }
 function ability(s: GameState, id: string, action = "special") {
+  if (
+    nebulaPack.nebulaPackAbility(
+      s,
+      id,
+      nebulaPackPorts,
+      action === "special" ? undefined : action,
+    )
+  )
+    return;
   if (
     mtsPlayerPack.mtsPlayerPackAbility(
       s,
@@ -5212,6 +5381,8 @@ function warningOptions(
   );
 }
 function allyUpgradeTargets(s: GameState, p: Piece) {
+  if (["22032", "22035"].includes(p.code))
+    return nebulaPack.nebulaPackAttachmentTargets(s, p.code, nebulaPackPorts);
   if (["17019", "18030"].includes(p.code))
     return (
       p.code === "17019"
@@ -5365,6 +5536,9 @@ const dsPorts: DoctorStrangePorts = {
           ? heroCard(v)
           : card(find(s, target)!),
         status,
+        target === "hero" || target.startsWith("hero:")
+          ? { stalwart: !!sourceKeyword(v, "hero", "Stalwart") }
+          : {},
       )
     );
   },
@@ -5640,6 +5814,18 @@ const waspPorts: wasp.WaspPorts = {
         (metadata as Effect) || E("thwart"),
         removedAllThreat,
       ),
+      E("scarletHeroThwartResponse", {
+        snapshot: {
+          playerId: s.activePlayerId,
+          source: "hero",
+          thwart: true,
+          basic: !!metadata,
+          removedAllThreat,
+          wasHero: s.player.form === "hero",
+          beforeThreat: removedAllThreat ? 1 : 0,
+          removed: removedAllThreat ? 1 : 0,
+        },
+      }),
     );
   },
   preventDamage: (s, packet, amount) => {
@@ -6040,6 +6226,56 @@ const venomPackPorts: venomPack.VenomPackPorts = {
   transferControl: hulkPackPorts.transferControl,
   maxHeroHP: (s, id) => maxHP(seatView(s, id)),
   canGiveTough: (s, target) => dsPorts.canAddStatus(s, target, "tough"),
+};
+const nebulaPackPorts: nebulaPack.NebulaPackPorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  hasTrait: captainPackHasTrait,
+  friendlyTargets: (s) => targets(s, "friendly"),
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  canGiveStatus: dsPorts.canAddStatus,
+  canReady: (s, target) =>
+    target === "hero"
+      ? s.player.exhausted && canReadyIdentity(s)
+      : target.startsWith("hero:")
+        ? seatView(s, target.slice(5)).player.exhausted &&
+          canReadyIdentity(seatView(s, target.slice(5)))
+        : !!find(s, target)?.exhausted,
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  canPay: (s, cost, exclude, code) => canPay(s, cost, [], exclude, code),
+  heroThwart: (s) => heroStats(s).thwart,
+  discardPiece,
+  attach: attachPackUpgrade,
+  transferControl: hulkPackPorts.transferControl,
+  shufflePlayerDeck: hawkeyePorts.shufflePlayerDeck,
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  revealHidden,
+  revealEncounterFromDeck: (s, id, after) => {
+    const i = s.encounter.deck.findIndex(
+      (p) => p.id === id && card(p).type_code === "side_scheme",
+    );
+    need(i >= 0, "The selected encounter side scheme is unavailable.");
+    const [piece] = s.encounter.deck.splice(i, 1);
+    add(s, E("reveal", { piece, fromEncounterDeck: true }), ...after);
+  },
+  discardPlayerTop: (s, playerId) => {
+    // A seat view shares zones but copies scalar RNG/hidden-information state.
+    // Commit the physical discard/reset against the actual global game.
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    try {
+      return discardNativePlayerTop(s).piece;
+    } finally {
+      activateSeat(s, previous);
+    }
+  },
+  discardEncounterTop: (s) => mutagenPorts.discardTop(s).piece,
+  canCancelBoostAbility: (s, p) =>
+    !!(s.attack || s.scheming) &&
+    bwPorts.hasBoostAbility(s, p.id) &&
+    !/cannot be cancel(?:ed|led)/i.test(card(p).text || ""),
+  cancelBoostAbility: bwPorts.cancelBoostAbility,
 };
 const mtsPlayerPackPorts: mtsPlayerPack.MtsPlayerPackPorts = {
   queue: add,
@@ -6492,12 +6728,20 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...venom.venomAbilityOptions(s, id, venomPorts),
     ...spectrum.spectrumObligationOptions(s, id, spectrumPorts),
     ...spectrum.spectrumAttachmentOptions(s, id, spectrumPorts),
+    ...(s.attachments.find((p) => p.id === id)
+      ? nebula.nebulaAttachmentActions(
+          s,
+          s.attachments.find((p) => p.id === id)!,
+          nebulaPorts,
+        )
+      : []),
     ...warlock.warlockAbilityOptions(s, id, warlockPorts),
     ...gmwPack.gmwPlayerPackAbilityOptions(s, id, gmwPorts),
     ...starLordPack.starLordPackAbilityOptions(s, id, starLordPackPorts),
     ...draxPack.draxPackAbilityOptions(s, id, draxPackPorts),
     ...venomPack.venomPackAbilityOptions(s, id, venomPackPorts),
     ...mtsPlayerPack.mtsPlayerPackAbilityOptions(s, id, mtsPlayerPackPorts),
+    ...nebulaPack.nebulaPackAbilityOptions(s, id, nebulaPackPorts),
     ...quicksilverPack.quicksilverPackAbilityOptions(
       s,
       id,
@@ -6675,6 +6919,7 @@ const riskyPorts: RiskyBusinessEnginePorts = {
 };
 function minionWillEnter(s: GameState, p: Piece) {
   gamora.gamoraMinionWillEnter(s, p, gamoraPorts);
+  nebula.nebulaMinionWillEnter(s, p, nebulaPorts);
 }
 function minionEntered(s: GameState, p: Piece) {
   minionWillEnter(s, p);
@@ -6715,6 +6960,132 @@ function minionResponses(s: GameState, p: Piece) {
       }),
     );
 }
+/** Old Rivals retains the actual player source in a saved activation receipt.
+ * A hero projection supplies printed identity metadata only; no duplicate card
+ * enters a zone and status costs always mutate the original player's identity. */
+function nebulaAttackSource(s: GameState) {
+  return s.attack?.activationAfter?.nebulaGamoraSource as
+    nebula.NebulaAttackSource | undefined;
+}
+function nebulaNativeAttacker(
+  s: GameState,
+  id: string,
+  source = nebulaAttackSource(s),
+): Piece | undefined {
+  if (source?.kind !== "hero") return find(s, id);
+  const seat = s.players.find(
+    (seat) => seat.id === source.playerId && !seat.eliminated,
+  );
+  if (!seat) return;
+  const view = seatView(s, seat);
+  if (view.player.form !== "hero" || heroCard(view).name !== "Gamora") return;
+  return {
+    ...view.player,
+    id: source.id,
+    code: heroCard(view).code,
+    damage: 0,
+    counters: 0,
+    ownerId: seat.id,
+  };
+}
+function nebulaNativeAttackStrength(
+  s: GameState,
+  p: Piece,
+  recipientId: string,
+  source = nebulaAttackSource(s),
+) {
+  if (source?.kind === "hero")
+    return heroStats(seatView(s, source.playerId!)).attack;
+  if (source?.kind === "ally") {
+    const seat = controller(s, source.id);
+    return seat ? allyStat(seatView(s, seat), p, "attack") : 0;
+  }
+  return enemyATK(s, p, recipientId);
+}
+const nebulaPorts: nebula.NebulaPorts = {
+  ...antManPorts,
+  select,
+  shufflePlayerDeck: hawkeyePorts.shufflePlayerDeck,
+  isIdentityTextBlank: (s) => isTextBlank(s, heroCard(s)),
+  canDiscardUpgrade: (s, p) =>
+    s.player.inPlay.some((piece) => piece.id === p.id) &&
+    card(p).type_code === "upgrade" &&
+    !isPermanent(card(p)),
+  discardUntilTechnique: (s, continuation) => {
+    const queuedBefore = s.queue.length;
+    const originalCount = s.player.deck.length;
+    let found: Piece | undefined;
+    for (let n = 0; n < originalCount; n++) {
+      const empties = s.player.deck.length <= 1;
+      const p = mill(s, 1)[0];
+      if (!p) break;
+      if (
+        card(p).type_code === "upgrade" &&
+        (card(p).traits || "").split(/\.\s*/).includes("Technique")
+      )
+        found = p;
+      if (found || empties) break;
+    }
+    // Immediate reset can move the found physical card back into the deck.
+    // Exhaustion interrupts/responses precede retrieving that same instance.
+    const exhaustion = s.queue.splice(0, s.queue.length - queuedBefore);
+    add(s, ...exhaustion, { ...continuation, id: found?.id });
+  },
+  putDiscardedTechnique: (s, id, after) => {
+    for (const zone of [s.player.discard, s.player.deck]) {
+      const index = zone.findIndex((p) => p.id === id);
+      if (index < 0) continue;
+      const [p] = zone.splice(index, 1);
+      need(
+        card(p).type_code === "upgrade" &&
+          (card(p).traits || "").split(/\.\s*/).includes("Technique"),
+        "Combat Ready requires the actual discarded Technique.",
+      );
+      Object.assign(p, resetPiece(p, true));
+      s.player.inPlay.push(p);
+      add(
+        s,
+        ...antMan.antManCardEntered(s, p, antManPorts),
+        ...antPack.antManPackCardEntered(s, p),
+        ...quicksilverPack.quicksilverPackCardEntered(s, p),
+        ...(rocket.rocketEnterPlay(s, p) || []),
+        ...gmwPack.gmwPlayerPackCardEntered(s, p),
+        ...starLordPack.starLordPackCardEntered(s, p),
+        ...gamoraPack.gamoraPackCardEntered(s, p),
+        ...draxPack.draxPackCardEntered(s, p),
+        ...venomPack.venomPackCardEntered(s, p),
+        ...mtsPlayerPack.mtsPlayerPackCardEntered(s, p),
+        ...captainPackCardEntered(s, p),
+        ...hulkPackCardEntered(s, p),
+        ...msMarvelCardEntered(s, p),
+        ...thorCardEntered(s, p),
+        ...doctorStrangeCardEntered(s, p),
+        ...blackWidowCardPlayed(s, p),
+        ...hawkeyeCardEntered(s, p),
+        ...after,
+      );
+      return true;
+    }
+    return false;
+  },
+  gamoraAttack: (s, source, playerId, continuation) => {
+    const recipient = s.players.find(
+      (seat) => seat.id === playerId && !seat.eliminated,
+    );
+    if (!recipient || !nebulaNativeAttacker(s, source.id, source)) return false;
+    add(
+      s,
+      E("nebulaGamoraAttackStart", {
+        source,
+        playerId,
+        continuation,
+        actorId: source.kind === "ally" ? source.playerId : playerId,
+      }),
+    );
+    return true;
+  },
+};
+
 function enemyAttack(
   s: GameState,
   id: string,
@@ -6731,13 +7102,21 @@ function enemyAttack(
         threatPlaced: 0,
       });
   };
-  const p = find(s, id);
+  const nebulaSource = activation?.after?.nebulaGamoraSource as
+    nebula.NebulaAttackSource | undefined;
+  const friendlySource = !!nebulaSource && nebulaSource.kind !== "enemy";
+  const p = nebulaNativeAttacker(s, id, nebulaSource);
   if (!p) {
     canceled();
     return;
   }
   if (p.stunned) {
-    consumeStatus(p, "stunned");
+    consumeStatus(
+      nebulaSource?.kind === "hero"
+        ? seatView(s, nebulaSource.playerId!).player
+        : p,
+      "stunned",
+    );
     log(s, `${card(p).name} loses stunned instead of attacking.`);
     canceled();
     return;
@@ -6765,7 +7144,7 @@ function enemyAttack(
   const isVillain = id === s.villain.id;
   if (isVillain && s.heroId === "spider_man" && s.player.form === "hero")
     draw(s, 1);
-  const base = enemyATK(s, p, s.activePlayerId);
+  const base = nebulaNativeAttackStrength(s, p, s.activePlayerId, nebulaSource);
   log(
     s,
     `${card(p).name} attacks ${originalTarget && find(s, originalTarget) ? card(find(s, originalTarget)!).name : heroCard(s).name}: ${base} base ATK${isVillain ? " before boost cards" : ""}.`,
@@ -6785,7 +7164,9 @@ function enemyAttack(
     defense: 0,
     prevented: 0,
     damage: 0,
-    overkill: isVillain && !!villainAt(s, "01099").length,
+    overkill:
+      (isVillain && !!villainAt(s, "01099").length) ||
+      (!!nebulaSource && !!sourceKeyword(s, id, "Overkill")),
     extra,
     modifier: activation?.modifier || 0,
     omitNormalBoost: activation?.omitNormalBoost,
@@ -6818,7 +7199,7 @@ function enemyAttack(
   );
   // Forced entry and its responses precede every optional initiation interrupt.
   if (isVillain && rulesCode(s.villain) === "01135") add(s, E("drone"));
-  const forced = doctorStrangeEnemyAttackInitiated(s, p);
+  const forced = friendlySource ? [] : doctorStrangeEnemyAttackInitiated(s, p);
   if (forced.length) {
     if (s.prompt) {
       add(s, E("resumePrompt", { prompt: s.prompt }));
@@ -6857,6 +7238,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     blackWidowEnemyModifier(s, p, originalPlayerId) +
     rocket.rocketEnemyStats(s, p).attack +
     drax.draxEnemyStats(s, p).attack +
+    nebula.nebulaNamedCharacterModifiers(s, card(p).name).attack +
     antMan.antManEnemyStats(s, p).attack -
     s.attachments
       .filter((a) => a.code === "12028" && a.attachedTo === p.id)
@@ -6898,7 +7280,7 @@ function prepareAttackBoosts(s: GameState) {
   const a = s.attack;
   if (!a || a.pendingBoosts) return;
   a.pendingBoosts = [];
-  const attacker = find(s, a.attacker);
+  const attacker = nebulaNativeAttacker(s, a.attacker);
   if (!attacker) {
     abortAttack(s);
     return;
@@ -6942,7 +7324,7 @@ function attackTargetsEnemy(
 function declareDefense(s: GameState) {
   const a = s.attack;
   if (!a) return;
-  const p = find(s, a.attacker);
+  const p = nebulaNativeAttacker(s, a.attacker);
   if (!p) {
     abortAttack(s);
     return;
@@ -6955,7 +7337,8 @@ function declareDefense(s: GameState) {
     return;
   }
   const base =
-    enemyATK(s, p, a.originalPlayerId || s.activePlayerId) + (a.modifier || 0);
+    nebulaNativeAttackStrength(s, p, a.originalPlayerId || s.activePlayerId) +
+    (a.modifier || 0);
   a.base = base;
   const opts: Option[] = [
     option(
@@ -7015,6 +7398,7 @@ function boostEffects(s: GameState, p: Piece) {
     gamora.gamoraBoost(s, p) ??
     drax.draxBoost(s, p) ??
     venom.venomBoost(s, p) ??
+    nebula.nebulaBoost(s, p) ??
     spectrum.spectrumBoost(s, p) ??
     warlock.warlockBoost(s, p) ??
     mtsPlayerPack.mtsPlayerPackBoost(s, p) ??
@@ -7256,10 +7640,10 @@ function finishScheme(s: GameState) {
 function calculateAttack(s: GameState) {
   const a = s.attack;
   if (!a) return;
-  const attacker = find(s, a.attacker);
+  const attacker = nebulaNativeAttacker(s, a.attacker);
   if (attacker)
     a.base =
-      enemyATK(
+      nebulaNativeAttackStrength(
         s,
         attacker,
         a.originalPlayerId || a.targetPlayerId || s.activePlayerId,
@@ -7325,7 +7709,7 @@ function schemeWindow(
 function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
   const a = s.attack!;
   if (!a) return;
-  const p = find(s, a.attacker);
+  const p = nebulaNativeAttacker(s, a.attacker);
   if (attackTargetsEnemy(s, a)) {
     // A redirected enemy attack uses native outgoing attack damage. This keeps
     // Tough, Vibration Resistance, Piercing, Overkill and one Retaliate window,
@@ -7533,6 +7917,29 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
                   p,
                   recipientId,
                   spectrumPorts,
+                ),
+              },
+            ]
+          : []),
+        ...(p &&
+        nebula.nebulaGamoraAttackEnded(
+          s,
+          p,
+          recipientId,
+          a.identityDamage || 0,
+          nebulaPorts,
+        ).length
+          ? [
+              {
+                id: `${p.id}:nebula-gamora`,
+                sourceId: p.id,
+                title: "Gamora",
+                effects: nebula.nebulaGamoraAttackEnded(
+                  s,
+                  p,
+                  recipientId,
+                  a.identityDamage || 0,
+                  nebulaPorts,
                 ),
               },
             ]
@@ -7893,6 +8300,7 @@ function reveal(
       ...gamora.GAMORA_SCRIPT_CODES,
       ...drax.DRAX_SCRIPT_CODES,
       ...venom.VENOM_SCRIPT_CODES,
+      ...nebula.NEBULA_SCRIPT_CODES,
       ...spectrum.SPECTRUM_SCRIPT_CODES,
       ...warlock.WARLOCK_SCRIPT_CODES,
     ].some((code) => code === p.code) ||
@@ -7968,6 +8376,7 @@ function reveal(
     gamora.gamoraEncounterReveal(s, p) ??
     drax.draxEncounterReveal(s, p) ??
     venom.venomEncounterReveal(s, p) ??
+    nebula.nebulaEncounterReveal(s, p) ??
     spectrum.spectrumEncounterReveal(s, p) ??
     warlock.warlockEncounterReveal(s, p) ??
     rocket.rocketEncounterReveal(s, p) ??
@@ -8605,6 +9014,7 @@ function resolve(s: GameState, e: Effect) {
   if (gamora.resolveGamoraEffect(s, e, gamoraPorts)) return;
   if (drax.resolveDraxEffect(s, e, draxPorts)) return;
   if (venom.resolveVenomEffect(s, e, venomPorts)) return;
+  if (nebula.resolveNebulaEffect(s, e, nebulaPorts)) return;
   if (spectrum.resolveSpectrumEffect(s, e, spectrumPorts)) return;
   if (warlock.resolveWarlockEffect(s, e, warlockPorts)) return;
   if (starLordPack.resolveStarLordPackEffect(s, e, starLordPackPorts)) return;
@@ -8613,6 +9023,7 @@ function resolve(s: GameState, e: Effect) {
   if (venomPack.resolveVenomPackEffect(s, e, venomPackPorts)) return;
   if (mtsPlayerPack.resolveMtsPlayerPackEffect(s, e, mtsPlayerPackPorts))
     return;
+  if (nebulaPack.resolveNebulaPackEffect(s, e, nebulaPackPorts)) return;
   if (resolveHawkeyeEffect(s, e, hawkeyePorts)) return;
   if (resolveSpiderWomanEffect(s, e, swPorts)) return;
   if (resolveDoctorStrangeEffect(s, e, dsPorts)) return;
@@ -8634,6 +9045,7 @@ function resolve(s: GameState, e: Effect) {
           gamora.gamoraEncounterReveal(state, piece) ??
           drax.draxEncounterReveal(state, piece) ??
           venom.venomEncounterReveal(state, piece) ??
+          nebula.nebulaEncounterReveal(state, piece) ??
           spectrum.spectrumEncounterReveal(state, piece) ??
           warlock.warlockEncounterReveal(state, piece) ??
           rocket.rocketEncounterReveal(state, piece) ??
@@ -8824,17 +9236,38 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "scarletHeroThwartResponse": {
-      const options = scarletPack.scarletWitchPackAfterHeroThwart(
+      const after = [{ ...e }];
+      const poolOptions = nebulaPack.nebulaPackAfterThwartOptions(
         s,
-        e.snapshot,
-        [],
-        scarletPackPorts,
+        {
+          playerId: e.snapshot.playerId,
+          source: e.snapshot.source || "hero",
+          thwart: e.snapshot.thwart !== false,
+          basic: !!e.snapshot.basic,
+          removedAllThreat:
+            e.snapshot.removedAllThreat ??
+            (e.snapshot.beforeThreat > 0 &&
+              e.snapshot.removed === e.snapshot.beforeThreat),
+        },
+        after,
+        nebulaPackPorts,
       );
+      const options = [
+        ...scarletPack.scarletWitchPackAfterHeroThwart(
+          s,
+          e.snapshot,
+          after,
+          scarletPackPorts,
+        ),
+        ...poolOptions,
+      ];
       if (options.length)
         choose(
           s,
-          "Turn the Tide",
-          "Respond after removing all threat from a scheme?",
+          poolOptions.length ? "After your hero thwarts" : "Turn the Tide",
+          poolOptions.length
+            ? "Choose a response after this thwart, or continue."
+            : "Respond after removing all threat from a scheme?",
           [...options, option("continue", "Continue", [])],
         );
       break;
@@ -8982,6 +9415,15 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "eventResolve": {
+      if (e.piece.code === "22015" && !e.nebulaPackAdditionalCostPaid) {
+        add(
+          s,
+          ...nebulaPack.nebulaPackBeforeEvent(s, e.piece, [
+            { ...e, nebulaPackAdditionalCostPaid: true },
+          ]),
+        );
+        break;
+      }
       const p: Piece = e.piece,
         c = card(p);
       if (
@@ -9097,9 +9539,10 @@ function resolve(s: GameState, e: Effect) {
       gamora.gamoraCardPlayed(s, card(p));
       gamoraPack.gamoraPackCardPlayed(s, p);
       mtsPlayerPack.mtsPlayerPackCardPlayed(s, card(p));
+      nebulaPack.nebulaPackCardPlayed(s, p);
       track(s, "cardsPlayed", 1);
       log(s, `Play ${card(p).name}.`, "good");
-      if (["21016", "21043", "21050", "21055"].includes(p.code)) {
+      if (["21016", "21043", "21050", "21055", "22015"].includes(p.code)) {
         add(
           s,
           E("eventResolve", {
@@ -9912,7 +10355,35 @@ function resolve(s: GameState, e: Effect) {
       break;
     case "allyEnter": {
       const p = find(s, e.id);
-      if (p) allyEnter(s, p, e.paid || [], !!e.fromHand);
+      if (p) allyEnter(s, p, e.paid || [], !!e.fromHand, e.paidForCard || []);
+      break;
+    }
+    case "nebulaPackAllyPlayed": {
+      const p = allInPlay(s).find((p) => p.id === e.id);
+      if (p)
+        add(
+          s,
+          ...nebulaPack.nebulaPackAllyPlayed(
+            s,
+            p,
+            e.playedPlayerId,
+            nebulaPackPorts,
+          ),
+        );
+      break;
+    }
+    case "nebulaPackUpgradePlayed": {
+      const p = allInPlay(s).find((p) => p.id === e.id);
+      if (p)
+        add(
+          s,
+          ...nebulaPack.nebulaPackUpgradePlayed(
+            s,
+            p,
+            e.playedPlayerId,
+            nebulaPackPorts,
+          ),
+        );
       break;
     }
     case "restrictedLimit":
@@ -10434,6 +10905,7 @@ function resolve(s: GameState, e: Effect) {
             e.thwartInitiated,
             !!e.ignoreCrisis,
             !!e.thwartStatusChecked,
+            !!e.basic,
           )
         : thwart(s, e.target, e.amount, !!e.ignoreCrisis, e.source);
       if (e.basic && e.venomPackEntrances?.length) {
@@ -10911,6 +11383,34 @@ function resolve(s: GameState, e: Effect) {
       const p = find(s, e.id);
       if (!p) break;
       const attack = e.kind === "attack";
+      if (!e.nebulaPackCosmoHandled && !(attack ? p.stunned : p.confused)) {
+        const packet = {
+          ...e,
+          amount: e.amount ?? allyStat(s, p, attack ? "attack" : "thwart"),
+        };
+        const options = nebulaPack.nebulaPackBeforeAllyBasicOptions(
+          s,
+          p,
+          packet,
+          [],
+          nebulaPackPorts,
+        );
+        if (options.length) {
+          p.exhausted = true;
+          choose(
+            s,
+            "Ally initiates basic power",
+            "Use Cosmo's interrupt before this attack or thwart?",
+            [
+              ...options,
+              option("continue", "Continue", [
+                { ...packet, nebulaPackCosmoHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
+      }
       if (attack && !e.mtsMarvelBoyHandled && !p.stunned) {
         const packet = { ...e, amount: e.amount ?? allyStat(s, p, "attack") };
         const options = mtsPlayerPack.mtsPlayerPackAllyBasicOptions(
@@ -11100,6 +11600,9 @@ function resolve(s: GameState, e: Effect) {
           id: p.id,
           attack,
           defeatKey,
+          nebulaPackCosmoHandled: e.nebulaPackCosmoHandled,
+          nebulaPackCosmoId: e.nebulaPackCosmoId,
+          nebulaPackCosmoSafe: e.nebulaPackCosmoSafe,
           amount: starLordPack.starLordPackConsequentialDamage(
             e,
             attack
@@ -11159,12 +11662,21 @@ function resolve(s: GameState, e: Effect) {
       const p = find(s, e.id);
       const defeatedEnemy = !!s.flags[e.defeatKey];
       if (e.defeatKey) delete s.flags[e.defeatKey];
-      if (p && e.amount)
+      const amount = p
+        ? nebulaPack.nebulaPackConsequentialDamage(
+            s,
+            p,
+            e,
+            e.amount,
+            nebulaPackPorts,
+          )
+        : 0;
+      if (p && amount)
         add(
           s,
           E("damage", {
             target: p.id,
-            amount: e.amount,
+            amount,
             source: "consequential",
           }),
           E("dvAllyConsequenceAfter", {
@@ -11440,10 +11952,131 @@ function resolve(s: GameState, e: Effect) {
       );
       break;
     }
+    case "nebulaGamoraAttackStart": {
+      const source = e.source as nebula.NebulaAttackSource;
+      const p = nebulaNativeAttacker(s, source.id, source);
+      if (!p || !playerOrder(s).some((seat) => seat.id === e.playerId)) {
+        add(s, { ...e.continuation, performed: false });
+        break;
+      }
+      if (source.kind === "ally" && !p.stunned) {
+        const seat = controller(s, source.id)!;
+        activateSeat(s, seat.id);
+        const baseAmount = e.baseAmount ?? allyStat(s, p, "attack");
+        const packet = {
+          ...e,
+          kind: "attack",
+          amount: e.amount ?? baseAmount,
+          baseAmount,
+          actorId: seat.id,
+        };
+        const resume = {
+          ...packet,
+          starPackTargetPracticeHandled: true,
+          scarletLastHandled: true,
+        };
+        const options = [
+          ...starLordPack.starLordPackBeforeAllyBasicOptions(
+            s,
+            p,
+            packet,
+            [],
+            starLordPackPorts,
+          ),
+          ...(!e.scarletLastHandled
+            ? scarletPack.scarletWitchPackAllyAttackOptions(
+                s,
+                p,
+                [{ ...packet, scarletLastHandled: true }],
+                scarletPackPorts,
+              )
+            : []),
+        ];
+        if (options.length) {
+          choose(
+            s,
+            "Gamora · attack interrupts",
+            "Use an attack interrupt before Gamora attacks without exhausting?",
+            [...options, option("continue", "Continue the attack", [resume])],
+          );
+          break;
+        }
+      }
+      activateSeat(s, e.playerId);
+      enemyAttack(s, source.id, undefined, {
+        playerId: e.playerId,
+        enemyId: source.id,
+        kind: "attack",
+        modifier: Math.max(
+          0,
+          Number(e.amount || 0) - Number(e.baseAmount || 0),
+        ),
+        after: E("nebulaGamoraAttackComplete", {
+          nebulaGamoraSource: source,
+          continuation: e.continuation,
+          actorId: e.playerId,
+        }),
+      });
+      break;
+    }
+    case "nebulaGamoraAttackComplete": {
+      const source = e.nebulaGamoraSource as nebula.NebulaAttackSource;
+      const after = [{ ...e.continuation, performed: !!e.performed }];
+      if (!e.performed) {
+        if (source.kind === "ally" && source.playerId)
+          add(
+            s,
+            ...scarletPack.scarletWitchPackAfterAllyAttack(
+              seatView(s, source.playerId),
+              source.id,
+              false,
+            ),
+            ...after,
+          );
+        else add(s, ...after);
+        break;
+      }
+      if (source.kind === "ally") {
+        const p = find(s, source.id),
+          seat = controller(s, source.id);
+        if (p && seat) {
+          const view = seatView(s, seat);
+          add(
+            s,
+            E("allyResponse", { id: p.id, attack: true, actorId: seat.id }),
+            E("allyConsequence", {
+              id: p.id,
+              attack: true,
+              actorId: seat.id,
+              amount:
+                (card(p).attack_cost || 0) +
+                captainPackModifiers(view, p.id).consequentialAttack,
+            }),
+            E("scarletAfterAllyAttack", { id: p.id, actorId: seat.id }),
+            ...after,
+          );
+          break;
+        }
+      } else if (source.kind === "hero") {
+        add(
+          s,
+          E("heroAttackResponses", {
+            actorId: source.playerId,
+            target: `hero:${e.attackedPlayerId || s.activePlayerId}`,
+            wasMinion: false,
+            excessDamage: 0,
+          }),
+          ...after,
+        );
+        break;
+      }
+      add(s, ...after);
+      break;
+    }
     case "enemyAttackInitiationWindow": {
       const a = s.attack;
       if (!a || a.attacker !== e.attacker) break;
-      const attacker = find(s, a.attacker);
+      const attacker = nebulaNativeAttacker(s, a.attacker);
       if (!attacker) {
         abortAttack(s);
         break;
@@ -11470,9 +12103,16 @@ function resolve(s: GameState, e: Effect) {
           })),
         }));
       const options: Option[] = [];
+      const friendlySource =
+        nebulaAttackSource(s)?.kind === "hero" ||
+        nebulaAttackSource(s)?.kind === "ally";
       for (const seat of playerOrder(s)) {
         const view = seatView(s, seat);
-        const nova = msMarvelAttackInitiatedOptions(view, attacker, [], msPorts)
+        const nova = (
+          friendlySource
+            ? []
+            : msMarvelAttackInitiatedOptions(view, attacker, [], msPorts)
+        )
           .filter((entry) => !usedIds.includes(entry.id))
           .map((entry) => ({
             ...entry,
@@ -11486,7 +12126,7 @@ function resolve(s: GameState, e: Effect) {
           a.originalTarget === "hero" ||
           a.originalTarget.startsWith("hero:");
         const mockingbird = (
-          againstPlayer
+          againstPlayer && !friendlySource
             ? hawkeyeAttackInitiatedOptions(view, attacker, hawkeyePorts)
             : []
         )
@@ -11502,21 +12142,24 @@ function resolve(s: GameState, e: Effect) {
                 : effect,
             ),
           }));
-        const firstHit = a.isVillain
+        const firstHit =
+          a.isVillain || friendlySource
+            ? []
+            : gamoraPack.gamoraPackFirstHitOptions(
+                view,
+                attacker,
+                [packet],
+                gamoraPackPorts,
+              );
+        const subdue = friendlySource
           ? []
-          : gamoraPack.gamoraPackFirstHitOptions(
+          : draxPack.draxPackAttackInitiatedOptions(
               view,
               attacker,
-              [packet],
-              gamoraPackPorts,
+              packet,
+              [],
+              draxPackPorts,
             );
-        const subdue = draxPack.draxPackAttackInitiatedOptions(
-          view,
-          attacker,
-          packet,
-          [],
-          draxPackPorts,
-        );
         const identity = againstPlayer
           ? venom.venomAttackInitiatedOptions(
               view,
@@ -11705,6 +12348,25 @@ function resolve(s: GameState, e: Effect) {
         after,
         bwPorts,
       );
+      options.push(
+        ...playerOrder(s).flatMap((seat) =>
+          nebulaPack
+            .nebulaPackBoostInterruptOptions(
+              seatView(s, seat),
+              e.piece,
+              after.map((effect) => ({ ...effect, actorId: original })),
+              nebulaPackPorts,
+            )
+            .map((o) => ({
+              ...o,
+              id: `${seat.id}:${o.id}`,
+              effects: o.effects.map((effect) => ({
+                ...effect,
+                actorId: seat.id,
+              })),
+            })),
+        ),
+      );
       if (!e.scheme && bwPorts.numericBoostIcons(s, e.piece.id) > 0)
         options.push(
           ...playerOrder(s).flatMap((seat) =>
@@ -11813,7 +12475,7 @@ function resolve(s: GameState, e: Effect) {
     case "damageWindow": {
       const a = s.attack;
       if (!a) break;
-      if (!find(s, a.attacker)) {
+      if (!nebulaNativeAttacker(s, a.attacker)) {
         abortAttack(s);
         break;
       }
@@ -11831,6 +12493,16 @@ function resolve(s: GameState, e: Effect) {
           ? a.defender
           : a.originalTarget || "hero";
       const heroTarget = damageTarget === "hero";
+      if (heroTarget && !a.nebulaDamageHandled) {
+        const prevented = Math.min(
+          Math.max(0, a.base - a.defense - a.prevented),
+          nebula.nebulaAttackDamageReduction(s),
+        );
+        a.prevented += prevented;
+        a.nebulaDamageHandled = true;
+        if (prevented)
+          log(s, `Wide Stance prevents ${prevented} attack damage.`, "good");
+      }
       const receiving = heroTarget ? s.player : find(s, damageTarget);
       const incoming = a.preventAllDamage
         ? 0
@@ -11850,6 +12522,31 @@ function resolve(s: GameState, e: Effect) {
             s,
             `Flora Colossus prevents ${prevented} damage with growth counters.`,
           );
+      }
+      if (
+        !heroTarget &&
+        !a.originalTarget &&
+        a.overkill &&
+        !a.nebulaOverkillHandled
+      ) {
+        const ally = find(s, damageTarget);
+        const excess =
+          ally && !ally.tough
+            ? Math.max(
+                0,
+                incoming -
+                  (pieceHP(s, ally) - ally.damage) -
+                  (a.identityPrevented || 0),
+              )
+            : 0;
+        const prevented = Math.min(
+          excess,
+          nebula.nebulaAttackDamageReduction(s),
+        );
+        a.identityPrevented = (a.identityPrevented || 0) + prevented;
+        a.nebulaOverkillHandled = true;
+        if (prevented)
+          log(s, `Wide Stance prevents ${prevented} overkill damage.`, "good");
       }
       if (
         !heroTarget &&
@@ -12635,6 +13332,7 @@ function resolve(s: GameState, e: Effect) {
       s.turnPlayerId = s.activePlayerId;
       log(s, `${heroCard(s).name} takes their turn.`, "phase");
       add(s, ...captainPackTurnStart(s));
+      add(s, ...nebula.nebulaTurnBegan(s, s.turnPlayerId, nebulaPorts));
       break;
     case "prepareDiscard": {
       if (e.selected) {
@@ -12864,6 +13562,7 @@ function resolve(s: GameState, e: Effect) {
       spectrum.spectrumPhaseEnded(s);
       starLord.starLordRoundEnded(s);
       warlock.warlockRoundEnded(s);
+      nebulaPack.nebulaPackRoundEnded(s);
       for (const seat of s.players) {
         waspPack.waspPackPhaseEnded(seatView(s, seat));
         mtsPlayerPack.mtsPlayerPackPhaseEnded(seatView(s, seat));
@@ -12931,6 +13630,7 @@ function resolve(s: GameState, e: Effect) {
         `Round ${s.round} · ${heroCard(s).name} holds the first-player token.`,
         "phase",
       );
+      add(s, ...nebula.nebulaTurnBegan(s, s.turnPlayerId, nebulaPorts));
       break;
     }
     case "lead":
@@ -13104,7 +13804,9 @@ function run(s: GameState) {
     s.currentResponseGroup = e.responseGroup;
     s.currentResponseMandatory = e.mandatory;
     s.currentRevealWindowId = e.revealWindowId;
+    syncNebulaIdentityStatuses(s);
     resolve(s, e);
+    syncNebulaIdentityStatuses(s);
     delete s.currentEventId;
     delete s.currentAttackProgramId;
     delete s.currentResponseGroup;
@@ -13153,6 +13855,7 @@ function run(s: GameState) {
 }
 export function dispatch(state: GameState, command: Command): GameState {
   const s = upgradeSave(structuredClone(state));
+  syncNebulaIdentityStatuses(s);
   s.combatEvents = [];
   delete s.error;
   try {
@@ -13323,6 +14026,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...rocket.rocketAttachmentActions(s, p, rocketPorts),
               ...gamora.gamoraAttachmentActions(s, p, gamoraPorts),
               ...spectrum.spectrumAttachmentOptions(s, p.id, spectrumPorts),
+              ...nebula.nebulaAttachmentActions(s, p, nebulaPorts),
               ...quicksilver.quicksilverAttachmentActions(
                 s,
                 p,

@@ -256,12 +256,14 @@ export function paymentStatus(
 
 /** Distinct resource multisets allocated to the actual cost. Generated excess
  * is overpayment (RRG 1.8, p13), not a resource paid for that cost. Wilds used
- * for a typed requirement become that type; other wilds use the player's type. */
+ * for a typed requirement become that type; other wilds use the player's type.
+ * Cards that count each paid type can allocate generic wilds independently. */
 export function paidResourceAllocations(
   printed: Resource[],
   cost: number,
   requirements: Resource[] = [],
   wildAs: Resource = "energy",
+  independentWilds = false,
 ): Resource[][] {
   const types: Resource[] = ["energy", "mental", "physical", "wild"];
   if (cost < requirements.length || printed.length < cost || cost < 0)
@@ -290,14 +292,22 @@ export function paidResourceAllocations(
       [order(requirements).join(":"), order(requirements)],
     ]);
     const generic = types.flatMap((type, index) =>
-      Array<Resource>(counts[index]).fill(type === "wild" ? wildAs : type),
+      Array<Resource>(counts[index]).fill(
+        type === "wild" && !independentWilds ? wildAs : type,
+      ),
     );
     for (const resource of generic) {
       const next = new Map(subsets);
       for (const paid of subsets.values()) {
         if (paid.length >= cost) continue;
-        const allocated = order([...paid, resource]);
-        next.set(allocated.join(":"), allocated);
+        const choices: Resource[] =
+          resource === "wild" && independentWilds
+            ? ["energy", "mental", "physical"]
+            : [resource];
+        for (const chosen of choices) {
+          const allocated = order([...paid, chosen]);
+          next.set(allocated.join(":"), allocated);
+        }
       }
       subsets = next;
     }

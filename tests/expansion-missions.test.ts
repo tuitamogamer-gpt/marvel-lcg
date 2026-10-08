@@ -56,6 +56,7 @@ const heroIds = [
   "vnm",
   "spectrum",
   "warlock",
+  "nebu",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -303,14 +304,14 @@ function runMission(config: (typeof missions)[number]) {
 }
 
 describe("published expansion starters across every supported mission setting", () => {
-  it("covers twenty expansion heroes, all scenarios, both difficulties and every supported encounter module", () => {
+  it("covers every imported expansion hero, scenario, difficulty and supported encounter module", () => {
     expect(missions).toHaveLength(
       heroIds.length * VILLAINS.length * 2 * MODULES.length,
     );
     expect(VILLAINS).toHaveLength(5);
     expect(MODULES).toHaveLength(9);
-    expect(heroIds).toHaveLength(20);
-    expect(missions).toHaveLength(1800);
+    expect(heroIds).toHaveLength(21);
+    expect(missions).toHaveLength(1890);
   });
   for (const mission of missions)
     it(

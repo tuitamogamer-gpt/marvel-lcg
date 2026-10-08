@@ -87,7 +87,9 @@ export function deckErrors(
   )
     return ["Choose distinct supported aspects, including the primary aspect."];
   if (
-    ["spider_woman", "hawkeye", "gam", "spectrum", "warlock"].includes(heroId)
+    ["spider_woman", "hawkeye", "gam", "spectrum", "warlock", "nebu"].includes(
+      heroId,
+    )
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);
     const errors = validateHeroDeck(heroId, selected, codes).errors;

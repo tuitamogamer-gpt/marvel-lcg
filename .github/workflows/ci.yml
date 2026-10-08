@@ -45,6 +45,8 @@ jobs:
             scripts: test:drax-venom
           - group: mts-heroes
             scripts: test:mts-heroes
+          - group: nebula
+            scripts: test:nebula
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

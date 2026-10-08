@@ -130,6 +130,9 @@ export interface Attack {
   /** Flora Colossus applies once to each incoming identity damage packet. */
   grootDamageHandled?: boolean;
   grootOverkillHandled?: boolean;
+  /** Wide Stance reduces each native identity attack packet once. */
+  nebulaDamageHandled?: boolean;
+  nebulaOverkillHandled?: boolean;
   /** The declared defender returned to hand before its damage was placed. */
   gmwReturnedDefender?: string;
   /** Printed boost grants and whole-attack prevention survive defender choice. */

@@ -6,7 +6,7 @@ import path from "node:path";
 /** This is a triage inventory, never a natural-language rules interpreter. */
 export const AUDIT_SCHEMA_VERSION = 1;
 export const RULES_REFERENCE_URL =
-  "https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/08/mc_rulesreference_v18_compressed-1.pdf";
+  "https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf";
 
 export function normalizeRules(text = "") {
   return text
@@ -1069,6 +1069,8 @@ export async function generateAudit(
     "src/game/spectrum.ts",
     "src/game/warlock.ts",
     "src/game/mts-player-pack.ts",
+    "src/game/nebula.ts",
+    "src/game/nebula-pack.ts",
     "src/game/printed-card-metadata.ts",
     "src/game/card-text.ts",
     "src/game/expansion-errata.ts",

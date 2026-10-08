@@ -34,7 +34,8 @@
     "test:gmw-heroes": "node scripts/gmw-heroes-check.mjs",
     "test:star-lord-gamora": "node scripts/star-lord-gamora-check.mjs",
     "test:drax-venom": "node scripts/drax-venom-check.mjs",
-    "test:mts-heroes": "node scripts/mts-heroes-check.mjs"
+    "test:mts-heroes": "node scripts/mts-heroes-check.mjs",
+    "test:nebula": "node scripts/nebula-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

@@ -18,6 +18,8 @@ const printedMetadata: Readonly<Record<string, PrintedMetadata>> = {
   "19028": { boost: 1, attack: 2 },
   // public/cards/catalog/19029.webp: two boost triangles, no boost star.
   "19029": { boost: 2 },
+  // public/cards/catalog/22030.webp: printed +1 ATK icon below the text box.
+  "22030": { attack: 1 },
 };
 
 /** Return a playable face with verified printing fields, without mutating its

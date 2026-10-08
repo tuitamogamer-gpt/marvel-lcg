@@ -20,6 +20,8 @@ import { VENOM_SCRIPT_CODES } from "./venom.js";
 import { SPECTRUM_SCRIPT_CODES } from "./spectrum.js";
 import { WARLOCK_SCRIPT_CODES } from "./warlock.js";
 import { MTS_PLAYER_PACK_SCRIPT_CODES } from "./mts-player-pack.js";
+import { NEBULA_SCRIPT_CODES } from "./nebula.js";
+import { NEBULA_PACK_SCRIPT_CODES } from "./nebula-pack.js";
 import { GOBLIN_MODULE_SCRIPT_CODES } from "./goblin-modules.js";
 import { BLACK_WIDOW_SCRIPT_CODES } from "./black-widow.js";
 import { DOCTOR_STRANGE_SCRIPT_CODES } from "./doctor-strange.js";
@@ -61,6 +63,7 @@ export const SCRIPTED_HERO_IDS = new Set([
   "vnm",
   "spectrum",
   "warlock",
+  "nebu",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ANT_MAN_SCRIPT_CODES,
@@ -85,6 +88,8 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...SPECTRUM_SCRIPT_CODES,
   ...WARLOCK_SCRIPT_CODES,
   ...MTS_PLAYER_PACK_SCRIPT_CODES,
+  ...NEBULA_SCRIPT_CODES,
+  ...NEBULA_PACK_SCRIPT_CODES,
   ...CAPTAIN_AMERICA_SCRIPT_CODES,
   ...HULK_SCRIPT_CODES,
   ...CAPTAIN_PACK_SCRIPT_CODES,

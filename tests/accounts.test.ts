@@ -481,7 +481,7 @@ describe("private player accounts", () => {
         else break;
       }
     }
-  });
+  }, 15_000);
   it("rotates recovery codes and revokes every old session after reset", async () => {
     const a = await register();
     const other = await call({

@@ -5,6 +5,15 @@ const url =
 /** Keep imported printing text intact. Apply published rules corrections in the
  * playable database and card inspector, independently of module registration. */
 export function expansionErrata(c: Card): Card {
+  if (c.code === "22011")
+    return {
+      ...c,
+      text: "<b>Response:</b> After you play Eros from your hand, for each [mental] resource you used to pay for him, choose a minion and confuse it.",
+      errata: {
+        reference: "FFG Rules Reference 1.8, p. 67",
+        url: url.replace("#page=66", "#page=67"),
+      },
+    };
   if (c.code === "13028")
     return {
       ...c,
