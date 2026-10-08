@@ -19,6 +19,7 @@ import {
   playable,
 } from "../src/game/engine";
 import type { GameState, Resource, Piece } from "../src/game/types";
+import { deckSizeFor } from "../src/game/decks";
 import { heroRequiredCards } from "../src/game/hero-runtime";
 function base(
   heroId = "spider_man",
@@ -147,7 +148,7 @@ describe("core set and setup", () => {
     for (const a of ASPECTS)
       it(`${h.name} / ${a.name} has a legal 40-card starter deck`, () => {
         const codes = deckCodes(h.id, a.id);
-        expect(codes).toHaveLength(40);
+        expect(deckSizeFor(codes)).toBe(40);
         const required = heroRequiredCards(h.id);
         const signatureCodes = codes.filter((code) =>
           Object.hasOwn(required, code),

@@ -25,9 +25,11 @@ import {
   countsFor,
   deckErrors,
   deckOptions,
+  deckSizeFor,
 } from "../game/decks.js";
 import {
   heroDeckAspects,
+  heroSetupCards,
   heroDeckRule,
   heroRequiredCards,
   heroStarterAspects,
@@ -52,6 +54,8 @@ function editorAspects(
   codes: string[] = [],
   declared?: Aspect[],
 ): Aspect[] {
+  if (heroDeckRule(heroId)?.aspects === "four-equal-singleton")
+    return ASPECTS.map((a) => a.id);
   if (heroDeckRule(heroId)?.aspects !== "two-equal") return [primary];
   const candidates = [
     ...(declared || heroDeckAspects(heroId, codes, primary)),
@@ -311,7 +315,14 @@ export function DeckEditor({
     initial?.cards || deckCodes(heroId, aspect, initialAspects),
   );
   const dualAspect = heroDeckRule(heroId)?.aspects === "two-equal";
-  const aspects = dualAspect ? [aspect, secondAspect] : [aspect];
+  const fourAspects = heroDeckRule(heroId)?.aspects === "four-equal-singleton";
+  const aspects = fourAspects
+    ? ASPECTS.map((a) => a.id)
+    : dualAspect
+      ? [aspect, secondAspect]
+      : [aspect];
+  const setup = heroSetupCards(heroId);
+  const setupCount = Object.values(setup).reduce((total, n) => total + n, 0);
   const required = heroRequiredCards(heroId);
   const counts = countsFor(codes);
   const errors = deckErrors(heroId, aspect, codes, aspects);
@@ -398,22 +409,33 @@ export function DeckEditor({
               ))}
             </select>
           </label>
-          <label>
-            Aspect
-            <select
-              aria-label="Aspect"
-              value={aspect}
-              onChange={(e) =>
-                reset(heroId, e.target.value as Aspect, secondAspect)
-              }
-            >
-              {ASPECTS.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!fourAspects && (
+            <label>
+              Aspect
+              <select
+                aria-label="Aspect"
+                value={aspect}
+                onChange={(e) =>
+                  reset(heroId, e.target.value as Aspect, secondAspect)
+                }
+              >
+                {ASPECTS.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {fourAspects && (
+            <p className="account-hint">
+              All four aspects ·{" "}
+              {ASPECTS.map(
+                (a) =>
+                  `${a.name} ${codes.filter((code) => card(code).faction_code === a.id).length}`,
+              ).join(" · ")}
+            </p>
+          )}
           {dualAspect && (
             <label>
               Second aspect
@@ -438,6 +460,10 @@ export function DeckEditor({
           and choose 25–35 aspect or basic cards.
           {dualAspect &&
             " Include equal numbers of your two chosen aspects, counting required hero cards of those colors."}
+          {fourAspects &&
+            " Include equal numbers of Aggression, Justice, Leadership and Protection cards, and only one copy of each other card. Your signature cards stay fixed."}
+          {setupCount > 0 &&
+            ` Your ${setupCount} Permanent energy forms start in play and do not count toward the 40–50 card deck.`}
         </p>
         {crossAspectEvents && (
           <p className="account-hint">
@@ -463,6 +489,9 @@ export function DeckEditor({
                       <small>
                         {c.type_code}{" "}
                         {c.cost !== undefined ? `· cost ${c.cost}` : ""}
+                        {Object.hasOwn(setup, c.code)
+                          ? " · starts in play"
+                          : ""}
                       </small>
                     </span>
                     {Object.hasOwn(required, c.code) ? (
@@ -482,11 +511,14 @@ export function DeckEditor({
                             ])
                           }
                         >
-                          {Array.from({ length: copyLimit(c) + 1 }, (_, n) => (
-                            <option key={n} value={n}>
-                              {n}
-                            </option>
-                          ))}
+                          {Array.from(
+                            { length: copyLimit(c, heroId) + 1 },
+                            (_, n) => (
+                              <option key={n} value={n}>
+                                {n}
+                              </option>
+                            ),
+                          )}
                         </select>
                       </label>
                     )}
@@ -497,7 +529,10 @@ export function DeckEditor({
         </div>
         <div className="account-editor-footer">
           <div>
-            <strong>{codes.length} / 50 cards</strong>
+            <strong>{deckSizeFor(codes)} / 50 cards</strong>
+            {setupCount > 0 && (
+              <small> · {setupCount} Permanent setup cards</small>
+            )}
             <p role="status">
               {errors[0] || "Deck ready. All card and copy limits are valid."}
             </p>
@@ -771,7 +806,7 @@ export function AccountPage({
                         </span>
                         <h3>{deck.name}</h3>
                         <p>
-                          {deck.cards.length} cards · Updated{" "}
+                          {deckSizeFor(deck.cards)} cards · Updated{" "}
                           {date(deck.updatedAt)}
                         </p>
                         <div className="account-item-actions">

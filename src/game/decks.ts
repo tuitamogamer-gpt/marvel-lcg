@@ -6,6 +6,8 @@ import {
   heroDeckAspects,
   heroRequiredCards,
   heroAllowsOffAspectEvent,
+  heroDeckRule,
+  isPermanent,
   validateHeroDeck,
 } from "./hero-runtime.js";
 import type { Aspect, Card } from "./types.js";
@@ -16,8 +18,19 @@ export function countsFor(codes: string[]) {
     return counts;
   }, Object.create(null));
 }
-export function copyLimit(c: Card) {
-  return c.deck_limit ?? (c.is_unique ? 1 : 3);
+export function copyLimit(c: Card, heroId?: string) {
+  return Math.min(
+    c.deck_limit ?? (c.is_unique ? 1 : 3),
+    heroId &&
+      heroDeckRule(heroId)?.aspects === "four-equal-singleton" &&
+      !Object.hasOwn(heroRequiredCards(heroId), c.code)
+      ? 1
+      : Infinity,
+  );
+}
+/** Physical setup cards belong to the composition, outside the playing deck. */
+export function deckSizeFor(codes: string[]) {
+  return codes.filter((code) => !card(code) || !isPermanent(card(code))).length;
 }
 export function deckOptions(
   heroId: string,
@@ -62,13 +75,20 @@ export function deckErrors(
   if (
     chosenAspects &&
     (!Array.isArray(chosenAspects) ||
-      chosenAspects.length !== (heroId === "spider_woman" ? 2 : 1) ||
+      chosenAspects.length !==
+        (heroDeckRule(heroId)?.aspects === "four-equal-singleton"
+          ? 4
+          : heroId === "spider_woman"
+            ? 2
+            : 1) ||
       new Set(chosenAspects).size !== chosenAspects.length ||
       !chosenAspects.includes(aspect) ||
       chosenAspects.some((a) => !ASPECTS.some((option) => option.id === a)))
   )
     return ["Choose distinct supported aspects, including the primary aspect."];
-  if (["spider_woman", "hawkeye", "gam"].includes(heroId)) {
+  if (
+    ["spider_woman", "hawkeye", "gam", "spectrum", "warlock"].includes(heroId)
+  ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);
     const errors = validateHeroDeck(heroId, selected, codes).errors;
     for (const code of codes)

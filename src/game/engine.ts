@@ -15,7 +15,12 @@ import * as starLordPack from "./star-lord-pack.js";
 import * as drax from "./drax.js";
 import * as draxPack from "./drax-pack.js";
 import * as venom from "./venom.js";
+import * as warlock from "./warlock.js";
 import * as venomPack from "./venom-pack.js";
+import * as mtsPlayerPack from "./mts-player-pack.js";
+import { spectrumResourceSpent } from "./spectrum.js";
+import { warlockResourceSpent } from "./warlock.js";
+import * as spectrum from "./spectrum.js";
 import * as waspPack from "./wasp-pack.js";
 import {
   hawkeyePlayRestriction,
@@ -287,6 +292,7 @@ import {
   consumeTough,
   discardToughForPiercing,
   syncStatuses,
+  statusCards,
 } from "./keywords.js";
 import type { PrintedKeyword, StatusKind, StatusState } from "./keywords.js";
 import {
@@ -479,6 +485,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         ? captainStats(s).retaliate +
           hulkStats(s).retaliate +
           drax.draxStats(s).retaliate +
+          spectrum.spectrumRetaliate(s) +
           wasp.waspRetaliate(textActiveState(s)) +
           gmwPack.gmwPlayerPackRetaliate(textActiveState(s), gmwPorts)
         : 0)
@@ -534,7 +541,10 @@ function finishResolution(s: GameState, id: string) {
   const index = s.resolving.findIndex((p) => p.id === id);
   if (index < 0) return;
   const [p] = s.resolving.splice(index, 1);
-  if (card(p).faction_code === "encounter")
+  if (
+    card(p).faction_code === "encounter" ||
+    mtsPlayerPack.mtsIsCosmicEntity(p)
+  )
     s.encounter.discard.push(resetPiece(p));
   else {
     const owner = s.players.find((seat) => seat.id === p.ownerId);
@@ -633,6 +643,7 @@ export function allyLimit(s: GameState) {
     Number(has(s, "01073")) +
     captainPackAllyLimit(s) +
     starLordPack.starLordPackAllyLimit(s) +
+    mtsPlayerPack.mtsPlayerPackAllyLimit(s, mtsPlayerPackPorts) +
     scriptedModifier(s, "ally_limit")
   );
 }
@@ -649,6 +660,7 @@ function putAllyFromHand(s: GameState, id: string) {
   s.player.inPlay.push(p);
   add(
     s,
+    ...mtsPlayerPack.mtsPlayerPackCardEntered(s, p),
     E("allyLimit"),
     ...(rulesCode(p) !== "01002" ? [E("allyEnter", { id: p.id })] : []),
   );
@@ -695,15 +707,34 @@ function randomDiscard(s: GameState) {
   );
 }
 function recyclePlayer(s: GameState) {
+  if (s.player.deck.length) {
+    s.flags.warlockDeckEmptyObserved = false;
+    return;
+  }
+  const exhausted = !s.flags.warlockDeckEmptyObserved
+    ? warlock.warlockDeckExhausted(s)
+    : [];
+  s.flags.warlockDeckEmptyObserved = true;
   if (!s.player.deck.length && s.player.discard.length) {
     s.player.deck = shuffle(s, s.player.discard.splice(0));
+    s.flags.warlockDeckEmptyObserved = false;
     dealEncounter(s);
+    // This forced response has no choice. Commit it at the real reset so
+    // end-of-phase readiness which follows a draw retains its printed timing.
+    for (const e of warlock.warlockDeckReset(s)) {
+      const church = s.sideSchemes.find((p) => p.id === e.id);
+      if (church && !isTextBlank(s, church)) {
+        s.player.exhausted = true;
+        giveCharacterStatus(s, s.player, "stunned");
+      }
+    }
     log(
       s,
       "Your deck reshuffles. You are dealt an extra encounter card.",
       "bad",
     );
   }
+  add(s, ...exhausted);
 }
 function takePlayer(s: GameState) {
   recyclePlayer(s);
@@ -781,6 +812,15 @@ function movePieceFromPlay(s: GameState, id: string, removed: boolean) {
   const viewBefore = controlling ? seatView(s, controlling) : s;
   const healthBefore = maxHP(viewBefore);
   const removedSource = find(s, id);
+  // Spectrum's three physical setup upgrades remain in play even facedown.
+  // Player elimination removes them through its ordinary whole-seat cleanup.
+  if (
+    removedSource &&
+    Object.values(spectrum.SPECTRUM_FORM_CODES).includes(
+      removedSource.code as (typeof spectrum.SPECTRUM_FORM_CODES)[keyof typeof spectrum.SPECTRUM_FORM_CODES],
+    )
+  )
+    return;
   const blankBefore = !!removedSource && isTextBlank(s, removedSource);
   const teamHealthBefore =
     removedSource?.code === "12026"
@@ -875,6 +915,14 @@ function restrictedLimitExceeded(s: GameState) {
   return restricted.length - Math.min(weapons, weaponSlots) > general;
 }
 function check(s: GameState) {
+  // Simultaneous Spectrum batches place every prepared packet before checking
+  // hero elimination. This flag exists only during the synchronous commit.
+  if (
+    s.players.some(
+      (seat) => seatView(s, seat).flags.spectrumDamageBatchApplying,
+    )
+  )
+    return;
   add(s, ...riskyEnvironmentEffects(s));
   syncSeat(s);
   const active = s.activePlayerId;
@@ -889,7 +937,8 @@ function check(s: GameState) {
     ...s.minions,
     ...allInPlay(s).filter((x) => card(x).type_code === "ally"),
   ]) {
-    if (find(s, p.id) && p.damage >= pieceHP(s, p)) defeatCharacter(s, p);
+    if (find(s, p.id) && p.damage >= pieceHP(s, p))
+      defeatCharacter(s, p, String(s.flags.spectrumBatchDefeatSource || ""));
   }
   for (const seat of playerOrder(s)) {
     const view = seatView(s, seat);
@@ -1579,6 +1628,67 @@ function applyDamage(
   }
   return result;
 }
+/** A Major Victory interrupt resolves while the actual ally is still pending
+ * defeat. Its physical source receipt prevents another ready when this saved
+ * window resumes, while leaving other defeat interrupts available. */
+function allyDefeatInterruptOptions(
+  s: GameState,
+  m: Piece,
+  source: string,
+  attack: boolean,
+  enemyAttack: boolean,
+  usedMajorIds: string[] = [],
+  originalActorId = s.activePlayerId,
+) {
+  const owner = controller(s, m.id);
+  const view = owner ? seatView(s, owner) : s;
+  return [
+    ...doctorStrangeDefeatOptions(view, m, []),
+    ...msMarvelRedDaggerOptions(view, m, [], msPorts),
+    ...(!usedMajorIds.includes(m.id)
+      ? mtsPlayerPack
+          .mtsPlayerPackAllyDefeatOptions(
+            view,
+            m,
+            [
+              E("mtsMajorDefeatWindow", {
+                id: m.id,
+                piece: { ...m },
+                source,
+                attack,
+                enemyAttack,
+                usedMajorIds: [...usedMajorIds, m.id],
+                originalActorId,
+                actorId: owner?.id,
+              }),
+            ],
+            mtsPlayerPackPorts,
+          )
+          .map((o) => ({
+            ...o,
+            effects: o.effects.map((effect) => ({
+              ...effect,
+              actorId: owner?.id || s.activePlayerId,
+            })),
+          }))
+      : []),
+    ...(enemyAttack && card(m).type_code === "ally"
+      ? draxPack.draxPackRegroupOptions(
+          s,
+          m,
+          { attack: true, enemySource: true },
+          [
+            E("dvRegroupDefeatAfter", {
+              piece: { ...m },
+              playerId: owner?.id,
+              actorId: originalActorId,
+            }),
+          ],
+          draxPackPorts,
+        )
+      : []),
+  ];
+}
 function defeatCharacter(
   s: GameState,
   m: Piece,
@@ -1590,27 +1700,13 @@ function defeatCharacter(
   if (m.pendingDefeat && !interrupted) return true;
   if (!interrupted && thorPreventsDefeat(s, m, thorPorts)) return false;
   if (!interrupted) {
-    const owner = controller(s, m.id);
-    const view = owner ? seatView(s, owner) : s;
-    const options = [
-      ...doctorStrangeDefeatOptions(view, m, []),
-      ...msMarvelRedDaggerOptions(view, m, [], msPorts),
-      ...(enemyAttack && card(m).type_code === "ally"
-        ? draxPack.draxPackRegroupOptions(
-            s,
-            m,
-            { attack: true, enemySource: true },
-            [
-              E("dvRegroupDefeatAfter", {
-                piece: { ...m },
-                playerId: owner?.id,
-                actorId: s.activePlayerId,
-              }),
-            ],
-            draxPackPorts,
-          )
-        : []),
-    ];
+    const options = allyDefeatInterruptOptions(
+      s,
+      m,
+      source,
+      attack,
+      enemyAttack,
+    );
     if (options.length) {
       m.pendingDefeat = true;
       choose(
@@ -1620,7 +1716,7 @@ function defeatCharacter(
         [
           ...options,
           option("defeat", "Let this ally be defeated", [
-            E("finishDefeat", { id: m.id, source, attack }),
+            E("finishDefeat", { id: m.id, source, attack, enemyAttack }),
           ]),
         ],
       );
@@ -1920,7 +2016,8 @@ function thwart(
   if (
     hulkThreatLocked(s, target) ||
     !gamora.gamoraCanRemoveThreat(s, target) ||
-    venom.venomSchemeLocked(s, target)
+    venom.venomSchemeLocked(s, target) ||
+    warlock.warlockSchemeLocked(s, target)
   )
     return 0;
   if (target === "main") {
@@ -1974,6 +2071,7 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
     s,
     ...wasp.waspDefeated(s, "side_scheme", source, s.currentEventId, false),
   );
+  add(s, ...spectrum.spectrumSideSchemeDefeated(s, p, spectrumPorts));
   discardPiece(s, p.id);
   if (s.villain.hp <= 0) advanceVillain(s);
 }
@@ -2029,7 +2127,8 @@ export function targets(
               p.counters > 0 &&
               !hulkThreatLocked(s, p.id) &&
               gamora.gamoraCanRemoveThreat(s, p.id) &&
-              !venom.venomSchemeLocked(s, p.id),
+              !venom.venomSchemeLocked(s, p.id) &&
+              !warlock.warlockSchemeLocked(s, p.id),
           )
           .map((p) => ({ id: p.id, label: card(p).name, code: p.code })),
       ];
@@ -2132,6 +2231,11 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
       msMarvelDiscount(s) -
       drax.draxCardCostReduction(s, physical || c) -
       venomPack.venomPackCardCostReduction(s, c) -
+      mtsPlayerPack.mtsPlayerPackCardCostReduction(
+        s,
+        physical || c,
+        mtsPlayerPackPorts,
+      ) -
       (physical ? starLord.starLordCardCostReduction(s, physical) : 0) -
       gmwPack.gmwPlayerPackCardCostReduction(s, c) -
       thorAllyDiscount(s, c) -
@@ -2389,8 +2493,11 @@ function requestPayment(
   paymentCommit: Effect[] = [],
   starLordCostHandled = false,
   starLordApplyDiscount = false,
+  handOnly = false,
+  abilityCost = false,
 ) {
   if (
+    !abilityCost &&
     !starLordCostHandled &&
     piece &&
     after.some(
@@ -2412,6 +2519,8 @@ function requestPayment(
         after,
         starLordCostHandled: true,
         starLordApplyDiscount: true,
+        handOnly,
+        abilityCost,
       }),
     ];
     const interrupts = starLord.starLordHandPlayOptions(
@@ -2445,24 +2554,68 @@ function requestPayment(
       return;
     }
   }
-  if (starLordApplyDiscount && piece)
+  if (!abilityCost && starLordApplyDiscount && piece)
     cost = Math.max(0, cost - starLord.starLordCardCostReduction(s, piece));
   if (cost === 0 && !requirements.length && !forcePayment) {
-    add(
-      s,
-      ...after.map((e) => ({
-        ...e,
-        paid: [],
-        ...(["20002", "20003", "20006"].includes(piece?.code || "")
-          ? { paidForCard: [] }
-          : {}),
-      })),
-    );
+    const zeroAfter = after.map((e) => ({
+      ...e,
+      paid: [],
+      ...(["20002", "20003", "20006"].includes(piece?.code || "")
+        ? { paidForCard: [] }
+        : {}),
+    }));
+    const spentResponseCards = s.player.hand.filter((p) => p.id !== piece?.id);
+    if (
+      mtsPlayerPack.mtsPlayerPackResourcesSpent(
+        s,
+        spentResponseCards,
+        mtsPlayerPackPorts,
+      ).length
+    ) {
+      choose(
+        s,
+        title,
+        "This costs 0 resources. You may spend extra resources to use their printed responses.",
+        [
+          option("continue", "Pay 0 resources", zeroAfter),
+          option("spend", "Choose resources to spend", [
+            E("payRequest", {
+              title,
+              cost,
+              requirements,
+              piece,
+              cancelable,
+              targetCode,
+              forcePayment: true,
+              commit: paymentCommit,
+              after,
+              starLordCostHandled,
+              starLordApplyDiscount,
+              handOnly,
+              abilityCost,
+            }),
+          ]),
+        ],
+        cancelable,
+      );
+      if (cancelable && s.attack) s.prompt!.cancellationQueue = [...s.queue];
+    } else add(s, ...zeroAfter);
     return;
   }
   // A cost that cannot be paid must not open a dialog with no way out.
+  const availableSources = paymentSources(
+    s,
+    piece?.id,
+    targetCode || piece?.code,
+    handOnly,
+  );
   if (
-    !canPay(s, cost, requirements, piece?.id, targetCode || piece?.code, false)
+    !paymentStatus(
+      availableSources,
+      availableSources.map((source) => source.id),
+      cost,
+      requirements,
+    ).ready
   ) {
     log(s, `${title}: not enough resources to pay the cost.`);
     return;
@@ -2480,6 +2633,8 @@ function requestPayment(
     paymentCommit: paymentCommit.map((e) => effectContext(s, e)),
     cancelable,
     paymentTarget: targetCode || piece?.code,
+    ...(handOnly ? { handOnly: true } : {}),
+    ...(abilityCost ? { abilityCost: true } : {}),
     wildAs: requirements[0] || "energy",
   };
 }
@@ -2492,7 +2647,7 @@ function pay(
   const p = s.prompt!;
   need(p?.kind === "payment", "No payment is pending.");
   need(new Set(ids).size === ids.length, "Choose each resource source once.");
-  const sources = paymentSources(s, p.card?.id, p.paymentTarget);
+  const sources = paymentSources(s, p.card?.id, p.paymentTarget, p.handOnly);
   const selected = ids.map((id) => sources.find((x) => x.id === id));
   need(selected.every(Boolean), "A selected resource is unavailable.");
   const { printed, missing } = paymentStatus(
@@ -2579,6 +2734,13 @@ function pay(
       spentResponses.push(...antMan.antManResourceSpent(s, spent, antManPorts));
       spentResponses.push(...wasp.waspResourceSpent(s, spent, waspPorts));
       spentResponses.push(...rocket.rocketResourceSpent(s, spent));
+      spentResponses.push(
+        ...mtsPlayerPack.mtsPlayerPackResourcesSpent(
+          s,
+          [spent],
+          mtsPlayerPackPorts,
+        ),
+      );
     } else {
       const source = find(s, id)!;
       const msSpent = msMarvelResourceSpent(s, source);
@@ -2588,6 +2750,8 @@ function pay(
       starLordPack.starLordPackResourceSpent(s, source.id, { discardPiece });
       draxPack.draxPackResourceSpent(s, source.id, { discardPiece });
       venomPack.venomPackResourceSpent(s, source.id, { discardPiece });
+      spectrumResourceSpent(s, source.id, { isTextBlank });
+      warlockResourceSpent(s, source.id, { isTextBlank });
       source.exhausted = true;
       for (const effect of [
         ...(msSpent || []),
@@ -2604,6 +2768,14 @@ function pay(
       }
     }
   }
+  // The resource cards are spent together. An empty player deck can reset
+  // once the entire committed payment has reached discard, rather than
+  // recycling between individual resources and splitting the same cost.
+  const beforeReset = new Set(s.queue);
+  recyclePlayer(s);
+  const resetResponses = s.queue.filter((effect) => !beforeReset.has(effect));
+  s.queue = s.queue.filter((effect) => beforeReset.has(effect));
+  spentResponses.push(...resetResponses);
   const paid = [...printed];
   const allocated = new Set<number>();
   for (const required of req) {
@@ -2786,6 +2958,11 @@ export function newGame(config: {
     );
     doctorStrangeSetup(s, dsPorts);
     venom.venomInitializeNemesis(s, { makePiece });
+    warlock.warlockInitializeNemesis(s, { makePiece });
+    // Extract the SAME three source-composition IDs before drawing an opening
+    // hand. The ordinary40-card deck never contains the setup upgrades.
+    for (const effect of spectrum.spectrumSetup(s))
+      spectrum.resolveSpectrumEffect(s, effect, spectrumPorts);
   }
   activateSeat(s, "p1");
   s.encounter.deck = shuffle(
@@ -2959,10 +3136,13 @@ export function playable(s: GameState, p: Piece): string | null {
     gamora.gamoraPlayRestriction(s, p, gamoraPorts) ||
     drax.draxPlayRestriction(s, p, draxPorts) ||
     venom.venomPlayRestriction(s, p) ||
+    warlock.warlockPlayRestriction(s, p) ||
+    spectrum.spectrumPlayRestriction(s, p) ||
     starLordPack.starLordPackPlayRestriction(s, p, starLordPackPorts) ||
     gamoraPack.gamoraPackPlayRestriction(s, p, gamoraPackPorts) ||
     draxPack.draxPackPlayRestriction(s, p, draxPackPorts) ||
-    venomPack.venomPackPlayRestriction(s, p, venomPackPorts);
+    venomPack.venomPackPlayRestriction(s, p, venomPackPorts) ||
+    mtsPlayerPack.mtsPlayerPackPlayRestriction(s, p, mtsPlayerPackPorts);
   if (antRestriction) return antRestriction;
   const hawkeyeRestriction = hawkeyePlayRestriction(s, p, hawkeyePorts);
   if (hawkeyeRestriction) return hawkeyeRestriction;
@@ -3242,6 +3422,7 @@ function play(
   gamora.gamoraCardPlayed(s, c);
   gamoraPack.gamoraPackCardPlayed(s, p);
   venomPack.venomPackCardPlayed(s, c);
+  mtsPlayerPack.mtsPlayerPackCardPlayed(s, c);
   s.flags.discount = 0;
   track(s, "cardsPlayed", 1);
   log(s, `Play ${c.name}.`, "good");
@@ -3298,6 +3479,7 @@ function play(
       ...gamoraPack.gamoraPackCardEntered(s, p),
       ...draxPack.draxPackCardEntered(s, p),
       ...venomPack.venomPackCardEntered(s, p),
+      ...mtsPlayerPack.mtsPlayerPackCardEntered(s, p),
       ...captainPackCardEntered(s, p),
       ...hulkPackCardEntered(s, p),
       ...msMarvelCardEntered(s, p),
@@ -3400,6 +3582,10 @@ function allyEnter(
   fromHand = false,
 ) {
   if (isTextBlank(s, p)) return;
+  if (p.code === "21005") {
+    add(s, ...spectrum.spectrumAllyEntersPlay(s, p, spectrumPorts));
+    return;
+  }
   const starLordAlly = starLord.starLordAllyEnter(s, p, fromHand);
   if (starLordAlly !== null) {
     add(s, ...starLordAlly);
@@ -3414,7 +3600,8 @@ function allyEnter(
     starLordPack.starLordPackAllyEnter(s, p) ??
     gamoraPack.gamoraPackAllyEnter(s, p) ??
     draxPack.draxPackAllyEnter(s, p) ??
-    venomPack.venomPackAllyEnter(s, p);
+    venomPack.venomPackAllyEnter(s, p) ??
+    mtsPlayerPack.mtsPlayerPackAllyEnter(s, p, fromHand);
   if (playerPackAlly !== null) {
     add(s, ...playerPackAlly);
     return;
@@ -3550,6 +3737,7 @@ function event(
   lightningX?: number,
   masterInvocationId?: string,
   paidForCard?: Resource[],
+  warlockDiscarded: Piece[] = [],
 ) {
   const ant =
     antMan.antManEvent(s, p.code === "13020" ? { ...p, code: "12020" } : p) ??
@@ -3566,11 +3754,14 @@ function event(
     gamora.gamoraEvent(s, p) ??
     drax.draxEvent(s, p) ??
     venom.venomEvent(s, p, paidForCard ?? paid) ??
+    warlock.warlockEvent(s, p, warlockDiscarded) ??
+    spectrum.spectrumEvent(s, p) ??
     gmwPack.gmwPlayerPackEvent(s, p) ??
     starLordPack.starLordPackEvent(s, p) ??
     gamoraPack.gamoraPackEvent(s, p) ??
     draxPack.draxPackEvent(s, p) ??
-    venomPack.venomPackEvent(s, p);
+    venomPack.venomPackEvent(s, p) ??
+    mtsPlayerPack.mtsPlayerPackEvent(s, p);
   if (ant !== null) {
     add(s, ...ant);
     return;
@@ -3897,6 +4088,12 @@ function flip(
     waspPack.waspPackFormResponseOptions(s, waspPackPorts).length
   )
     add(s, E("antFormResponses", { responses }));
+  if (
+    mtsPlayerPack.mtsPlayerPackFormResponseOptions(s, [], mtsPlayerPackPorts)
+      .length
+  )
+    add(s, E("mtsPackFormResponses"));
+  add(s, ...spectrum.spectrumChangedForm(s, spectrumPorts));
   log(
     s,
     `Change form to ${heroCard(s).name}${["ant", "wsp"].includes(s.heroId) && s.player.form === "hero" ? ` (${s.player.heroForm})` : ""}.`,
@@ -3917,6 +4114,10 @@ export function abilityOptions(
   p: Piece,
 ): { id: string; label: string; disabled?: string }[] {
   const c = card(p);
+  if (
+    Object.values(spectrum.SPECTRUM_FORM_CODES).some((code) => code === p.code)
+  )
+    return [];
   if (isTextBlank(s, p) && c.type_code !== "ally") return [];
   const hero = s.player.form === "hero";
   const riseOptions = nativeHeroAbilityOptions(s, p.id);
@@ -3942,6 +4143,7 @@ export function abilityOptions(
     ...scarletWitch.scarletWitchAttachmentActions(s, p, scarletPorts),
     ...rocket.rocketAttachmentActions(s, p, rocketPorts),
     ...gamora.gamoraAttachmentActions(s, p, gamoraPorts),
+    ...spectrum.spectrumAttachmentOptions(s, p.id, spectrumPorts),
   ];
   if (attachmentOptions.length)
     return attachmentOptions.map(({ id, label }) => ({ id, label }));
@@ -4081,6 +4283,7 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
     scriptedModifier(s, kind, p) +
     antPack.antManPackModifiers(s, p.id, { maxAllyHP: pieceHP })[kind] +
     starLordPack.starLordPackModifiers(s, p.id, starLordPackPorts)[kind] +
+    mtsPlayerPack.mtsPlayerPackModifiers(s, p.id, mtsPlayerPackPorts)[kind] +
     (kind === "thwart"
       ? starLord.starLordAllyThwartBonus(
           controller(s, p.id) ? seatView(s, controller(s, p.id)!) : s,
@@ -4095,6 +4298,15 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   );
 }
 function ability(s: GameState, id: string, action = "special") {
+  if (
+    mtsPlayerPack.mtsPlayerPackAbility(
+      s,
+      id,
+      mtsPlayerPackPorts,
+      action === "special" ? undefined : action,
+    )
+  )
+    return;
   const source = find(s, id);
   need(
     !source ||
@@ -4103,6 +4315,15 @@ function ability(s: GameState, id: string, action = "special") {
         ["attack", "thwart"].includes(action)),
     "This card's printed text is blank.",
   );
+  if (
+    warlock.warlockAbility(
+      s,
+      id,
+      warlockPorts,
+      action === "special" ? undefined : action,
+    )
+  )
+    return;
   const ant =
     antMan.antManAbility(
       s,
@@ -4169,7 +4390,8 @@ function ability(s: GameState, id: string, action = "special") {
       id,
       action === "special" ? undefined : action,
       venomPorts,
-    );
+    ) ??
+    spectrum.spectrumAbility(s, id, action, spectrumPorts);
   if (ant) {
     add(s, ...ant);
     return;
@@ -4719,6 +4941,7 @@ function openMsDamageWindow(s: GameState, packet: Effect): boolean {
     0,
     packet.amount - Number(s.flags[`msPrevent:${key}`] || 0),
   );
+  if (amount === 0) return false;
   const used = String(s.flags[`msUsed:${key}`] || "").split(",");
   const options = [
     ...drax.draxDamageOptions(s, packet, amount, [packet], draxPorts),
@@ -4728,6 +4951,13 @@ function openMsDamageWindow(s: GameState, packet: Effect): boolean {
       amount,
       [packet],
       draxPackPorts,
+    ),
+    ...mtsPlayerPack.mtsPlayerPackDamageOptions(
+      s,
+      packet,
+      amount,
+      [packet],
+      mtsPlayerPackPorts,
     ),
     ...starLord.starLordDamageOptions(
       s,
@@ -4850,6 +5080,7 @@ const bwPorts: BlackWidowPorts = {
   flip,
   shufflePlayerDeck: (s) => {
     s.player.deck = shuffle(s, s.player.deck);
+    recyclePlayer(s);
   },
   canChangeForm: canChangeIdentityForm,
   canReadyIdentity: (s, id) => canReadyIdentity(seatView(s, id)),
@@ -5146,6 +5377,7 @@ const hawkeyePorts: HawkeyePorts = {
   revealHidden,
   shufflePlayerDeck: (s) => {
     s.player.deck = shuffle(s, s.player.deck);
+    recyclePlayer(s);
   },
   recyclePlayer,
   discardHand,
@@ -5809,6 +6041,210 @@ const venomPackPorts: venomPack.VenomPackPorts = {
   maxHeroHP: (s, id) => maxHP(seatView(s, id)),
   canGiveTough: (s, target) => dsPorts.canAddStatus(s, target, "tough"),
 };
+const mtsPlayerPackPorts: mtsPlayerPack.MtsPlayerPackPorts = {
+  queue: add,
+  choose,
+  discardPiece,
+  hasTrait: captainPackHasTrait,
+  characterTraits: (s, target) => {
+    const id =
+      target === "hero"
+        ? s.activePlayerId
+        : target.startsWith("hero:")
+          ? target.slice(5)
+          : undefined;
+    if (id) {
+      const view = seatView(s, id);
+      return [
+        ...new Set([
+          ...(heroCard(view).traits || "").split(/\.\s*/).filter(Boolean),
+          ...starLord.starLordHeroTraits(view),
+          ...(aerial(view) ? ["Aerial"] : []),
+        ]),
+      ];
+    }
+    const p = allInPlay(s).find((p) => p.id === target);
+    if (!p) return [];
+    const view = controller(s, target)
+      ? seatView(s, controller(s, target)!)
+      : s;
+    return [
+      ...new Set([
+        ...(card(p).traits || "").split(/\.\s*/).filter(Boolean),
+        ...starLord.starLordAllyTraits(view, p),
+        ...(!isTextBlank(view, p)
+          ? wasp.waspAllyTraits(textActiveState(view), p)
+          : []),
+        ...captainPackModifiers(view, target).traits,
+      ]),
+    ];
+  },
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  schemeTargets: (s, thwart) => targets(s, "scheme", false, thwart),
+  friendlyTargets: (s) => targets(s, "friendly"),
+  heroAttack: (s) => heroStats(s).attack,
+  allyAttack: (s, p) => allyStat(s, p, "attack"),
+  maxHeroHP: maxHP,
+  canReady: (s, target) =>
+    target === "hero"
+      ? s.player.exhausted && canReadyIdentity(s)
+      : target.startsWith("hero:")
+        ? seatView(s, target.slice(5)).player.exhausted &&
+          canReadyIdentity(seatView(s, target.slice(5)))
+        : !!find(s, target)?.exhausted,
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  canPay: (s, cost, exclude, code, requirements = [], handOnly = false) => {
+    if (!handOnly) return canPay(s, cost, requirements, exclude, code);
+    const sources = paymentSources(s, exclude, code, true);
+    return paymentStatus(
+      sources,
+      sources.map((source) => source.id),
+      cost,
+      requirements,
+    ).ready;
+  },
+  discardPlayerTop: discardNativePlayerTop,
+  shufflePlayerDeck: hawkeyePorts.shufflePlayerDeck,
+  revealHidden,
+  canPutAlly: (s, p) =>
+    card(p).type_code === "ally" && !uniqueConflict(s, card(p)),
+  putAllyFromDiscard: (s, id) => {
+    const i = s.player.discard.findIndex((p) => p.id === id);
+    if (i < 0 || uniqueConflict(s, card(s.player.discard[i]))) return;
+    const [p] = s.player.discard.splice(i, 1);
+    Object.assign(p, resetPiece(p, true));
+    if (rulesCode(p) === "01066") p.counters = 4;
+    s.player.inPlay.push(p);
+    add(s, ...mtsPlayerPack.mtsPlayerPackCardEntered(s, p), E("allyLimit"));
+    const enter = effectContext(
+      s,
+      E("allyEnter", { id: p.id, fromHand: false, eventId: undefined }),
+    );
+    const finish = s.queue.findIndex(
+      (e) => e.type === "finishResolution" && e.id === s.currentEventId,
+    );
+    if (finish >= 0) s.queue.splice(finish + 1, 0, enter);
+    else add(s, enter);
+  },
+  transferControl: hulkPackPorts.transferControl,
+  shuffleResolvingIntoEncounter: (s, id) => {
+    const i = s.resolving.findIndex(
+      (p) => p.id === id && mtsPlayerPack.mtsIsCosmicEntity(p),
+    );
+    need(i >= 0, "The actual Cosmic Entity event is no longer resolving.");
+    s.encounter.deck.push(...s.resolving.splice(i, 1));
+    mutagenPorts.shuffleEncounter(s);
+  },
+  removeResolvingOwnedToRemoved: (s, id) => {
+    const i = s.resolving.findIndex(
+      (p) => p.id === id && mtsPlayerPack.mtsIsCosmicEntity(p),
+    );
+    if (i >= 0) s.removed.push(resetPiece(s.resolving.splice(i, 1)[0]));
+  },
+  preventAllAttackDamage: (s, packet, amount) => {
+    if (s.attack && ["attack", "overkill"].includes(packet.kind))
+      s.attack.preventAllDamage = true;
+    else preventNativeIdentityDamage(s, packet, amount);
+  },
+  claimDefense: gamoraPorts.claimDefense,
+};
+const warlockPorts: warlock.WarlockPorts = {
+  ...antManPorts,
+  makePiece,
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  discardHand: (s, id) => {
+    discardHand(s, id);
+    recyclePlayer(s);
+  },
+  discardPlayerCards: mill,
+  heroMaxHP: maxHP,
+  removeIdentityStatusCard: (s, status) => {
+    const count = statusCards(s.player, status);
+    if (!count) return false;
+    const key =
+      status === "stunned"
+        ? "stunCards"
+        : status === "confused"
+          ? "confuseCards"
+          : "toughCards";
+    s.player[key] = count - 1;
+    syncStatuses(s.player, heroCard(s));
+    return true;
+  },
+  canPutAlly: (s, p) => !uniqueConflict(s, card(p)),
+  putAllyFromHand: (s, id, playerId) => {
+    const index = s.player.hand.findIndex(
+      (p) => p.id === id && p.code === "21032",
+    );
+    const target = s.players.find(
+      (seat) => seat.id === playerId && !seat.eliminated,
+    );
+    need(
+      index >= 0 && target && !uniqueConflict(s, card(s.player.hand[index])),
+      "Pip cannot enter play.",
+    );
+    const p = s.player.hand.splice(index, 1)[0];
+    Object.assign(p, resetPiece(p, true));
+    seatView(s, target!).player.inPlay.push(p);
+    add(
+      s,
+      E("allyLimit", { actorId: playerId }),
+      E("allyEnter", { id: p.id, actorId: playerId, fromHand: false }),
+    );
+  },
+  canCancelTreachery: (s, p) =>
+    card(p).type_code === "treachery" &&
+    s.resolving.some((x) => x.id === p.id) &&
+    !/cannot be cancel(?:ed|led)/i.test(card(p).text || ""),
+  cancelWhenRevealed: (s, p, after, context) => {
+    const c = card(p);
+    const revealCard = context?.knifeSurge
+      ? { ...c, text: `Surge.\n${c.text || ""}` }
+      : c;
+    const windows = beginRevealWindow(
+      s,
+      p,
+      revealCard,
+      context?.playerId || s.activePlayerId,
+      1 + goblinWhenRevealedCopies(s),
+    );
+    s.revealWindows![p.id].pending = s.revealWindows![p.id].pending.filter(
+      (id) => id !== "text",
+    );
+    log(s, `${c.name}: Cosmic Ward cancels its When Revealed effects.`, "good");
+    add(s, ...after, ...windows);
+  },
+  findAndRevealEncounter: (s, code) => {
+    const reserved = new Set(
+      s.players.flatMap((seat) =>
+        String(seatView(s, seat).flags.warlockReservedNemesis || "").split(","),
+      ),
+    );
+    let found: Piece | undefined;
+    for (const zone of [
+      s.encounter.deck,
+      s.encounter.discard,
+      ...s.players.map((seat) => seatView(s, seat).player.setAside || []),
+    ]) {
+      const index = zone.findIndex(
+        (p) => p.code === code && !reserved.has(p.id),
+      );
+      if (index >= 0) {
+        found = zone.splice(index, 1)[0];
+        break;
+      }
+    }
+    mutagenPorts.shuffleEncounter(s);
+    if (found) add(s, E("reveal", { piece: found }));
+  },
+  putBoostMinion: mutagenPorts.putMinion,
+  revealBoostCard: (s, p) => {
+    const activation = s.scheming || s.attack;
+    if (activation) (activation.retainedBoostIds ||= []).push(p.id);
+    removeEncounterInstance(s, p.id);
+    add(s, E("reveal", { piece: p }));
+  },
+};
 const venomPorts: venom.VenomPorts = {
   ...antManPorts,
   makePiece,
@@ -5884,6 +6320,84 @@ const venomPorts: venom.VenomPorts = {
     if (finish >= 0) s.queue.splice(finish + 1, 0, ...completion);
     else add(s, ...completion);
     add(s, ...clauses);
+  },
+};
+const spectrumPorts: spectrum.SpectrumPorts = {
+  queue: add,
+  choose,
+  makePiece,
+  isTextBlank,
+  identityTextBlank: (s) => isTextBlank(s, heroCard(s).code),
+  canChangeForm: canChangeIdentityForm,
+  canReadyIdentity: (s, id) => canReadyIdentity(seatView(s, id)),
+  canPay,
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  heroMaxHP: maxHP,
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  schemeTargets: (s, thwarting, ignoreCrisis = false) => {
+    if (thwarting && captainThwartBlocked(s)) return [];
+    const list = targets(s, "scheme", false, thwarting);
+    if (
+      ignoreCrisis &&
+      !list.some((t) => t.id === "main") &&
+      !(thwarting && engaged(s).some((p) => keyword(p, "Patrol"))) &&
+      rulesCode(s.scheme) !== "01139b" &&
+      s.scheme.threat > 0 &&
+      !hulkThreatLocked(s, "main")
+    )
+      list.unshift({
+        id: "main",
+        label: card(s.scheme.code).name,
+        code: s.scheme.code,
+      });
+    return list;
+  },
+  energyFormChanged: (s, from, to) =>
+    log(s, `Change energy form from ${from || "powered down"} to ${to}.`),
+  formResponseOptions: (s, after) =>
+    mtsPlayerPack.mtsPlayerPackFormResponseOptions(
+      s,
+      after,
+      mtsPlayerPackPorts,
+    ),
+  refreshDefense: (s) => {
+    if (
+      s.attack?.basicDefense &&
+      s.attack.defender === "hero" &&
+      s.attack.targetPlayerId === s.activePlayerId
+    )
+      s.attack.defense = heroStats(s).defense + (s.attack.defenseBonus || 0);
+  },
+  damageBatch: (s, ids, amount, source) => {
+    // Interrupt/prevention windows prepare saved packet amounts before any HP
+    // changes. Each physical recipient belongs to this original snapshot.
+    const batchId = `spectrum-batch-${s.nextId++}`;
+    const ownerId = s.activePlayerId;
+    add(
+      s,
+      ...ids.map((target, index) =>
+        E("damage", {
+          target,
+          amount,
+          source,
+          spectrumBatchId: batchId,
+          spectrumBatchIndex: index,
+          spectrumBatchOwnerId: ownerId,
+        }),
+      ),
+      E("spectrumBatchCommit", { batchId, ids, amount, source, ownerId }),
+    );
+  },
+  giveObligation: (s, p, playerId) => {
+    s.resolving = s.resolving.filter((card) => card.id !== p.id);
+    p.dealtTo = playerId;
+    const player = seatView(s, playerId).player;
+    if (!player.inPlay.some((card) => card.id === p.id)) player.inPlay.push(p);
+  },
+  attachIdentity: (s, p, playerId) => {
+    s.resolving = s.resolving.filter((card) => card.id !== p.id);
+    p.attachedTo = `hero:${playerId}`;
+    if (!s.attachments.some((card) => card.id === p.id)) s.attachments.push(p);
   },
 };
 const rocketPorts: rocket.RocketPorts = {
@@ -5976,10 +6490,14 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...gamora.gamoraAbilityOptions(s, id, gamoraPorts),
     ...drax.draxAbilityOptions(s, id, draxPorts),
     ...venom.venomAbilityOptions(s, id, venomPorts),
+    ...spectrum.spectrumObligationOptions(s, id, spectrumPorts),
+    ...spectrum.spectrumAttachmentOptions(s, id, spectrumPorts),
+    ...warlock.warlockAbilityOptions(s, id, warlockPorts),
     ...gmwPack.gmwPlayerPackAbilityOptions(s, id, gmwPorts),
     ...starLordPack.starLordPackAbilityOptions(s, id, starLordPackPorts),
     ...draxPack.draxPackAbilityOptions(s, id, draxPackPorts),
     ...venomPack.venomPackAbilityOptions(s, id, venomPackPorts),
+    ...mtsPlayerPack.mtsPlayerPackAbilityOptions(s, id, mtsPlayerPackPorts),
     ...quicksilverPack.quicksilverPackAbilityOptions(
       s,
       id,
@@ -6128,6 +6646,7 @@ const msPorts: MsMarvelPorts = {
       a!.defender = "hero";
       a!.basicDefense = false;
       a!.defense = 0;
+      add(s, E("quicksilverLateDefense"));
     }
     a!.targetPlayerId = s.activePlayerId;
     return amount;
@@ -6496,6 +7015,9 @@ function boostEffects(s: GameState, p: Piece) {
     gamora.gamoraBoost(s, p) ??
     drax.draxBoost(s, p) ??
     venom.venomBoost(s, p) ??
+    spectrum.spectrumBoost(s, p) ??
+    warlock.warlockBoost(s, p) ??
+    mtsPlayerPack.mtsPlayerPackBoost(s, p) ??
     rocket.rocketBoost(s, p) ??
     groot.grootBoost(s, p) ??
     scarletWitch.scarletWitchBoost(s, p) ??
@@ -6722,6 +7244,7 @@ function finishScheme(s: GameState) {
           .map((p) => E("threat", { target: p.id, amount: 2 }))
       : []),
     ...antMan.antManEnemyActivated(s, id),
+    ...spectrum.spectrumEnemyActivated(s, p, s.activePlayerId, spectrumPorts),
     ...(activation.afterActivation || []),
     ...activation.boostIds.map((id) => E("finishResolution", { id })),
     E("scarletEnemyActivated", { id }),
@@ -6998,6 +7521,22 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
       : []),
     E("forcedResponses", {
       responses: [
+        ...(p &&
+        spectrum.spectrumEnemyActivated(s, p, recipientId, spectrumPorts).length
+          ? [
+              {
+                id: `${p.id}:spectrum-activation`,
+                sourceId: p.id,
+                title: "Radioactive Man",
+                effects: spectrum.spectrumEnemyActivated(
+                  s,
+                  p,
+                  recipientId,
+                  spectrumPorts,
+                ),
+              },
+            ]
+          : []),
         ...goblinModuleAttackResponses(s, {
           attacker: a.attackerSnapshot || p!,
           playerId: recipientId,
@@ -7135,6 +7674,14 @@ function reveal(
   s.lastEncounter = p.code;
   log(s, `${skip ? "Resolve" : "Encounter"}: ${card(p).name}.`, "bad");
   if (!skip) {
+    const forced = warlock.warlockForcedTreacheryInterrupt(s, p, warlockPorts, {
+      playerId: s.activePlayerId,
+      knifeSurge,
+    });
+    if (forced) {
+      add(s, ...forced);
+      return;
+    }
     const opts: Option[] = [];
     const revealing = s.activePlayerId;
     for (const seat of playerOrder(s))
@@ -7298,6 +7845,11 @@ function reveal(
   }
   const c = card(p);
   const revealCard = knifeSurge ? { ...c, text: `Surge.\n${c.text || ""}` } : c;
+  const cosmic = mtsPlayerPack.mtsPlayerPackEncounterReveal(s, p);
+  if (cosmic !== null) {
+    add(s, ...cosmic);
+    return;
+  }
   if (!repeat && c.type_code === "minion") minionWillEnter(s, p);
   if (!repeat && uniqueConflict(s, c)) {
     finishResolution(s, p.id);
@@ -7341,6 +7893,8 @@ function reveal(
       ...gamora.GAMORA_SCRIPT_CODES,
       ...drax.DRAX_SCRIPT_CODES,
       ...venom.VENOM_SCRIPT_CODES,
+      ...spectrum.SPECTRUM_SCRIPT_CODES,
+      ...warlock.WARLOCK_SCRIPT_CODES,
     ].some((code) => code === p.code) ||
       CARDS.some(
         (core) => core.code === rulesCode(p) && core.type_code === "treachery",
@@ -7414,6 +7968,8 @@ function reveal(
     gamora.gamoraEncounterReveal(s, p) ??
     drax.draxEncounterReveal(s, p) ??
     venom.venomEncounterReveal(s, p) ??
+    spectrum.spectrumEncounterReveal(s, p) ??
+    warlock.warlockEncounterReveal(s, p) ??
     rocket.rocketEncounterReveal(s, p) ??
     groot.grootEncounterReveal(s, p) ??
     scarletWitch.scarletWitchEncounterReveal(s, p) ??
@@ -7879,13 +8435,27 @@ function treachery(s: GameState, p: Piece) {
       add(s, E("vulturePlans"));
       break;
     case "01173": {
-      const up = s.player.inPlay.filter((p) => card(p).type_code === "upgrade");
+      const up = s.player.inPlay.filter(
+        (p) =>
+          card(p).type_code === "upgrade" &&
+          (!Object.values(spectrum.SPECTRUM_FORM_CODES).some(
+            (code) => code === p.code,
+          ) ||
+            spectrum.spectrumFormFaceup(s, p)),
+      );
       const opts = [
         option("damage", `Take ${up.length} damage`, [
           E("damage", { target: "hero", amount: up.length }),
         ]),
       ];
-      if (up.length)
+      if (
+        up.some(
+          (p) =>
+            !Object.values(spectrum.SPECTRUM_FORM_CODES).some(
+              (code) => code === p.code,
+            ),
+        )
+      )
         opts.push(
           option("discard", "Discard an upgrade", [
             E("chooseDiscard", { filter: "upgrade" }),
@@ -7915,8 +8485,12 @@ function treachery(s: GameState, p: Piece) {
       break;
     case "01188":
       if (
-        s.player.inPlay.some((p) =>
-          ["support", "upgrade"].includes(card(p).type_code),
+        s.player.inPlay.some(
+          (p) =>
+            ["support", "upgrade"].includes(card(p).type_code) &&
+            !Object.values(spectrum.SPECTRUM_FORM_CODES).some(
+              (code) => code === p.code,
+            ),
         )
       )
         add(s, E("chooseDiscard", { filter: "supportUpgrade" }));
@@ -7928,6 +8502,16 @@ function treachery(s: GameState, p: Piece) {
       else surge();
       break;
     case "01190": {
+      const warlockNemesis = warlock.warlockShadowOfPast(s);
+      if (warlockNemesis !== null) {
+        add(s, ...warlockNemesis);
+        log(
+          s,
+          "Adam Warlock's actual set-aside nemesis cards enter the fight!",
+          "bad",
+        );
+        break;
+      }
       const venomNemesis = venom.venomShadowOfPast(s);
       if (venomNemesis !== null) {
         add(s, ...venomNemesis);
@@ -8021,10 +8605,14 @@ function resolve(s: GameState, e: Effect) {
   if (gamora.resolveGamoraEffect(s, e, gamoraPorts)) return;
   if (drax.resolveDraxEffect(s, e, draxPorts)) return;
   if (venom.resolveVenomEffect(s, e, venomPorts)) return;
+  if (spectrum.resolveSpectrumEffect(s, e, spectrumPorts)) return;
+  if (warlock.resolveWarlockEffect(s, e, warlockPorts)) return;
   if (starLordPack.resolveStarLordPackEffect(s, e, starLordPackPorts)) return;
   if (gamoraPack.resolveGamoraPackEffect(s, e, gamoraPackPorts)) return;
   if (draxPack.resolveDraxPackEffect(s, e, draxPackPorts)) return;
   if (venomPack.resolveVenomPackEffect(s, e, venomPackPorts)) return;
+  if (mtsPlayerPack.resolveMtsPlayerPackEffect(s, e, mtsPlayerPackPorts))
+    return;
   if (resolveHawkeyeEffect(s, e, hawkeyePorts)) return;
   if (resolveSpiderWomanEffect(s, e, swPorts)) return;
   if (resolveDoctorStrangeEffect(s, e, dsPorts)) return;
@@ -8046,6 +8634,8 @@ function resolve(s: GameState, e: Effect) {
           gamora.gamoraEncounterReveal(state, piece) ??
           drax.draxEncounterReveal(state, piece) ??
           venom.venomEncounterReveal(state, piece) ??
+          spectrum.spectrumEncounterReveal(state, piece) ??
+          warlock.warlockEncounterReveal(state, piece) ??
           rocket.rocketEncounterReveal(state, piece) ??
           groot.grootEncounterReveal(state, piece) ??
           scarletWitch.scarletWitchEncounterReveal(state, piece) ??
@@ -8227,6 +8817,9 @@ function resolve(s: GameState, e: Effect) {
           s,
           ...groot.grootEnemyActivated(s, p, grootPorts),
           ...scarletWitch.scarletWitchEnemyActivated(s, p),
+          ...(e.againstPlayer === false
+            ? []
+            : warlock.warlockEnemyActivated(s, p.id)),
         );
       break;
     }
@@ -8329,6 +8922,12 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "removeEncounter":
+      if (e.piece.code === "21026")
+        for (const seat of s.players)
+          seatView(s, seat).player.inPlay = seatView(
+            s,
+            seat,
+          ).player.inPlay.filter((p) => p.id !== e.piece.id);
       s.resolving = s.resolving.filter((p) => p.id !== e.piece.id);
       s.encounter.discard = s.encounter.discard.filter(
         (p) => p.id !== e.piece.id,
@@ -8385,6 +8984,27 @@ function resolve(s: GameState, e: Effect) {
     case "eventResolve": {
       const p: Piece = e.piece,
         c = card(p);
+      if (
+        !e.mtsPackAdditionalCostPaid &&
+        ["21016", "21043", "21050", "21055"].includes(p.code)
+      ) {
+        add(
+          s,
+          ...mtsPlayerPack.mtsPlayerPackBeforeEvent(s, p, [
+            { ...e, mtsPackAdditionalCostPaid: true },
+          ]),
+        );
+        break;
+      }
+      if (!e.warlockDiscardCostPaid) {
+        const cost = warlock.warlockBeforeEvent(s, p, [
+          { ...e, warlockDiscardCostPaid: true },
+        ]);
+        if (cost) {
+          add(s, ...cost);
+          break;
+        }
+      }
       const multipleLabels = (c.text || "").match(
         /\((?:attack|defense|thwart)(?:\/(?:attack|defense|thwart))+\)/gi,
       );
@@ -8440,6 +9060,7 @@ function resolve(s: GameState, e: Effect) {
         e.lightningX,
         e.masterInvocationId,
         e.paidForCard,
+        e.warlockDiscarded || [],
       );
       break;
     }
@@ -8475,8 +9096,30 @@ function resolve(s: GameState, e: Effect) {
       gmwPack.gmwPlayerPackCardPlayed(s, card(p));
       gamora.gamoraCardPlayed(s, card(p));
       gamoraPack.gamoraPackCardPlayed(s, p);
+      mtsPlayerPack.mtsPlayerPackCardPlayed(s, card(p));
       track(s, "cardsPlayed", 1);
       log(s, `Play ${card(p).name}.`, "good");
+      if (["21016", "21043", "21050", "21055"].includes(p.code)) {
+        add(
+          s,
+          E("eventResolve", {
+            piece: p,
+            paid: e.paid || [],
+            paidForCard: e.paidForCard,
+            eventId: p.id,
+          }),
+          E("finishResolution", {
+            id: p.id,
+            eventId: p.id,
+            playedEvent: { ...p },
+          }),
+          ...(e.continuation || e.resume || []).map((x: Effect) => ({
+            ...x,
+            eventId: undefined,
+          })),
+        );
+        break;
+      }
       const labels =
         (card(p).text || "").match(
           /\((?:attack|defense|thwart)(?:\/(?:attack|defense|thwart))*\)/gi,
@@ -8773,11 +9416,14 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "quicksilverLateDefense": {
-      const options = quicksilverPack.quicksilverPackDefenseOptions(
-        s,
-        [e],
-        quicksilverPackPorts,
-      );
+      const options = [
+        ...quicksilverPack.quicksilverPackDefenseOptions(
+          s,
+          [e],
+          quicksilverPackPorts,
+        ),
+        ...spectrum.spectrumDefenseOptions(s, [], [e], spectrumPorts),
+      ];
       if (options.length)
         choose(
           s,
@@ -9082,6 +9728,7 @@ function resolve(s: GameState, e: Effect) {
       if (p && card(p).type_code === "event") {
         const previous = s.activePlayerId;
         if (e.actorId || p.ownerId) activateSeat(s, e.actorId || p.ownerId);
+        mtsPlayerPack.mtsPlayerPackEventFinished(s, p);
         add(
           s,
           ...gamora.gamoraAfterEvent(
@@ -9172,9 +9819,39 @@ function resolve(s: GameState, e: Effect) {
     case "clearMainCompletion":
       s.pendingMainCompletion = false;
       break;
+    case "mtsMajorDefeatWindow": {
+      const p = allInPlay(s).find(
+        (p) => p.id === e.id && p.code === e.piece?.code,
+      );
+      if (!p?.pendingDefeat) break;
+      const options = allyDefeatInterruptOptions(
+        s,
+        p,
+        e.source,
+        !!e.attack,
+        !!e.enemyAttack,
+        e.usedMajorIds || [],
+        e.originalActorId,
+      );
+      const after = E("finishDefeat", {
+        id: p.id,
+        source: e.source,
+        attack: e.attack,
+        enemyAttack: e.enemyAttack,
+      });
+      if (options.length)
+        choose(
+          s,
+          card(p).name,
+          "Resolve another defeat interrupt, or finish this ally's defeat.",
+          [...options, option("defeat", "Let this ally be defeated", [after])],
+        );
+      else add(s, after);
+      break;
+    }
     case "finishDefeat": {
       const p = find(s, e.id);
-      if (p) defeatCharacter(s, p, e.source, e.attack, true);
+      if (p) defeatCharacter(s, p, e.source, e.attack, true, !!e.enemyAttack);
       break;
     }
     case "defeatScheme": {
@@ -9277,6 +9954,19 @@ function resolve(s: GameState, e: Effect) {
     case "discardForLimit":
       discardPiece(s, e.id);
       break;
+    case "mtsPackFormResponses": {
+      const options = mtsPlayerPack.mtsPlayerPackFormResponseOptions(
+        s,
+        [{ ...e }],
+        mtsPlayerPackPorts,
+      );
+      if (options.length)
+        choose(s, "After changing form", "Choose a response, or continue.", [
+          ...options,
+          option("pass", "Continue", []),
+        ]);
+      break;
+    }
     case "antFormResponses": {
       const responses: Effect[] = e.responses || [];
       const native = responses.map((response, index) =>
@@ -9584,6 +10274,14 @@ function resolve(s: GameState, e: Effect) {
           break;
         }
       }
+      if (e.spectrumBatchId) {
+        // Saved pre-placement amounts preserve all paid interrupt costs and
+        // preparation windows while every recipient still has its original HP.
+        seatView(s, e.spectrumBatchOwnerId).flags[
+          `${e.spectrumBatchId}:${e.spectrumBatchIndex}`
+        ] = e.amount;
+        break;
+      }
       if (e.attack) {
         const result = attackAction(
           s,
@@ -9644,6 +10342,44 @@ function resolve(s: GameState, e: Effect) {
     case "heal":
       heal(s, e.target, e.amount);
       break;
+    case "spectrumBatchCommit": {
+      const receipts = seatView(s, e.ownerId).flags;
+      const previousDefer = s.flags.waspDeferDefeats;
+      s.flags.spectrumDamageBatchApplying = true;
+      s.flags.waspDeferDefeats = true;
+      try {
+        for (const [index, target] of (e.ids as string[]).entries()) {
+          const key = `${e.batchId}:${index}`;
+          const amount = Number(receipts[key] ?? 0);
+          delete receipts[key];
+          if (
+            target.startsWith("hero:") &&
+            s.players.find((seat) => seat.id === target.slice(5))?.eliminated
+          )
+            continue;
+          // Hero Flora Colossus already resolved during the saved preparation.
+          dealDamage(s, target, amount, e.source, false, false, false, {
+            grootHandled: true,
+            damageDealt: e.amount,
+          });
+        }
+      } finally {
+        delete s.flags.spectrumDamageBatchApplying;
+        if (previousDefer !== undefined)
+          s.flags.waspDeferDefeats = previousDefer;
+        else delete s.flags.waspDeferDefeats;
+      }
+      const batchFlags = s.flags;
+      batchFlags.spectrumBatchDefeatSource = e.source;
+      try {
+        check(s);
+      } finally {
+        delete batchFlags.spectrumBatchDefeatSource;
+      }
+      // Native run/check now handles every ally/identity defeat after all
+      // damage is placed, retaining the surrounding activation continuation.
+      break;
+    }
     case "threat":
       {
         const options = e.bwThreatDone ? [] : blackWidowThreatOptions(s, e);
@@ -9994,6 +10730,8 @@ function resolve(s: GameState, e: Effect) {
         e.commit,
         !!e.starLordCostHandled,
         !!e.starLordApplyDiscount,
+        !!e.handOnly,
+        !!e.abilityCost,
       );
       break;
     case "attachPlayer": {
@@ -10162,6 +10900,7 @@ function resolve(s: GameState, e: Effect) {
         s.player.inPlay.push(p);
         /* put into play responses do not include Black Cat's after-you-play effect */ add(
           s,
+          ...mtsPlayerPack.mtsPlayerPackCardEntered(s, p),
           E("allyLimit"),
           ...(rulesCode(p) !== "01002" ? [E("allyEnter", { id: p.id })] : []),
         );
@@ -10172,6 +10911,31 @@ function resolve(s: GameState, e: Effect) {
       const p = find(s, e.id);
       if (!p) break;
       const attack = e.kind === "attack";
+      if (attack && !e.mtsMarvelBoyHandled && !p.stunned) {
+        const packet = { ...e, amount: e.amount ?? allyStat(s, p, "attack") };
+        const options = mtsPlayerPack.mtsPlayerPackAllyBasicOptions(
+          s,
+          p,
+          packet,
+          [],
+          mtsPlayerPackPorts,
+        );
+        if (options.length) {
+          p.exhausted = true;
+          choose(
+            s,
+            "Marvel Boy",
+            "Spend a physical resource before this ally attacks?",
+            [
+              ...options,
+              option("continue", "Continue", [
+                { ...packet, mtsMarvelBoyHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
+      }
       need(
         !attack ||
           p.stunned ||
@@ -10309,7 +11073,11 @@ function resolve(s: GameState, e: Effect) {
       const amount =
         (e.amount ?? allyStat(s, p, attack ? "attack" : "thwart") - bonus) +
         bonus;
-      if (attack) attackAction(s, e.target, amount, p.id, !!e.overkill);
+      if (attack)
+        attackAction(s, e.target, amount, p.id, !!e.overkill, false, {
+          piercing: e.piercing,
+          ranged: e.ranged,
+        });
       else thwartAction(s, e.target, amount, p.id);
       if (stunned) break;
       const responses = s.queue.splice(0, s.queue.length - queuedBefore);
@@ -10367,6 +11135,7 @@ function resolve(s: GameState, e: Effect) {
           ...venomPack.venomPackAfterAllyThwart(s, p),
         );
       add(s, ...draxPack.draxPackAfterAllyBasic(s, p));
+      add(s, ...mtsPlayerPack.mtsPlayerPackAfterAllyBasic(s, p));
       add(s, ...hulkPackAllyResponse(s, p, !!e.attack));
       add(
         s,
@@ -10642,12 +11411,21 @@ function resolve(s: GameState, e: Effect) {
       add(
         s,
         ...antMan.antManEnemyActivated(s, a.attacker),
+        ...(a.completionRecorded && a.attackerSnapshot
+          ? spectrum.spectrumEnemyActivated(
+              s,
+              a.attackerSnapshot,
+              a.targetPlayerId || s.activePlayerId,
+              spectrumPorts,
+            )
+          : []),
         ...(a.afterActivation || []),
         ...a.boostEffects,
         ...(a.boostIds || []).map((id) => E("finishResolution", { id })),
         E("scarletEnemyActivated", {
           id: a.attacker,
           actorId: a.originalPlayerId || s.activePlayerId,
+          againstPlayer: false,
         }),
         ...(a.activationAfter
           ? [
@@ -10753,6 +11531,14 @@ function resolve(s: GameState, e: Effect) {
               venomPorts,
             )
           : [];
+        const pip = againstPlayer
+          ? warlock.warlockAttackInitiatedOptions(
+              view,
+              e.playerId,
+              [packet],
+              warlockPorts,
+            )
+          : [];
         options.push(
           ...scoped(seat.id, [
             ...nova,
@@ -10760,6 +11546,7 @@ function resolve(s: GameState, e: Effect) {
             ...firstHit,
             ...subdue,
             ...identity,
+            ...pip,
           ]),
         );
       }
@@ -10804,8 +11591,25 @@ function resolve(s: GameState, e: Effect) {
           const p = find(s, e.id);
           if (p) p.exhausted = true;
         }
+        if (e.id === "hero") add(s, E("spectrumDefenseWindow", { used: [] }));
       }
       break;
+    case "spectrumDefenseWindow": {
+      const options = spectrum.spectrumDefenseOptions(
+        s,
+        e.used || [],
+        [],
+        spectrumPorts,
+      );
+      if (options.length)
+        choose(
+          s,
+          "Spectrum defense interrupts",
+          "Play Pulsar Shield when Spectrum defends?",
+          [...options, option("continue", "Continue", [])],
+        );
+      break;
+    }
     case "boostAttack": {
       const a = s.attack;
       if (!a) break;
@@ -11014,6 +11818,10 @@ function resolve(s: GameState, e: Effect) {
         break;
       }
       calculateAttack(s);
+      if (a.preventAllDamage) {
+        add(s, E("finishAttack"));
+        break;
+      }
       if (attackTargetsEnemy(s, a)) {
         add(s, E("finishAttack"));
         break;
@@ -11098,6 +11906,13 @@ function resolve(s: GameState, e: Effect) {
             amount,
             [E("damageWindow")],
             draxPackPorts,
+          ),
+          ...mtsPlayerPack.mtsPlayerPackDamageOptions(
+            s,
+            packet,
+            a.preventAllDamage ? 0 : amount,
+            [E("damageWindow")],
+            mtsPlayerPackPorts,
           ),
           ...starLord.starLordDamageOptions(
             s,
@@ -11247,6 +12062,18 @@ function resolve(s: GameState, e: Effect) {
               excess,
               [E("damageWindow")],
               draxPackPorts,
+            ),
+            ...mtsPlayerPack.mtsPlayerPackDamageOptions(
+              s,
+              {
+                type: "damage",
+                kind: "overkill",
+                target: "hero",
+                attack: true,
+              },
+              a.preventAllDamage ? 0 : excess,
+              [E("damageWindow")],
+              mtsPlayerPackPorts,
             ),
             ...starLord.starLordDamageOptions(
               s,
@@ -11414,8 +12241,10 @@ function resolve(s: GameState, e: Effect) {
     case "preventAttack":
       if (s.attack) {
         s.attack.prevented += e.amount;
-        if (!s.attack.defender || s.attack.defender === "none")
+        if (!s.attack.defender || s.attack.defender === "none") {
           s.attack.defender = "hero";
+          add(s, E("quicksilverLateDefense"));
+        }
       }
       break;
     case "finishAttack":
@@ -11616,6 +12445,8 @@ function resolve(s: GameState, e: Effect) {
       reveal(s, e.piece, e.skip, false, !!e.fromEncounterDeck, e.knifeSurge);
       break;
     case "discardEncounter":
+      if (e.piece.code === "21029")
+        s.attachments = s.attachments.filter((p) => p.id !== e.piece.id);
       beginResolution(s, e.piece);
       finishResolution(s, e.piece.id);
       break;
@@ -11691,12 +12522,16 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "chooseDiscard": {
-      const eligible = s.player.inPlay.filter((p) =>
-        e.filter === "panther"
-          ? card(p).traits?.includes("Black Panther.")
-          : e.filter === "upgrade"
-            ? card(p).type_code === "upgrade"
-            : ["support", "upgrade"].includes(card(p).type_code),
+      const eligible = s.player.inPlay.filter(
+        (p) =>
+          !Object.values(spectrum.SPECTRUM_FORM_CODES).some(
+            (code) => code === p.code,
+          ) &&
+          (e.filter === "panther"
+            ? card(p).traits?.includes("Black Panther.")
+            : e.filter === "upgrade"
+              ? card(p).type_code === "upgrade"
+              : ["support", "upgrade"].includes(card(p).type_code)),
       );
       choose(
         s,
@@ -11867,12 +12702,15 @@ function resolve(s: GameState, e: Effect) {
         }
       }
       gamora.gamoraPhaseEnded(s);
+      spectrum.spectrumPhaseEnded(s);
       venomPack.venomPackPhaseEnded(s);
       venom.venomPhaseEnded(s);
+      warlock.warlockPhaseEnded(s);
       scarletWitch.scarletWitchPhaseEnded(s);
       rocket.rocketPhaseEnded(s);
       for (const seat of s.players) {
         antPack.antManPackPhaseEnded(seatView(s, seat));
+        mtsPlayerPack.mtsPlayerPackPhaseEnded(seatView(s, seat));
         waspPack.waspPackPhaseEnded(seatView(s, seat));
         quicksilver.quicksilverPhaseEnded(seatView(s, seat));
         quicksilverPack.quicksilverPackPhaseEnded(seatView(s, seat));
@@ -12019,12 +12857,17 @@ function resolve(s: GameState, e: Effect) {
       gamora.gamoraPhaseEnded(s);
       venomPack.venomPackPhaseEnded(s);
       venom.venomPhaseEnded(s);
+      warlock.warlockPhaseEnded(s);
       scarletWitch.scarletWitchPhaseEnded(s);
       rocket.rocketPhaseEnded(s);
       rocket.rocketRoundEnded(s);
+      spectrum.spectrumPhaseEnded(s);
       starLord.starLordRoundEnded(s);
+      warlock.warlockRoundEnded(s);
       for (const seat of s.players) {
         waspPack.waspPackPhaseEnded(seatView(s, seat));
+        mtsPlayerPack.mtsPlayerPackPhaseEnded(seatView(s, seat));
+        mtsPlayerPack.mtsPlayerPackRoundEnded(seatView(s, seat));
         quicksilver.quicksilverPhaseEnded(seatView(s, seat));
         quicksilver.quicksilverRoundEnded(seatView(s, seat));
         quicksilverPack.quicksilverPackPhaseEnded(seatView(s, seat));
@@ -12046,6 +12889,15 @@ function resolve(s: GameState, e: Effect) {
             : {}),
           ...(s.heroId === "drax"
             ? { draxVengeanceCounters: drax.draxVengeanceCounters(s) }
+            : {}),
+          ...(s.flags.spectrumSetupComplete
+            ? { spectrumSetupComplete: true }
+            : {}),
+          ...(s.flags.spectrumEnergyFormId
+            ? { spectrumEnergyFormId: s.flags.spectrumEnergyFormId }
+            : {}),
+          ...(typeof s.flags.warlockDeckEmptyObserved === "boolean"
+            ? { warlockDeckEmptyObserved: s.flags.warlockDeckEmptyObserved }
             : {}),
           ...(s.flags.qsvCannotReadyUntilTurnEnd
             ? { qsvCannotReadyUntilTurnEnd: s.flags.qsvCannotReadyUntilTurnEnd }
@@ -12209,6 +13061,7 @@ function run(s: GameState) {
     const global =
       [
         "newRound",
+        "spectrumBatchCommit",
         "dealEncounters",
         "beginVillain",
         "villainStepOne",
@@ -12469,6 +13322,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...scarletWitch.scarletWitchAttachmentActions(s, p, scarletPorts),
               ...rocket.rocketAttachmentActions(s, p, rocketPorts),
               ...gamora.gamoraAttachmentActions(s, p, gamoraPorts),
+              ...spectrum.spectrumAttachmentOptions(s, p.id, spectrumPorts),
               ...quicksilver.quicksilverAttachmentActions(
                 s,
                 p,
@@ -12548,6 +13402,10 @@ export function dispatch(state: GameState, command: Command): GameState {
             );
           }
           add(s, ...hulkTurnEnds(s));
+          add(
+            s,
+            ...spectrum.spectrumTurnEnded(s, s.turnPlayerId, spectrumPorts),
+          );
         }
       }
     }
@@ -12699,7 +13557,12 @@ export function summarize(s: GameState) {
           options: s.prompt.options.map((o) => ({ id: o.id, label: o.label })),
           sources:
             s.prompt.kind === "payment"
-              ? paymentSources(s, s.prompt.card?.id, s.prompt.paymentTarget)
+              ? paymentSources(
+                  s,
+                  s.prompt.card?.id,
+                  s.prompt.paymentTarget,
+                  s.prompt.handOnly,
+                )
               : undefined,
         }
       : null,

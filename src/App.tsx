@@ -8,7 +8,18 @@ import {
 } from "./game/ms-marvel";
 import { thorAbilityOptions } from "./game/thor";
 import { hawkeyeStoredPlayable } from "./game/hawkeye";
-import { heroDeckAspects } from "./game/hero-runtime";
+import {
+  heroDeckAspects,
+  heroDeckRule,
+  heroSetupCards,
+} from "./game/hero-runtime";
+import { deckSizeFor } from "./game/decks";
+import { resourcesFor } from "./game/payment";
+import {
+  SPECTRUM_FORM_CODES,
+  spectrumEnergyForm,
+  spectrumFormFaceup,
+} from "./game/spectrum";
 import { riskyBlankPower } from "./game/risky-business";
 import { mutagenAttachmentActions } from "./game/mutagen-formula";
 import {
@@ -409,6 +420,38 @@ function CardImage({
     </div>
   );
 }
+function spectrumEnergyFormInfo(s: GameState, p: Piece) {
+  if (!(Object.values(SPECTRUM_FORM_CODES) as string[]).includes(p.code))
+    return null;
+  const owner =
+    s.players.find((seat) => seat.id === p.ownerId) ||
+    s.players.find(
+      (seat) =>
+        seat.heroId === "spectrum" &&
+        seatView(s, seat).player.inPlay.some((piece) => piece.id === p.id),
+    );
+  if (!owner) return { faceup: false, current: "None" };
+  const view = seatView(s, owner),
+    form = spectrumEnergyForm(view);
+  return {
+    faceup: spectrumFormFaceup(view, p),
+    current: form ? card(SPECTRUM_FORM_CODES[form]).name : "None",
+  };
+}
+/** The physical owner's saved form determines the face in every table view. */
+export function PlayerCardImage({
+  game,
+  piece,
+}: {
+  game: GameState;
+  piece: Piece;
+}) {
+  return spectrumEnergyFormInfo(game, piece)?.faceup === false ? (
+    <CardBack kind="hero" />
+  ) : (
+    <CardImage code={piece.code} />
+  );
+}
 function Brand({ onClick }: { onClick: () => void }) {
   return (
     <button
@@ -654,8 +697,17 @@ export default function App() {
   const [setupSeat, setSetupSeat] = useState(0);
   const hero = HEROES.find((h) => h.id === team[setupSeat].heroId)!;
   const aspect = team[setupSeat].aspect;
+  const allFourAspects =
+    heroDeckRule(hero.id)?.aspects === "four-equal-singleton";
+  const setupDeckCards =
+    team[setupSeat].deckCards || deckCodes(hero.id, aspect);
+  const setupDeckSize = deckSizeFor(setupDeckCards);
+  const setupCardCount = Object.values(heroSetupCards(hero.id)).reduce(
+    (total, count) => total + count,
+    0,
+  );
   const chosenAspects =
-    team[setupSeat].deckAspects ||
+    (allFourAspects ? undefined : team[setupSeat].deckAspects) ||
     heroDeckAspects(
       hero.id,
       team[setupSeat].deckCards || deckCodes(hero.id, aspect),
@@ -729,6 +781,8 @@ export default function App() {
   );
   const [module, setModule] = useState("bomb_scare");
   const [inspect, setInspect] = useState<Inspect | null>(null);
+  const inspectedEnergyForm =
+    game && inspect?.piece ? spectrumEnergyFormInfo(game, inspect.piece) : null;
   const [help, setHelp] = useState(false);
   const [deckView, setDeckView] = useState(false);
   const [contentView, setContentView] = useState(false);
@@ -1146,7 +1200,7 @@ export default function App() {
       await account.request("deck.save", {
         name:
           team[setupSeat].deckName ||
-          `${hero.name} / ${ASPECTS.find((a) => a.id === aspect)!.name}`,
+          `${hero.name} / ${allFourAspects ? "All four aspects" : ASPECTS.find((a) => a.id === aspect)!.name}`,
         heroId: hero.id,
         aspect,
         aspects: chosenAspects,
@@ -1442,7 +1496,13 @@ export default function App() {
                     <span>
                       <b>{h.name}</b>
                       <small>
-                        {ASPECTS.find((a) => a.id === p.aspect)?.name} · 40
+                        {p.heroId === "warlock"
+                          ? "All four aspects"
+                          : ASPECTS.find((a) => a.id === p.aspect)?.name}{" "}
+                        ·{" "}
+                        {deckSizeFor(
+                          p.deckCards || deckCodes(p.heroId, p.aspect),
+                        )}{" "}
                         cards
                       </small>
                     </span>
@@ -1586,8 +1646,7 @@ export default function App() {
                   className="text-button"
                   onClick={() => setDeckView(true)}
                 >
-                  View {team[setupSeat].deckCards?.length || 40}-card deck{" "}
-                  <ArrowUpRight size={15} />
+                  View {setupDeckSize}-card deck <ArrowUpRight size={15} />
                 </button>
               </div>
               <div className="aspect-grid">
@@ -1604,16 +1663,21 @@ export default function App() {
                     <button
                       style={aspectStyle(a.color)}
                       key={a.id}
-                      className={`aspect-option ${aspect === a.id ? "selected" : ""}`}
+                      className={`aspect-option ${allFourAspects || aspect === a.id ? "selected" : ""}`}
                       onClick={() => setAspect(a.id)}
-                      aria-pressed={aspect === a.id}
+                      aria-pressed={allFourAspects || aspect === a.id}
+                      disabled={allFourAspects}
                     >
                       <I
                         size={21}
-                        weight={aspect === a.id ? "fill" : "regular"}
+                        weight={
+                          allFourAspects || aspect === a.id ? "fill" : "regular"
+                        }
                       />
                       <span>{a.name}</span>
-                      {aspect === a.id && <Check size={13} />}
+                      {(allFourAspects || aspect === a.id) && (
+                        <Check size={13} />
+                      )}
                     </button>
                   );
                 })}
@@ -1643,7 +1707,11 @@ export default function App() {
                 </label>
               )}
               <p className="aspect-description">
-                {ASPECTS.find((a) => a.id === aspect)!.description}{" "}
+                {allFourAspects
+                  ? "Adam Warlock uses all four aspects with equal card totals and only one copy of each non-signature card."
+                  : ASPECTS.find((a) => a.id === aspect)!.description}{" "}
+                {setupCardCount > 0 &&
+                  `${setupCardCount} Permanent energy forms start in play outside the ${setupDeckSize}-card deck. `}
                 <span>
                   {team[setupSeat].deckName
                     ? `${team[setupSeat].deckName} is ready to play.`
@@ -1824,8 +1892,14 @@ export default function App() {
                     <span>
                       <b>{HEROES.find((h) => h.id === p.heroId)!.name}</b>
                       <small>
-                        {ASPECTS.find((a) => a.id === p.aspect)?.name} ·{" "}
-                        {p.deckCards?.length || 40}-card deck
+                        {p.heroId === "warlock"
+                          ? "All four aspects"
+                          : ASPECTS.find((a) => a.id === p.aspect)?.name}{" "}
+                        ·{" "}
+                        {deckSizeFor(
+                          p.deckCards || deckCodes(p.heroId, p.aspect),
+                        )}
+                        -card deck
                       </small>
                     </span>
                     <CheckCircle size={19} weight="fill" />
@@ -2156,6 +2230,14 @@ export default function App() {
                 {card(inspect.code).faction_code || "card"} ·{" "}
                 {(card(inspect.code).type_code || "card").replace("_", " ")}
               </span>
+              {inspectedEnergyForm && (
+                <p className="modal-intro" role="status">
+                  {inspectedEnergyForm.faceup ? "Faceup" : "Facedown"} energy
+                  form. Current energy form: {inspectedEnergyForm.current}.
+                  {!inspectedEnergyForm.faceup &&
+                    " Its text is inactive while facedown."}
+                </p>
+              )}
               <p className="rules-text">
                 {plain(card(inspect.code).text) ||
                   (card(inspect.code).type_code === "resource"
@@ -2232,10 +2314,16 @@ export default function App() {
           onClose={() => setDeckView(false)}
         >
           <p className="modal-intro">
-            {team[setupSeat].deckCards?.length || 40} cards ·{" "}
+            {setupDeckSize} cards ·{" "}
             {team[setupSeat].deckName || "App starter deck"}. Includes the
             complete required hero set.
           </p>
+          {setupCardCount > 0 && (
+            <p className="modal-intro">
+              {setupCardCount} Permanent energy forms start in play and stay
+              outside the deck count.
+            </p>
+          )}
           <DeckProvenance
             codes={team[setupSeat].deckCards || deckCodes(hero.id, aspect)}
             custom={!!team[setupSeat].deckCards}
@@ -2527,7 +2615,7 @@ function PaymentDecision({
   const [selected, setSelected] = useState<string[]>([]);
   const [wild, setWild] = useState<Resource>(p.wildAs || "energy");
   const [preview, setPreview] = useState<string | null>(null);
-  const sources = paymentSources(s, p.card?.id, p.paymentTarget);
+  const sources = paymentSources(s, p.card?.id, p.paymentTarget, p.handOnly);
   const status = paymentStatus(sources, selected, p.cost || 0, p.requirements);
   const subject = paymentSubject(s, p);
   // Spend the least valuable resources first: Scientist and printed resource
@@ -4733,10 +4821,19 @@ function Tabletop({
                             <button
                               className="in-play-image"
                               onClick={() =>
-                                inspect({ code: p.code, piece: p })
+                                inspect({
+                                  code: p.code,
+                                  piece: p,
+                                  playerId: s.activePlayerId,
+                                })
+                              }
+                              aria-label={
+                                spectrumEnergyFormInfo(s, p)?.faceup === false
+                                  ? `${card(p).name} · facedown energy form`
+                                  : `Inspect ${card(p).name}`
                               }
                             >
-                              <CardImage code={p.code} />
+                              <PlayerCardImage game={s} piece={p} />
 
                               {card(p).type_code === "ally" && (
                                 <span className="mini-token">
@@ -5021,9 +5118,14 @@ function Tabletop({
                                       playerId: seat.id,
                                     })
                                   }
-                                  aria-label={`Inspect ${teammate.name}’s ${card(p).name}`}
+                                  aria-label={
+                                    spectrumEnergyFormInfo(game, p)?.faceup ===
+                                    false
+                                      ? `${teammate.name}’s ${card(p).name} · facedown energy form`
+                                      : `Inspect ${teammate.name}’s ${card(p).name}`
+                                  }
                                 >
-                                  <CardImage code={p.code} />
+                                  <PlayerCardImage game={game} piece={p} />
                                 </button>
                                 <AttachedCards
                                   game={game}
@@ -5190,7 +5292,7 @@ function Tabletop({
                           <CardImage code={p.code} />
                           <span className="hand-card-name">{card(p).name}</span>
                           <span className="hand-card-footer">
-                            <ResourceIcons items={resources(card(p))} />
+                            <ResourceIcons items={resourcesFor(s, p)} />
                             {!disabled ? (
                               <span className="hand-card-cost">
                                 COST {card(p).cost ?? 0}

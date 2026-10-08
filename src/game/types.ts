@@ -117,6 +117,10 @@ export interface Prompt {
   /** A canceled optional payment resumes the already initiated activation. */
   cancellationQueue?: Effect[];
   paymentTarget?: string;
+  /** Printed costs such as Blade must spend cards from hand. */
+  handOnly?: boolean;
+  /** The physical payment subject is using an ability, not being played. */
+  abilityCost?: boolean;
   wildAs?: Resource;
   selectAction?: Effect;
 }

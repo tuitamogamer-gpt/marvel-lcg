@@ -417,9 +417,20 @@ describe("Star-Lord printed rules and physical continuations", () => {
         f.starlordFirstTreacheryRound =
           s.round;
       f.starlordDiscountCardId = "old-play";
+      f.warlockDeckEmptyObserved = seat.id === s.activePlayerId;
     }
     starLordRoundEnded(s);
-    for (const seat of s.players) expect(seatView(s, seat).flags).toEqual({});
+    for (const seat of s.players) {
+      const f = seatView(s, seat).flags;
+      for (const key of [
+        "starlordCostRound",
+        "starlordSmoothRound",
+        "starlordFirstTreacheryRound",
+        "starlordDiscountCardId",
+      ])
+        expect(f[key]).toBeUndefined();
+      expect(f.warlockDeckEmptyObserved).toBe(seat.id === s.activePlayerId);
+    }
   });
   it("Daring Escape pays a real encounter cost before its ready and draw continuation", () => {
     let { s, ports, piece } = fixture();

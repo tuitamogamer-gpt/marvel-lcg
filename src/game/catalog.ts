@@ -87,6 +87,12 @@ const appStarters: CatalogDeck[] = HEROES.map((hero) => ({
     {},
   ),
   sourceType: "app-starter",
+  ...(hero.id === "spectrum"
+    ? { setupCards: { "21002": 1, "21003": 1, "21004": 1 }, deckSize: 40 }
+    : {}),
+  ...(hero.id === "warlock"
+    ? { aspects: ["aggression", "justice", "leadership", "protection"] }
+    : {}),
 }));
 export const STARTER_DECKS: CatalogDeck[] = [
   // JSON inference gives each deck optional keys belonging to other decks;

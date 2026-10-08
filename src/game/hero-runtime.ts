@@ -207,6 +207,8 @@ export function heroDeckAspects(
   primary?: string,
 ): HeroAspect[] {
   const hero = heroRuntime(idOrCode);
+  if (hero?.deckRule.aspects === "four-equal-singleton")
+    return [...fourAspects];
   if (!hero || hero.deckRule.aspects !== "two-equal")
     return primary && HERO_ASPECTS.includes(primary as HeroAspect)
       ? [primary as HeroAspect]

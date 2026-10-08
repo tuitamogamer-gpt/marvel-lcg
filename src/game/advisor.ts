@@ -410,7 +410,7 @@ export function advisePrompt(s: GameState): Advice | null {
   const p = s.prompt;
   if (!p) return null;
   if (p.kind === "payment") {
-    const sources = paymentSources(s, p.card?.id, p.paymentTarget);
+    const sources = paymentSources(s, p.card?.id, p.paymentTarget, p.handOnly);
     const ids = suggestPayment(
       sources,
       p.cost || 0,

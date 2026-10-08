@@ -8,6 +8,9 @@ import { starLordPackResourceSources } from "./star-lord-pack.js";
 import { draxPackResourceSources } from "./drax-pack.js";
 import { venomPackResourceSources } from "./venom-pack.js";
 import { venomResourceSources } from "./venom.js";
+import { spectrumResourceSources } from "./spectrum.js";
+import { warlockResourceSources } from "./warlock.js";
+import { mtsPlayerPackCardResources } from "./mts-player-pack.js";
 import { isTextBlank } from "./card-text.js";
 import { hawkeyeResourceSources } from "./hawkeye.js";
 import { spiderWomanResourceSources } from "./spider-woman.js";
@@ -23,7 +26,7 @@ import { hulkPackResourceSources } from "./hulk-pack.js";
 import { captainPackResourceSources } from "./captain-pack.js";
 import { cardScript } from "./script-registry.js";
 import { resourceAbility } from "./scripts/runtime.js";
-import type { GameState, Prompt, Resource } from "./types.js";
+import type { Card, GameState, Piece, Prompt, Resource } from "./types.js";
 
 export function paymentSubject(s: GameState, prompt: Prompt) {
   return (
@@ -51,10 +54,20 @@ export function venomPaymentDamageCostAvailable(s: GameState, amount: number) {
   return amount > 0 && !s.player.tough && s.player.hp >= amount;
 }
 
+/** Actual resources generated when spending this physical hand card. */
+export function resourcesFor(
+  s: GameState,
+  p: Piece,
+  target?: Card,
+): Resource[] {
+  return mtsPlayerPackCardResources(s, p) ?? resources(card(p), target);
+}
+
 export function paymentSources(
   s: GameState,
   exclude?: string,
   targetCode?: string,
+  handOnly = false,
 ) {
   const target = targetCode ? card(targetCode) : undefined;
   const sources: PaymentSource[] = s.player.hand
@@ -63,7 +76,7 @@ export function paymentSources(
       id: p.id,
       name: card(p).name,
       code: p.code,
-      resources: resources(card(p), target),
+      resources: resourcesFor(s, p, target),
       description: "Discard from hand",
       kind: "card",
     }));
@@ -123,6 +136,8 @@ export function paymentSources(
       canTakeDamageCost: venomPaymentDamageCostAvailable,
     }),
   );
+  sources.push(...spectrumResourceSources(s, { isTextBlank }));
+  sources.push(...warlockResourceSources(s, { isTextBlank }));
   sources.push(...hawkeyeResourceSources(s, targetCode));
   sources.push(...spiderWomanResourceSources(s, targetCode));
   sources.push(...blackWidowResourceSources(s, targetCode));
@@ -147,7 +162,10 @@ export function paymentSources(
       });
   }
   return sources.filter(
-    (x) => x.resources.length && (x.kind === "card" || !isTextBlank(s, x.code)),
+    (x) =>
+      x.resources.length &&
+      (!handOnly || x.kind === "card") &&
+      (x.kind === "card" || !isTextBlank(s, x.code)),
   );
 }
 

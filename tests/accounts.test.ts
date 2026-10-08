@@ -8,6 +8,7 @@ import { deckCodes, HEROES, ASPECTS } from "../src/game/cards";
 import {
   countsFor,
   deckErrors,
+  deckSizeFor,
   deckOptions,
   copyLimit,
 } from "../src/game/decks";
@@ -542,7 +543,7 @@ describe("playable saved decks", () => {
     ),
   )("accepts the $heroId $aspect starter list", ({ heroId, aspect }) => {
     const codes = deckCodes(heroId, aspect);
-    expect(codes).toHaveLength(40);
+    expect(deckSizeFor(codes)).toBe(40);
     expect(deckErrors(heroId, aspect, codes)).toEqual([]);
   });
   it("rejects an off-aspect card in a starter list", () => {

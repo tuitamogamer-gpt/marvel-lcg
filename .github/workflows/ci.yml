@@ -43,6 +43,8 @@ jobs:
             scripts: test:star-lord-gamora
           - group: drax-venom
             scripts: test:drax-venom
+          - group: mts-heroes
+            scripts: test:mts-heroes
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

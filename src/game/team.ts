@@ -1,5 +1,6 @@
 import type { GameState, PlayerSeat, Piece } from "./types.js";
 import { venomInitializeNemesis } from "./venom.js";
+import { warlockInitializeNemesis } from "./warlock.js";
 
 // The active view keeps the original solo API. Seats own every persistent zone.
 // Rebind after JSON hydration, which does not preserve shared object references.
@@ -120,6 +121,21 @@ export function upgradeSave(s: GameState): GameState {
         confused: false,
       }),
     });
+    warlockInitializeNemesis(seatView(s, seat), {
+      makePiece: (_view, code) => ({
+        id: `c${s.nextId++}`,
+        code,
+        exhausted: false,
+        damage: 0,
+        counters: 0,
+        tough: false,
+        stunned: false,
+        confused: false,
+      }),
+    });
+    const view = seatView(s, seat);
+    if (view.flags.warlockDeckEmptyObserved === undefined)
+      view.flags.warlockDeckEmptyObserved = !view.player.deck.length;
   }
   return s;
 }

@@ -163,10 +163,37 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(1020);
-    expect(coverage.unsupportedFaces).toBe(3531);
-    expect(coverage.dedicatedFaces).toBe(544);
-    expect(coverage.registeredHeroIds).toHaveLength(23);
+    const mts = coverage.products.find(
+      (pack: { code: string }) => pack.code === "mts",
+    );
+    expect(mts).toMatchObject({
+      faceCount: 213,
+      executableFaces: 73,
+      installedCardClosure: false,
+    });
+    expect(mts.unsupportedFaceCodes).toHaveLength(140);
+    expect(mts.unsupportedFaceCodes).toContain("21071");
+    const mtsHeroFaces = cards.filter(
+      (entry: { pack_code: string; position: number }) =>
+        entry.pack_code === "mts" && entry.position <= 70,
+    );
+    expect(mtsHeroFaces).toHaveLength(72);
+    for (const entry of mtsHeroFaces)
+      expect(mts.unsupportedFaceCodes, entry.code).not.toContain(entry.code);
+    for (const id of ["spectrum", "warlock"])
+      expect(
+        inventory.heroes.find(
+          (hero: { id: string }) => hero.id === `mts:${id}`,
+        ),
+      ).toMatchObject({
+        registeredHeroIds: [id],
+        installedCardClosure: true,
+        installedUnsupportedDependencies: [],
+      });
+    expect(coverage.executableFaces).toBe(1080);
+    expect(coverage.unsupportedFaces).toBe(3471);
+    expect(coverage.dedicatedFaces).toBe(604);
+    expect(coverage.registeredHeroIds).toHaveLength(25);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
         coverage.registeredHeroes.some(
@@ -245,7 +272,8 @@ describe("complete expansion rules inventory", () => {
     ).toBe(true);
   });
 
-  it("pins all source hashes so the checked inventory cannot silently drift", () => {
+  it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(65);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
@@ -299,6 +327,9 @@ describe("complete expansion rules inventory", () => {
       "src/game/drax-pack.ts",
       "src/game/venom.ts",
       "src/game/venom-pack.ts",
+      "src/game/spectrum.ts",
+      "src/game/warlock.ts",
+      "src/game/mts-player-pack.ts",
       "src/game/printed-card-metadata.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",

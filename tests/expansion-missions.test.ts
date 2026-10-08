@@ -29,7 +29,9 @@ import {
 } from "../src/game/captain-america";
 import { hulkAbilityOptions } from "../src/game/hulk";
 import { uniqueConflict } from "../src/game/unique";
-import { heroStarterAspects } from "../src/game/hero-runtime";
+import { heroStarterAspects, isPermanent } from "../src/game/hero-runtime";
+import { deckSizeFor } from "../src/game/decks";
+import { seatView } from "../src/game/team";
 import type { Aspect, Command, GameState, Piece } from "../src/game/types";
 
 const ended = (s: GameState) => ["won", "lost"].includes(s.phase);
@@ -52,6 +54,8 @@ const heroIds = [
   "gam",
   "drax",
   "vnm",
+  "spectrum",
+  "warlock",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -70,31 +74,53 @@ const missions = heroIds.flatMap((heroId, hi) =>
 /** Only physical-zone auditing inspects hidden card IDs. The player strategy
  * uses hand cards, visible board state, and the same public prompts as the UI. */
 function ownedPieces(s: GameState, originalIds: Set<string>): Piece[] {
-  const playerZones = s.players.flatMap((seat) => [
-    ...seat.player.hand,
-    ...seat.player.deck,
-    ...seat.player.discard,
-    ...seat.player.inPlay,
-    ...(seat.player.invocationDeck || []),
-    ...(seat.player.invocationDiscard || []),
-  ]);
-  const owners = new Set(s.players.map((seat) => seat.id));
-  return [
+  const playerZones = s.players.flatMap((seat) => {
+    const p = seatView(s, seat).player;
+    return [
+      ...p.hand,
+      ...p.deck,
+      ...p.discard,
+      ...p.inPlay,
+      ...(p.setAside || []),
+      ...(p.invocationDeck || []),
+      ...(p.invocationDiscard || []),
+    ];
+  });
+  const actual = [
     ...playerZones,
-    ...playerZones.flatMap((p) => p.storedCards || []),
-    ...[
-      ...s.resolving,
-      ...s.removed,
-      ...s.attachments,
-      ...s.minions.flatMap((p) => (p.droneCard ? [p.droneCard] : [])),
-      ...s.sideSchemes.flatMap((p) => [
-        ...(p.captured || []),
-        ...(p.storedCards || []),
-      ]),
-    ].filter(
-      (p) => originalIds.has(p.id) || (!!p.ownerId && owners.has(p.ownerId)),
-    ),
+    ...s.encounter.deck,
+    ...s.encounter.discard,
+    ...s.encounter.dealt,
+    ...(s.encounter.storedBoosts || []),
+    ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
+      .setAside || []),
+    ...(s.attack?.pendingBoosts || []),
+    ...(s.scheming?.pendingBoosts || []),
+    s.villain,
+    ...s.minions,
+    ...s.sideSchemes,
+    ...s.attachments,
+    ...(s.environments || []),
+    ...s.resolving,
+    ...s.removed,
   ];
+  const pieces: Piece[] = [];
+  const visit = (p: Piece) => {
+    // Do not deduplicate: the audit must detect the same physical ID in two
+    // actual zones. Prompt, queue and attacker snapshots are not physical zones.
+    pieces.push(p);
+    for (const child of [
+      ...(p.storedCards || []),
+      ...(p.captured || []),
+      ...(p.droneCard ? [p.droneCard] : []),
+    ])
+      visit(child);
+  };
+  actual.forEach(visit);
+  // Encounter cards such as Spectrum's Loss of Control can be in player zones;
+  // owned Cosmic Entities can be in encounter zones. Membership follows the
+  // original physical source IDs, never the current zone or owner alone.
+  return pieces.filter((p) => originalIds.has(p.id));
 }
 
 function runMission(config: (typeof missions)[number]) {
@@ -107,33 +133,42 @@ function runMission(config: (typeof missions)[number]) {
       deck.aspect === "multi" ? heroStarterAspects(hero.id)[0] : deck.aspect
     ) as Aspect;
   expect(deckErrors(hero.id, aspect, codes)).toEqual([]);
-  expect(codes).toHaveLength(40);
+  expect(deckSizeFor(codes)).toBe(40);
   let s = newGame({
     ...config,
     aspect,
     pacing: "expert",
     heroes: [{ heroId: hero.id, aspect, deckCards: codes }],
   });
-  const initial = [...s.player.hand, ...s.player.deck];
+  const initial = [
+    ...s.player.hand,
+    ...s.player.deck,
+    ...s.player.inPlay.filter((p) => isPermanent(card(p))),
+  ];
   expect(initial.map((p) => p.code).sort()).toEqual([...codes].sort());
   const supplementary = [
     ...(s.player.invocationDeck || []),
     ...(s.player.invocationDiscard || []),
   ];
-  const total = 40 + supplementary.length;
+  const total = codes.length + supplementary.length;
   const originalIds = new Set([...initial, ...supplementary].map((p) => p.id));
+  expect(originalIds.size, "Original physical source IDs are distinct").toBe(
+    total,
+  );
   const trace: string[] = [];
   let commands = 0;
   const audit = () => {
     const pieces = ownedPieces(s, originalIds);
     expect(
       pieces.length,
-      `Physical40-card invariant after ${trace.at(-1)}`,
+      `Physical source-composition invariant after ${trace.at(-1)}`,
     ).toBe(total);
     expect(
       new Set(pieces.map((p) => p.id)).size,
       "No duplicated physical player cards",
     ).toBe(total);
+    // ownedPieces admits only original IDs. Equal total and distinct counts
+    // therefore prove every original instance occurs exactly once.
   };
   const send = (command: Command) => {
     trace.push(
@@ -268,14 +303,14 @@ function runMission(config: (typeof missions)[number]) {
 }
 
 describe("published expansion starters across every supported mission setting", () => {
-  it("covers eighteen expansion heroes, all scenarios, both difficulties and every supported encounter module", () => {
+  it("covers twenty expansion heroes, all scenarios, both difficulties and every supported encounter module", () => {
     expect(missions).toHaveLength(
       heroIds.length * VILLAINS.length * 2 * MODULES.length,
     );
     expect(VILLAINS).toHaveLength(5);
     expect(MODULES).toHaveLength(9);
-    expect(heroIds).toHaveLength(18);
-    expect(missions).toHaveLength(1620);
+    expect(heroIds).toHaveLength(20);
+    expect(missions).toHaveLength(1800);
   });
   for (const mission of missions)
     it(

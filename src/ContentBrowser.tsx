@@ -15,7 +15,7 @@ import {
 } from "@phosphor-icons/react";
 import { ASPECTS, CATALOG_CARDS, card, imageFor, plain } from "./game/cards";
 import { deckErrors } from "./game/decks";
-import { heroStarterAspects } from "./game/hero-runtime";
+import { heroStarterAspects, heroSetupCards } from "./game/hero-runtime";
 import {
   CATALOG_HEROES,
   CATALOG_SUMMARY,
@@ -329,7 +329,8 @@ export function ContentBrowser({
   const deckSize = deck?.deckSize ?? codes.length - setupCount;
   const deckAspect =
     ASPECTS.find((aspect) => aspect.id === deck?.aspect)?.id ||
-    (["spider_woman", "gam"].includes(hero.id) && deck?.aspect === "multi"
+    (["spider_woman", "gam", "warlock"].includes(hero.id) &&
+    deck?.aspect === "multi"
       ? ASPECTS.find((aspect) => aspect.id === heroStarterAspects(hero.id)[0])
           ?.id
       : undefined);
@@ -338,16 +339,26 @@ export function ContentBrowser({
       ? deckErrors(hero.id, deckAspect, codes)
       : [];
   const appStarter = deck?.sourceType === "app-starter";
+  const nativeSetup = heroSetupCards(hero.id);
+  const setupReady =
+    !setupCount ||
+    (hero.id === "spectrum" &&
+      Object.entries(deck?.setupCards || {}).every(
+        ([code, count]) => nativeSetup[code] === count,
+      ) &&
+      Object.entries(nativeSetup).every(
+        ([code, count]) => deck?.setupCards?.[code] === count,
+      ));
   const canLaunchDeck = !!(
     hero.automated &&
     deck &&
     deckAspect &&
     !validationErrors.length &&
-    !setupCount &&
+    setupReady &&
     supplementaryReady
   );
   const fallbackReason =
-    setupCount || !supplementaryReady
+    !setupReady || !supplementaryReady
       ? "This list requires additional setup or special decks."
       : !deckAspect
         ? "This list requires deckbuilding rules that are not yet available for missions."

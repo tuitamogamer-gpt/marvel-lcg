@@ -33,6 +33,9 @@ import {
 } from "./doctor-strange.js";
 import { expansionErrata } from "./expansion-errata.js";
 import { printedCardMetadata } from "./printed-card-metadata.js";
+import { spectrumStats } from "./spectrum.js";
+import { warlockStats } from "./warlock.js";
+import { mtsPlayerPackHeroStats } from "./mts-player-pack.js";
 import { msMarvelStats } from "./ms-marvel.js";
 import { identityMatch, uniqueMatches } from "./unique.js";
 import { rulesCode } from "./rules-code.js";
@@ -436,6 +439,34 @@ export const HEROES = [
     style: "Weapon upgrades · Justice",
     complexity: 3,
   },
+  {
+    id: "spectrum",
+    code: "21001a",
+    alter: "21001b",
+    name: "Spectrum",
+    identity: "Monica Rambeau",
+    aspect: "leadership" as Aspect,
+    color: "#b9a976",
+    tag: "Energy in every form.",
+    description:
+      "Change between Gamma, Photon and Pulsar energy forms to strengthen each basic power and answer the threat in front of you.",
+    style: "Energy forms · Leadership",
+    complexity: 3,
+  },
+  {
+    id: "warlock",
+    code: "21031a",
+    alter: "21031b",
+    name: "Adam Warlock",
+    identity: "Adam Warlock",
+    aspect: "aggression" as Aspect,
+    color: "#cba558",
+    tag: "Master of all four aspects.",
+    description:
+      "Build an equal mix of four aspects, use Battle Mage to shape each turn, and recover cards through Quantum Magic.",
+    style: "Battle Mage · Four aspects",
+    complexity: 4,
+  },
 ];
 export const VILLAINS = [
   {
@@ -626,6 +657,8 @@ export function deckCodes(
       (hero === "gam" && aspect === "aggression") ||
       (hero === "drax" && aspect === "protection") ||
       (hero === "vnm" && aspect === "justice") ||
+      (hero === "spectrum" && aspect === "leadership") ||
+      hero === "warlock" ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
         pair.includes("aggression") &&
@@ -645,7 +678,7 @@ export function deckCodes(
               c.type_code,
             ))) &&
         !["hero", "alter_ego"].includes(c.type_code) &&
-        !c.permanent,
+        (!c.permanent || hero === "spectrum"),
     )
     .flatMap((c) => Array(c.quantity).fill(c.code)) as string[];
   if (hero === "spider_woman") {
@@ -761,6 +794,9 @@ export function heroStats(s: GameState) {
       starLordStats(s).attack +
       starLordPackModifiers(s, "hero").attack +
       draxStats(s).attack +
+      spectrumStats(s).attack +
+      warlockStats(s).attack +
+      mtsPlayerPackHeroStats(s).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
       spiderWomanStats(s).attack +
@@ -778,6 +814,9 @@ export function heroStats(s: GameState) {
       quicksilverStats(s).thwart +
       rocketStats(s).thwart +
       starLordStats(s).thwart +
+      spectrumStats(s).thwart +
+      warlockStats(s).thwart +
+      mtsPlayerPackHeroStats(s).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
       scriptedModifier(s, "thwart") +
@@ -793,6 +832,9 @@ export function heroStats(s: GameState) {
       spiderWomanStats(s).defense +
       antManPackStats(s).defense +
       quicksilverStats(s).defense +
+      spectrumStats(s).defense +
+      warlockStats(s).defense +
+      mtsPlayerPackHeroStats(s).defense +
       quicksilverPackHeroStatBonus(s, "defense") +
       scriptedModifier(s, "defense"),
     recover:
