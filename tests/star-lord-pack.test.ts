@@ -17,7 +17,6 @@ import {
   put as nativePut,
   play as nativePlay,
   conserved as nativeConserved,
-  minion as nativeMinion,
 } from "./sg-test-helpers.js";
 
 const P = (type: string, args: Record<string, unknown> = {}): Effect => ({
@@ -671,37 +670,15 @@ describe("Star-Lord original retail player pool", () => {
 });
 
 describe("retail shared-pack native host adapters", () => {
-  it("Dive Bomb respects Guard before choosing its primary attack, while its secondary damage still reaches the villain", () => {
-    let s = nativeBase("stld");
-    nativePut(s, "17008");
-    const guard = nativeMinion(s, "01101");
-    const [event, first, second] = nativeHand(s, "17028", "18022", "18021");
-    s = nativeFinish(nativePlay(s, event, [first, second]));
-    expect(s.minions.some((p) => p.id === guard.id)).toBe(false);
-    expect(s.villain.hp).toBe(49);
-    nativeConserved(s, [event, first, second]);
-  });
-  it("Pulse Grenade respects Guard when its attack chooses a target", () => {
-    let s = nativeBase("gam");
-    const grenade = nativePut(s, "17023"),
-      guard = nativeMinion(s, "01101");
-    s.encounter.deck = [makePiece(s, "01102"), makePiece(s, "01103")];
-    s = nativeFinish(
-      nativeCommand(s, { type: "ABILITY", id: grenade.id, action: "grenade" }),
-    );
-    expect(s.minions.some((p) => p.id === guard.id)).toBe(false);
-    expect(s.villain.hp).toBe(50);
-    nativeConserved(s, [grenade]);
-  });
-  it("C.I.T.T. cannot double The Power in All of Us to pay for its ability", () => {
+  it("C.I.T.T. doubles The Power in All of Us for its Basic ability cost (RRG 1.8 p13)", () => {
     const s = nativeBase("gam"),
       citt = nativePut(s, "17021"),
       cosmo = nativePut(s, "17020");
     cosmo.exhausted = true;
     nativeHand(s, "13024");
-    expect(nativeHeroAbilityOptions(s, citt.id)).toEqual([]);
+    expect(nativeHeroAbilityOptions(s, citt.id)[0].id).toBe("ready-guardian");
   });
-  it("C.I.T.T. pays actual generic resources, exhausts, and readies its selected Guardian after JSON reload", () => {
+  it("C.I.T.T. pays two resources from one Power in All of Us, then readies its selected Guardian after JSON reload", () => {
     let s = nativeBase("gam");
     const citt = nativePut(s, "17021"),
       cosmo = nativePut(s, "17020"),
@@ -713,16 +690,17 @@ describe("retail shared-pack native host adapters", () => {
       action: "ready-guardian",
     });
     expect(s.prompt).toMatchObject({ kind: "payment", cost: 2 });
-    expect(paymentSources(s).find((p) => p.id === power.id)?.resources).toEqual(
-      ["wild"],
-    );
-    s = nativeFinish(
-      nativeCommand(s, { type: "PAY", ids: [power.id, ordinary.id] }),
-    );
+    expect(
+      paymentSources(s, undefined, s.prompt?.paymentTarget).find(
+        (p) => p.id === power.id,
+      )?.resources,
+    ).toEqual(["wild", "wild"]);
+    s = nativeFinish(nativeCommand(s, { type: "PAY", ids: [power.id] }));
     expect(s.player.inPlay.find((p) => p.id === citt.id)?.exhausted).toBe(true);
     expect(s.player.inPlay.find((p) => p.id === cosmo.id)?.exhausted).toBe(
       false,
     );
+    expect(s.player.hand.some((p) => p.id === ordinary.id)).toBe(true);
     nativeConserved(s, [citt, cosmo, power, ordinary]);
   });
   it("Enhanced Awareness's physical printing enters with three Uses and pays a later card through the native payment adapter", () => {

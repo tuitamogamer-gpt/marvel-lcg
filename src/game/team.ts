@@ -1,4 +1,5 @@
 import type { GameState, PlayerSeat, Piece } from "./types.js";
+import { venomInitializeNemesis } from "./venom.js";
 
 // The active view keeps the original solo API. Seats own every persistent zone.
 // Rebind after JSON hydration, which does not preserve shared object references.
@@ -104,5 +105,21 @@ export function upgradeSave(s: GameState): GameState {
     for (const p of s.encounter.dealt) p.dealtTo = "p1";
   }
   syncSeat(s);
+  for (const seat of s.players) {
+    // The view shares zones but copies primitive counters. Allocate IDs from
+    // the root state so a different seat's migration cannot reuse future IDs.
+    venomInitializeNemesis(seatView(s, seat), {
+      makePiece: (_view, code) => ({
+        id: `c${s.nextId++}`,
+        code,
+        exhausted: false,
+        damage: 0,
+        counters: 0,
+        tough: false,
+        stunned: false,
+        confused: false,
+      }),
+    });
+  }
   return s;
 }

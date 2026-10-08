@@ -510,6 +510,58 @@ describe("native Wasp adapter", () => {
       { target: "main", amount: 3 },
     ]);
   });
+  it.each([
+    ["attack", -1, "draxPackLeadingBlows", 5],
+    ["thwart", 2, "venomPackEntrances", 8],
+  ] as const)(
+    "preserves %s pack receipts and bonuses through stacked Rapid Growth payments and JSON reload",
+    (power, bonus, receipt, amount) => {
+      const { s, ports, enqueue, choose, pay } = fixture();
+      const first = piece("13005"),
+        second = piece("13005");
+      const metadata = {
+        basic: true,
+        gmwBasicBonus: bonus,
+        [receipt]: ["physical-pack-event"],
+      };
+      s.player.hand.push(first, second);
+      enqueue(
+        ...waspBasicPower(s, power, bonus, {
+          overkill: power === "attack",
+          metadata,
+        })!,
+      );
+      choose(first.id);
+      Object.assign(s, JSON.parse(JSON.stringify(s)));
+      s.players[0].player = s.player;
+      s.players[0].flags = s.flags;
+      pay();
+      choose(second.id);
+      Object.assign(s, JSON.parse(JSON.stringify(s)));
+      s.players[0].player = s.player;
+      s.players[0].flags = s.flags;
+      pay();
+      const packets = [
+        { target: power === "attack" ? s.villain.id : "main", amount },
+      ];
+      if (power === "attack")
+        expect(ports.attackDistribution).toHaveBeenLastCalledWith(s, packets, {
+          basic: true,
+          piercing: false,
+          overkill: true,
+          metadata,
+        });
+      else
+        expect(ports.thwartDistribution).toHaveBeenLastCalledWith(
+          s,
+          packets,
+          metadata,
+        );
+      expect(s.player.discard.map((p) => p.id)).toEqual([first.id, second.id]);
+      expect(s.player.heroForm).toBe("giant");
+      expect(ports.flip).toHaveBeenCalledOnce();
+    },
+  );
   it("Rapid Growth independently adds two while a form lock preserves Tiny", () => {
     const { s, ports, enqueue, choose, pay, lock, recorded } = fixture();
     const growth = piece("13005");

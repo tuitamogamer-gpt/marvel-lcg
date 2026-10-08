@@ -114,7 +114,7 @@ describe("GMW damage adapter: actual damage and printed response timing", () => 
     conserved(s, h);
   });
 
-  it("Tough suppresses both raw excess and all damage-triggered Rocket healing", () => {
+  it("Tough suppresses excess while positive dealt damage still triggers Schadenfreude", () => {
     let s = damageSetup();
     const enemy = minion(s, "01110");
     enemy.tough = true;
@@ -126,7 +126,7 @@ describe("GMW damage adapter: actual damage and printed response timing", () => 
       source: "hero",
     });
     expect(s.prompt).toBeNull();
-    expect(s.player.hp).toBe(3);
+    expect(s.player.hp).toBe(5);
     expect(s.player.hand).toEqual([]);
     expect(s.minions.find((p) => p.id === enemy.id)).toMatchObject({
       damage: 0,

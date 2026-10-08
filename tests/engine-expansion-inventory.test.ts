@@ -26,6 +26,47 @@ const audited = new Map(
 );
 
 describe("complete expansion rules inventory", () => {
+  it("records scan-verified printed numeric metadata separately from text errata", () => {
+    const corrections = inventory.runtimeMetadataCorrections;
+    expect(corrections.map((entry: { code: string }) => entry.code)).toEqual([
+      "19025",
+      "19026",
+      "19027",
+      "19028",
+      "19029",
+    ]);
+    for (const [code, boost] of [
+      ["19025", 2],
+      ["19026", 2],
+      ["19027", 3],
+      ["19028", 1],
+      ["19029", 2],
+    ] as const) {
+      const correction = corrections.find(
+        (entry: { code: string }) => entry.code === code,
+      );
+      expect(correction.source).toBe("Original English card scan");
+      expect(correction.url).toContain(`/official/${code}.jpg`);
+      expect(correction.changes).toContainEqual({
+        field: "boost",
+        imported: null,
+        runtime: boost,
+      });
+    }
+    expect(
+      corrections.find((entry: { code: string }) => entry.code === "19028")
+        .changes,
+    ).toContainEqual({
+      field: "attack",
+      imported: null,
+      runtime: 2,
+    });
+    expect(
+      corrections.some((entry: { code: string }) =>
+        entry.code.startsWith("20"),
+      ),
+    ).toBe(false);
+  });
   it("separates live installed registry, compiler recognition, hero/scenario registration and campaign gaps", () => {
     const coverage = inventory.installedRegistryCoverage;
     expect(coverage.total).toBe(cards.length);
@@ -73,6 +114,8 @@ describe("complete expansion rules inventory", () => {
       ["drs", 40],
       ["stld", 32],
       ["gam", 33],
+      ["drax", 34],
+      ["vnm", 30],
     ] as const) {
       expect(
         coverage.products.find((pack: { code: string }) => pack.code === code),
@@ -110,7 +153,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    for (const id of ["stld", "gam"])
+    for (const id of ["stld", "gam", "drax", "vnm"])
       expect(
         inventory.heroes.find(
           (hero: { id: string }) => hero.id === `${id}:${id}`,
@@ -120,10 +163,10 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(966);
-    expect(coverage.unsupportedFaces).toBe(3585);
-    expect(coverage.dedicatedFaces).toBe(489);
-    expect(coverage.registeredHeroIds).toHaveLength(21);
+    expect(coverage.executableFaces).toBe(1020);
+    expect(coverage.unsupportedFaces).toBe(3531);
+    expect(coverage.dedicatedFaces).toBe(544);
+    expect(coverage.registeredHeroIds).toHaveLength(23);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
         coverage.registeredHeroes.some(
@@ -202,10 +245,8 @@ describe("complete expansion rules inventory", () => {
     ).toBe(true);
   });
 
-  it("pins data hashes so the checked inventory cannot silently drift from the import", () => {
+  it("pins all source hashes so the checked inventory cannot silently drift", () => {
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
-      // Engine adapters are implemented concurrently; their hash is diagnostic.
-      if (!file.startsWith("src/data/")) continue;
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
         .digest("hex");
@@ -254,6 +295,11 @@ describe("complete expansion rules inventory", () => {
       "src/game/gamora.ts",
       "src/game/star-lord-pack.ts",
       "src/game/gamora-pack.ts",
+      "src/game/drax.ts",
+      "src/game/drax-pack.ts",
+      "src/game/venom.ts",
+      "src/game/venom-pack.ts",
+      "src/game/printed-card-metadata.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",
       "src/game/payment.ts",

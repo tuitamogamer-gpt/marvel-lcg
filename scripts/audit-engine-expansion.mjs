@@ -847,7 +847,7 @@ export async function generateAudit(
   const bundle = await build({
     stdin: {
       contents:
-        'export { scriptCoverage } from "./src/game/scripts/compiler.ts"; export { hasExecutableScript } from "./src/game/script-registry.ts"; export { EXPLICIT_CARD_SCRIPTS, SCRIPTED_HERO_IDS } from "./src/game/engine-support.ts"; export { CARDS, CATALOG_CARDS, HEROES, VILLAINS } from "./src/game/cards.ts";',
+        'export { scriptCoverage } from "./src/game/scripts/compiler.ts"; export { hasExecutableScript } from "./src/game/script-registry.ts"; export { EXPLICIT_CARD_SCRIPTS, SCRIPTED_HERO_IDS } from "./src/game/engine-support.ts"; export { CARDS, CATALOG_CARDS, HEROES, VILLAINS } from "./src/game/cards.ts"; export { printedCardMetadata } from "./src/game/printed-card-metadata.ts";',
       resolveDir: root,
     },
     bundle: true,
@@ -864,6 +864,7 @@ export async function generateAudit(
     CATALOG_CARDS,
     HEROES,
     VILLAINS,
+    printedCardMetadata,
   } = await import(
     `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`
   );
@@ -887,6 +888,31 @@ export async function generateAudit(
         url: runtime.errata?.url,
       },
     ];
+  });
+  audit.runtimeMetadataCorrections = cards.flatMap((imported) => {
+    const corrected = printedCardMetadata(imported);
+    if (corrected === imported) return [];
+    const changes = ["attack", "boost"].flatMap((field) =>
+      corrected[field] !== imported[field]
+        ? [
+            {
+              field,
+              imported: imported[field] ?? null,
+              runtime: corrected[field],
+            },
+          ]
+        : [],
+    );
+    return changes.length
+      ? [
+          {
+            code: imported.code,
+            source: "Original English card scan",
+            url: `https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/${imported.code}.jpg`,
+            changes,
+          },
+        ]
+      : [];
   });
   audit.compilerCoverage = {
     ...coverage,
@@ -1036,6 +1062,11 @@ export async function generateAudit(
     "src/game/gamora.ts",
     "src/game/star-lord-pack.ts",
     "src/game/gamora-pack.ts",
+    "src/game/drax.ts",
+    "src/game/drax-pack.ts",
+    "src/game/venom-pack.ts",
+    "src/game/venom.ts",
+    "src/game/printed-card-metadata.ts",
     "src/game/card-text.ts",
     "src/game/expansion-errata.ts",
     "src/game/types.ts",

@@ -38,6 +38,7 @@ export interface WaspDistributionOptions {
   basic: boolean;
   piercing: boolean;
   overkill?: boolean;
+  metadata?: Partial<Effect>;
 }
 export interface WaspPorts extends AntManPorts {
   select(
@@ -61,7 +62,11 @@ export interface WaspPorts extends AntManPorts {
     options: WaspDistributionOptions,
   ): void;
   /** Reuse the native simultaneous threat-removal/side-scheme defeat path. */
-  thwartDistribution(s: GameState, packets: WaspPacket[]): void;
+  thwartDistribution(
+    s: GameState,
+    packets: WaspPacket[],
+    metadata?: Partial<Effect>,
+  ): void;
   /** Native packet prevention: supports enemy attacks, overkill and direct
    * damage without restarting the packet or bypassing its other interrupts. */
   preventDamage(s: GameState, packet: Effect | undefined, amount: number): void;
@@ -302,10 +307,17 @@ export function waspBasicPower(
   s: GameState,
   power: "attack" | "thwart",
   bonus = 0,
-  options: { overkill?: boolean } = {},
+  options: { overkill?: boolean; metadata?: Partial<Effect> } = {},
 ): Effect[] | null {
   return active(s) && s.player.form === "hero"
-    ? [W("basic", { power, bonus, overkill: !!options.overkill })]
+    ? [
+        W("basic", {
+          power,
+          bonus,
+          overkill: !!options.overkill,
+          metadata: options.metadata,
+        }),
+      ]
     : null;
 }
 function rapidOptions(
@@ -399,6 +411,7 @@ function beginDistribution(
   basic: boolean,
   ports: WaspPorts,
   overkill = false,
+  metadata?: Partial<Effect>,
 ) {
   const legal =
     power === "attack"
@@ -417,6 +430,7 @@ function beginDistribution(
       piercing: basic && waspBasicPiercing(s),
       legal,
       packets: [],
+      metadata,
     }),
   );
 }
@@ -523,6 +537,7 @@ export function resolveWaspEffect(
           bonus: e.bonus || 0,
           overkill: !!e.overkill,
           used: [],
+          metadata: e.metadata,
         }),
       );
       break;
@@ -533,6 +548,7 @@ export function resolveWaspEffect(
           power: e.power,
           bonus: e.bonus || 0,
           overkill: !!e.overkill,
+          metadata: e.metadata,
         }),
       ];
       const options = rapidOptions(s, e.power, after, e.used || [], ports);
@@ -561,6 +577,7 @@ export function resolveWaspEffect(
           true,
           ports,
           !!e.overkill,
+          e.metadata,
         );
       else
         select(
@@ -570,6 +587,7 @@ export function resolveWaspEffect(
             ? ports.enemyTargets(s, true)
             : ports.schemeTargets(s, true),
           E(power === "attack" ? "damage" : "thwart", {
+            ...e.metadata,
             amount,
             source: "hero",
             basic: true,
@@ -614,6 +632,7 @@ export function resolveWaspEffect(
                         power: e.power,
                         bonus: Number(e.after?.[0]?.bonus || 0) + 2,
                         overkill: !!e.after?.[0]?.overkill,
+                        metadata: e.after?.[0]?.metadata,
                         used: [...(e.used || []), p!.id],
                       }),
                     ],
@@ -757,7 +776,9 @@ export function resolveWaspEffect(
           basic: !!e.basic,
           piercing: !!e.piercing,
           ...(e.overkill ? { overkill: true } : {}),
+          ...(e.metadata ? { metadata: e.metadata } : {}),
         });
+      else if (e.metadata) ports.thwartDistribution(s, packets, e.metadata);
       else ports.thwartDistribution(s, packets);
       break;
     }

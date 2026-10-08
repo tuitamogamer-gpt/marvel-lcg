@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import catalogCards from "../src/data/catalog-cards.json";
-import { deckCodes } from "../src/game/cards";
+import { card, deckCodes } from "../src/game/cards";
 import { deckErrors, deckOptions } from "../src/game/decks";
 import { rulesCode } from "../src/game/rules-code";
 import {
@@ -41,11 +41,15 @@ describe("imported hero definitions and printed starter legality", () => {
     expect(heroRuntime("stld")?.forms).toHaveLength(2);
     expect(heroRuntime("18001b")?.id).toBe("gam");
     expect(heroRuntime("gam")?.forms).toHaveLength(2);
+    expect(heroRuntime("19001b")?.id).toBe("drax");
+    expect(heroRuntime("drax")?.forms).toHaveLength(2);
+    expect(heroRuntime("20001b")?.id).toBe("vnm");
+    expect(heroRuntime("vnm")?.forms).toHaveLength(2);
   });
   it("imported identities stay unautomated until their full runtime is installed", () => {
     expect(
       HERO_RUNTIME.filter((h) => h.scripted).map((h) => h.id),
-    ).toHaveLength(21);
+    ).toHaveLength(23);
     expect(heroRuntime("captain_america")?.scripted).toBe(true);
     expect(heroRuntime("wsp")?.scripted).toBe(true);
     expect(heroRuntime("qsv")?.scripted).toBe(true);
@@ -54,6 +58,8 @@ describe("imported hero definitions and printed starter legality", () => {
     expect(heroRuntime("rocket")?.scripted).toBe(true);
     expect(heroRuntime("stld")?.scripted).toBe(true);
     expect(heroRuntime("gam")?.scripted).toBe(true);
+    expect(heroRuntime("drax")?.scripted).toBe(true);
+    expect(heroRuntime("vnm")?.scripted).toBe(true);
     expect(heroRuntime("daredevil")?.scripted).toBe(false);
   });
   for (const hero of HERO_RUNTIME)
@@ -427,6 +433,64 @@ describe("imported hero definitions and printed starter legality", () => {
         "18023": 1,
       },
     },
+    {
+      id: "drax",
+      aspect: "protection" as const,
+      pack: "drax",
+      quantities: {
+        "19002": 1,
+        "19003": 2,
+        "19004": 2,
+        "19005": 2,
+        "19006": 2,
+        "19007": 2,
+        "19008": 1,
+        "19009": 1,
+        "19010": 1,
+        "19011": 1,
+        "19012": 1,
+        "19013": 1,
+        "19014": 2,
+        "19015": 3,
+        "19016": 3,
+        "19017": 3,
+        "19018": 3,
+        "19019": 2,
+        "19020": 1,
+        "19021": 3,
+        "19022": 1,
+        "19023": 1,
+        "19024": 1,
+      },
+    },
+    {
+      id: "vnm",
+      aspect: "justice" as const,
+      pack: "vnm",
+      quantities: {
+        "20002": 2,
+        "20003": 2,
+        "20004": 1,
+        "20005": 3,
+        "20006": 2,
+        "20007": 1,
+        "20008": 1,
+        "20009": 1,
+        "20010": 2,
+        "20011": 1,
+        "20012": 3,
+        "20013": 3,
+        "20014": 2,
+        "20015": 3,
+        "20016": 1,
+        "20017": 1,
+        "20018": 1,
+        "20019": 1,
+        "20020": 3,
+        "20021": 3,
+        "20022": 3,
+      },
+    },
   ])
     it(`preserves ${id}'s exact forty-card retail source starter`, () => {
       const codes = deckCodes(id, aspect);
@@ -503,6 +567,39 @@ describe("imported hero definitions and printed starter legality", () => {
       "18032",
     ])
       expect(rulesCode(code)).toBe(code);
+  });
+  it("distinguishes Drax and Venom's nine Core aliases from three other native reprints", () => {
+    const aliases = {
+      "19014": "01077",
+      "19019": "01082",
+      "19022": "01088",
+      "19023": "01089",
+      "19024": "01090",
+      "20014": "01062",
+      "20017": "01088",
+      "20018": "01089",
+      "20019": "01090",
+    };
+    expect(
+      Object.fromEntries(
+        Object.keys(aliases).map((code) => [code, rulesCode(code)]),
+      ),
+    ).toEqual(aliases);
+    for (const code of ["19021", "19033", "20020"])
+      expect(rulesCode(code)).toBe(code);
+  });
+  it("uses scan-verified Drax encounter metadata without changing the imported catalog", () => {
+    expect(
+      ["19025", "19026", "19027", "19028", "19029"].map(
+        (code) => card(code).boost,
+      ),
+    ).toEqual([2, 2, 3, 1, 2]);
+    expect(card("19028").attack).toBe(2);
+    for (const code of ["19025", "19026", "19027", "19028", "19029"])
+      expect(byCode.get(code)?.boost).toBeUndefined();
+    expect(byCode.get("19028")?.attack).toBeUndefined();
+    expect(card("20025")).toMatchObject({ quantity: 4, boost_star: true });
+    expect(Number(card("20025").boost || 0)).toBe(0);
   });
   it("matching identity allies remain illegal across typographic differences in alter-ego names", () => {
     const codes = deckCodes("black_panther", "leadership");

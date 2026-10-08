@@ -620,6 +620,11 @@ describe("complete seeded missions", () => {
           aspect: h.aspect,
           seed: 90210,
         });
+        const originalIds = new Set(
+          [...s.player.hand, ...s.player.deck, ...s.player.inPlay].map(
+            (p) => p.id,
+          ),
+        );
         s = settle(dispatch(s, { type: "MULLIGAN", ids: [] }));
         const command = (c: any) => {
           s = settle(dispatch(s, c));
@@ -690,11 +695,17 @@ describe("complete seeded missions", () => {
             ...s.player.deck,
             ...s.player.discard,
             ...s.player.inPlay,
+            ...s.resolving,
+            ...s.removed,
+            ...s.attachments,
+            ...s.encounter.deck,
+            ...s.encounter.discard,
+            ...s.encounter.dealt,
             ...s.minions.flatMap((p) => (p.droneCard ? [p.droneCard] : [])),
             ...s.sideSchemes.flatMap((p) => p.captured || []),
-          ];
+          ].filter((p) => originalIds.has(p.id));
           expect(new Set(pieces.map((p) => p.id)).size).toBe(pieces.length);
-          expect(pieces.length).toBe(40);
+          expect(pieces.length).toBe(originalIds.size);
         }
         expect(["won", "lost"]).toContain(s.phase);
       });

@@ -1,4 +1,5 @@
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
+import { printedCardMetadata } from "./printed-card-metadata.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { isTextBlank } from "./card-text.js";
 import type { AntManPackPorts, AntManPackTarget } from "./ant-man-pack.js";
@@ -6,7 +7,10 @@ import type { PaymentSource } from "./payment.js";
 import type { Card, Effect, GameState, Option, Piece } from "./types.js";
 
 const cards = new Map(
-  (importedCards as unknown as Card[]).map((c) => [c.code, c]),
+  (importedCards as unknown as Card[]).map((c) => [
+    c.code,
+    printedCardMetadata(c),
+  ]),
 );
 const E = (type: string, args: Record<string, unknown> = {}): Effect => ({
   type,
@@ -320,7 +324,7 @@ export function starLordPackAbilityOptions(
     p.code === "17021" &&
     !p.exhausted &&
     readyGuardians(s, ports).length &&
-    ports.canPay(s, 2, "", "")
+    ports.canPay(s, 2, "", p.code)
   )
     return [
       O(
@@ -623,7 +627,7 @@ export function resolveStarLordPackEffect(
         p &&
           !p.exhausted &&
           readyGuardians(s, ports).length &&
-          ports.canPay(s, 2, "", ""),
+          ports.canPay(s, 2, "", p.code),
         "C.I.T.T. is unavailable.",
       );
       p!.exhausted = true;
@@ -632,6 +636,7 @@ export function resolveStarLordPackEffect(
         E("payRequest", {
           title: "C.I.T.T.",
           cost: 2,
+          targetCode: p!.code,
           cancelable: false,
           after: [P("citt-ready", { id: p!.id })],
         }),

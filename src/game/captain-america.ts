@@ -1,3 +1,4 @@
+import { printedCardMetadata } from "./printed-card-metadata.js";
 import { goblinIdentityLocked } from "./goblin-modules.js";
 import type {
   Card,
@@ -12,7 +13,9 @@ import { playerOrder } from "./team.js";
 import { consumeStatus } from "./keywords.js";
 import catalogCards from "../data/catalog-cards.json" with { type: "json" };
 
-const cards = new Map((catalogCards as Card[]).map((c) => [c.code, c]));
+const cards = new Map(
+  (catalogCards as Card[]).map((c) => [c.code, printedCardMetadata(c)]),
+);
 const E = (type: string, args: Record<string, unknown> = {}): Effect => ({
   type,
   ...args,

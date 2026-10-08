@@ -12,6 +12,10 @@ import * as gamora from "./gamora.js";
 import * as gamoraPack from "./gamora-pack.js";
 import * as starLord from "./star-lord.js";
 import * as starLordPack from "./star-lord-pack.js";
+import * as drax from "./drax.js";
+import * as draxPack from "./drax-pack.js";
+import * as venom from "./venom.js";
+import * as venomPack from "./venom-pack.js";
 import * as waspPack from "./wasp-pack.js";
 import {
   hawkeyePlayRestriction,
@@ -241,7 +245,12 @@ import {
   pacingOf,
   stopsFor,
 } from "./review.js";
-import { paymentSources, paymentStatus } from "./payment.js";
+import {
+  paymentSources,
+  paymentStatus,
+  paidResourceAllocations,
+  venomPaymentDamageCostAvailable,
+} from "./payment.js";
 import { combatCharacter, recordCombat } from "./combat.js";
 import { deckErrors } from "./decks.js";
 import {
@@ -458,6 +467,8 @@ function readyIdentity(s: GameState) {
   return true;
 }
 function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
+  if (source.startsWith("hero:"))
+    return sourceKeyword(seatView(s, source.slice(5)), "hero", name);
   if (source === "hero")
     return (
       printedKeyword(heroCard(s), name) +
@@ -467,6 +478,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
       (name === "Retaliate"
         ? captainStats(s).retaliate +
           hulkStats(s).retaliate +
+          drax.draxStats(s).retaliate +
           wasp.waspRetaliate(textActiveState(s)) +
           gmwPack.gmwPlayerPackRetaliate(textActiveState(s), gmwPorts)
         : 0)
@@ -490,7 +502,10 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     ),
     Number(
       name === "Ranged" &&
-        (granted.ranged || allyTraits.ranged || packTraits.ranged),
+        (granted.ranged ||
+          allyTraits.ranged ||
+          packTraits.ranged ||
+          venomPack.venomPackAllyKeywords(s, p).ranged),
     ),
     Number(name === "Overkill" && packTraits.overkill),
   );
@@ -749,6 +764,19 @@ function dealEncounter(s: GameState, playerId = s.activePlayerId) {
   }
 }
 function discardPiece(s: GameState, id: string) {
+  movePieceFromPlay(s, id, false);
+}
+function removePlayerCard(s: GameState, id: string) {
+  const p = allInPlay(s).find((p) => p.id === id);
+  need(
+    p && card(p).faction_code !== "encounter",
+    "The owned player card is no longer in play.",
+  );
+  movePieceFromPlay(s, id, true);
+}
+/** Leaving-play cleanup is shared; a removed source never enters a discard
+ * pile. Attached and stored cards keep their ordinary native destinations. */
+function movePieceFromPlay(s: GameState, id: string, removed: boolean) {
   const controlling = controller(s, id);
   const viewBefore = controlling ? seatView(s, controlling) : s;
   const healthBefore = maxHP(viewBefore);
@@ -805,7 +833,7 @@ function discardPiece(s: GameState, id: string) {
       controlling ||
       s.players.find((x) => x.id === s.activePlayerId)!;
     const discarded = resetPiece(p);
-    if (owner.eliminated) s.removed.push(discarded);
+    if (removed || owner.eliminated) s.removed.push(discarded);
     else seatView(s, owner).player.discard.push(discarded);
     const view = controlling ? seatView(s, controlling) : s;
     if (rulesCode(p) === "01036" && !blankBefore) view.player.hp -= 6;
@@ -834,6 +862,18 @@ function endGame(s: GameState, won: boolean, reason: string) {
   s.prompt = null;
   log(s, reason, won ? "good" : "bad");
 }
+/** Extra Weapon slots cannot absorb non-Weapon Restricted cards. */
+function restrictedLimitExceeded(s: GameState) {
+  const restricted = s.player.inPlay.filter((p) => keyword(p, "Restricted"));
+  const general = 2 + venom.venomRestrictedAllowance(s);
+  const weapons = restricted.filter(
+    (p) =>
+      card(p).type_code === "upgrade" &&
+      /(?:^|\.)\s*Weapon\s*(?:\.|$)/i.test(card(p).traits || ""),
+  ).length;
+  const weaponSlots = venomPack.venomPackRestrictedWeaponAllowance(s);
+  return restricted.length - Math.min(weapons, weaponSlots) > general;
+}
 function check(s: GameState) {
   add(s, ...riskyEnvironmentEffects(s));
   syncSeat(s);
@@ -854,7 +894,7 @@ function check(s: GameState) {
   for (const seat of playerOrder(s)) {
     const view = seatView(s, seat);
     if (
-      view.player.inPlay.filter((p) => keyword(p, "Restricted")).length > 2 &&
+      restrictedLimitExceeded(view) &&
       !(
         s.prompt?.title === "Restricted limit" && s.activePlayerId === seat.id
       ) &&
@@ -880,11 +920,13 @@ function check(s: GameState) {
     seat.player.hp = Math.max(0, seat.player.hp);
     if (seat.player.hp > 0 || seat.eliminated || s.phase === "won") continue;
     const view = seatView(s, seat);
-    if (view.flags.captainHelmetPending) continue;
+    if (view.flags.captainHelmetPending || view.flags.draxStubbornPending)
+      continue;
     if (!view.flags.captainHelmetDeclined) {
       const choices = captainHelmetOptions(view, [
         E("captainAllowDefeat", { actorId: seat.id }),
       ]);
+      if (choices.length && s.prompt) continue;
       if (choices.length && !s.prompt) {
         activateSeat(s, seat.id);
         s.flags.captainHelmetPending = true;
@@ -893,6 +935,29 @@ function check(s: GameState) {
           "Captain America’s Helmet",
           "Your identity would be defeated. Use its printed replacement?",
           choices,
+        );
+        return;
+      }
+    }
+    if (!view.flags.draxStubbornDeclined) {
+      const after = [E("draxDefeatResume", { actorId: seat.id })];
+      const choices = drax.draxDefeatOptions(view, after, draxPorts);
+      if (choices.length) {
+        // Finish an existing payment or ally choice before opening this
+        // identity interrupt. A pending replacement must not eliminate Drax.
+        if (s.prompt) continue;
+        activateSeat(s, seat.id);
+        s.flags.draxStubbornPending = true;
+        choose(
+          s,
+          "Too Stubborn to Die",
+          "Your identity would be defeated. Use its printed replacement?",
+          [
+            ...choices,
+            option("defeat", "Let Drax be defeated", [
+              E("draxAllowDefeat", { actorId: seat.id }),
+            ]),
+          ],
         );
         return;
       }
@@ -1026,6 +1091,13 @@ function heal(s: GameState, target: string, n: number): number {
   return n;
 }
 interface DamageTraits {
+  /** Original dealt amount, before damage-taken prevention. */
+  damageDealt?: number;
+  /** Overkill is attack damage, but is not a new attack on its recipient. */
+  damageFromAttack?: boolean;
+  /** P31 specifically excludes prevented excess from damage dealt by Overkill. */
+  overkillDamage?: boolean;
+  enemyAttack?: boolean;
   piercing?: boolean;
   ranged?: boolean;
   excessToMain?: boolean;
@@ -1033,9 +1105,34 @@ interface DamageTraits {
   grootHandled?: boolean;
   aftermathChooser?: string;
 }
-interface DamageResult {
+interface DamageTakenResult {
   actualDamage: number;
   excessDamage: number;
+  /** An instead effect or damage prohibition can replace damage dealt. */
+  damageDealt?: number;
+}
+interface DamageResult extends DamageTakenResult {
+  damageDealt: number;
+}
+function damageProhibition(s: GameState, target: string, panther: boolean) {
+  if (msMarvelDamageImmune(s, target)) return "This enemy cannot take damage.";
+  if (
+    target === s.villain.id &&
+    s.villainId === "ultron" &&
+    s.villain.stage === 3 &&
+    s.minions.some((p) => card(p).traits?.includes("Drone."))
+  )
+    return "Ultron is protected by his drones.";
+  const p = find(s, target);
+  if (p && rulesCode(p) === "01157" && panther)
+    return "Killmonger is immune to Black Panther upgrades.";
+  if (
+    p &&
+    rulesCode(p) === "01181" &&
+    s.sideSchemes.some((x) => rulesCode(x) === "01180")
+  )
+    return "Legions of Hydra protects Madame Hydra.";
+  return undefined;
 }
 function attackExcess(s: GameState, packet: Effect): number {
   const target = find(s, packet.target);
@@ -1101,12 +1198,35 @@ function dealDamage(
   )
     n += msMarvelEventAmountModifier(s, s.currentEventId, "damage");
   const original = find(s, target);
+  const dealt = Math.max(0, traits.damageDealt ?? n);
   const code = original?.code;
   const originalStage = target === s.villain.id ? s.villain.stage : undefined;
   const sourceIsIdentity = rocket.rocketIsIdentitySource(s, source);
   const wasHero = s.player.form === "hero";
   const targetPiece = target === "hero" ? s.player : original;
-  if (targetPiece && attack)
+  const damageFromAttack = attack || !!traits.damageFromAttack;
+  // A prohibition cannot be bypassed by Tough or Piercing. A dealt-damage
+  // replacement resolves before Tough and damage-taken prevention (RRG1.8 p14).
+  // Keep the actual attack's aftermath even when its damage is prohibited.
+  let replaced: DamageTakenResult | undefined;
+  const prohibition =
+    dealt > 0 ? damageProhibition(s, target, panther) : undefined;
+  if (prohibition) {
+    log(s, prohibition);
+    replaced = { actualDamage: 0, excessDamage: 0, damageDealt: 0 };
+  } else if (dealt > 0 && target === s.villain.id) {
+    const armor = villainAt(s, "01098")[0];
+    if (armor) {
+      armor.damage += dealt;
+      track(s, "damageDealt", dealt);
+      log(s, `Armored Rhino Suit absorbs ${dealt} damage.`);
+      if (armor.damage >= 5) discardPiece(s, armor.id);
+      replaced = { actualDamage: 0, excessDamage: 0, damageDealt: 0 };
+    }
+  }
+  // Piercing discards Tough only if the attack would deal damage to the
+  // attacked character; Armor replaces that damage entirely (RRG1.8 p32).
+  if (!replaced && targetPiece && attack)
     discardToughForPiercing(
       targetPiece,
       n,
@@ -1114,7 +1234,7 @@ function dealDamage(
     );
   // Constant reductions precede Tough (RRG1.8 FAQ). Multiple packets of the
   // same attack share one Vibration Resistance allowance.
-  if (attack && n > 0 && original) {
+  if (!replaced && damageFromAttack && n > 0 && original) {
     const resistance = s.attachments.filter(
       (a) =>
         a.code === "14027" && a.attachedTo === target && !isTextBlank(s, a),
@@ -1132,16 +1252,28 @@ function dealDamage(
     }
   }
   const previousQueue = new Set(s.queue);
-  const result = applyDamage(
-    s,
-    target,
-    n,
-    source,
-    attack,
-    overkill,
-    panther,
-    traits,
-  );
+  const taken =
+    replaced ??
+    applyDamage(s, target, n, source, attack, overkill, panther, traits);
+  const result: DamageResult = {
+    ...taken,
+    damageDealt:
+      taken.damageDealt ?? (traits.overkillDamage ? taken.actualDamage : dealt),
+  };
+  if (damageFromAttack && original && !["won", "lost"].includes(s.phase))
+    add(
+      s,
+      ...drax.draxDamageDealt(
+        s,
+        {
+          target,
+          attack: true,
+          sourceIsDrax: s.heroId === "drax" && sourceIsIdentity,
+          damageDealt: result.damageDealt,
+        },
+        draxPorts,
+      ),
+    );
   if (
     traits.excessToMain &&
     original &&
@@ -1176,7 +1308,7 @@ function dealDamage(
     sourceIsIdentity &&
     original &&
     (target === s.villain.id || card(original).type_code === "minion") &&
-    result.actualDamage > 0 &&
+    result.damageDealt > 0 &&
     !["won", "lost"].includes(s.phase)
   )
     add(
@@ -1340,7 +1472,7 @@ function applyDamage(
   overkill = false,
   panther = false,
   traits: DamageTraits = {},
-): DamageResult {
+): DamageTakenResult {
   const none = { actualDamage: 0, excessDamage: 0 };
   if (target?.startsWith("hero:")) {
     const prev = s.activePlayerId;
@@ -1375,28 +1507,14 @@ function applyDamage(
     check(s);
     return { actualDamage: n, excessDamage: 0 };
   }
-  if (msMarvelDamageImmune(s, target)) return none;
   if (target === s.villain.id) {
     const replaced = riskyDamageReplacement(s, target, n);
     if (replaced) {
       add(s, ...replaced);
-      return none;
-    }
-    if (
-      s.villainId === "ultron" &&
-      s.villain.stage === 3 &&
-      s.minions.some((p) => card(p).traits?.includes("Drone."))
-    ) {
-      log(s, "Ultron is protected by his drones.");
-      return none;
-    }
-    const armor = villainAt(s, "01098")[0];
-    if (armor) {
-      armor.damage += n;
-      track(s, "damageDealt", n);
-      log(s, `Armored Rhino Suit absorbs ${n} damage.`);
-      if (armor.damage >= 5) discardPiece(s, armor.id);
-      return none;
+      // Norman modifies damage TAKEN, unlike Rhino's dealt-damage replacement.
+      // Overkill still credits its unprevented amount when a TAKE replacement
+      // redirects it; only prevention invokes the specific p31 exception.
+      return traits.overkillDamage ? { ...none, damageDealt: n } : none;
     }
     const excess = Math.max(0, n - s.villain.hp);
     const result = {
@@ -1416,17 +1534,6 @@ function applyDamage(
     return result;
   }
   const m = find(s, target)!;
-  if (rulesCode(m) === "01157" && panther) {
-    log(s, "Killmonger is immune to Black Panther upgrades.");
-    return none;
-  }
-  if (
-    rulesCode(m) === "01181" &&
-    s.sideSchemes.some((x) => rulesCode(x) === "01180")
-  ) {
-    log(s, "Legions of Hydra protects Madame Hydra.");
-    return none;
-  }
   const remain = pieceHP(s, m) - m.damage;
   const excess = Math.max(0, n - remain);
   const result = {
@@ -1442,7 +1549,9 @@ function applyDamage(
   log(s, `${card(m).name} takes ${n} damage.`, "good");
   if (m.damage >= pieceHP(s, m)) {
     const deferred = !!s.flags.waspDeferDefeats;
-    const defeated = deferred || defeatCharacter(s, m, source, attack);
+    const defeated =
+      deferred ||
+      defeatCharacter(s, m, source, attack, false, !!traits.enemyAttack);
     if (
       card(m).type_code === "minion" &&
       defeated &&
@@ -1457,6 +1566,8 @@ function applyDamage(
         target: s.villain.id,
         amount: result.excessDamage,
         source,
+        damageFromAttack: true,
+        overkillDamage: true,
       });
       if (m.pendingDefeat) {
         const i = s.queue.findIndex(
@@ -1474,6 +1585,7 @@ function defeatCharacter(
   source = "",
   attack = false,
   interrupted = false,
+  enemyAttack = false,
 ) {
   if (m.pendingDefeat && !interrupted) return true;
   if (!interrupted && thorPreventsDefeat(s, m, thorPorts)) return false;
@@ -1483,6 +1595,21 @@ function defeatCharacter(
     const options = [
       ...doctorStrangeDefeatOptions(view, m, []),
       ...msMarvelRedDaggerOptions(view, m, [], msPorts),
+      ...(enemyAttack && card(m).type_code === "ally"
+        ? draxPack.draxPackRegroupOptions(
+            s,
+            m,
+            { attack: true, enemySource: true },
+            [
+              E("dvRegroupDefeatAfter", {
+                piece: { ...m },
+                playerId: owner?.id,
+                actorId: s.activePlayerId,
+              }),
+            ],
+            draxPackPorts,
+          )
+        : []),
     ];
     if (options.length) {
       m.pendingDefeat = true;
@@ -1790,7 +1917,11 @@ function thwart(
 ) {
   if (n > 0 && !s.flags.additionalThwartPacket)
     n += msMarvelEventAmountModifier(s, s.currentEventId, "thwart");
-  if (hulkThreatLocked(s, target) || !gamora.gamoraCanRemoveThreat(s, target))
+  if (
+    hulkThreatLocked(s, target) ||
+    !gamora.gamoraCanRemoveThreat(s, target) ||
+    venom.venomSchemeLocked(s, target)
+  )
     return 0;
   if (target === "main") {
     if (
@@ -1897,7 +2028,8 @@ export function targets(
             (p) =>
               p.counters > 0 &&
               !hulkThreatLocked(s, p.id) &&
-              gamora.gamoraCanRemoveThreat(s, p.id),
+              gamora.gamoraCanRemoveThreat(s, p.id) &&
+              !venom.venomSchemeLocked(s, p.id),
           )
           .map((p) => ({ id: p.id, label: card(p).name, code: p.code })),
       ];
@@ -1998,6 +2130,8 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
       captainAllyDiscount(s, c) -
       captainPackDiscount(s, c) -
       msMarvelDiscount(s) -
+      drax.draxCardCostReduction(s, physical || c) -
+      venomPack.venomPackCardCostReduction(s, c) -
       (physical ? starLord.starLordCardCostReduction(s, physical) : 0) -
       gmwPack.gmwPlayerPackCardCostReduction(s, c) -
       thorAllyDiscount(s, c) -
@@ -2080,6 +2214,7 @@ function attackAction(
   overkill = false,
   panther = false,
   traits: {
+    basic?: boolean;
     piercing?: boolean;
     ranged?: boolean;
     initiated?: boolean;
@@ -2105,7 +2240,8 @@ function attackAction(
   }
   const attacker = combatCharacter(s, source);
   const defender = combatCharacter(s, target);
-  dealDamage(
+  const previousEffects = new Set(s.queue);
+  const result = dealDamage(
     s,
     target,
     n,
@@ -2115,6 +2251,10 @@ function attackAction(
     panther,
     traits,
   );
+  if (source === "hero" && traits.basic)
+    for (const e of s.queue)
+      if (!previousEffects.has(e) && e.type === "heroAttackResponses")
+        e.draxBasicAttack = true;
   recordCombat(s, attacker, defender, target, false);
   if (source === "hero") {
     const strengths = s.player.inPlay.filter((p) => rulesCode(p) === "01028");
@@ -2126,6 +2266,7 @@ function attackAction(
       }
     }
   }
+  return result;
 }
 function thwartAction(
   s: GameState,
@@ -2162,7 +2303,7 @@ function thwartAction(
   const wasHero = source === "hero" && s.player.form === "hero";
   const previousQueue = new Set(s.queue);
   const removed = thwart(s, target, n, ignoreCrisis, source);
-  if (!wasHero || removed <= 0 || removed !== beforeThreat) return;
+  if (!wasHero || removed <= 0 || removed !== beforeThreat) return removed;
 
   const responseGroup = s.currentEventId
     ? `eventThwart:${s.currentEventId}`
@@ -2201,6 +2342,7 @@ function thwartAction(
   if (finish >= 0) continuation.splice(finish, 0, response);
   else continuation.unshift(response);
   s.queue = [...generated, ...continuation];
+  return removed;
 }
 /** Whether the hero's hand and resource abilities can meet a cost right now. */
 export function canPay(
@@ -2306,7 +2448,16 @@ function requestPayment(
   if (starLordApplyDiscount && piece)
     cost = Math.max(0, cost - starLord.starLordCardCostReduction(s, piece));
   if (cost === 0 && !requirements.length && !forcePayment) {
-    add(s, ...after.map((e) => ({ ...e, paid: [] })));
+    add(
+      s,
+      ...after.map((e) => ({
+        ...e,
+        paid: [],
+        ...(["20002", "20003", "20006"].includes(piece?.code || "")
+          ? { paidForCard: [] }
+          : {}),
+      })),
+    );
     return;
   }
   // A cost that cannot be paid must not open a dialog with no way out.
@@ -2332,7 +2483,12 @@ function requestPayment(
     wildAs: requirements[0] || "energy",
   };
 }
-function pay(s: GameState, ids: string[], wildAs: Resource = "energy") {
+function pay(
+  s: GameState,
+  ids: string[],
+  wildAs: Resource = "energy",
+  actualAllocation?: Resource[],
+) {
   const p = s.prompt!;
   need(p?.kind === "payment", "No payment is pending.");
   need(new Set(ids).size === ids.length, "Choose each resource source once.");
@@ -2352,10 +2508,73 @@ function pay(s: GameState, ids: string[], wildAs: Resource = "energy") {
     !p.card || hulkPaymentAllowed(p.card, printed, wildAs),
     "Crushing Blow can only be paid with physical resources.",
   );
+  let paidForCard: Resource[] | undefined;
+  if (["20002", "20003", "20006"].includes(p.card?.code || "")) {
+    const allocations = paidResourceAllocations(
+      printed,
+      p.cost || 0,
+      req,
+      wildAs,
+    );
+    need(
+      allocations.length,
+      "The selected resources cannot cover the actual typed cost.",
+    );
+    if (actualAllocation) {
+      const canonical = (resources: Resource[]) =>
+        [...resources].sort().join(":");
+      need(
+        allocations.some(
+          (paid) => canonical(paid) === canonical(actualAllocation),
+        ),
+        "The selected allocation cannot pay this cost.",
+      );
+      paidForCard = actualAllocation;
+    } else if (allocations.length > 1) {
+      choose(
+        s,
+        "Allocate payment resources",
+        "Choose the resources paid for the card's cost. Other generated resources are overpaid.",
+        allocations.map((allocated) => {
+          const pure =
+            allocated.length &&
+            allocated.every((resource) => resource === allocated[0]);
+          const label = [...new Set(allocated)]
+            .map(
+              (resource) =>
+                `${allocated.filter((r) => r === resource).length} ${resource}`,
+            )
+            .join(" + ");
+          return option(pure ? allocated[0] : allocated.join("+"), label, [
+            E("commitPaymentAllocation", {
+              payment: p,
+              ids,
+              wildAs,
+              paidForCard: allocated,
+            }),
+          ]);
+        }),
+        true,
+      );
+      s.prompt!.cancellationQueue = [
+        E("restorePaymentPrompt", {
+          actorId: s.activePlayerId,
+          payment: p,
+          queue: [...s.queue],
+        }),
+      ];
+      return;
+    } else paidForCard = allocations[0];
+  }
   const spentResponses: Effect[] = [];
   for (const id of ids) {
     if (id === "scientist") s.flags.scientist = true;
-    else if (s.player.hand.some((x) => x.id === id)) {
+    else if (id === "symbiotic-bond") {
+      need(
+        venom.venomResourceSpent(s, id, venomPorts),
+        "Symbiotic Bond is unavailable.",
+      );
+    } else if (s.player.hand.some((x) => x.id === id)) {
       const spent = discardHand(s, id);
       spentResponses.push(...antMan.antManResourceSpent(s, spent, antManPorts));
       spentResponses.push(...wasp.waspResourceSpent(s, spent, waspPorts));
@@ -2367,6 +2586,8 @@ function pay(s: GameState, ids: string[], wildAs: Resource = "energy") {
       spiderWomanResourceSpent(s, source, p.paymentTarget);
       gamoraPack.gamoraPackResourceSpent(s, source.id, { discardPiece });
       starLordPack.starLordPackResourceSpent(s, source.id, { discardPiece });
+      draxPack.draxPackResourceSpent(s, source.id, { discardPiece });
+      venomPack.venomPackResourceSpent(s, source.id, { discardPiece });
       source.exhausted = true;
       for (const effect of [
         ...(msSpent || []),
@@ -2408,6 +2629,7 @@ function pay(s: GameState, ids: string[], wildAs: Resource = "energy") {
     ...(p.after || []).map((e) => ({
       ...e,
       paid,
+      ...(paidForCard !== undefined ? { paidForCard } : {}),
       overpaid: Math.max(0, printed.length - (p.cost || 0)),
     })),
   );
@@ -2563,6 +2785,7 @@ export function newGame(config: {
       ),
     );
     doctorStrangeSetup(s, dsPorts);
+    venom.venomInitializeNemesis(s, { makePiece });
   }
   activateSeat(s, "p1");
   s.encounter.deck = shuffle(
@@ -2632,6 +2855,10 @@ function initialSetup(s: GameState) {
         actorId: seat.id,
       })),
       ...starLord.starLordSetup(seatView(s, seat)).map((e) => ({
+        ...e,
+        actorId: seat.id,
+      })),
+      ...venom.venomSetup(seatView(s, seat)).map((e) => ({
         ...e,
         actorId: seat.id,
       })),
@@ -2730,8 +2957,12 @@ export function playable(s: GameState, p: Piece): string | null {
     gmwPack.gmwPlayerPackPlayRestriction(s, p, gmwPorts) ||
     starLord.starLordPlayRestriction(s, p) ||
     gamora.gamoraPlayRestriction(s, p, gamoraPorts) ||
+    drax.draxPlayRestriction(s, p, draxPorts) ||
+    venom.venomPlayRestriction(s, p) ||
     starLordPack.starLordPackPlayRestriction(s, p, starLordPackPorts) ||
-    gamoraPack.gamoraPackPlayRestriction(s, p, gamoraPackPorts);
+    gamoraPack.gamoraPackPlayRestriction(s, p, gamoraPackPorts) ||
+    draxPack.draxPackPlayRestriction(s, p, draxPackPorts) ||
+    venomPack.venomPackPlayRestriction(s, p, venomPackPorts);
   if (antRestriction) return antRestriction;
   const hawkeyeRestriction = hawkeyePlayRestriction(s, p, hawkeyePorts);
   if (hawkeyeRestriction) return hawkeyeRestriction;
@@ -2969,6 +3200,7 @@ function play(
   attachedTarget?: string,
   agilityHandled = false,
   overpaid = 0,
+  paidForCard?: Resource[],
 ) {
   const c = card(p);
   const agility = !agilityHandled ? spiderWomanCardPlayed(s, c) : [];
@@ -2984,6 +3216,7 @@ function play(
         attachedTarget,
         agilityHandled: true,
         overpaid,
+        paidForCard,
       }),
     );
     return;
@@ -3008,6 +3241,7 @@ function play(
   gmwPack.gmwPlayerPackCardPlayed(s, c);
   gamora.gamoraCardPlayed(s, c);
   gamoraPack.gamoraPackCardPlayed(s, p);
+  venomPack.venomPackCardPlayed(s, c);
   s.flags.discount = 0;
   track(s, "cardsPlayed", 1);
   log(s, `Play ${c.name}.`, "good");
@@ -3017,21 +3251,26 @@ function play(
     beginResolution(s, p);
     add(
       s,
-      ...gmwPack.gmwPlayerPackBeforeEvent(
+      ...venomPack.venomPackBeforeEvent(
         s,
         p,
-        starLord.starLordBeforeEvent(
+        gmwPack.gmwPlayerPackBeforeEvent(
           s,
           p,
-          msMarvelBeforeEvent(s, p, [
-            E("eventResolve", {
-              piece: p,
-              paid,
-              lightningX,
-              masterInvocationId,
-              eventId: p.id,
-            }),
-          ]),
+          starLord.starLordBeforeEvent(
+            s,
+            p,
+            msMarvelBeforeEvent(s, p, [
+              E("eventResolve", {
+                piece: p,
+                paid,
+                paidForCard,
+                lightningX,
+                masterInvocationId,
+                eventId: p.id,
+              }),
+            ]),
+          ),
         ),
       ),
       E("finishResolution", { id: p.id, eventId: p.id, playedEvent: { ...p } }),
@@ -3057,6 +3296,8 @@ function play(
       ...gmwPack.gmwPlayerPackCardEntered(s, p),
       ...starLordPack.starLordPackCardEntered(s, p),
       ...gamoraPack.gamoraPackCardEntered(s, p),
+      ...draxPack.draxPackCardEntered(s, p),
+      ...venomPack.venomPackCardEntered(s, p),
       ...captainPackCardEntered(s, p),
       ...hulkPackCardEntered(s, p),
       ...msMarvelCardEntered(s, p),
@@ -3171,7 +3412,9 @@ function allyEnter(
   }
   const playerPackAlly =
     starLordPack.starLordPackAllyEnter(s, p) ??
-    gamoraPack.gamoraPackAllyEnter(s, p);
+    gamoraPack.gamoraPackAllyEnter(s, p) ??
+    draxPack.draxPackAllyEnter(s, p) ??
+    venomPack.venomPackAllyEnter(s, p);
   if (playerPackAlly !== null) {
     add(s, ...playerPackAlly);
     return;
@@ -3306,6 +3549,7 @@ function event(
   paid: Resource[],
   lightningX?: number,
   masterInvocationId?: string,
+  paidForCard?: Resource[],
 ) {
   const ant =
     antMan.antManEvent(s, p.code === "13020" ? { ...p, code: "12020" } : p) ??
@@ -3320,9 +3564,13 @@ function event(
     groot.grootEvent(s, p) ??
     starLord.starLordEvent(s, p) ??
     gamora.gamoraEvent(s, p) ??
+    drax.draxEvent(s, p) ??
+    venom.venomEvent(s, p, paidForCard ?? paid) ??
     gmwPack.gmwPlayerPackEvent(s, p) ??
     starLordPack.starLordPackEvent(s, p) ??
-    gamoraPack.gamoraPackEvent(s, p);
+    gamoraPack.gamoraPackEvent(s, p) ??
+    draxPack.draxPackEvent(s, p) ??
+    venomPack.venomPackEvent(s, p);
   if (ant !== null) {
     add(s, ...ant);
     return;
@@ -3586,6 +3834,7 @@ function flip(
   counts = true,
   target?: "alter" | "tiny" | "giant",
 ) {
+  const previousForm = s.player.form;
   if (!canChangeIdentityForm(s)) {
     need(
       !counts,
@@ -3640,6 +3889,7 @@ function flip(
   }
   if (counts) s.player.flipped = true;
   add(s, ...hulkFormChanged(s));
+  add(s, ...drax.draxChangedForm(s, previousForm));
   const responses = antMan.antManFormChanged(s, antManPorts);
   if (
     responses.length ||
@@ -3907,6 +4157,18 @@ function ability(s: GameState, id: string, action = "special") {
       id,
       action === "special" ? undefined : action,
       gamoraPorts,
+    ) ??
+    drax.draxAbility(
+      s,
+      id,
+      action === "special" ? undefined : action,
+      draxPorts,
+    ) ??
+    venom.venomAbility(
+      s,
+      id,
+      action === "special" ? undefined : action,
+      venomPorts,
     );
   if (ant) {
     add(s, ...ant);
@@ -3917,6 +4179,21 @@ function ability(s: GameState, id: string, action = "special") {
       s,
       id,
       starLordPackPorts,
+      action === "special" ? undefined : action,
+    )
+  )
+    return;
+  if (
+    draxPack.draxPackAbility(
+      s,
+      id,
+      draxPackPorts,
+      action === "special" ? undefined : action,
+    ) ||
+    venomPack.venomPackAbility(
+      s,
+      id,
+      venomPackPorts,
       action === "special" ? undefined : action,
     )
   )
@@ -4444,6 +4721,14 @@ function openMsDamageWindow(s: GameState, packet: Effect): boolean {
   );
   const used = String(s.flags[`msUsed:${key}`] || "").split(",");
   const options = [
+    ...drax.draxDamageOptions(s, packet, amount, [packet], draxPorts),
+    ...draxPack.draxPackDamageOptions(
+      s,
+      packet,
+      amount,
+      [packet],
+      draxPackPorts,
+    ),
     ...starLord.starLordDamageOptions(
       s,
       packet,
@@ -5084,6 +5369,7 @@ const waspPorts: wasp.WaspPorts = {
     add(
       s,
       E("waspDistributedAttack", {
+        ...options.metadata,
         packets,
         ...options,
         piercing:
@@ -5096,7 +5382,34 @@ const waspPorts: wasp.WaspPorts = {
       E("attackProgramEnd", { id, attackProgramId: id }),
     );
   },
-  thwartDistribution: swPorts.thwartDistribution,
+  thwartDistribution: (s, packets, metadata) => {
+    const before = packets.map((p) => ({
+      target: p.target,
+      threat:
+        p.target === "main"
+          ? s.scheme.threat
+          : s.sideSchemes.find((x) => x.id === p.target)?.counters || 0,
+    }));
+    const queuedBefore = s.queue.length;
+    swPorts.thwartDistribution(s, packets);
+    const responses = s.queue.splice(0, s.queue.length - queuedBefore);
+    const removedAllThreat = before.some(
+      (p) =>
+        p.threat > 0 &&
+        (p.target === "main"
+          ? s.scheme.threat
+          : s.sideSchemes.find((x) => x.id === p.target)?.counters || 0) === 0,
+    );
+    add(
+      s,
+      ...responses,
+      ...venomPack.venomPackBasicThwartEnded(
+        s,
+        (metadata as Effect) || E("thwart"),
+        removedAllThreat,
+      ),
+    );
+  },
   preventDamage: (s, packet, amount) => {
     if (packet?.kind === "overkill" && s.attack)
       s.attack.identityPrevented = (s.attack.identityPrevented || 0) + amount;
@@ -5312,6 +5625,9 @@ function preventNativeIdentityDamage(
   amount: number,
 ) {
   if (packet?.kind === "attack" && s.attack) s.attack.prevented += amount;
+  else if (packet?.kind === "overkill" && s.attack)
+    s.attack.identityPrevented =
+      Number(s.attack.identityPrevented || 0) + amount;
   else resolve(s, E("ms:prevent-damage", { packet, amount }));
 }
 const starLordPorts: starLord.StarLordPorts = {
@@ -5404,6 +5720,172 @@ const gamoraPackPorts: gamoraPack.GamoraPackPorts = {
     !!card(target === s.villain.id ? s.villain : find(s, target) || "")
       .is_unique,
 };
+function discardNativePlayerTop(s: GameState) {
+  const length = s.player.deck.length;
+  return { piece: mill(s, 1)[0], emptied: length <= 1 };
+}
+const draxPorts: drax.DraxPorts = {
+  ...antManPorts,
+  identityTargets: (s) =>
+    playerOrder(s)
+      .filter((seat) => seatView(s, seat).player.hp < maxHP(seatView(s, seat)))
+      .map((seat) => ({
+        id: `hero:${seat.id}`,
+        label: heroCard(seatView(s, seat)).name,
+        code: heroCard(seatView(s, seat)).code,
+      })),
+  heroAttack: (s) => heroStats(s).attack,
+  enemyAttack: (s, p) => enemyATK(s, p, s.activePlayerId),
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  preventDamage: preventNativeIdentityDamage,
+  claimDefense: gamoraPorts.claimDefense,
+  removePlayerCard,
+  startEnemyAttack: (s, id, modifier, after) =>
+    enemyAttack(s, id, undefined, {
+      enemyId: id,
+      playerId: s.activePlayerId,
+      kind: "attack",
+      modifier,
+      after: E("dvEnemyAttackComplete", { after }),
+    }),
+  enemyAttackCount: (s, id) => s.enemyAttackCounts?.[id] || 0,
+};
+const draxPackPorts: draxPack.DraxPackPorts = {
+  queue: add,
+  choose,
+  discardPiece,
+  hasTrait: captainPackHasTrait,
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  minionTargets: (s) =>
+    targets(s, "enemy", false).filter((t) =>
+      s.minions.some((p) => p.id === t.id),
+    ),
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  canPay: (s, cost, exclude, code) => canPay(s, cost, [], exclude, code),
+  discardPlayerTop: discardNativePlayerTop,
+  discardEncounterTop: mutagenPorts.discardTop,
+  preventDamage: (s, amount, packet) =>
+    preventNativeIdentityDamage(s, packet, amount),
+  removeStatus: (s, target, status) => {
+    const p =
+      target === "hero"
+        ? s.player
+        : target.startsWith("hero:")
+          ? seatView(s, target.slice(5)).player
+          : find(s, target);
+    if (p) consumeStatus(p, status);
+  },
+  canGiveTough: (s, target) => dsPorts.canAddStatus(s, target, "tough"),
+  returnAllyToHand: (s, id) => {
+    const p = allInPlay(s).find((p) => p.id === id);
+    need(p, "The defeated ally is no longer in play.");
+    const owner =
+      s.players.find((seat) => seat.id === p!.ownerId) || controller(s, id)!;
+    discardPiece(s, id);
+    const view = seatView(s, owner);
+    const index = view.player.discard.findIndex((p) => p.id === id);
+    need(index >= 0, "The returned physical ally is missing.");
+    view.player.hand.push(
+      resetPiece(view.player.discard.splice(index, 1)[0], true),
+    );
+  },
+  minionAttackEnemy: (s, id, target) => {
+    const p = s.minions.find((p) => p.id === id);
+    if (!p || !find(s, target) || target === id) return;
+    enemyAttack(s, id, undefined, undefined, target);
+  },
+  attackProgram: (s, effects, after = []) =>
+    bwPorts.attackProgram(s, effects, after),
+};
+const venomPackPorts: venomPack.VenomPackPorts = {
+  queue: add,
+  choose,
+  discardPiece,
+  hasTrait: captainPackHasTrait,
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  canPay: (s, cost, exclude, code) => canPay(s, cost, [], exclude, code),
+  transferControl: hulkPackPorts.transferControl,
+  maxHeroHP: (s, id) => maxHP(seatView(s, id)),
+  canGiveTough: (s, target) => dsPorts.canAddStatus(s, target, "tough"),
+};
+const venomPorts: venom.VenomPorts = {
+  ...antManPorts,
+  makePiece,
+  shufflePlayerDeck: hawkeyePorts.shufflePlayerDeck,
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  discardPlayerTop: discardNativePlayerTop,
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  heroMaxHP: maxHP,
+  canTakeDamageCost: venomPaymentDamageCostAvailable,
+  takeDamageCost: (s, amount) => {
+    if (!venomPorts.canTakeDamageCost(s, amount)) return false;
+    s.player.hp -= amount;
+    track(s, "damageTaken", amount);
+    log(s, `Take ${amount} damage as a cost.`);
+    return true;
+  },
+  damageBatch: (s, ids, amount, source) =>
+    rocketPorts.damageBatch(s, ids, amount, source),
+  putMinion: mutagenPorts.putMinion,
+  putBoostMinion: (s, p, playerId) => mutagenPorts.putMinion(s, p, playerId),
+  cancelVillainAttack: (s, clauses) => {
+    const a = s.attack;
+    need(a?.isVillain, "No villain attack is pending.");
+    const attacker = a!.attacker;
+    s.encounter.discard.push(...(a!.pendingBoosts || []));
+    for (const id of a!.boostIds || []) finishResolution(s, id);
+    s.queue = s.queue.filter(
+      (e) =>
+        ![
+          "enemyAttackInitiationWindow",
+          "prepareAttackBoosts",
+          "declareDefense",
+          "defensePrompt",
+          "boostAttack",
+          "damageWindow",
+          "finishAttack",
+          "quicksilverLateDefense",
+        ].includes(e.type),
+    );
+    s.attack = null;
+    const response = E("defenseResponses", {
+      defended: true,
+      attacker,
+      snapshot: {
+        attacker,
+        isVillain: true,
+        heroDefended: true,
+        basicDefense: false,
+        heroDamage: 0,
+        identityDamage: 0,
+        playerId: s.activePlayerId,
+        defender: "hero",
+        originalTarget: "hero",
+        damage: 0,
+      },
+    });
+    const finish = s.queue.findIndex(
+      (e) => e.type === "finishResolution" && e.id === s.currentEventId,
+    );
+    const completion = [
+      response,
+      ...(a!.activationAfter
+        ? [
+            {
+              ...a!.activationAfter,
+              performed: false,
+              damagePlaced: 0,
+              threatPlaced: 0,
+            },
+          ]
+        : []),
+    ];
+    if (finish >= 0) s.queue.splice(finish + 1, 0, ...completion);
+    else add(s, ...completion);
+    add(s, ...clauses);
+  },
+};
 const rocketPorts: rocket.RocketPorts = {
   ...antManPorts,
   select,
@@ -5492,8 +5974,12 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...groot.grootAbilityOptions(s, id, grootPorts),
     ...starLord.starLordAbilityOptions(s, id, starLordPorts),
     ...gamora.gamoraAbilityOptions(s, id, gamoraPorts),
+    ...drax.draxAbilityOptions(s, id, draxPorts),
+    ...venom.venomAbilityOptions(s, id, venomPorts),
     ...gmwPack.gmwPlayerPackAbilityOptions(s, id, gmwPorts),
     ...starLordPack.starLordPackAbilityOptions(s, id, starLordPackPorts),
+    ...draxPack.draxPackAbilityOptions(s, id, draxPackPorts),
+    ...venomPack.venomPackAbilityOptions(s, id, venomPackPorts),
     ...quicksilverPack.quicksilverPackAbilityOptions(
       s,
       id,
@@ -5715,6 +6201,7 @@ function enemyAttack(
   id: string,
   extra?: string,
   activation?: MutagenActivation,
+  originalTarget?: string,
 ) {
   const canceled = () => {
     if (activation?.after)
@@ -5726,7 +6213,10 @@ function enemyAttack(
       });
   };
   const p = find(s, id);
-  if (!p) return;
+  if (!p) {
+    canceled();
+    return;
+  }
   if (p.stunned) {
     consumeStatus(p, "stunned");
     log(s, `${card(p).name} loses stunned instead of attacking.`);
@@ -5759,13 +6249,14 @@ function enemyAttack(
   const base = enemyATK(s, p, s.activePlayerId);
   log(
     s,
-    `${card(p).name} attacks ${heroCard(s).name}: ${base} base ATK${isVillain ? " before boost cards" : ""}.`,
+    `${card(p).name} attacks ${originalTarget && find(s, originalTarget) ? card(find(s, originalTarget)!).name : heroCard(s).name}: ${base} base ATK${isVillain ? " before boost cards" : ""}.`,
     "bad",
   );
   s.flags.attacksPerformed = Number(s.flags.attacksPerformed || 0) + 1;
   s.attack = {
     targetPlayerId: s.activePlayerId,
     originalPlayerId: s.activePlayerId,
+    originalTarget,
     attacker: id,
     isVillain,
     base,
@@ -5796,39 +6287,18 @@ function enemyAttack(
         ),
     );
   add(s, E("prepareAttackBoosts"), E("declareDefense"));
-  // Forced drone entry, including its responses, completes before defense.
+  add(
+    s,
+    E("enemyAttackInitiationWindow", {
+      attacker: id,
+      playerId: s.activePlayerId,
+      isVillain,
+      modifier: s.attack.modifier || 0,
+      usedIds: [],
+    }),
+  );
+  // Forced entry and its responses precede every optional initiation interrupt.
   if (isVillain && rulesCode(s.villain) === "01135") add(s, E("drone"));
-  const novaOptions = msMarvelAttackInitiatedOptions(s, p, [], msPorts);
-  const hawkeyeOptions = hawkeyeAttackInitiatedOptions(s, p, hawkeyePorts);
-  const firstHitOptions = isVillain
-    ? []
-    : playerOrder(s).flatMap((seat) =>
-        gamoraPack
-          .gamoraPackFirstHitOptions(seatView(s, seat), p, [], gamoraPackPorts)
-          .map((entry) => ({
-            ...entry,
-            id:
-              seat.id === s.activePlayerId
-                ? entry.id
-                : `${seat.id}:${entry.id}`,
-            effects: entry.effects.map((effect) => ({
-              ...effect,
-              actorId: seat.id,
-            })),
-          })),
-      );
-  if (novaOptions.length || hawkeyeOptions.length || firstHitOptions.length)
-    choose(
-      s,
-      "Enemy initiates attack",
-      "Use an interrupt before revealing boost cards?",
-      [
-        ...novaOptions,
-        ...hawkeyeOptions,
-        ...firstHitOptions,
-        option("continue", "Continue the attack", []),
-      ],
-    );
   const forced = doctorStrangeEnemyAttackInitiated(s, p);
   if (forced.length) {
     if (s.prompt) {
@@ -5867,6 +6337,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     attachments +
     blackWidowEnemyModifier(s, p, originalPlayerId) +
     rocket.rocketEnemyStats(s, p).attack +
+    drax.draxEnemyStats(s, p).attack +
     antMan.antManEnemyStats(s, p).attack -
     s.attachments
       .filter((a) => a.code === "12028" && a.attachedTo === p.id)
@@ -5932,12 +6403,36 @@ function prepareAttackBoosts(s: GameState) {
     if (p) a.pendingBoosts.push(p);
   }
 }
+/** Only an enemy recipient uses redirected outgoing attack resolution.
+ * Clash can target a friendly ally and retains ordinary defense/after-you
+ * windows. Keep classification stable if an enemy recipient has left play. */
+function attackTargetsEnemy(
+  s: GameState,
+  a: NonNullable<GameState["attack"]>,
+): a is NonNullable<GameState["attack"]> & { originalTarget: string } {
+  const id = a.originalTarget;
+  if (!id || id === "hero" || id.startsWith("hero:")) return false;
+  if (id === s.villain.id) return true;
+  const p =
+    find(s, id) ||
+    [...s.encounter.discard, ...s.resolving, ...s.removed].find(
+      (p) => p.id === id,
+    );
+  return !!p && ["minion", "villain"].includes(card(p).type_code);
+}
 function declareDefense(s: GameState) {
   const a = s.attack;
   if (!a) return;
   const p = find(s, a.attacker);
   if (!p) {
     abortAttack(s);
+    return;
+  }
+  if (attackTargetsEnemy(s, a)) {
+    a.defender = "none";
+    a.basicDefense = false;
+    a.defense = 0;
+    add(s, E("boostAttack"));
     return;
   }
   const base =
@@ -5999,6 +6494,8 @@ function boostEffects(s: GameState, p: Piece) {
   const rise =
     starLord.starLordBoost(s, p) ??
     gamora.gamoraBoost(s, p) ??
+    drax.draxBoost(s, p) ??
+    venom.venomBoost(s, p) ??
     rocket.rocketBoost(s, p) ??
     groot.grootBoost(s, p) ??
     scarletWitch.scarletWitchBoost(s, p) ??
@@ -6306,6 +6803,39 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
   const a = s.attack!;
   if (!a) return;
   const p = find(s, a.attacker);
+  if (attackTargetsEnemy(s, a)) {
+    // A redirected enemy attack uses native outgoing attack damage. This keeps
+    // Tough, Vibration Resistance, Piercing, Overkill and one Retaliate window,
+    // while no player is attacked or given a hero defense response.
+    if (!p || !find(s, a.originalTarget)) {
+      abortAttack(s);
+      return;
+    }
+    add(s, E("enemyTargetAttackComplete", { snapshot: a }));
+    if (!a.completionRecorded) {
+      s.enemyAttackCounts ||= {};
+      s.enemyAttackCounts[a.attacker] =
+        Number(s.enemyAttackCounts[a.attacker] || 0) + 1;
+      a.completionRecorded = true;
+    }
+    const result = attackAction(
+      s,
+      a.originalTarget,
+      Math.max(0, a.base - a.defense - a.prevented),
+      a.attacker,
+      !!a.overkill || !!sourceKeyword(s, a.attacker, "Overkill"),
+      false,
+      {
+        initiated: true,
+        piercing: !!a.piercing || !!sourceKeyword(s, a.attacker, "Piercing"),
+        ranged: !!sourceKeyword(s, a.attacker, "Ranged"),
+      },
+    );
+    a.damage = result?.actualDamage || 0;
+    a.damagePlaced = a.damage;
+    a.identityDamage = 0;
+    return;
+  }
   const target =
     a.defender && a.defender !== "none"
       ? a.defender
@@ -6356,6 +6886,12 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
   );
   const recipientId = s.activePlayerId;
   const identityBefore = seatView(s, recipientId).player.hp;
+  if (p && !a.completionRecorded) {
+    s.enemyAttackCounts ||= {};
+    s.enemyAttackCounts[a.attacker] =
+      Number(s.enemyAttackCounts[a.attacker] || 0) + 1;
+    a.completionRecorded = true;
+  }
   const result = dealDamage(
     s,
     target,
@@ -6364,7 +6900,11 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
     false,
     false,
     false,
-    { grootHandled: !!a.grootDamageHandled },
+    {
+      grootHandled: !!a.grootDamageHandled,
+      enemyAttack: true,
+      damageDealt: Math.max(0, a.base - a.defense),
+    },
   );
   a.damage = result.actualDamage;
   if (a.overkill && target !== "hero" && damage > before && !wasTough)
@@ -6376,7 +6916,13 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
       false,
       false,
       false,
-      { grootHandled: !!a.grootOverkillHandled },
+      {
+        grootHandled: !!a.grootOverkillHandled,
+        enemyAttack: true,
+        damageDealt: Math.max(0, damage - before),
+        damageFromAttack: true,
+        overkillDamage: true,
+      },
     );
   a.identityDamage = Math.max(
     0,
@@ -6428,6 +6974,28 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
     s,
     ...antMan.antManEnemyActivated(s, a.attacker),
     ...(a.afterActivation || []),
+    ...(a.damage > 0
+      ? [
+          E("dvAttackDamageResponse", {
+            snapshot: {
+              target: target === "hero" ? `hero:${recipientId}` : target,
+              actualDamage: a.damage,
+              attack: true,
+            },
+          }),
+        ]
+      : []),
+    ...(target !== "hero" && a.identityDamage
+      ? [
+          E("dvAttackDamageResponse", {
+            snapshot: {
+              target: `hero:${recipientId}`,
+              actualDamage: a.identityDamage,
+              attack: true,
+            },
+          }),
+        ]
+      : []),
     E("forcedResponses", {
       responses: [
         ...goblinModuleAttackResponses(s, {
@@ -6511,7 +7079,8 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
           ? (a.attackerSnapshot as GameState["villain"] | undefined)?.stage
           : undefined,
         isVillain: a.isVillain,
-        playerId: s.activePlayerId,
+        playerId: recipientId,
+        identityAttacked: target === "hero",
         defender: target,
         heroDamage: a.identityDamage || 0,
         heroDefended: target === "hero" && a.defender !== "none",
@@ -6770,6 +7339,8 @@ function reveal(
       ...groot.GROOT_SCRIPT_CODES,
       ...starLord.STAR_LORD_SCRIPT_CODES,
       ...gamora.GAMORA_SCRIPT_CODES,
+      ...drax.DRAX_SCRIPT_CODES,
+      ...venom.VENOM_SCRIPT_CODES,
     ].some((code) => code === p.code) ||
       CARDS.some(
         (core) => core.code === rulesCode(p) && core.type_code === "treachery",
@@ -6841,6 +7412,8 @@ function reveal(
   const rise =
     starLord.starLordEncounterReveal(s, p) ??
     gamora.gamoraEncounterReveal(s, p) ??
+    drax.draxEncounterReveal(s, p) ??
+    venom.venomEncounterReveal(s, p) ??
     rocket.rocketEncounterReveal(s, p) ??
     groot.grootEncounterReveal(s, p) ??
     scarletWitch.scarletWitchEncounterReveal(s, p) ??
@@ -7355,6 +7928,16 @@ function treachery(s: GameState, p: Piece) {
       else surge();
       break;
     case "01190": {
+      const venomNemesis = venom.venomShadowOfPast(s);
+      if (venomNemesis !== null) {
+        add(s, ...venomNemesis);
+        log(
+          s,
+          "Venom's remaining set-aside nemesis cards enter the fight!",
+          "bad",
+        );
+        break;
+      }
       if (s.flags.nemesis) {
         surge();
         break;
@@ -7436,8 +8019,12 @@ function resolve(s: GameState, e: Effect) {
   if (gmwPack.resolveGmwPlayerPackEffect(s, e, gmwPorts)) return;
   if (starLord.resolveStarLordEffect(s, e, starLordPorts)) return;
   if (gamora.resolveGamoraEffect(s, e, gamoraPorts)) return;
+  if (drax.resolveDraxEffect(s, e, draxPorts)) return;
+  if (venom.resolveVenomEffect(s, e, venomPorts)) return;
   if (starLordPack.resolveStarLordPackEffect(s, e, starLordPackPorts)) return;
   if (gamoraPack.resolveGamoraPackEffect(s, e, gamoraPackPorts)) return;
+  if (draxPack.resolveDraxPackEffect(s, e, draxPackPorts)) return;
+  if (venomPack.resolveVenomPackEffect(s, e, venomPackPorts)) return;
   if (resolveHawkeyeEffect(s, e, hawkeyePorts)) return;
   if (resolveSpiderWomanEffect(s, e, swPorts)) return;
   if (resolveDoctorStrangeEffect(s, e, dsPorts)) return;
@@ -7457,6 +8044,8 @@ function resolve(s: GameState, e: Effect) {
           doctorStrangeEncounterReveal(state, piece) ??
           starLord.starLordEncounterReveal(state, piece) ??
           gamora.gamoraEncounterReveal(state, piece) ??
+          drax.draxEncounterReveal(state, piece) ??
+          venom.venomEncounterReveal(state, piece) ??
           rocket.rocketEncounterReveal(state, piece) ??
           groot.grootEncounterReveal(state, piece) ??
           scarletWitch.scarletWitchEncounterReveal(state, piece) ??
@@ -7703,6 +8292,14 @@ function resolve(s: GameState, e: Effect) {
       delete s.flags.captainHelmetPending;
       s.flags.captainHelmetDeclined = true;
       break;
+    case "draxDefeatResume":
+      delete s.flags.draxStubbornPending;
+      delete s.flags.draxStubbornDeclined;
+      break;
+    case "draxAllowDefeat":
+      delete s.flags.draxStubbornPending;
+      s.flags.draxStubbornDeclined = true;
+      break;
     case "scriptSequence": {
       const source =
         e.source === "hero" || !e.source ? s.player : find(s, e.source);
@@ -7836,7 +8433,14 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "nativeEvent": {
-      event(s, e.piece, e.paid || [], e.lightningX, e.masterInvocationId);
+      event(
+        s,
+        e.piece,
+        e.paid ?? [],
+        e.lightningX,
+        e.masterInvocationId,
+        e.paidForCard,
+      );
       break;
     }
     case "ms:mark-attack-interrupt":
@@ -7887,6 +8491,13 @@ function resolve(s: GameState, e: Effect) {
       ]);
       for (const e of doctorStrangeCardPlayed(s, card(p)))
         discardPiece(s, e.id);
+      const eventEffects: Effect[] = e.after ?? [
+        E("nativeEvent", {
+          piece: p,
+          paid: e.paid || [],
+          paidForCard: e.paidForCard,
+        }),
+      ];
       add(
         s,
         ...msMarvelBeforeEvent(
@@ -7897,7 +8508,7 @@ function resolve(s: GameState, e: Effect) {
             : doctorStrangeBeforeEvent(
                 s,
                 p,
-                e.after.map((x: Effect) => ({ ...x, eventId: p.id })),
+                eventEffects.map((x: Effect) => ({ ...x, eventId: p.id })),
               ),
         ),
         E("finishResolution", {
@@ -7977,11 +8588,84 @@ function resolve(s: GameState, e: Effect) {
           break;
         }
       }
+      if (!replaced && power === "attack" && !e.draxBasicHandled) {
+        const packet = {
+          ...continuation,
+          grootBasicHandled: true,
+          gmwBasicHandled: true,
+        };
+        const options = drax.draxBasicAttackOptions(s, packet, [], draxPorts);
+        if (options.length) {
+          choose(
+            s,
+            "Basic attack interrupts",
+            "Play Knife Leap before resolving this basic attack?",
+            [
+              ...options,
+              option("continue", "Continue", [
+                { ...packet, draxBasicHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
+      }
+      if (!replaced && !e.venomPistolHandled) {
+        const after = [{ ...continuation, venomPistolHandled: true }];
+        const options = venom.venomBasicPowerOptions(
+          s,
+          power,
+          after,
+          venomPorts,
+        );
+        if (options.length) {
+          choose(
+            s,
+            "Basic power interrupts",
+            "Use Venom's Pistol for this basic power?",
+            [...options, option("continue", "Continue", after)],
+          );
+          break;
+        }
+      }
+      if (!replaced && !e.dvBasicHandled) {
+        const packet = { ...continuation, dvBasicHandled: false };
+        const options =
+          power === "attack"
+            ? draxPack.draxPackBasicAttackOptions(s, packet, [], draxPackPorts)
+            : venomPack.venomPackBasicThwartOptions(
+                s,
+                packet,
+                [],
+                venomPackPorts,
+              );
+        if (options.length) {
+          choose(
+            s,
+            "Basic power interrupts",
+            power === "attack"
+              ? "Use Leading Blow before resolving this basic attack?"
+              : "Use Making an Entrance before resolving this basic thwart?",
+            [
+              ...options,
+              option("continue", "Continue", [
+                { ...packet, dvBasicHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
+      }
+      const metadata = {
+        draxPackLeadingBlows: e.draxPackLeadingBlows,
+        venomPackEntrances: e.venomPackEntrances,
+        gmwBasicBonus: e.gmwBasicBonus,
+      };
       const native = wasp.waspBasicPower(
         s,
         power,
         continuation.amount - continuation.basicStatAmount,
-        { overkill: !!e.overkill },
+        { overkill: !!e.overkill, metadata },
       );
       if (native)
         add(
@@ -7997,16 +8681,20 @@ function resolve(s: GameState, e: Effect) {
             group: power === "attack" ? "enemy" : "scheme",
             title: power === "attack" ? "Basic attack" : "Basic thwart",
             action: E(power === "attack" ? "damage" : "thwart", {
+              ...metadata,
               amount,
               basicStatAmount: continuation.basicStatAmount,
+              gmwBasicBonus: e.gmwBasicBonus,
               basic: true,
               ...(power === "attack"
                 ? {
                     attack: true,
                     overkill: !!e.overkill,
-                    piercing: quicksilverPack.quicksilverPackBasicPiercing(
-                      textActiveState(s),
-                    ),
+                    piercing:
+                      !!e.piercing ||
+                      quicksilverPack.quicksilverPackBasicPiercing(
+                        textActiveState(s),
+                      ),
                   }
                 : { action: true }),
             }),
@@ -8033,6 +8721,57 @@ function resolve(s: GameState, e: Effect) {
         ...quicksilver.quicksilverBasicUsed(s, e.power),
       );
       break;
+    case "dvBasicDamageAfter":
+      add(
+        s,
+        ...draxPack.draxPackBasicAttackDamageResolved(
+          s,
+          e.packet,
+          Number(e.damageDealt || 0),
+        ),
+      );
+      break;
+    case "dvAttackDamageResponse": {
+      const snapshot = e.snapshot as venomPack.VenomPackAttackDamageSnapshot;
+      const identity = snapshot.target.startsWith("hero:")
+        ? playerOrder(s).find((seat) => seat.id === snapshot.target.slice(5))
+        : undefined;
+      const ally = allInPlay(s).find(
+        (p) => p.id === snapshot.target && card(p).type_code === "ally",
+      );
+      const surviving = identity
+        ? !identity.eliminated && seatView(s, identity).player.hp > 0
+        : !!ally && !ally.pendingDefeat && ally.damage < pieceHP(s, ally);
+      if (!surviving || snapshot.actualDamage <= 0) break;
+      const original = s.activePlayerId;
+      const options = playerOrder(s).flatMap((seat) => {
+        const view = seatView(s, seat);
+        if (seat.eliminated || view.player.hp <= 0) return [];
+        return venomPack
+          .venomPackAfterAttackDamageOptions(
+            view,
+            snapshot,
+            [{ ...e, actorId: original }],
+            venomPackPorts,
+          )
+          .map((o) => ({
+            ...o,
+            id: `${seat.id}:${o.id}`,
+            effects: o.effects.map((effect) => ({
+              ...effect,
+              actorId: seat.id,
+            })),
+          }));
+      });
+      if (options.length)
+        choose(
+          s,
+          "Shake it Off",
+          "Give the Guardian that took attack damage a tough status?",
+          [...options, option("continue", "Continue", [])],
+        );
+      break;
+    }
     case "quicksilverLateDefense": {
       const options = quicksilverPack.quicksilverPackDefenseOptions(
         s,
@@ -8189,10 +8928,11 @@ function resolve(s: GameState, e: Effect) {
       );
       // Keep every target and continuous effect in play until all damage has
       // been placed. Native defeat interrupts and responses follow the batch.
+      let damageDealt = 0;
       s.flags.waspDeferDefeats = true;
       try {
-        for (const packet of packets)
-          attackAction(
+        for (const packet of packets) {
+          const result = attackAction(
             s,
             packet.target,
             packet.amount,
@@ -8200,6 +8940,7 @@ function resolve(s: GameState, e: Effect) {
             !!e.overkill,
             false,
             {
+              basic: !!e.basic,
               initiated: true,
               piercing: e.piercing,
               excessBonus: (
@@ -8208,12 +8949,15 @@ function resolve(s: GameState, e: Effect) {
               aftermathChooser: e.chooserId,
             },
           );
+          damageDealt += Number(result?.damageDealt || 0);
+        }
       } finally {
         delete s.flags.waspDeferDefeats;
       }
       const defeated = s.minions.filter((p) => p.damage >= pieceHP(s, p));
       for (const p of defeated) defeatCharacter(s, p, "hero", true);
       if (s.villain.hp <= 0) advanceVillain(s);
+      if (e.basic) add(s, E("dvBasicDamageAfter", { packet: e, damageDealt }));
       break;
     }
     case "gmwDistributedExcess": {
@@ -8298,6 +9042,7 @@ function resolve(s: GameState, e: Effect) {
           defeatedMinion: e.wasMinion && !find(s, e.target),
           actorId: s.activePlayerId,
         }).map((x) => ({ ...x, mandatory: false })),
+        ...(e.draxBasicAttack ? drax.draxAfterBasicAttack(s, draxPorts) : []),
       );
       break;
     case "attackAftermathOrder": {
@@ -8494,11 +9239,11 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "restrictedLimit":
-      if (s.player.inPlay.filter((p) => keyword(p, "Restricted")).length > 2)
+      if (restrictedLimitExceeded(s))
         choose(
           s,
           "Restricted limit",
-          "Choose a Restricted card to discard; you may control at most two.",
+          "Choose a Restricted card to discard to meet your limit. Extra Weapon slots apply only to Weapon upgrades.",
           s.player.inPlay
             .filter((p) => keyword(p, "Restricted"))
             .map((p) =>
@@ -8628,6 +9373,8 @@ function resolve(s: GameState, e: Effect) {
         add(s, { ...e, target: "hero", actorId: e.target.slice(5) });
         break;
       }
+      if (e.target === "hero" && e.damageDealt === undefined)
+        e.damageDealt = e.amount;
       if (e.target === "hero" && !e.grootDamageHandled) {
         if (e.attack)
           discardToughForPiercing(
@@ -8837,8 +9584,8 @@ function resolve(s: GameState, e: Effect) {
           break;
         }
       }
-      if (e.attack)
-        attackAction(
+      if (e.attack) {
+        const result = attackAction(
           s,
           e.target,
           e.amount,
@@ -8846,6 +9593,7 @@ function resolve(s: GameState, e: Effect) {
           e.overkill,
           e.panther,
           {
+            basic: !!e.basic,
             piercing: e.piercing,
             ranged: e.ranged,
             excessToMain: e.excessToMain,
@@ -8853,7 +9601,27 @@ function resolve(s: GameState, e: Effect) {
             initiated: e.attackInitiated || e.attackAlreadyInitiated,
           },
         );
-      else {
+        if (e.basic && result)
+          add(
+            s,
+            E("dvBasicDamageAfter", {
+              packet: e,
+              damageDealt: result.damageDealt,
+            }),
+          );
+        if (result?.actualDamage)
+          add(
+            s,
+            E("dvAttackDamageResponse", {
+              snapshot: {
+                target:
+                  e.target === "hero" ? `hero:${s.activePlayerId}` : e.target,
+                actualDamage: result.actualDamage,
+                attack: true,
+              },
+            }),
+          );
+      } else {
         if (e.ignoreTough) s.flags.ignoreToughPacket = true;
         dealDamage(
           s,
@@ -8863,7 +9631,12 @@ function resolve(s: GameState, e: Effect) {
           e.attack,
           e.overkill,
           e.panther,
-          { grootHandled: !!e.grootDamageHandled },
+          {
+            grootHandled: !!e.grootDamageHandled,
+            damageDealt: e.damageDealt,
+            damageFromAttack: !!e.damageFromAttack,
+            overkillDamage: !!e.overkillDamage,
+          },
         );
         delete s.flags.ignoreToughPacket;
       }
@@ -8889,7 +9662,7 @@ function resolve(s: GameState, e: Effect) {
         else threat(s, e.target, e.amount, e.skip);
       }
       break;
-    case "thwart":
+    case "thwart": {
       if (
         e.basic &&
         !e.thorWindowHandled &&
@@ -8911,19 +9684,37 @@ function resolve(s: GameState, e: Effect) {
         e.amount += heroStats(s).thwart - e.basicStatAmount;
         delete e.basicStatAmount;
       }
-      if (e.action)
-        thwartAction(
+      const beforeThreat =
+        e.target === "main"
+          ? s.scheme.threat
+          : s.sideSchemes.find((p) => p.id === e.target)?.counters || 0;
+      const queuedBefore = s.queue.length;
+      const removed = e.action
+        ? thwartAction(
+            s,
+            e.target,
+            e.amount,
+            e.source,
+            e.thwartInitiated,
+            !!e.ignoreCrisis,
+            !!e.thwartStatusChecked,
+          )
+        : thwart(s, e.target, e.amount, !!e.ignoreCrisis, e.source);
+      if (e.basic && e.venomPackEntrances?.length) {
+        const responses = s.queue.splice(0, s.queue.length - queuedBefore);
+        add(
           s,
-          e.target,
-          e.amount,
-          e.source,
-          e.thwartInitiated,
-          !!e.ignoreCrisis,
-          !!e.thwartStatusChecked,
+          ...responses,
+          ...venomPack.venomPackBasicThwartEnded(
+            s,
+            e,
+            beforeThreat > 0 && removed === beforeThreat,
+          ),
         );
-      else thwart(s, e.target, e.amount, !!e.ignoreCrisis, e.source);
+      }
       delete s.flags.additionalThwartPacket;
       break;
+    }
     case "target":
       targetPrompt(s, e);
       break;
@@ -9172,10 +9963,22 @@ function resolve(s: GameState, e: Effect) {
         e.attachedTarget,
         !!e.agilityHandled,
         e.overpaid || 0,
+        e.paidForCard,
       );
+      break;
+    case "commitPaymentAllocation":
+      s.prompt = e.payment;
+      pay(s, e.ids, e.wildAs, e.paidForCard);
+      break;
+    case "restorePaymentPrompt":
+      s.prompt = e.payment;
+      s.queue = e.queue;
       break;
     case "playRequest":
       requestPlay(s, e.piece, !!e.discountHandled);
+      break;
+    case "dvEnemyAttackComplete":
+      add(s, ...(e.after || []));
       break;
     case "payRequest":
       requestPayment(
@@ -9490,6 +10293,15 @@ function resolve(s: GameState, e: Effect) {
       const minionTarget = attack
         ? s.minions.find((minion) => minion.id === e.target)
         : undefined;
+      const enemyTarget = attack ? find(s, e.target) : undefined;
+      const attackedEnemySnapshot = enemyTarget
+        ? {
+            id: enemyTarget.id,
+            code: enemyTarget.code,
+            stage:
+              enemyTarget.id === s.villain.id ? s.villain.stage : undefined,
+          }
+        : undefined;
       const queuedBefore = s.queue.length;
       const bonus = attack
         ? scarletPack.scarletWitchPackAllyAttackBonus(s, p)
@@ -9501,9 +10313,14 @@ function resolve(s: GameState, e: Effect) {
       else thwartAction(s, e.target, amount, p.id);
       if (stunned) break;
       const responses = s.queue.splice(0, s.queue.length - queuedBefore);
+      const defeatKey = `dvAllyDefeat:${p.id}:${s.nextId++}`;
       add(
         s,
         ...responses,
+        E("dvAllyAttackSnapshot", {
+          key: defeatKey,
+          attackedEnemy: attackedEnemySnapshot,
+        }),
         E("allyResponse", {
           id: p.id,
           attack,
@@ -9513,6 +10330,8 @@ function resolve(s: GameState, e: Effect) {
         }),
         E("allyConsequence", {
           id: p.id,
+          attack,
+          defeatKey,
           amount: starLordPack.starLordPackConsequentialDamage(
             e,
             attack
@@ -9542,7 +10361,12 @@ function resolve(s: GameState, e: Effect) {
         }),
       );
       if (!e.attack)
-        add(s, ...scarletPack.scarletWitchPackAfterAllyThwart(s, p));
+        add(
+          s,
+          ...scarletPack.scarletWitchPackAfterAllyThwart(s, p),
+          ...venomPack.venomPackAfterAllyThwart(s, p),
+        );
+      add(s, ...draxPack.draxPackAfterAllyBasic(s, p));
       add(s, ...hulkPackAllyResponse(s, p, !!e.attack));
       add(
         s,
@@ -9564,6 +10388,8 @@ function resolve(s: GameState, e: Effect) {
     }
     case "allyConsequence": {
       const p = find(s, e.id);
+      const defeatedEnemy = !!s.flags[e.defeatKey];
+      if (e.defeatKey) delete s.flags[e.defeatKey];
       if (p && e.amount)
         add(
           s,
@@ -9572,6 +10398,54 @@ function resolve(s: GameState, e: Effect) {
             amount: e.amount,
             source: "consequential",
           }),
+          E("dvAllyConsequenceAfter", {
+            id: p.id,
+            beforeDamage: p.damage,
+            attack: !!e.attack,
+            defeatedEnemy,
+          }),
+        );
+      break;
+    }
+    case "dvAllyAttackSnapshot":
+      s.flags[e.key] =
+        !!e.attackedEnemy &&
+        (!find(s, e.attackedEnemy.id) ||
+          find(s, e.attackedEnemy.id)?.code !== e.attackedEnemy.code ||
+          (e.attackedEnemy.id === s.villain.id &&
+            s.villain.stage !== e.attackedEnemy.stage));
+      break;
+    case "dvRegroupDefeatAfter":
+      if (e.playerId)
+        add(
+          s,
+          E("bwAllyDefeated", {
+            piece: e.piece,
+            playerId: e.playerId,
+            actorId: e.playerId,
+          }),
+        );
+      log(
+        s,
+        `${card(e.piece).name} is defeated and returns to its owner's hand.`,
+        "good",
+      );
+      break;
+    case "dvAllyConsequenceAfter": {
+      const p = allInPlay(s).find((p) => p.id === e.id);
+      if (p)
+        add(
+          s,
+          ...draxPack.draxPackAfterAllyConsequence(
+            s,
+            p,
+            {
+              attack: !!e.attack,
+              defeatedEnemy: !!e.defeatedEnemy,
+              actualDamage: Math.max(0, p.damage - e.beforeDamage),
+            },
+            draxPackPorts,
+          ),
         );
       break;
     }
@@ -9762,6 +10636,142 @@ function resolve(s: GameState, e: Effect) {
     case "enemyAttack":
       enemyAttack(s, e.id, e.extra);
       break;
+    case "enemyTargetAttackComplete": {
+      const a = e.snapshot as NonNullable<GameState["attack"]>;
+      s.attack = null;
+      add(
+        s,
+        ...antMan.antManEnemyActivated(s, a.attacker),
+        ...(a.afterActivation || []),
+        ...a.boostEffects,
+        ...(a.boostIds || []).map((id) => E("finishResolution", { id })),
+        E("scarletEnemyActivated", {
+          id: a.attacker,
+          actorId: a.originalPlayerId || s.activePlayerId,
+        }),
+        ...(a.activationAfter
+          ? [
+              {
+                ...a.activationAfter,
+                performed: true,
+                damagePlaced: a.damagePlaced || 0,
+                threatPlaced: 0,
+              },
+            ]
+          : []),
+      );
+      break;
+    }
+    case "enemyAttackInitiationWindow": {
+      const a = s.attack;
+      if (!a || a.attacker !== e.attacker) break;
+      const attacker = find(s, a.attacker);
+      if (!attacker) {
+        abortAttack(s);
+        break;
+      }
+      a.modifier = e.modifier ?? a.modifier;
+      const usedIds: string[] = e.usedIds || [];
+      const packet = {
+        ...e,
+        actorId: e.playerId,
+        modifier: a.modifier || 0,
+        usedIds,
+      };
+      const resume = (id: string) => ({
+        ...packet,
+        usedIds: [...usedIds, id],
+      });
+      const scoped = (seatId: string, options: Option[]) =>
+        options.map((entry) => ({
+          ...entry,
+          id: seatId === s.activePlayerId ? entry.id : `${seatId}:${entry.id}`,
+          effects: entry.effects.map((effect) => ({
+            ...effect,
+            actorId: seatId,
+          })),
+        }));
+      const options: Option[] = [];
+      for (const seat of playerOrder(s)) {
+        const view = seatView(s, seat);
+        const nova = msMarvelAttackInitiatedOptions(view, attacker, [], msPorts)
+          .filter((entry) => !usedIds.includes(entry.id))
+          .map((entry) => ({
+            ...entry,
+            effects: entry.effects.map((effect) => ({
+              ...effect,
+              after: [resume(entry.id)],
+            })),
+          }));
+        const againstPlayer =
+          !a.originalTarget ||
+          a.originalTarget === "hero" ||
+          a.originalTarget.startsWith("hero:");
+        const mockingbird = (
+          againstPlayer
+            ? hawkeyeAttackInitiatedOptions(view, attacker, hawkeyePorts)
+            : []
+        )
+          .filter((entry) => !usedIds.includes(entry.id))
+          .map((entry) => ({
+            ...entry,
+            effects: entry.effects.map((effect) =>
+              effect.type === "payRequest"
+                ? {
+                    ...effect,
+                    after: [...(effect.after || []), resume(entry.id)],
+                  }
+                : effect,
+            ),
+          }));
+        const firstHit = a.isVillain
+          ? []
+          : gamoraPack.gamoraPackFirstHitOptions(
+              view,
+              attacker,
+              [packet],
+              gamoraPackPorts,
+            );
+        const subdue = draxPack.draxPackAttackInitiatedOptions(
+          view,
+          attacker,
+          packet,
+          [],
+          draxPackPorts,
+        );
+        const identity = againstPlayer
+          ? venom.venomAttackInitiatedOptions(
+              view,
+              {
+                attacker: a.attacker,
+                playerId: e.playerId,
+                isVillain: a.isVillain,
+                usedIds,
+                sharedWindow: packet,
+              },
+              [],
+              venomPorts,
+            )
+          : [];
+        options.push(
+          ...scoped(seat.id, [
+            ...nova,
+            ...mockingbird,
+            ...firstHit,
+            ...subdue,
+            ...identity,
+          ]),
+        );
+      }
+      if (options.length)
+        choose(
+          s,
+          "Enemy initiates attack",
+          "Use an interrupt before revealing boost cards?",
+          [...options, option("continue", "Continue the attack", [])],
+        );
+      break;
+    }
     case "attackKeyword":
       if (s.attack && e.keyword === "piercing") s.attack.piercing = true;
       break;
@@ -9799,6 +10809,24 @@ function resolve(s: GameState, e: Effect) {
     case "boostAttack": {
       const a = s.attack;
       if (!a) break;
+      if (!e.venomPistolHandled) {
+        const after = [{ ...e, venomPistolHandled: true }];
+        const options = venom.venomBasicPowerOptions(
+          s,
+          "defense",
+          after,
+          venomPorts,
+        );
+        if (options.length) {
+          choose(
+            s,
+            "Basic power interrupts",
+            "Use Venom's Pistol for this basic defense?",
+            [...options, option("continue", "Continue", after)],
+          );
+          break;
+        }
+      }
       if (!e.expertChecked) {
         const options = [
           ...groot.grootDefenseOptions(s, [E("boostAttack")], grootPorts),
@@ -9986,6 +11014,10 @@ function resolve(s: GameState, e: Effect) {
         break;
       }
       calculateAttack(s);
+      if (attackTargetsEnemy(s, a)) {
+        add(s, E("finishAttack"));
+        break;
+      }
       const damageTarget =
         a.defender && a.defender !== "none"
           ? a.defender
@@ -10011,7 +11043,12 @@ function resolve(s: GameState, e: Effect) {
             `Flora Colossus prevents ${prevented} damage with growth counters.`,
           );
       }
-      if (!heroTarget && a.overkill && !a.grootOverkillHandled) {
+      if (
+        !heroTarget &&
+        !a.originalTarget &&
+        a.overkill &&
+        !a.grootOverkillHandled
+      ) {
         const ally = find(s, damageTarget);
         const excess =
           ally && !ally.tough
@@ -10040,9 +11077,28 @@ function resolve(s: GameState, e: Effect) {
       ];
       const shieldTarget = damageTarget;
       if (heroTarget) {
-        const packet = { type: "attackDamage", kind: "attack", target: "hero" };
+        const packet = {
+          type: "attackDamage",
+          kind: "attack",
+          target: "hero",
+          attack: true,
+        };
         const amount = Math.max(0, a.base - a.defense - a.prevented);
         opts.unshift(
+          ...drax.draxDamageOptions(
+            s,
+            packet,
+            amount,
+            [E("damageWindow")],
+            draxPorts,
+          ),
+          ...draxPack.draxPackDamageOptions(
+            s,
+            packet,
+            amount,
+            [E("damageWindow")],
+            draxPackPorts,
+          ),
           ...starLord.starLordDamageOptions(
             s,
             packet,
@@ -10168,6 +11224,30 @@ function resolve(s: GameState, e: Effect) {
             : 0;
         if (!s.player.tough)
           opts.unshift(
+            ...drax.draxDamageOptions(
+              s,
+              {
+                type: "damage",
+                kind: "overkill",
+                target: "hero",
+                attack: true,
+              },
+              excess,
+              [E("damageWindow")],
+              draxPorts,
+            ),
+            ...draxPack.draxPackDamageOptions(
+              s,
+              {
+                type: "damage",
+                kind: "overkill",
+                target: "hero",
+                attack: true,
+              },
+              excess,
+              [E("damageWindow")],
+              draxPackPorts,
+            ),
             ...starLord.starLordDamageOptions(
               s,
               { type: "damage", kind: "overkill", target: "hero" },
@@ -10420,11 +11500,21 @@ function resolve(s: GameState, e: Effect) {
         [e],
         gamoraPackPorts,
       );
+      const draxOptions = e.snapshot
+        ? drax.draxVillainAttackResponseOptions(
+            s,
+            e.snapshot,
+            e.draxUsed || [],
+            [e],
+            draxPorts,
+          )
+        : [];
       if (
         !e.defended &&
         !packOptions.length &&
         !bwOptions.length &&
-        !gamoraOptions.length
+        !gamoraOptions.length &&
+        !draxOptions.length
       )
         break;
       const ind = s.player.inPlay.find((p) => rulesCode(p) === "01082");
@@ -10433,6 +11523,7 @@ function resolve(s: GameState, e: Effect) {
         option("pass", "Continue", []),
         ...bwOptions,
         ...gamoraOptions,
+        ...draxOptions,
         ...packOptions.map((o) => ({
           ...o,
           effects: [
@@ -10484,7 +11575,12 @@ function resolve(s: GameState, e: Effect) {
           ),
         );
       if (opts.length > 1)
-        choose(s, "After defending", "You can trigger a response.", opts);
+        choose(
+          s,
+          e.defended ? "After defending" : "Drax · after the villain attacks",
+          "You can trigger a response.",
+          opts,
+        );
       break;
     }
     case "boostDroneChoice": {
@@ -10771,6 +11867,8 @@ function resolve(s: GameState, e: Effect) {
         }
       }
       gamora.gamoraPhaseEnded(s);
+      venomPack.venomPackPhaseEnded(s);
+      venom.venomPhaseEnded(s);
       scarletWitch.scarletWitchPhaseEnded(s);
       rocket.rocketPhaseEnded(s);
       for (const seat of s.players) {
@@ -10901,6 +11999,13 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "newRound": {
+      if (!e.draxPackRegroupEnded) {
+        const expired = draxPack.draxPackRoundEnded(s);
+        if (expired.length) {
+          add(s, ...expired, { ...e, draxPackRegroupEnded: true });
+          break;
+        }
+      }
       if (!e.starLordBlazeEnded) {
         const damage = starLordPack.starLordPackPhaseEnded(
           s,
@@ -10912,6 +12017,8 @@ function resolve(s: GameState, e: Effect) {
         }
       }
       gamora.gamoraPhaseEnded(s);
+      venomPack.venomPackPhaseEnded(s);
+      venom.venomPhaseEnded(s);
       scarletWitch.scarletWitchPhaseEnded(s);
       rocket.rocketPhaseEnded(s);
       rocket.rocketRoundEnded(s);
@@ -10936,6 +12043,9 @@ function resolve(s: GameState, e: Effect) {
           nemesis: s.flags.nemesis || false,
           ...(s.heroId === "groot"
             ? { grootGrowthCounters: groot.grootGrowthCounters(s) }
+            : {}),
+          ...(s.heroId === "drax"
+            ? { draxVengeanceCounters: drax.draxVengeanceCounters(s) }
             : {}),
           ...(s.flags.qsvCannotReadyUntilTurnEnd
             ? { qsvCannotReadyUntilTurnEnd: s.flags.qsvCannotReadyUntilTurnEnd }
@@ -11284,7 +12394,8 @@ export function dispatch(state: GameState, command: Command): GameState {
     else if (command.type === "CANCEL") {
       need(s.prompt?.cancelable, "This decision cannot be canceled.");
       const resume = s.prompt?.cancellationQueue;
-      starLord.starLordHandPlayFinished(s);
+      if (!resume?.some((e) => e.type === "restorePaymentPrompt"))
+        starLord.starLordHandPlayFinished(s);
       s.prompt = null;
       s.queue = resume || [];
     } else {

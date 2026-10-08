@@ -121,6 +121,8 @@ export interface Prompt {
   selectAction?: Effect;
 }
 export interface Attack {
+  /** This activation reached its actual attack damage step. */
+  completionRecorded?: boolean;
   /** Flora Colossus applies once to each incoming identity damage packet. */
   grootDamageHandled?: boolean;
   grootOverkillHandled?: boolean;
@@ -162,6 +164,8 @@ export interface Attack {
   isVillain: boolean;
 }
 export interface GameState {
+  /** Actual completed enemy attacks by physical attacker, across defending seats. */
+  enemyAttackCounts?: Record<string, number>;
   /** Physical source event for the currently resolving effect only. */
   currentEventId?: string;
   /** Independent nested attack: preserves printed clauses before its aftermath. */
@@ -233,6 +237,9 @@ export interface GameState {
     deck: Piece[];
     discard: Piece[];
     inPlay: Piece[];
+    /** Actual owned cards set aside by setup. These remain outside the player
+     * and encounter decks until a card ability moves that physical instance. */
+    setAside?: Piece[];
     /** Doctor Strange's separate physical supplementary deck. Never part of the
      * player draw pile or its exhaustion rule. Only its current top is faceup. */
     invocationDeck?: Piece[];

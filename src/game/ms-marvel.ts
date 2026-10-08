@@ -1,3 +1,4 @@
+import { printedCardMetadata } from "./printed-card-metadata.js";
 import { isTextBlank } from "./card-text.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
@@ -14,7 +15,10 @@ import type {
 } from "./types.js";
 
 const cards = new Map(
-  (importedCards as unknown as Card[]).map((card) => [card.code, card]),
+  (importedCards as unknown as Card[]).map((card) => [
+    card.code,
+    printedCardMetadata(card),
+  ]),
 );
 const E = (type: string, args: Record<string, unknown> = {}): Effect => ({
   type,

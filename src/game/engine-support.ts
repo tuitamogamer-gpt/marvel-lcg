@@ -13,6 +13,10 @@ import { STAR_LORD_SCRIPT_CODES } from "./star-lord.js";
 import { GAMORA_SCRIPT_CODES } from "./gamora.js";
 import { STAR_LORD_PACK_SCRIPT_CODES } from "./star-lord-pack.js";
 import { GAMORA_PACK_SCRIPT_CODES } from "./gamora-pack.js";
+import { DRAX_SCRIPT_CODES } from "./drax.js";
+import { DRAX_PACK_SCRIPT_CODES } from "./drax-pack.js";
+import { VENOM_PACK_SCRIPT_CODES } from "./venom-pack.js";
+import { VENOM_SCRIPT_CODES } from "./venom.js";
 import { GOBLIN_MODULE_SCRIPT_CODES } from "./goblin-modules.js";
 import { BLACK_WIDOW_SCRIPT_CODES } from "./black-widow.js";
 import { DOCTOR_STRANGE_SCRIPT_CODES } from "./doctor-strange.js";
@@ -50,6 +54,8 @@ export const SCRIPTED_HERO_IDS = new Set([
   "rocket",
   "stld",
   "gam",
+  "drax",
+  "vnm",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ANT_MAN_SCRIPT_CODES,
@@ -67,6 +73,10 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...GAMORA_SCRIPT_CODES,
   ...STAR_LORD_PACK_SCRIPT_CODES,
   ...GAMORA_PACK_SCRIPT_CODES,
+  ...DRAX_SCRIPT_CODES,
+  ...DRAX_PACK_SCRIPT_CODES,
+  ...VENOM_PACK_SCRIPT_CODES,
+  ...VENOM_SCRIPT_CODES,
   ...CAPTAIN_AMERICA_SCRIPT_CODES,
   ...HULK_SCRIPT_CODES,
   ...CAPTAIN_PACK_SCRIPT_CODES,

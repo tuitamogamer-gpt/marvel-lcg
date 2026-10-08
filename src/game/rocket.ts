@@ -285,6 +285,8 @@ export interface RocketDamageSnapshot {
   stage?: number;
   playerId?: string;
   actualDamage: number;
+  /** Saves before the dealt/taken split fall back to actualDamage. */
+  damageDealt?: number;
   excessDamage: number;
   /** Allies and supports remain separate sources. Controlled upgrades and
    * events dealing damage on behalf of the player are identity sources. */
@@ -300,7 +302,7 @@ export function rocketDamageResolved(
   if (
     !active(s) ||
     !snapshot.sourceIsIdentity ||
-    snapshot.actualDamage <= 0 ||
+    (snapshot.damageDealt ?? snapshot.actualDamage) <= 0 ||
     (snapshot.playerId && snapshot.playerId !== s.activePlayerId)
   )
     return [];

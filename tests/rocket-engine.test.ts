@@ -446,7 +446,7 @@ describe("Rocket's native Tech, attacks and damage responses", () => {
     expect(s.player.inPlay.find((p) => p.id === launcher.id)?.counters).toBe(0);
   });
 
-  it("Schadenfreude heals per enemy actually damaged by one Launcher activation", () => {
+  it("Schadenfreude heals per enemy dealt damage by one Launcher activation, including Tough", () => {
     let s = base("rocket");
     s.player.hp = 1;
     const launcher = put(s, "16037");
@@ -458,7 +458,7 @@ describe("Rocket's native Tech, attacks and damage responses", () => {
     s = finish(paidPlay(s, "16032", "16049"));
     s = command(s, { type: "ABILITY", id: launcher.id, action: "launcher" });
     s = finish(target(s, "p1"));
-    expect(s.player.hp).toBe(7); // villain + a + b; the Tough enemy took no damage.
+    expect(s.player.hp).toBe(9); // Four enemies were dealt damage; Tough changes damage taken (RRG1.8 p35).
     expect(s.minions.find((p) => p.id === a.id)?.damage).toBe(2);
     expect(s.minions.find((p) => p.id === b.id)?.damage).toBe(2);
     expect(s.minions.find((p) => p.id === tough.id)?.damage).toBe(0);

@@ -11,6 +11,7 @@ import {
 } from "./star-lord.js";
 import { starLordPackModifiers } from "./star-lord-pack.js";
 import { gamoraPackAllyHP } from "./gamora-pack.js";
+import { draxStats } from "./drax.js";
 import {
   antManPackAllyHP,
   antManPackStats,
@@ -31,6 +32,7 @@ import {
   doctorStrangeTraits,
 } from "./doctor-strange.js";
 import { expansionErrata } from "./expansion-errata.js";
+import { printedCardMetadata } from "./printed-card-metadata.js";
 import { msMarvelStats } from "./ms-marvel.js";
 import { identityMatch, uniqueMatches } from "./unique.js";
 import { rulesCode } from "./rules-code.js";
@@ -73,6 +75,7 @@ export const CARDS = ([...playerData, ...encounterData] as Card[]).map((c) => {
 export const CATALOG_CARDS = [
   ...CARDS,
   ...(catalogData as Card[])
+    .map(printedCardMetadata)
     .map(expansionErrata)
     .filter((c) => !CARDS.some((core) => core.code === c.code)),
 ];
@@ -405,6 +408,34 @@ export const HEROES = [
     style: "Events · Flexible",
     complexity: 3,
   },
+  {
+    id: "drax",
+    code: "19001a",
+    alter: "19001b",
+    name: "Drax",
+    identity: "Drax",
+    aspect: "protection" as Aspect,
+    color: "#87a48a",
+    tag: "Fight me, coward!",
+    description:
+      "Build vengeance when the villain attacks, strike back with your knives, and recover by changing to alter-ego form.",
+    style: "Vengeance counters · Protection",
+    complexity: 3,
+  },
+  {
+    id: "vnm",
+    code: "20001a",
+    alter: "20001b",
+    name: "Venom",
+    identity: "Flash Thompson",
+    aspect: "justice" as Aspect,
+    color: "#648cab",
+    tag: "Armed and ready.",
+    description:
+      "Equip an arsenal of Weapons, spend health for a resource, and use your pistols to strengthen each basic power.",
+    style: "Weapon upgrades · Justice",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -593,6 +624,8 @@ export function deckCodes(
       (hero === "rocket" && aspect === "aggression") ||
       (hero === "stld" && aspect === "leadership") ||
       (hero === "gam" && aspect === "aggression") ||
+      (hero === "drax" && aspect === "protection") ||
+      (hero === "vnm" && aspect === "justice") ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
         pair.includes("aggression") &&
@@ -727,6 +760,7 @@ export function heroStats(s: GameState) {
       rocketStats(s).attack +
       starLordStats(s).attack +
       starLordPackModifiers(s, "hero").attack +
+      draxStats(s).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
       spiderWomanStats(s).attack +

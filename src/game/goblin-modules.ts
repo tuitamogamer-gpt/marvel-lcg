@@ -1,3 +1,4 @@
+import { printedCardMetadata } from "./printed-card-metadata.js";
 import type {
   Card,
   Effect,
@@ -13,7 +14,9 @@ import type {
   MutagenForcedResponse,
 } from "./mutagen-formula.js";
 
-const cards = new Map((catalog as Card[]).map((c) => [c.code, c]));
+const cards = new Map(
+  (catalog as Card[]).map((c) => [c.code, printedCardMetadata(c)]),
+);
 const E = (type: string, args: Record<string, unknown> = {}): Effect => ({
   type,
   ...args,

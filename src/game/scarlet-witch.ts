@@ -1,10 +1,13 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { isTextBlank } from "./card-text.js";
+import { printedCardMetadata } from "./printed-card-metadata.js";
 import type { AntManPorts, AntManTarget } from "./ant-man.js";
 import type { Card, Effect, GameState, Option, Piece } from "./types.js";
 
-const cards = new Map((catalog as unknown as Card[]).map((c) => [c.code, c]));
+const cards = new Map(
+  (catalog as unknown as Card[]).map((c) => [c.code, printedCardMetadata(c)]),
+);
 const E = (type: string, args: Record<string, unknown> = {}): Effect => ({
   type,
   ...args,

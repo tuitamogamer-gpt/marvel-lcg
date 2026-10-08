@@ -5,6 +5,9 @@ import { quicksilverPackResourceSources } from "./quicksilver-pack.js";
 import { gamoraKeenInstinctsEligible } from "./gamora.js";
 import { gamoraPackResourceSources } from "./gamora-pack.js";
 import { starLordPackResourceSources } from "./star-lord-pack.js";
+import { draxPackResourceSources } from "./drax-pack.js";
+import { venomPackResourceSources } from "./venom-pack.js";
+import { venomResourceSources } from "./venom.js";
 import { isTextBlank } from "./card-text.js";
 import { hawkeyeResourceSources } from "./hawkeye.js";
 import { spiderWomanResourceSources } from "./spider-woman.js";
@@ -40,6 +43,12 @@ export interface PaymentSource {
   resources: Resource[];
   description: string;
   kind: "card" | "ability";
+}
+
+/** TAKE costs require the full damage to reach the identity. Tough prevents
+ * that damage, so it cannot be discarded to partially pay Symbiotic Bond. */
+export function venomPaymentDamageCostAvailable(s: GameState, amount: number) {
+  return amount > 0 && !s.player.tough && s.player.hp >= amount;
 }
 
 export function paymentSources(
@@ -107,6 +116,13 @@ export function paymentSources(
   sources.push(...quicksilverPackResourceSources(s, targetCode));
   sources.push(...gamoraPackResourceSources(s));
   sources.push(...starLordPackResourceSources(s));
+  sources.push(...draxPackResourceSources(s));
+  sources.push(...venomPackResourceSources(s));
+  sources.push(
+    ...venomResourceSources(s, {
+      canTakeDamageCost: venomPaymentDamageCostAvailable,
+    }),
+  );
   sources.push(...hawkeyeResourceSources(s, targetCode));
   sources.push(...spiderWomanResourceSources(s, targetCode));
   sources.push(...blackWidowResourceSources(s, targetCode));
@@ -218,4 +234,64 @@ export function paymentStatus(
     missing,
     ready: printed.length >= cost && !missing.length,
   };
+}
+
+/** Distinct resource multisets allocated to the actual cost. Generated excess
+ * is overpayment (RRG 1.8, p13), not a resource paid for that cost. Wilds used
+ * for a typed requirement become that type; other wilds use the player's type. */
+export function paidResourceAllocations(
+  printed: Resource[],
+  cost: number,
+  requirements: Resource[] = [],
+  wildAs: Resource = "energy",
+): Resource[][] {
+  const types: Resource[] = ["energy", "mental", "physical", "wild"];
+  if (cost < requirements.length || printed.length < cost || cost < 0)
+    return [];
+  let remaining = new Map<string, number[]>();
+  const initial = types.map((type) => printed.filter((r) => r === type).length);
+  remaining.set(initial.join(":"), initial);
+  for (const required of requirements) {
+    const next = new Map<string, number[]>();
+    for (const counts of remaining.values()) {
+      for (const type of new Set<Resource>([required, "wild"])) {
+        const index = types.indexOf(type);
+        if (!counts[index]) continue;
+        const rest = [...counts];
+        rest[index]--;
+        next.set(rest.join(":"), rest);
+      }
+    }
+    remaining = next;
+  }
+  const order = (paid: Resource[]) =>
+    [...paid].sort((a, b) => types.indexOf(a) - types.indexOf(b));
+  const result = new Map<string, Resource[]>();
+  for (const counts of remaining.values()) {
+    let subsets = new Map<string, Resource[]>([
+      [order(requirements).join(":"), order(requirements)],
+    ]);
+    const generic = types.flatMap((type, index) =>
+      Array<Resource>(counts[index]).fill(type === "wild" ? wildAs : type),
+    );
+    for (const resource of generic) {
+      const next = new Map(subsets);
+      for (const paid of subsets.values()) {
+        if (paid.length >= cost) continue;
+        const allocated = order([...paid, resource]);
+        next.set(allocated.join(":"), allocated);
+      }
+      subsets = next;
+    }
+    for (const paid of subsets.values())
+      if (paid.length === cost) result.set(paid.join(":"), paid);
+  }
+  return [...result.values()].sort((a, b) => {
+    const pure = (paid: Resource[]) =>
+      paid.length > 0 && paid.every((r) => r === paid[0]);
+    return (
+      Number(pure(b)) - Number(pure(a)) ||
+      a.join(":").localeCompare(b.join(":"))
+    );
+  });
 }
