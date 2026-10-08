@@ -81,6 +81,30 @@ describe("Drax and Venom native basic/ally adapters", () => {
     expect(s.villain.hp).toBe(49);
     expect(s.player.exhausted).toBe(false);
   });
+  it("clamps only the final attack when two Leading Blows outweigh a later Godslayer bonus", () => {
+    let s = hero();
+    const godslayer = put(s, "18018");
+    const [first, second] = hand(s, "19017", "19017");
+    const boosts = [makePiece(s, "19027"), makePiece(s, "19027")];
+    s.encounter.deck.unshift(...boosts);
+    s = command(s, { type: "BASIC", action: "attack" });
+    s = respond(s, /Leading Blow/);
+    s = respond(s, /Leading Blow/);
+    s = target(s, s.villain.id);
+    s = respond(s, /Godslayer/);
+    s = finish(s);
+    expect(s.villain.hp).toBe(50);
+    expect(s.player.exhausted).toBe(true);
+    expect(s.player.inPlay.find((p) => p.id === godslayer.id)?.exhausted).toBe(
+      true,
+    );
+    expect(s.player.discard.map((p) => p.id)).toEqual(
+      expect.arrayContaining([first.id, second.id]),
+    );
+    expect(s.encounter.discard.map((p) => p.id)).toEqual(
+      expect.arrayContaining(boosts.map((p) => p.id)),
+    );
+  });
   it("grants Venom's general Restricted slot in both identity forms", () => {
     for (const form of ["hero", "alter"] as const) {
       let s = hero("vnm");

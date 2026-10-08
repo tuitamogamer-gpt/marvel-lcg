@@ -1,3 +1,4 @@
+import { visionCanAttack } from "./game/vision";
 import { valkyrieCannotBasicAttack } from "./game/valkyrie";
 import {
   doctorStrangeAbilityOptions,
@@ -134,6 +135,7 @@ import {
   paymentSources,
   canPay,
   warMachinePackStoredPlayable,
+  visionPackStoredPlayable,
   playable,
   cardCost,
   summarize,
@@ -1714,7 +1716,9 @@ export default function App() {
                   ? "Adam Warlock uses all four aspects with equal card totals and only one copy of each non-signature card."
                   : ASPECTS.find((a) => a.id === aspect)!.description}{" "}
                 {setupCardCount > 0 &&
-                  `${setupCardCount} Permanent energy forms start in play outside the ${setupDeckSize}-card deck. `}
+                  (hero.id === "vision"
+                    ? `One Permanent mass card stays outside the ${setupDeckSize}-card deck and enters play after you keep your opening hand. `
+                    : `${setupCardCount} Permanent energy forms start in play outside the ${setupDeckSize}-card deck. `)}
                 <span>
                   {team[setupSeat].deckName
                     ? `${team[setupSeat].deckName} is ready to play.`
@@ -2323,8 +2327,9 @@ export default function App() {
           </p>
           {setupCardCount > 0 && (
             <p className="modal-intro">
-              {setupCardCount} Permanent energy forms start in play and stay
-              outside the deck count.
+              {hero.id === "vision"
+                ? "One reversible Intangible / Dense mass card stays outside the 40-card deck and enters play after you keep your opening hand."
+                : `${setupCardCount} Permanent energy forms start in play and stay outside the deck count.`}
             </p>
           )}
           <DeckProvenance
@@ -2632,6 +2637,7 @@ function PaymentDecision({
     p.requirements,
     p.retainOneOfIds,
     p.sourceRequirement,
+    p.retainAlternatives,
   );
   const subject = paymentSubject(s, p);
   // Spend the least valuable resources first: Scientist and printed resource
@@ -2652,6 +2658,7 @@ function PaymentDecision({
     rank,
     p.retainOneOfIds,
     p.sourceRequirement,
+    p.retainAlternatives,
   );
   const discards = status.selected.filter((x) => x.kind === "card").length;
   const abilities = status.selected.length - discards;
@@ -2851,9 +2858,11 @@ function PaymentDecision({
                   ? `Still need ${status.missing.join(" + ")}`
                   : !status.retained
                     ? "Keep an eligible ally in hand for Sneak Attack"
-                    : !status.sourceRequirementMet
-                      ? p.sourceRequirement?.label
-                      : "Payment ready to confirm"}
+                    : !status.retainedAlternative
+                      ? "Keep an Avenger and a Guardian in hand for Joining Forces"
+                      : !status.sourceRequirementMet
+                        ? p.sourceRequirement?.label
+                        : "Payment ready to confirm"}
             </b>
             <small>
               {selected.length
@@ -5095,6 +5104,51 @@ function Tabletop({
                     </div>
                   </section>
                 )}
+                {visionPackStoredPlayable(s).length > 0 && (
+                  <section
+                    className="attached-event-area"
+                    aria-label="Jocasta attached Defense events"
+                  >
+                    <span className="table-group-label">
+                      JOCASTA · ATTACHED DEFENSE
+                    </span>
+                    <div className="attached-card-list">
+                      {visionPackStoredPlayable(s).map((event) => {
+                        const reason = playable(s, event);
+                        const cost = cardCost(s, card(event), event);
+                        return (
+                          <div className="attached-piece" key={event.id}>
+                            <button
+                              className="attached-card"
+                              aria-label={`Inspect ${card(event).name} attached to Jocasta`}
+                              onClick={() =>
+                                inspect({
+                                  code: event.code,
+                                  piece: event,
+                                  playerId: s.activePlayerId,
+                                })
+                              }
+                            >
+                              <CardImage code={event.code} />
+                              <span>{card(event).name}</span>
+                            </button>
+                            <button
+                              className="ability-button"
+                              aria-label={`Play from Jocasta: ${card(event).name}`}
+                              title={reason || `Pay ${cost} resources`}
+                              disabled={!canUseAction || !!reason}
+                              onClick={() =>
+                                sendAction({ type: "PLAY", id: event.id })
+                              }
+                            >
+                              Play Event · {cost}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
                 {s.heroId === "doctor_strange" &&
                   s.phase !== "mulligan" &&
                   doctorStrangeTopInvocation(s) && (
@@ -5246,12 +5300,15 @@ function Tabletop({
                       title={
                         valkyrieCannotBasicAttack(s)
                           ? "Seduced prevents basic attacks."
-                          : "Attack an enemy. Exhaust your identity."
+                          : !visionCanAttack(s)
+                            ? "Intangible prevents attack abilities."
+                            : "Attack an enemy. Exhaust your identity."
                       }
                       disabled={
                         !acting ||
                         s.player.exhausted ||
-                        valkyrieCannotBasicAttack(s)
+                        valkyrieCannotBasicAttack(s) ||
+                        !visionCanAttack(s)
                       }
                       onClick={() => send({ type: "BASIC", action: "attack" })}
                     >

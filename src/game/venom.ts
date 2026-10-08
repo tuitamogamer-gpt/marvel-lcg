@@ -1,5 +1,5 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
-import { isTextBlank } from "./card-text.js";
+import { defenseEventSources, isTextBlank } from "./card-text.js";
 import { playerOrder, seatView } from "./team.js";
 import type { AntManPorts, AntManTarget } from "./ant-man.js";
 import type { PaymentSource } from "./payment.js";
@@ -431,7 +431,7 @@ export function venomAttackInitiatedOptions(
         p.code,
       ),
     );
-  for (const p of s.player.hand.filter(
+  for (const p of defenseEventSources(s).filter(
     (p) =>
       p.code === "20003" &&
       ports.canPay(s, ports.cardCost(s, p), [], p.id, p.code),

@@ -1,3 +1,4 @@
+import { defenseEventSources } from "./card-text.js";
 import { printedCardMetadata } from "./printed-card-metadata.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
@@ -709,7 +710,7 @@ export function doctorStrangeDefenseOptions(
     (s.attack.targetPlayerId && s.attack.targetPlayerId !== s.activePlayerId)
   )
     return [];
-  return s.player.hand
+  return defenseEventSources(s)
     .filter(
       (p) =>
         p.code === "09015" &&
@@ -1526,7 +1527,9 @@ export function resolveDoctorStrangeEffect(
       ports.queue(s, ...e.after);
       break;
     case "ds:defense-cost": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "09015");
+      const p = defenseEventSources(s).find(
+        (p) => p.id === e.id && p.code === "09015",
+      );
       need(
         p && s.attack?.defender === "hero" && s.player.form === "hero",
         "Desperate Defense is unavailable.",

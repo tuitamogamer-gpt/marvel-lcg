@@ -7,6 +7,7 @@ import {
   DB,
   card,
   deckCodes,
+  heroStats,
   maxHP,
   handSize,
   pieceHP,
@@ -17,10 +18,13 @@ import {
   makePiece,
   paymentSources,
   playable,
+  targets,
 } from "../src/game/engine";
 import type { GameState, Resource, Piece } from "../src/game/types";
 import { deckSizeFor } from "../src/game/decks";
 import { heroRequiredCards, heroRuntime } from "../src/game/hero-runtime";
+import { visionCanAttack } from "../src/game/vision";
+import { valkyrieCannotBasicAttack } from "../src/game/valkyrie";
 function base(
   heroId = "spider_man",
   villainId = "rhino",
@@ -624,10 +628,16 @@ describe("complete seeded missions", () => {
           seed: 90210,
         });
         const originalIds = new Set(
-          [...s.player.hand, ...s.player.deck, ...s.player.inPlay].map(
-            (p) => p.id,
-          ),
+          [
+            ...s.player.hand,
+            ...s.player.deck,
+            ...s.player.inPlay,
+            ...(s.player.setAside || []).filter(
+              (p) => card(p).faction_code !== "encounter",
+            ),
+          ].map((p) => p.id),
         );
+        if (h.id === "vision") expect(originalIds.size).toBe(41);
         s = settle(dispatch(s, { type: "MULLIGAN", ids: [] }));
         const command = (c: any) => {
           s = settle(dispatch(s, c));
@@ -678,14 +688,24 @@ describe("complete seeded missions", () => {
             });
           }
           if (s.phase !== "player") break;
-          if (!s.player.exhausted && s.player.form === "hero")
-            command({
-              type: "BASIC",
-              action:
-                s.scheme.threat >= 3 || s.sideSchemes.length
-                  ? "thwart"
-                  : "attack",
-            });
+          if (!s.player.exhausted && s.player.form === "hero") {
+            const cannotAttack =
+              !visionCanAttack(s) || valkyrieCannotBasicAttack(s);
+            const canThwart =
+              s.player.confused ||
+              (targets(s, "scheme").length > 0 && heroStats(s).thwart > 0);
+            if (!cannotAttack || canThwart)
+              command({
+                type: "BASIC",
+                action:
+                  (s.scheme.threat >= 3 ||
+                    s.sideSchemes.length ||
+                    cannotAttack) &&
+                  canThwart
+                    ? "thwart"
+                    : "attack",
+              });
+          }
           if (s.phase !== "player") break;
           if (s.player.hp <= 3 && !s.player.flipped) command({ type: "FLIP" });
           if (s.phase !== "player") break;
@@ -698,15 +718,26 @@ describe("complete seeded missions", () => {
             ...s.player.deck,
             ...s.player.discard,
             ...s.player.inPlay,
+            ...(s.player.setAside || []),
             ...s.resolving,
             ...s.removed,
             ...s.attachments,
             ...s.encounter.deck,
             ...s.encounter.discard,
             ...s.encounter.dealt,
-            ...s.minions.flatMap((p) => (p.droneCard ? [p.droneCard] : [])),
-            ...s.sideSchemes.flatMap((p) => p.captured || []),
-          ].filter((p) => originalIds.has(p.id));
+            ...s.minions,
+            ...s.sideSchemes,
+            ...(s.environments || []),
+          ]
+            .flatMap(function walk(this: void, p: Piece): Piece[] {
+              return [
+                p,
+                ...(p.droneCard ? walk(p.droneCard) : []),
+                ...(p.storedCards || []).flatMap(walk),
+                ...(p.captured || []).flatMap(walk),
+              ];
+            })
+            .filter((p) => originalIds.has(p.id));
           expect(new Set(pieces.map((p) => p.id)).size).toBe(pieces.length);
           expect(pieces.length).toBe(originalIds.size);
         }

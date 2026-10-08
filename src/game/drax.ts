@@ -1,6 +1,6 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { playerOrder, seatView } from "./team.js";
-import { isTextBlank } from "./card-text.js";
+import { defenseEventSources, isTextBlank } from "./card-text.js";
 import { consumeStatus } from "./keywords.js";
 import type { AntManPorts, AntManTarget } from "./ant-man.js";
 import type { Card, Effect, GameState, Option, Piece } from "./types.js";
@@ -268,7 +268,7 @@ export function draxDamageOptions(
     ports.heroAttack(s) <= 0
   )
     return [];
-  return s.player.hand
+  return defenseEventSources(s)
     .filter(
       (p) =>
         p.code === "19006" &&
@@ -593,7 +593,9 @@ export function resolveDraxEffect(
       );
       break;
     case "drax:parry-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "19006");
+      const p = defenseEventSources(s).find(
+        (p) => p.id === e.id && p.code === "19006",
+      );
       need(
         p &&
           draxDamageOptions(s, e.packet, e.amount, after, ports).some(

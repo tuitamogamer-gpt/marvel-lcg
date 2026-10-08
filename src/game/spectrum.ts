@@ -1,5 +1,5 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
-import { isTextBlank } from "./card-text.js";
+import { defenseEventSources, isTextBlank } from "./card-text.js";
 import { playerOrder, seatView } from "./team.js";
 import type { AntManTarget } from "./ant-man.js";
 import type { PaymentSource } from "./payment.js";
@@ -408,7 +408,7 @@ export function spectrumDefenseOptions(
   ports: SpectrumPorts,
 ): Option[] {
   if (!spectrumIsDefending(s)) return [];
-  return s.player.hand
+  return defenseEventSources(s)
     .filter(
       (p) =>
         p.code === "21009" &&
@@ -749,7 +749,9 @@ export function resolveSpectrumEffect(
       break;
     }
     case "spectrum:shield-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "21009");
+      const p = defenseEventSources(s).find(
+        (p) => p.id === e.id && p.code === "21009",
+      );
       need(
         p &&
           spectrumDefenseOptions(s, e.used || [], after, ports).some(

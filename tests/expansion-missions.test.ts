@@ -1,6 +1,7 @@
+import { valkyrieCannotBasicAttack } from "../src/game/valkyrie";
+import { visionCanAttack } from "../src/game/vision";
 import { doctorStrangeAbilityOptions } from "../src/game/doctor-strange";
 import { thorAbilityOptions } from "../src/game/thor";
-import { valkyrieCannotBasicAttack } from "../src/game/valkyrie";
 import { msMarvelAbilityOptions } from "../src/game/ms-marvel";
 import { describe, expect, it } from "vitest";
 import {
@@ -60,6 +61,7 @@ const heroIds = [
   "nebu",
   "warm",
   "valk",
+  "vision",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -277,6 +279,12 @@ function runMission(config: (typeof missions)[number]) {
     if (strangeSpell)
       act({ type: "ABILITY", id: "identity", action: strangeSpell.id });
     if (ended(s)) break;
+    if (!visionCanAttack(s)) {
+      const density = nativeHeroAbilityOptions(s).find(
+        (o) => o.id === "density",
+      );
+      if (density) act({ type: "ABILITY", id: "identity", action: density.id });
+    }
     const basic = () => {
       if (s.player.exhausted || s.player.form !== "hero") return;
       const canThwart =
@@ -284,11 +292,11 @@ function runMission(config: (typeof missions)[number]) {
         ((!!targets(s, "scheme").length && heroStats(s).thwart > 0) ||
           s.player.confused);
       const urgent = s.scheme.threat >= 3 || !!s.sideSchemes.length;
-      const cannotAttack = valkyrieCannotBasicAttack(s);
-      if (cannotAttack && !canThwart) return;
+      const canAttack = visionCanAttack(s) && !valkyrieCannotBasicAttack(s);
+      if (!canAttack && !canThwart) return;
       act({
         type: "BASIC",
-        action: (urgent || cannotAttack) && canThwart ? "thwart" : "attack",
+        action: (urgent || !canAttack) && canThwart ? "thwart" : "attack",
       });
     };
     basic();
@@ -319,8 +327,8 @@ describe("published expansion starters across every supported mission setting", 
     );
     expect(VILLAINS).toHaveLength(5);
     expect(MODULES).toHaveLength(9);
-    expect(heroIds).toHaveLength(23);
-    expect(missions).toHaveLength(2070);
+    expect(heroIds).toHaveLength(24);
+    expect(missions).toHaveLength(2160);
   });
   for (const mission of missions)
     it(

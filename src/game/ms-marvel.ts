@@ -1,5 +1,5 @@
 import { printedCardMetadata } from "./printed-card-metadata.js";
-import { isTextBlank } from "./card-text.js";
+import { defenseEventSources, isTextBlank } from "./card-text.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { uniqueConflict } from "./unique.js";
@@ -500,7 +500,7 @@ export function msMarvelDamageOptions(
     return [];
   return [
     ...(s.player.form === "hero" && mayDefend(s)
-      ? s.player.hand
+      ? defenseEventSources(s)
           .filter(
             (p) =>
               p.code === "05005" &&
@@ -560,7 +560,7 @@ export function msMarvelBoostOptions(
     Number(cards.get(boost.code)?.boost || 0) === 0
   )
     return [];
-  return s.player.hand
+  return defenseEventSources(s)
     .filter(
       (p) =>
         p.code === "05014" &&
@@ -995,7 +995,9 @@ export function resolveMsMarvelEffect(
       break;
     }
     case "ms:wiggle-cost": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "05005");
+      const p = defenseEventSources(s).find(
+        (p) => p.id === e.id && p.code === "05005",
+      );
       need(
         p &&
           s.player.form === "hero" &&
@@ -1066,7 +1068,9 @@ export function resolveMsMarvelEffect(
       break;
     }
     case "ms:preemptive-cost": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "05014");
+      const p = defenseEventSources(s).find(
+        (p) => p.id === e.id && p.code === "05014",
+      );
       need(
         p && s.player.form === "hero" && mayDefend(s) && s.attack?.isVillain,
         "Preemptive Strike is unavailable.",

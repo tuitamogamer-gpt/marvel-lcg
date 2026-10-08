@@ -1,6 +1,6 @@
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { controller, playerOrder, seatView } from "./team.js";
-import { isTextBlank } from "./card-text.js";
+import { defenseEventSources, isTextBlank } from "./card-text.js";
 import type {
   Card,
   Effect,
@@ -608,7 +608,7 @@ export function mtsPlayerPackDamageOptions(
     !ports.hasTrait(s, "hero", "Mystic")
   )
     return [];
-  return s.player.hand
+  return defenseEventSources(s)
     .filter(
       (p) =>
         p.code === "21061" &&
@@ -1087,7 +1087,9 @@ export function resolveMtsPlayerPackEffect(
       break;
     }
     case "mts-pack:shield-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "21061");
+      const p = defenseEventSources(s).find(
+        (p) => p.id === e.id && p.code === "21061",
+      );
       need(
         p &&
           mtsPlayerPackDamageOptions(

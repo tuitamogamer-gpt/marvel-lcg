@@ -1,5 +1,5 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
-import { isTextBlank } from "./card-text.js";
+import { defenseEventSources, isTextBlank } from "./card-text.js";
 import { consumeStatus } from "./keywords.js";
 import { playerOrder, seatView } from "./team.js";
 import type { AntManPorts } from "./ant-man.js";
@@ -404,7 +404,7 @@ export function valkyrieAttackInitiationOptions(
     !ports.canDeclareIdentityDefender(s, s.activePlayerId)
   )
     return [];
-  return s.player.hand
+  return defenseEventSources(s)
     .filter(
       (p) =>
         p.code === "25011" &&
@@ -847,7 +847,9 @@ export function resolveValkyrieEffect(
       break;
     }
     case "valkyrie:shieldmaiden-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "25011");
+      const p = defenseEventSources(s).find(
+        (p) => p.id === e.id && p.code === "25011",
+      );
       need(
         p &&
           valkyrieAttackInitiationOptions(s, e.attacker, after, ports).some(

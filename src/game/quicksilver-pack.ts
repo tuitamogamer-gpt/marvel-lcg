@@ -1,6 +1,6 @@
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
-import { isTextBlank } from "./card-text.js";
+import { defenseEventSources, isTextBlank } from "./card-text.js";
 import type { PaymentSource } from "./payment.js";
 import type {
   Card,
@@ -338,7 +338,7 @@ export function quicksilverPackDefenseOptions(
     (s.attack.targetPlayerId && s.attack.targetPlayerId !== s.activePlayerId)
   )
     return [];
-  return s.player.hand
+  return defenseEventSources(s)
     .filter(
       (p) =>
         p.code === "14014" &&
@@ -393,7 +393,7 @@ export function quicksilverPackDamageOptions(
     (window.playerId && window.playerId !== s.activePlayerId)
   )
     return [];
-  return s.player.hand
+  return defenseEventSources(s)
     .filter(
       (p) =>
         p.code === "14015" &&
@@ -475,6 +475,7 @@ export function resolveQuicksilverPackEffect(
           after: (e.effects || []).map((effect: Effect) => ({
             ...effect,
             paid: e.paid || [],
+            paidForCard: e.paidForCard,
           })),
           continuation: e.continuation || [],
         }),
@@ -620,7 +621,9 @@ export function resolveQuicksilverPackEffect(
       break;
     }
     case "quicksilver-pack:never-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "14014");
+      const p = defenseEventSources(s).find(
+        (p) => p.id === e.id && p.code === "14014",
+      );
       need(
         p &&
           quicksilverPackDefenseOptions(s, e.after || [], ports).some(
@@ -651,7 +654,9 @@ export function resolveQuicksilverPackEffect(
       }
       break;
     case "quicksilver-pack:side-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "14015");
+      const p = defenseEventSources(s).find(
+        (p) => p.id === e.id && p.code === "14015",
+      );
       need(
         p &&
           quicksilverPackDamageOptions(s, e.window, e.after || [], ports).some(
@@ -675,7 +680,7 @@ export function resolveQuicksilverPackEffect(
         source === s.villain.id
           ? s.villain
           : s.minions.find((p) => p.id === source);
-      if ((e.paid || []).includes("energy") && enemy)
+      if ((e.paidForCard ?? e.paid ?? []).includes("energy") && enemy)
         ports.queue(
           s,
           E("damage", { target: enemy.id, amount: 1, source: "hero" }),

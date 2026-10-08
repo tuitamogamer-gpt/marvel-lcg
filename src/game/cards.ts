@@ -39,6 +39,12 @@ import { mtsPlayerPackHeroStats } from "./mts-player-pack.js";
 import { nebulaStats, nebulaNamedCharacterModifiers } from "./nebula.js";
 import { nebulaPackModifiers } from "./nebula-pack.js";
 import { valkyrieHPBonus, valkyrieStats, valkyrieTraits } from "./valkyrie.js";
+import {
+  visionAlterStats,
+  visionDroneStats,
+  visionStats,
+  visionTraits,
+} from "./vision.js";
 import { warMachineTraits } from "./war-machine.js";
 import { msMarvelStats } from "./ms-marvel.js";
 import { identityMatch, uniqueMatches } from "./unique.js";
@@ -523,6 +529,20 @@ export const HEROES = [
     style: "Death-Glow · Aggression",
     complexity: 3,
   },
+  {
+    id: "vision",
+    code: "26001a",
+    alter: "26001b",
+    name: "Vision",
+    identity: "Vision",
+    aspect: "protection" as Aspect,
+    color: "#85ad98",
+    tag: "Change the shape of the battle.",
+    description:
+      "Change between Intangible and Dense mass forms, prevent attack damage, and control the board with Android allies.",
+    style: "Mass forms · Protection",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -717,6 +737,7 @@ export function deckCodes(
       (hero === "nebu" && aspect === "justice") ||
       (hero === "warm" && aspect === "leadership") ||
       (hero === "valk" && aspect === "aggression") ||
+      (hero === "vision" && aspect === "protection") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
@@ -737,7 +758,9 @@ export function deckCodes(
               c.type_code,
             ))) &&
         !["hero", "alter_ego"].includes(c.type_code) &&
-        (!c.permanent || hero === "spectrum"),
+        (!c.permanent ||
+          hero === "spectrum" ||
+          (hero === "vision" && c.code === "26002")),
     )
     .flatMap((c) => Array(c.quantity).fill(c.code)) as string[];
   if (hero === "spider_woman") {
@@ -829,6 +852,7 @@ export function aerial(s: GameState) {
     starLordHeroTraits(s).includes("Aerial") ||
     warMachineTraits(s).includes("Aerial") ||
     valkyrieTraits(s).includes("Aerial") ||
+    visionTraits(s).includes("Aerial") ||
     waspHeroTraits(textActiveState(s)).includes("Aerial")
   );
 }
@@ -868,6 +892,7 @@ export function heroStats(s: GameState) {
       mtsPlayerPackHeroStats(s).attack +
       nebulaStats(s).attack +
       valkyrieStats(s).attack +
+      visionStats(s).attack +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
@@ -891,6 +916,7 @@ export function heroStats(s: GameState) {
       mtsPlayerPackHeroStats(s).thwart +
       nebulaStats(s).thwart +
       valkyrieStats(s).thwart +
+      visionStats(s).thwart +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
@@ -912,6 +938,7 @@ export function heroStats(s: GameState) {
       mtsPlayerPackHeroStats(s).defense +
       nebulaStats(s).defense +
       valkyrieStats(s).defense +
+      visionStats(s).defense +
       nebulaNamedCharacterModifiers(s, h.name).defense +
       quicksilverPackHeroStatBonus(s, "defense") +
       scriptedModifier(s, "defense"),
@@ -919,7 +946,8 @@ export function heroStats(s: GameState) {
       card(HEROES.find((h) => h.id === s.heroId)!.alter).recover! +
       scriptedModifier(s, "recover") +
       hulkStats(s).recover +
-      msMarvelStats(s).recover,
+      msMarvelStats(s).recover +
+      visionAlterStats(s).recover,
   };
 }
 export function handSize(s: GameState) {
@@ -943,12 +971,14 @@ export function handSize(s: GameState) {
         doctorStrangeHandSize(s) +
         spiderWomanHandSize(s) +
         starLordHandSizeBonus(s) +
-        antManPackHandSize(s);
+        antManPackHandSize(s) +
+        visionAlterStats(s).handSize;
 }
 export function pieceHP(s: GameState, p: Piece) {
   return (
     (p.code === "drone"
-      ? 1 + s.attachments.filter((p) => rulesCode(p) === "01142").length
+      ? (visionDroneStats(s, p)?.health ?? 1) +
+        s.attachments.filter((p) => rulesCode(p) === "01142").length
       : (card(p).health || 0) * (card(p).health_per_hero ? s.playerCount : 1)) +
     (rulesCode(s.villain) === "01136" && card(p).traits?.includes("Drone.")
       ? 1

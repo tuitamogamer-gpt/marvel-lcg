@@ -11,6 +11,7 @@ import { venomResourceSources } from "./venom.js";
 import { spectrumResourceSources } from "./spectrum.js";
 import { warlockResourceSources } from "./warlock.js";
 import { warMachineResourceSources } from "./war-machine.js";
+import { visionResourceSources } from "./vision.js";
 import { warMachinePackResourceSources } from "./war-machine-pack.js";
 import { mtsPlayerPackCardResources } from "./mts-player-pack.js";
 import { isTextBlank } from "./card-text.js";
@@ -145,6 +146,7 @@ function localPaymentSources(
   sources.push(...warlockResourceSources(s, { isTextBlank }));
   sources.push(...warMachineResourceSources(s, targetCode, { isTextBlank }));
   sources.push(...warMachinePackResourceSources(s, { isTextBlank }));
+  sources.push(...visionResourceSources(s, { isTextBlank }));
   sources.push(...hawkeyeResourceSources(s, targetCode));
   sources.push(...spiderWomanResourceSources(s, targetCode));
   sources.push(...blackWidowResourceSources(s, targetCode));
@@ -217,7 +219,40 @@ export function suggestPayment(
   rank: (source: PaymentSource) => number = () => 0,
   retainOneOfIds: string[] = [],
   sourceRequirement?: Prompt["sourceRequirement"],
+  retainAlternatives: string[][] = [],
 ) {
+  if (retainAlternatives.length) {
+    let best: { ids: string[]; total: number; value: number } | undefined;
+    for (const group of retainAlternatives) {
+      const available = sources.filter(
+        (source) => !group.includes(source.localId || source.id),
+      );
+      const ids = suggestPayment(
+        available,
+        cost,
+        requirements,
+        rank,
+        retainOneOfIds,
+        sourceRequirement,
+      );
+      if (ids === null) continue;
+      const selected = available.filter((source) => ids.includes(source.id));
+      const total = selected.reduce(
+        (sum, source) => sum + source.resources.length,
+        0,
+      );
+      const value = selected.reduce((sum, source) => sum + rank(source), 0);
+      if (
+        !best ||
+        total < best.total ||
+        (total === best.total &&
+          (value < best.value ||
+            (value === best.value && ids.length < best.ids.length)))
+      )
+        best = { ids, total, value };
+    }
+    return best?.ids ?? null;
+  }
   type Selection = { ids: string[]; printed: Resource[]; value: number };
   const types: Resource[] = ["energy", "mental", "physical", "wild"];
   const caps = types.map((type) =>
@@ -294,6 +329,7 @@ export function paymentStatus(
   requirements: Resource[] = [],
   retainOneOfIds: string[] = [],
   sourceRequirement?: Prompt["sourceRequirement"],
+  retainAlternatives: string[][] = [],
 ) {
   const selected = sources.filter((s) => ids.includes(s.id));
   const printed = selected.flatMap((s) => s.resources);
@@ -307,6 +343,14 @@ export function paymentStatus(
   }
   const retained =
     !retainOneOfIds.length || retainOneOfIds.some((id) => !ids.includes(id));
+  const selectedActualIds = selected.map(
+    (source) => source.localId || source.id,
+  );
+  const retainedAlternative =
+    !retainAlternatives.length ||
+    retainAlternatives.some((group) =>
+      group.every((id) => !selectedActualIds.includes(id)),
+    );
   const sourceRequirementMet =
     !sourceRequirement ||
     sourceRequirement.ids.filter((id) => ids.includes(id)).length >=
@@ -315,6 +359,7 @@ export function paymentStatus(
     selected,
     printed,
     sourceRequirementMet,
+    retainedAlternative,
     total: printed.length,
     missing,
     retained,
@@ -322,6 +367,7 @@ export function paymentStatus(
       printed.length >= cost &&
       !missing.length &&
       retained &&
+      retainedAlternative &&
       sourceRequirementMet,
   };
 }

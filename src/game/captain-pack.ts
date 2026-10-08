@@ -2,7 +2,11 @@ import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { uniqueConflict } from "./unique.js";
 import { waspAllyTraits } from "./wasp.js";
-import { isTextBlank, textActiveState } from "./card-text.js";
+import {
+  defenseEventSources,
+  isTextBlank,
+  textActiveState,
+} from "./card-text.js";
 import type { Card, Effect, GameState, Option, Piece } from "./types.js";
 import type { PaymentSource } from "./payment.js";
 
@@ -398,7 +402,7 @@ export function captainPackExpertDefenseOptions(
     s.attack.defender !== "hero"
   )
     return [];
-  return s.player.hand
+  return defenseEventSources(s)
     .filter((p) => p.code === "03033")
     .map((p) =>
       option(
@@ -652,7 +656,9 @@ export function resolveCaptainPackEffect(
         s.attack?.basicDefense &&
           s.attack.defender === "hero" &&
           s.player.form === "hero" &&
-          s.player.hand.some((p) => p.id === e.id && p.code === "03033"),
+          defenseEventSources(s).some(
+            (p) => p.id === e.id && p.code === "03033",
+          ),
         "Expert Defense's trigger is no longer available.",
       );
       ports.queue(

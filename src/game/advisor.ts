@@ -1,3 +1,5 @@
+import { valkyrieCannotBasicAttack } from "./valkyrie.js";
+import { visionCanAttack } from "./vision.js";
 import {
   doctorStrangeAbilityOptions,
   doctorStrangeTopInvocation,
@@ -24,7 +26,6 @@ import {
   warMachinePackSneakAllies,
 } from "./engine.js";
 import { printedKeyword } from "./keywords.js";
-import { valkyrieCannotBasicAttack } from "./valkyrie.js";
 import { suggestPayment } from "./payment.js";
 import type { PaymentSource } from "./payment.js";
 import { engaged } from "./team.js";
@@ -379,7 +380,11 @@ export function adviseAction(s: GameState): Advice | null {
           ? "Use a thwart to remove Confused so you can control threat next turn."
           : "The main scheme is close to completing; remove threat now.",
       };
-    if (!valkyrieCannotBasicAttack(s) && (enemies.length || s.player.stunned))
+    if (
+      !valkyrieCannotBasicAttack(s) &&
+      visionCanAttack(s) &&
+      (enemies.length || s.player.stunned)
+    )
       return {
         command: { type: "BASIC", action: "attack" },
         title: s.player.stunned ? "Clear Stunned" : `Attack ${stats.attack}`,
@@ -443,6 +448,7 @@ export function advisePrompt(s: GameState): Advice | null {
       rankSource(s),
       p.retainOneOfIds,
       p.sourceRequirement,
+      p.retainAlternatives,
     );
     if (ids)
       return {

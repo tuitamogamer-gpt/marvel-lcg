@@ -1,3 +1,4 @@
+import { defenseEventSources } from "./card-text.js";
 import { printedCardMetadata } from "./printed-card-metadata.js";
 import { goblinIdentityLocked } from "./goblin-modules.js";
 import type {
@@ -235,7 +236,7 @@ export function captainShieldBlockOptions(
   if (!active(s) || s.player.tough) return [];
   const sh = shield(s);
   if (!sh || sh.exhausted) return [];
-  return s.player.hand
+  return defenseEventSources(s)
     .filter((p) => p.code === "03005")
     .map((p) =>
       option(
@@ -487,7 +488,9 @@ export function resolveCaptainEffect(
       break;
     case "cap:block": {
       const sh = shield(s);
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "03005");
+      const p = defenseEventSources(s).find(
+        (p) => p.id === e.id && p.code === "03005",
+      );
       need(
         p && sh && sh.id === e.shieldId && !sh.exhausted,
         "Shield Block costs cannot be paid.",

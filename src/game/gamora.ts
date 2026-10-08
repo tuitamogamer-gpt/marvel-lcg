@@ -1,3 +1,4 @@
+import { defenseEventSources } from "./card-text.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, playerOrder, seatView } from "./team.js";
 import { consumeStatus } from "./keywords.js";
@@ -351,7 +352,7 @@ export function gamoraDamageOptions(
     !["hero", `hero:${s.activePlayerId}`].includes(target)
   )
     return [];
-  return s.player.hand
+  return defenseEventSources(s)
     .filter(
       (p) =>
         p.code === "18004" &&
@@ -650,7 +651,9 @@ export function resolveGamoraEffect(
       break;
     }
     case "gamora:crosscounter-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "18004");
+      const p = defenseEventSources(s).find(
+        (p) => p.id === e.id && p.code === "18004",
+      );
       need(
         p &&
           gamoraDamageOptions(s, e.packet, e.amount, after, ports).some(

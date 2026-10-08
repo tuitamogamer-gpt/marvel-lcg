@@ -125,6 +125,8 @@ export interface Prompt {
   alliance?: boolean;
   /** At least one actual additional-cost hand ally must remain unspent. */
   retainOneOfIds?: string[];
+  /** At least one whole alternative group of actual hand cards must remain. */
+  retainAlternatives?: string[][];
   /** Selected resource abilities must also fund the pending additional cost. */
   sourceRequirement?: { ids: string[]; minimum: number; label: string };
   /** The physical payment subject is using an ability, not being played. */
@@ -153,6 +155,8 @@ export interface Attack {
   omitNormalBoost?: boolean;
   extraBoostIcons?: number;
   afterActivation?: Effect[];
+  /** Effects tied to this actual attack, before optional aftermath responses. */
+  visionAfterAttack?: Effect[];
   activationAfter?: Effect;
   attackerSnapshot?: Piece;
   identityDamage?: number;
@@ -166,6 +170,7 @@ export interface Attack {
   valkyrieDefense?: boolean;
   /** The Best Defense replaces DEF with current ATK for this defender only. */
   valkyriePackAttackDefensePlayerId?: string;
+  visionPackManchaHandled?: boolean;
   attacker: string;
   base: number;
   boostCodes: string[];
@@ -286,6 +291,8 @@ export interface GameState {
     modifier?: number;
     extraBoostIcons?: number;
     afterActivation?: Effect[];
+    /** Effects tied to this actual attack, before optional aftermath responses. */
+    visionAfterAttack?: Effect[];
     activationAfter?: Effect;
     threatBefore?: number;
     attacker: string;

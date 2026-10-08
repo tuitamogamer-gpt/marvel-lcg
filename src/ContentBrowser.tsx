@@ -342,7 +342,7 @@ export function ContentBrowser({
   const nativeSetup = heroSetupCards(hero.id);
   const setupReady =
     !setupCount ||
-    (hero.id === "spectrum" &&
+    (["spectrum", "vision"].includes(hero.id) &&
       Object.entries(deck?.setupCards || {}).every(
         ([code, count]) => nativeSetup[code] === count,
       ) &&
@@ -679,8 +679,9 @@ export function ContentBrowser({
                     {setupCount === 1 ? "CARD" : "CARDS"}
                   </h4>
                   <p>
-                    These Permanent cards are included in the composition above.
-                    They begin in play and do not count toward deck-size limits.
+                    {hero.id === "vision"
+                      ? "Your one mass form card is included in the composition above and does not count toward deck-size limits. It enters play Intangible after your mulligan."
+                      : "These Permanent cards are included in the composition above. They begin in play and do not count toward deck-size limits."}
                   </p>
                   <DeckCardList
                     counts={deck.setupCards || {}}

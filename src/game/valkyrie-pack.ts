@@ -1,5 +1,5 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
-import { isTextBlank } from "./card-text.js";
+import { defenseEventSources, isTextBlank } from "./card-text.js";
 import { card as nativeCard } from "./cards.js";
 import { consumeStatus, statusCards } from "./keywords.js";
 import { allInPlay, playerOrder, seatView } from "./team.js";
@@ -394,7 +394,7 @@ export function valkyriePackDefenseOptions(
     ports.usesAttackForDefense?.(s)
   )
     return [];
-  return s.player.hand
+  return defenseEventSources(s)
     .filter(
       (p) =>
         p.code === "25020" &&
@@ -910,7 +910,9 @@ export function resolveValkyriePackEffect(
       ports.queue(s, ...after);
       break;
     case "valkyrie-pack:defense-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "25020");
+      const p = defenseEventSources(s).find(
+        (p) => p.id === e.id && p.code === "25020",
+      );
       need(
         p &&
           valkyriePackDefenseOptions(s, after, ports).some(

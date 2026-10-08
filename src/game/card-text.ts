@@ -13,6 +13,22 @@ export function isTextBlank(
 ) {
   if (typeof p !== "string" && "treatedAsMinion" in p && p.treatedAsMinion)
     return true;
+  const physicalCode = typeof p === "string" ? p : p.code;
+  if (["26002", "26002b"].includes(physicalCode)) {
+    const owner = [
+      s.player,
+      ...s.players
+        .filter((seat) => seat.id !== s.activePlayerId)
+        .map((seat) => seat.player),
+    ].find((player) =>
+      player.inPlay.some((piece) =>
+        typeof p !== "string" && p.id
+          ? piece.id === p.id
+          : piece.code === physicalCode,
+      ),
+    );
+    if (owner?.inPlay.some((piece) => piece.code === "26028")) return true;
+  }
   if (!s.sideSchemes.some((scheme) => scheme.code === "12026")) return false;
   const code = typeof p === "string" ? p : p.code;
   const inPlay = [
@@ -32,6 +48,25 @@ export function isTextBlank(
     c.faction_code !== "encounter" &&
     (c.traits || "").split(/\.\s*/).includes("Tech")
   );
+}
+
+/** Actual Defense events available to this controller. Jocasta permits playing
+ * its attached events as if they were in hand, without exposing or moving them
+ * before the native PLAY resolves. Stored cards remain separate from resources. */
+export function defenseEventSources(s: GameState): Piece[] {
+  const defense = (p: Piece) => {
+    const c = definitions.get(p.code);
+    return (
+      c?.type_code === "event" &&
+      (c.traits || "").split(/\.\s*/).includes("Defense")
+    );
+  };
+  return [
+    ...s.player.hand.filter(defense),
+    ...s.player.inPlay
+      .filter((p) => p.code === "26013" && !isTextBlank(s, p))
+      .flatMap((p) => (p.storedCards || []).filter(defense)),
+  ];
 }
 
 /** Read-only view for older continuous-effect adapters. Physical zones in the

@@ -124,6 +124,7 @@ describe("complete expansion rules inventory", () => {
       ["nebu", 36],
       ["warm", 36],
       ["valk", 37],
+      ["vision", 38],
     ] as const) {
       expect(
         coverage.products.find((pack: { code: string }) => pack.code === code),
@@ -161,7 +162,16 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    for (const id of ["stld", "gam", "drax", "vnm", "nebu", "warm", "valk"])
+    for (const id of [
+      "stld",
+      "gam",
+      "drax",
+      "vnm",
+      "nebu",
+      "warm",
+      "valk",
+      "vision",
+    ])
       expect(
         inventory.heroes.find(
           (hero: { id: string }) => hero.id === `${id}:${id}`,
@@ -198,10 +208,10 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(1172);
-    expect(coverage.unsupportedFaces).toBe(3379);
-    expect(coverage.dedicatedFaces).toBe(697);
-    expect(coverage.registeredHeroIds).toHaveLength(28);
+    expect(coverage.executableFaces).toBe(1204);
+    expect(coverage.unsupportedFaces).toBe(3347);
+    expect(coverage.dedicatedFaces).toBe(729);
+    expect(coverage.registeredHeroIds).toHaveLength(29);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
         coverage.registeredHeroes.some(
@@ -281,7 +291,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(71);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(73);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
@@ -360,6 +370,8 @@ describe("complete expansion rules inventory", () => {
       "src/game/war-machine-pack.ts",
       "src/game/valkyrie.ts",
       "src/game/valkyrie-pack.ts",
+      "src/game/vision.ts",
+      "src/game/vision-pack.ts",
       "src/game/printed-card-metadata.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",

@@ -345,6 +345,7 @@ export function effectTitle(e?: Effect) {
 const plumbing = new Set([
   "attackProgramEnd",
   "nativeEvent",
+  "visionPackFlowPlayed",
   "boostInterruptWindow",
   "boostResponseWindow",
   "bwEntryResponses",

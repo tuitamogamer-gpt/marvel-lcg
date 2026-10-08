@@ -51,6 +51,8 @@ jobs:
             scripts: test:war-machine
           - group: valkyrie
             scripts: test:valkyrie
+          - group: vision
+            scripts: test:vision
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -468,7 +468,9 @@ export function DeckEditor({
           {fourAspects &&
             " Include equal numbers of Aggression, Justice, Leadership and Protection cards, and only one copy of each other card. Your signature cards stay fixed."}
           {setupCount > 0 &&
-            ` Your ${setupCount} Permanent energy forms start in play and do not count toward the 40–50 card deck.`}
+            (heroId === "vision"
+              ? " Your mass form is one Permanent card and does not count toward the 40–50 card deck. It enters play Intangible after your mulligan."
+              : ` Your ${setupCount} Permanent energy forms start in play and do not count toward the 40–50 card deck.`)}
         </p>
         {crossAspectEvents && (
           <p className="account-hint">
@@ -536,7 +538,11 @@ export function DeckEditor({
           <div>
             <strong>{deckSizeFor(codes)} / 50 cards</strong>
             {setupCount > 0 && (
-              <small> · {setupCount} Permanent setup cards</small>
+              <small>
+                {" "}
+                · {setupCount} Permanent setup{" "}
+                {setupCount === 1 ? "card" : "cards"}
+              </small>
             )}
             <p role="status">
               {errors[0] || "Deck ready. All card and copy limits are valid."}

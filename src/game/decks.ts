@@ -44,6 +44,7 @@ export function deckOptions(
     chosenAspects || heroDeckAspects(heroId, deckCodes(heroId, aspect), aspect);
   return CATALOG_CARDS.filter(
     (c) =>
+      c.code !== "26002b" &&
       !identityMatch(heroId, c) &&
       (hasExecutableScript(c) ||
         (CAPTAIN_AMERICA_SCRIPT_CODES as readonly string[]).includes(c.code)) &&
@@ -96,6 +97,7 @@ export function deckErrors(
       "nebu",
       "warm",
       "valk",
+      "vision",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

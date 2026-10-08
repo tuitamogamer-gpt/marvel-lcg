@@ -295,7 +295,7 @@ describe("Spectrum defense and actual encounter ownership", () => {
     s = native(s, { type: "enemyAttack", id: s.villain.id });
     s = until(s, (v) => !!v.prompt?.options.some((o) => o.id === "hero"));
     s = choose(s, "hero");
-    expect(s.prompt?.title).toBe("Spectrum defense interrupts");
+    expect(s.prompt?.title).toBe("Identity defense interrupts");
     s = choose(s, shield.id);
     s = pay(s, [resource]);
     expect(spectrumEnergyForm(s)).toBe("pulsar");

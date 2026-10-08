@@ -1,6 +1,6 @@
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
-import { isTextBlank } from "./card-text.js";
+import { defenseEventSources, isTextBlank } from "./card-text.js";
 import type {
   Card,
   Effect,
@@ -421,7 +421,7 @@ export function gmwPlayerPackDefenseOptions(
     (s.attack.targetPlayerId && s.attack.targetPlayerId !== s.activePlayerId)
   )
     return [];
-  return s.player.hand
+  return defenseEventSources(s)
     .filter(
       (p) =>
         p.code === "16013" &&
@@ -714,7 +714,9 @@ export function resolveGmwPlayerPackEffect(
       break;
     }
     case "gmw-pack:defense-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "16013");
+      const p = defenseEventSources(s).find(
+        (p) => p.id === e.id && p.code === "16013",
+      );
       need(
         p &&
           gmwPlayerPackDefenseOptions(s, e.after || [], ports).some(
