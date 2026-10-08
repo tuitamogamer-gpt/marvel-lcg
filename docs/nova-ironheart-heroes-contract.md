@@ -1,6 +1,6 @@
 # Nova and Ironheart original source and registration contract
 
-This hero import covers Nova, Ironheart, their signature cards, player pools, obligations and nemeses. It covers **66 faces from 76 retail faces**: 28 Nova faces and 38 Ironheart faces. The five Armadillo faces `28028`–`28032` and five Zzzax faces `29036`–`29040` belong to separate modular encounter sets and remain outside this release. Importing the hero packs does not claim those modules, scenarios or campaigns.
+This hero import covers Nova, Ironheart, their signature cards, player pools, obligations and nemeses. It covers **66 faces from 76 retail faces**: 28 Nova faces and 38 Ironheart faces. The five Armadillo faces `28028`–`28032` and five Zzzax faces `29036`–`29040` belong to separate modular encounter sets and were outside that historical hero release. Subsequent modular support is recorded separately in [current coverage](engine-expansion-coverage.md) and [the Zzzax contract](zzzax-integration.md); the sixty-six-face hero scope, scenarios and campaign boundary remain unchanged.
 
 ## Original sources and canonical identities
 

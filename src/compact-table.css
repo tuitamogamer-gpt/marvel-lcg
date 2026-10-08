@@ -578,7 +578,9 @@
     padding-top: 4px;
     gap: 8px;
   }
-  .app .physical-table .teammate-tableaux:not(:has(.teammate-card-stack)) {
+  .app
+    .physical-table
+    .teammate-tableaux:not(:has(.teammate-card-stack, .attached-piece)) {
     display: none;
   }
   .app .physical-table .teammate-tableau {

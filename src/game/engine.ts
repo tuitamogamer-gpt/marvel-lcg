@@ -1,4 +1,5 @@
 import * as armadillo from "./armadillo.js";
+import * as zzzax from "./zzzax.js";
 import * as antMan from "./ant-man.js";
 import * as antPack from "./ant-man-pack.js";
 import * as wasp from "./wasp.js";
@@ -1156,7 +1157,16 @@ function movePieceFromPlay(
         seatView(s, target).player.deck,
       );
       delete s.flags[`niLeaveShuffle:${id}`];
-    } else seatView(s, owner).player.discard.push(discarded);
+    } else {
+      seatView(s, owner).player.discard.push(discarded);
+      // A discard cost is paid at this native destination commit. Keep the
+      // receipt even if a later response moves that physical card again.
+      for (const seat of s.players) {
+        const flags = seatView(s, seat).flags;
+        if (flags[`zzzaxDiscardPending:${id}`])
+          flags[`zzzaxDiscardPaid:${id}`] = true;
+      }
+    }
     delete s.flags[`niLeaveCommitted:${id}`];
     const view = controlling ? seatView(s, controlling) : s;
     if (rulesCode(p) === "01036" && !blankBefore) view.player.hp -= 6;
@@ -3916,22 +3926,25 @@ export function newGame(config: {
         c.faction_code === "encounter" &&
         ((((c.set_code === s.module &&
           c.pack_code ===
-            (s.module === "armadillo"
-              ? "nova"
-              : [
-                    "goblin_gimmicks",
-                    "a_mess_of_things",
-                    "power_drain",
-                    "running_interference",
-                  ].includes(s.module)
-                ? "gob"
-                : "core")) ||
+            (s.module === "zzzax"
+              ? "ironheart"
+              : s.module === "armadillo"
+                ? "nova"
+                : [
+                      "goblin_gimmicks",
+                      "a_mess_of_things",
+                      "power_drain",
+                      "running_interference",
+                    ].includes(s.module)
+                  ? "gob"
+                  : "core")) ||
           (c.set_code === v.id && c.pack_code === scenarioPack) ||
           (c.set_code === "standard" && c.pack_code === "core") ||
           (difficulty === "expert" &&
             c.set_code === "expert" &&
             c.pack_code === "core")) &&
-          !["villain", "main_scheme", "environment"].includes(c.type_code)) ||
+          !["villain", "main_scheme"].includes(c.type_code) &&
+          (c.type_code !== "environment" || c.set_code === s.module)) ||
           (team.some(
             (h) =>
               h.heroId === c.set_code &&
@@ -5419,6 +5432,7 @@ export function abilityOptions(
   if (hulkPackOptions.length)
     return hulkPackOptions.map(({ id, label }) => ({ id, label }));
   const attachmentOptions = [
+    ...zzzax.zzzaxActions(s, p, zzzaxPorts),
     ...goblinModuleAttachmentActions(s, p),
     ...mutagenAttachmentActions(s, p),
     ...scarletWitch.scarletWitchAttachmentActions(s, p, scarletPorts),
@@ -5601,6 +5615,19 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   );
 }
 function ability(s: GameState, id: string, action = "special") {
+  const zzzaxSource = find(s, id);
+  if (zzzaxSource) {
+    const effects = zzzax.zzzaxActionEffects(
+      s,
+      zzzaxSource,
+      action,
+      zzzaxPorts,
+    );
+    if (effects !== null) {
+      add(s, ...effects);
+      return;
+    }
+  }
   if (
     miles.milesAbility(
       s,
@@ -8647,6 +8674,59 @@ const armadilloPorts: armadillo.ArmadilloPorts = {
     return !!p && giveCharacterStatus(s, p, "tough");
   },
 };
+function zzzaxCanTakeCostDamage(s: GameState, target: string): boolean {
+  if (damageProhibition(s, target, false)) return false;
+  if (target !== "hero") return !find(s, target)?.tough;
+  return (
+    !s.player.tough &&
+    !(
+      s.heroId === "groot" &&
+      s.player.form === "hero" &&
+      !isTextBlank(s, heroCard(s)) &&
+      groot.grootGrowthCounters(s) > 0
+    )
+  );
+}
+const zzzaxPorts: zzzax.ZzzaxPorts = {
+  ...mutagenPorts,
+  discardControlledCost: (s, costId, after) => {
+    const playerId = s.activePlayerId;
+    s.flags[`zzzaxDiscardPending:${costId}`] = true;
+    // Leave-play interrupts and responses prepend ahead of this saved commit.
+    add(s, E("zzzaxDiscardCostCommit", { costId, playerId, after }));
+    discardPiece(s, costId);
+  },
+  canDiscardControlled: (s, p) =>
+    s.player.inPlay.some((x) => x.id === p.id) &&
+    !isPermanent(card(p)) &&
+    valkyrie.valkyrieCanDiscardAttachment(s, p),
+  canTakeIndirectCost: (s, amount) => {
+    const heroAvailable = zzzaxCanTakeCostDamage(s, "hero")
+      ? Math.max(0, s.player.hp)
+      : 0;
+    const alliesAvailable = s.player.inPlay
+      .filter(
+        (p) => card(p).type_code === "ally" && zzzaxCanTakeCostDamage(s, p.id),
+      )
+      .reduce((n, p) => n + Math.max(0, pieceHP(s, p) - p.damage), 0);
+    return heroAvailable + alliesAvailable >= amount;
+  },
+  indirect: (s, request) => {
+    add(
+      s,
+      E("indirect", {
+        actorId: request.playerId,
+        amount: request.amount,
+        source: request.sourceId,
+        sourceTitle: request.sourceTitle,
+        zzzaxBatchId: `zzzax-indirect:${s.nextId++}`,
+        zzzaxBatchOwner: request.playerId,
+        zzzaxAfter: request.after,
+        zzzaxTakeCost: request.after?.type === "zzzax:remove-damage-after",
+      }),
+    );
+  },
+};
 const riskyPorts: RiskyBusinessEnginePorts = {
   queue: add,
   choose,
@@ -10365,7 +10445,8 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
   const bonus =
     (p.bonusAtk || 0) +
     mutagenAttackModifiers(s, p).goblinNation +
-    armadillo.armadilloAttackBonus(s, p);
+    armadillo.armadilloAttackBonus(s, p) +
+    zzzax.zzzaxEnemyStats(s, p).attack;
   const attachments = s.attachments
     .filter((a) => a.attachedTo === p.id)
     .reduce((n, a) => n + (card(a).attack || 0), 0);
@@ -10562,6 +10643,15 @@ function declareDefense(s: GameState) {
   );
 }
 function boostEffects(s: GameState, p: Piece) {
+  const zzzaxBoost = zzzax.zzzaxBoost(s, p, s.activePlayerId);
+  if (zzzaxBoost !== null) {
+    if (zzzaxBoost.retainsCard) {
+      const activation = s.scheming || s.attack;
+      if (activation) (activation.retainedBoostIds ||= []).push(p.id);
+    }
+    add(s, ...zzzaxBoost.effects);
+    return;
+  }
   const rise =
     starLord.starLordBoost(s, p) ??
     gamora.gamoraBoost(s, p) ??
@@ -11568,6 +11658,7 @@ function reveal(
     ([
       ...GOBLIN_MODULE_SCRIPT_CODES,
       ...armadillo.ARMADILLO_SCRIPT_CODES,
+      ...zzzax.ZZZAX_SCRIPT_CODES,
       ...RISKY_BUSINESS_SCRIPT_CODES,
       ...MUTAGEN_FORMULA_SCRIPT_CODES,
       ...BLACK_WIDOW_SCRIPT_CODES,
@@ -11616,6 +11707,7 @@ function reveal(
       ...GOBLIN_MODULE_SCRIPT_CODES,
       ...MUTAGEN_FORMULA_SCRIPT_CODES,
       ...armadillo.ARMADILLO_SCRIPT_CODES,
+      ...zzzax.ZZZAX_SCRIPT_CODES,
     ].some((code) => code === p.code)
   ) {
     const window = beginRevealWindow(
@@ -11628,7 +11720,8 @@ function reveal(
     const entry =
       goblinModuleReveal(s, p) ??
       mutagenEncounterReveal(s, p) ??
-      armadillo.armadilloReveal(s, p);
+      armadillo.armadilloReveal(s, p) ??
+      zzzax.zzzaxReveal(s, p);
     need(entry !== null, "No native encounter attachment entry handler.");
     add(s, ...entry!.map((e) => ({ ...e, revealWindowId: p.id })), ...window);
     return;
@@ -11672,6 +11765,7 @@ function reveal(
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
     armadillo.armadilloReveal(s, p) ??
+    zzzax.zzzaxReveal(s, p) ??
     starLord.starLordEncounterReveal(s, p) ??
     gamora.gamoraEncounterReveal(s, p) ??
     drax.draxEncounterReveal(s, p) ??
@@ -11696,7 +11790,7 @@ function reveal(
     spiderWomanEncounterReveal(s, p);
   if (
     c.type_code === "environment" &&
-    vision.visionEncounterReveal(s, p) !== null
+    (vision.visionEncounterReveal(s, p) !== null || p.code === "29039")
   ) {
     if (!repeat) visionPorts.putEnvironment(s, p);
     add(s, ...(rise || []));
@@ -12414,6 +12508,7 @@ function resolve(s: GameState, e: Effect) {
         state.currentRevealWindowId = windowId;
         const effects =
           armadillo.armadilloReveal(state, piece) ??
+          zzzax.zzzaxReveal(state, piece) ??
           goblinModuleReveal(state, piece) ??
           riskyEncounterReveal(state, piece) ??
           mutagenEncounterReveal(state, piece) ??
@@ -12461,6 +12556,7 @@ function resolve(s: GameState, e: Effect) {
   )
     return;
   if (armadillo.resolveArmadilloEffect(s, e, armadilloPorts)) return;
+  if (zzzax.resolveZzzaxEffect(s, e, zzzaxPorts)) return;
   if (resolveGoblinModuleEffect(s, e, goblinPorts)) return;
   if (resolveThorEffect(s, e, thorPorts)) return;
   if (resolveMsMarvelEffect(s, e, msPorts)) return;
@@ -13906,6 +14002,7 @@ function resolve(s: GameState, e: Effect) {
     case "indirect": {
       const allocations = e.allocations || {};
       const choices = targets(s, "controlled").filter((t) => {
+        if (e.zzzaxTakeCost && !zzzaxCanTakeCostDamage(s, t.id)) return false;
         const hp =
           t.id === "hero"
             ? s.player.hp
@@ -13913,6 +14010,37 @@ function resolve(s: GameState, e: Effect) {
         return hp > (allocations[t.id] || 0);
       });
       if (e.amount <= 0 || !choices.length) {
+        if (e.zzzaxBatchId) {
+          const packets = Object.entries(allocations).map(
+            ([target, amount]) => ({
+              target: target === "hero" ? `hero:${e.zzzaxBatchOwner}` : target,
+              amount,
+            }),
+          );
+          add(
+            s,
+            ...packets.map((packet, index) =>
+              E("damage", {
+                ...packet,
+                damageDealt: packet.amount,
+                source: e.source,
+                zzzaxBatchId: e.zzzaxBatchId,
+                zzzaxBatchOwner: e.zzzaxBatchOwner,
+                zzzaxBatchIndex: index,
+                actorId: e.zzzaxBatchOwner,
+              }),
+            ),
+            E("zzzaxIndirectCommit", {
+              packets,
+              batchId: e.zzzaxBatchId,
+              playerId: e.zzzaxBatchOwner,
+              source: e.source,
+              after: e.zzzaxAfter,
+              actorId: e.zzzaxBatchOwner,
+            }),
+          );
+          break;
+        }
         add(
           s,
           ...Object.entries(allocations).map(([target, amount]) =>
@@ -14626,6 +14754,14 @@ function resolve(s: GameState, e: Effect) {
           break;
         }
       }
+      if (e.zzzaxBatchId) {
+        // Run native prevention windows for every allocated character before
+        // placing any damage. The saved packet retains dealt and taken amounts.
+        seatView(s, e.zzzaxBatchOwner).flags[
+          `${e.zzzaxBatchId}:${e.zzzaxBatchIndex}`
+        ] = JSON.stringify({ amount: e.amount, damageDealt: e.damageDealt });
+        break;
+      }
       if (e.spectrumBatchId) {
         // Saved pre-placement amounts preserve all paid interrupt costs and
         // preparation windows while every recipient still has its original HP.
@@ -14701,6 +14837,90 @@ function resolve(s: GameState, e: Effect) {
     case "heal":
       heal(s, e.target, e.amount);
       break;
+    case "zzzaxIndirectCommit": {
+      const owner = seatView(s, e.playerId);
+      const flags = owner.flags;
+      const previousDefer = s.flags.waspDeferDefeats;
+      s.flags.spectrumDamageBatchApplying = true;
+      s.flags.waspDeferDefeats = true;
+      let identityDamageDealt = 0;
+      let damageTaken = 0;
+      const receipt = effectContext(
+        s,
+        E("zzzaxIndirectAfter", {
+          batchId: e.batchId,
+          playerId: e.playerId,
+          after: e.after,
+          identityDamageDealt: 0,
+          damageTaken: 0,
+        }),
+      );
+      // Every native damage/defeat response must resolve before the card's
+      // continuation. This receipt is serializable if a response pauses play.
+      s.queue.unshift(receipt);
+      try {
+        for (const [index, packet] of (
+          e.packets as { target: string; amount: number }[]
+        ).entries()) {
+          const key = `${e.batchId}:${index}`;
+          const prepared = JSON.parse(String(flags[key] || "null"));
+          delete flags[key];
+          if (!prepared) continue;
+          const identity = packet.target === `hero:${e.playerId}`;
+          if (!identity && !find(s, packet.target)) continue;
+          const result = dealDamage(
+            s,
+            packet.target,
+            prepared.amount,
+            e.source,
+            false,
+            false,
+            false,
+            {
+              grootHandled: true,
+              damageDealt: prepared.damageDealt ?? packet.amount,
+            },
+          );
+          damageTaken += result.actualDamage;
+          if (identity) identityDamageDealt += result.damageDealt;
+        }
+      } finally {
+        delete flags.spectrumDamageBatchApplying;
+        if (previousDefer !== undefined) flags.waspDeferDefeats = previousDefer;
+        else delete flags.waspDeferDefeats;
+      }
+      receipt.identityDamageDealt = identityDamageDealt;
+      receipt.damageTaken = damageTaken;
+      flags.spectrumBatchDefeatSource = e.source;
+      try {
+        check(s);
+      } finally {
+        delete flags.spectrumBatchDefeatSource;
+      }
+      break;
+    }
+    case "zzzaxIndirectAfter": {
+      const original = s.players.find((p) => p.id === e.playerId);
+      if (
+        e.after &&
+        (!original?.eliminated || e.after.type === "zzzax:remove-damage-after")
+      )
+        add(s, {
+          ...e.after,
+          actorId: original?.eliminated ? s.activePlayerId : e.playerId,
+          identityDamageDealt: e.identityDamageDealt,
+          damageTaken: e.damageTaken,
+        });
+      break;
+    }
+    case "zzzaxDiscardCostCommit": {
+      const flags = seatView(s, e.playerId).flags;
+      const paid = flags[`zzzaxDiscardPaid:${e.costId}`];
+      delete flags[`zzzaxDiscardPaid:${e.costId}`];
+      delete flags[`zzzaxDiscardPending:${e.costId}`];
+      if (paid) add(s, { ...e.after, actorId: s.activePlayerId });
+      break;
+    }
     case "spectrumBatchCommit": {
       const receipts = seatView(s, e.ownerId).flags;
       const previousDefer = s.flags.waspDeferDefeats;
@@ -18048,6 +18268,7 @@ function resolve(s: GameState, e: Effect) {
       log(s, "Villain phase · threat, activations, then encounters.", "phase");
       add(
         s,
+        ...zzzax.zzzaxVillainPhaseInterrupts(s),
         ...groot.grootVillainPhaseBegin(s, grootPorts),
         ...ghostSpider.ghostSpiderVillainPhaseBegins(s, ghostSpiderPorts),
         ...gamora.gamoraVillainPhaseBegin(s, gamoraPorts),
@@ -18436,6 +18657,8 @@ function run(s: GameState) {
       [
         "newRound",
         "spectrumBatchCommit",
+        "zzzaxIndirectAfter",
+        "zzzaxDiscardCostCommit",
         "dealEncounters",
         "beginVillain",
         "villainStepOne",
@@ -18719,6 +18942,7 @@ export function dispatch(state: GameState, command: Command): GameState {
           if (s.attachments.some((p) => p.id === command.id)) {
             const p = find(s, command.id)!;
             const custom = [
+              ...zzzax.zzzaxActions(s, p, zzzaxPorts),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
               ...goblinModuleAttachmentActions(s, p),
               ...mutagenAttachmentActions(s, p),

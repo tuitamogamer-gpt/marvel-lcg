@@ -58,6 +58,8 @@ jobs:
           - group: nova-ironheart
             scripts: test:nova-ironheart test:milestones
             timeout: 45
+          - group: zzzax
+            scripts: test:zzzax
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

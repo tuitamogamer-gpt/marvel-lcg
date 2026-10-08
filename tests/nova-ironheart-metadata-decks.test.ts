@@ -308,7 +308,7 @@ for (const spec of specs)
   });
 
 describe("Nova and Ironheart printings, scope and physical identities", () => {
-  it("preserves sixty-six hero-scope faces and independently tracks Armadillo and pending Zzzax", () => {
+  it("preserves sixty-six hero-scope faces and independently tracks Armadillo and Zzzax", () => {
     const nova = catalog.filter((c) => c.pack_code === "nova"),
       ironheart = catalog.filter((c) => c.pack_code === "ironheart");
     expect(nova).toHaveLength(33);
@@ -329,10 +329,19 @@ describe("Nova and Ironheart printings, scope and physical identities", () => {
     );
     expect(modular).toHaveLength(10);
     for (const c of modular) {
-      expect(EXPLICIT_CARD_SCRIPTS.has(c.code), c.code).toBe(
-        c.set_code === "armadillo",
-      );
+      expect(EXPLICIT_CARD_SCRIPTS.has(c.code), c.code).toBe(true);
+      expect(hasExecutableScript(c.code), c.code).toBe(true);
     }
+    expect(
+      modular
+        .filter((c) => c.set_code === "armadillo")
+        .reduce((n, c) => n + c.quantity, 0),
+    ).toBe(6);
+    expect(
+      modular
+        .filter((c) => c.set_code === "zzzax")
+        .reduce((n, c) => n + c.quantity, 0),
+    ).toBe(7);
     for (const [code, core] of Object.entries(coreAliases)) {
       expect(rulesCode(code), code).toBe(core);
       expect(hasCoreScript(code), code).toBe(true);

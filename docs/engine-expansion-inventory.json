@@ -401,7 +401,10 @@
       "wakanda",
       "warmPackAttach",
       "warmPackAttachChosen",
-      "waspDistributedAttack"
+      "waspDistributedAttack",
+      "zzzaxDiscardCostCommit",
+      "zzzaxIndirectAfter",
+      "zzzaxIndirectCommit"
     ],
     "note": "Switch-case inventory is a diagnostic snapshot only; handler presence does not prove full card support or rule correctness."
   },
@@ -124868,8 +124871,8 @@
       },
       "installedRegistry": {
         "code": "29036",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -124906,8 +124909,8 @@
       },
       "installedRegistry": {
         "code": "29037",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -124947,8 +124950,8 @@
       },
       "installedRegistry": {
         "code": "29038",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -124988,8 +124991,8 @@
       },
       "installedRegistry": {
         "code": "29039",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -125028,8 +125031,8 @@
       },
       "installedRegistry": {
         "code": "29040",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -265153,15 +265156,15 @@
     "src/data/catalog-decks.json": "6d75a9c883223b59a9b9d950696de7b6876f8921ffe025d40e352495c1a2b886",
     "src/data/core-player.json": "451c26f5ca50fd7b9c4bfc167675a23031b411c291bc546ad011c608603bbfa2",
     "src/data/core-encounter.json": "db9ec82bf2b9aa6b00bc813bc6b64aac3d0237996e3393f47d8dbd3645ddd2da",
-    "src/game/engine.ts": "346a87cad824d4bdf93bcfd40f99303ff802f43c21b3e54a41cce0ad861f392c",
+    "src/game/engine.ts": "4f29c780a55cc63833e978a86ce02260d3a7e488db087c96beb10a167b95b2b1",
     "src/data/catalog-provenance.json": "8dddd4de54508b44039d4cf196a98550503486efdaf2ac9771de55992a77b7e4",
     "src/game/scripts/compiler.ts": "33feb608b78cc98fa23bfca85926b8213dd82b4a056d419fa459e6bef5363e87",
     "src/game/scripts/runtime.ts": "60ed7040b44d97589d6eb3e0583e6153680757c1de50fe8788c5dd48d1c355ac",
     "src/game/scripts/types.ts": "7c911c5060b6d6945391256137de71ac00a4adb75b5765040b7a6f0a71dbe2fc",
     "src/game/script-registry.ts": "ef1a70d1b07d46a9165045e38cbaeb6acecbffc303bda84db9a810bc44d9d0f5",
     "src/game/keywords.ts": "773badc9609fc065a43227235c04609b4525e25cf25bdebe3bc216411a2e693d",
-    "src/game/engine-support.ts": "5dff14bca5129cad0e89b1fbfbf62342925ac277352b500b2c4d1a33edaf360a",
-    "src/game/cards.ts": "0a4bb791d7a455cb9a580ebcebef38b891c6c8c927c799b56a9e63de3fe2d74e",
+    "src/game/engine-support.ts": "412751a866f6fab7efba98da2f7fdee10a91d1be5a82367de5837b807ffd293e",
+    "src/game/cards.ts": "d158affa7256e2f2bc51260d7916a845b7a814852861f876b07023a4aeea0a53",
     "src/game/captain-america.ts": "bf6d11942c8933b64cce049b3ff13291d8271338b553e1482d542ceb6ecddb9e",
     "src/game/captain-pack.ts": "5da521a1e13a0eccca9b0821dc9418dc452947b1ed15ef81db550a362c8029ba",
     "src/game/hulk.ts": "b450aa1dc93bbc55150db96af40ac71e2c0cae858270018b73ebfc880e8b26e7",
@@ -265172,6 +265175,7 @@
     "src/game/risky-business.ts": "e4071b93fec1d38e97140e34f44ff18549a265f9ec45d0933e70106303500807",
     "src/game/goblin-modules.ts": "5fff1e7a55eaae31de9ec43a0d5885113162cc32fcbbf0a7a444ab1a05b5a8b9",
     "src/game/armadillo.ts": "3e10d9863ea703eb3bfba8e4dfbbdf15f39f324f25fdea345580a9105cd24ff8",
+    "src/game/zzzax.ts": "9c17db3811a051160636a06f5d6f93883c034b46b8754ab52af9b46481d2e6e8",
     "src/game/reveal-window.ts": "6470de86e3628972490e6184c23dc5bb5585b6b766c12fbeee7d56046807d5a2",
     "src/game/black-widow.ts": "9644c2efe568b503964463371367da404328ef5eae334db28cbd5a76459c3f03",
     "src/game/doctor-strange.ts": "2e9c7f17016401b3e152f5a8565c9e03174c369193d6580a71e9f3b183fa74ff",
@@ -265217,7 +265221,7 @@
     "src/game/card-text.ts": "dae1efdcef17b99e905aa3eb8cfbfe250d6c52c6db4646c9b0b173f7d61f9639",
     "src/game/expansion-errata.ts": "e8f79c8686fd27ef3a3243f3aae387947137a9f2e0b61d1f603fbdb6f8f7ee87",
     "src/game/types.ts": "7385aac3fef1ba2a9c8f16ca4ec2b69ce39c4cb074a0ce2644887c8600d76be3",
-    "src/game/payment.ts": "a993501972db8039e2726943a7f395bb678aaa0b6b53ea735e4971489fc51779",
+    "src/game/payment.ts": "7340857218575207e3c27ac4373f6567cd864859be4b28ec66dd9da1d2f53380",
     "src/game/team.ts": "1e7f0d45c83d51a88ce7b18300cb1ba1fc550567920d137e403a2e4ef1b51057",
     "src/game/review.ts": "e93e8acaaa2ef8e450901e42e7de9028e1bad4c75b30eff2429936a6f8708584",
     "src/game/lookahead.ts": "844a7531a441ecdc1f0e6ec704c57709e2cdfd4a36814103888f1bf3eb8b8854",
@@ -289405,9 +289409,9 @@
   },
   "installedRegistryCoverage": {
     "total": 4551,
-    "executableFaces": 1326,
-    "unsupportedFaces": 3225,
-    "dedicatedFaces": 853,
+    "executableFaces": 1331,
+    "unsupportedFaces": 3220,
+    "dedicatedFaces": 858,
     "dedicatedCodes": [
       "02001a",
       "02001b",
@@ -290261,7 +290265,12 @@
       "29032",
       "29033",
       "29034",
-      "29035"
+      "29035",
+      "29036",
+      "29037",
+      "29038",
+      "29039",
+      "29040"
     ],
     "registeredHeroIds": [
       "ant",
@@ -291567,15 +291576,9 @@
         "code": "ironheart",
         "name": "Ironheart",
         "faceCount": 43,
-        "executableFaces": 38,
-        "unsupportedFaceCodes": [
-          "29036",
-          "29037",
-          "29038",
-          "29039",
-          "29040"
-        ],
-        "installedCardClosure": false,
+        "executableFaces": 43,
+        "unsupportedFaceCodes": [],
+        "installedCardClosure": true,
         "automationCertification": "registration_closure_only_requires_rules_and_native_integration_evidence"
       },
       {
@@ -306182,32 +306185,32 @@
       },
       {
         "code": "29036",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "29037",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "29038",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "29039",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "29040",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {

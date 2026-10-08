@@ -139,6 +139,8 @@ describe("complete expansion rules inventory", () => {
       ["warm", 36],
       ["valk", 37],
       ["vision", 38],
+      ["nova", 33],
+      ["ironheart", 43],
     ] as const) {
       expect(
         coverage.products.find((pack: { code: string }) => pack.code === code),
@@ -222,9 +224,9 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(1326);
-    expect(coverage.unsupportedFaces).toBe(3225);
-    expect(coverage.dedicatedFaces).toBe(853);
+    expect(coverage.executableFaces).toBe(1331);
+    expect(coverage.unsupportedFaces).toBe(3220);
+    expect(coverage.dedicatedFaces).toBe(858);
     expect(coverage.registeredHeroIds).toHaveLength(33);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
@@ -305,7 +307,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(80);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(81);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
@@ -386,6 +388,8 @@ describe("complete expansion rules inventory", () => {
       "src/game/valkyrie-pack.ts",
       "src/game/vision.ts",
       "src/game/vision-pack.ts",
+      "src/game/armadillo.ts",
+      "src/game/zzzax.ts",
       "src/game/printed-card-metadata.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",

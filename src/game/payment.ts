@@ -1,4 +1,5 @@
 import { thorResourceSources } from "./thor.js";
+import { zzzaxHandResources } from "./zzzax.js";
 import { waspPackResourceSources } from "./wasp-pack.js";
 import { quicksilverResourceSources } from "./quicksilver.js";
 import { quicksilverPackResourceSources } from "./quicksilver-pack.js";
@@ -72,7 +73,8 @@ export function resourcesFor(
   p: Piece,
   target?: Card,
 ): Resource[] {
-  return mtsPlayerPackCardResources(s, p) ?? resources(card(p), target);
+  const generated = mtsPlayerPackCardResources(s, p);
+  return generated ?? zzzaxHandResources(s, p, resources(card(p), target));
 }
 
 function localPaymentSources(

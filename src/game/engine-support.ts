@@ -35,6 +35,7 @@ import { NOVA_SCRIPT_CODES } from "./nova.js";
 import { IRONHEART_SCRIPT_CODES } from "./ironheart.js";
 import { NOVA_IRONHEART_PACK_SCRIPT_CODES } from "./nova-ironheart-pack.js";
 import { ARMADILLO_SCRIPT_CODES } from "./armadillo.js";
+import { ZZZAX_SCRIPT_CODES } from "./zzzax.js";
 import { GOBLIN_MODULE_SCRIPT_CODES } from "./goblin-modules.js";
 import { BLACK_WIDOW_SCRIPT_CODES } from "./black-widow.js";
 import { DOCTOR_STRANGE_SCRIPT_CODES } from "./doctor-strange.js";
@@ -132,6 +133,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...THOR_SCRIPT_CODES,
   ...GOBLIN_MODULE_SCRIPT_CODES,
   ...ARMADILLO_SCRIPT_CODES,
+  ...ZZZAX_SCRIPT_CODES,
   ...BLACK_WIDOW_SCRIPT_CODES,
   ...DOCTOR_STRANGE_SCRIPT_CODES,
   ...HAWKEYE_SCRIPT_CODES,

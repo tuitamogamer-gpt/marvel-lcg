@@ -624,6 +624,8 @@ describe("regressions from tabletop review", () => {
 });
 
 describe("complete seeded missions", () => {
+  // Complete missions resolve native windows alongside the exhaustive matrix;
+  // allow their bounded fifty-round checks enough time on shared workers.
   for (const h of HEROES)
     for (const v of VILLAINS)
       it(`${h.name} vs ${v.name} reaches a result without losing cards or locking`, () => {
@@ -748,7 +750,7 @@ describe("complete seeded missions", () => {
           expect(pieces.length).toBe(originalIds.size);
         }
         expect(["won", "lost"]).toContain(s.phase);
-      });
+      }, 20_000);
 });
 describe("status cancellation of compound effects", () => {
   it("stunned cancels the entire Repulsor Blast after its resource cost is paid", () => {

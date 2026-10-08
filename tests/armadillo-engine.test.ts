@@ -125,13 +125,13 @@ const modularIds = (s: GameState) =>
     .map((p) => p.id);
 
 describe("Armadillo modular set through the actual native dispatcher", () => {
-  it("registers five faces and exactly six physical modular cards", () => {
+  it("registers five Armadillo faces and six physical cards alongside Zzzax", () => {
     const s = base();
     expect(MODULES.some((m) => m.id === "armadillo")).toBe(true);
     expect(modularIds(s)).toHaveLength(6);
     for (const code of ["28028", "28029", "28030", "28031", "28032"])
       expect(hasExecutableScript(code), code).toBe(true);
-    expect(hasExecutableScript("29037")).toBe(false);
+    expect(hasExecutableScript("29037")).toBe(true);
   });
   it.each([1, 2])(
     "reveals per-player scheme threat with %i players",

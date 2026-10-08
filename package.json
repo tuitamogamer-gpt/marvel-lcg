@@ -41,7 +41,8 @@
     "test:vision": "node scripts/vision-check.mjs",
     "test:sinister-heroes": "node scripts/sinister-heroes-check.mjs",
     "test:nova-ironheart": "node scripts/nova-ironheart-check.mjs",
-    "test:milestones": "node scripts/milestones-check.mjs"
+    "test:milestones": "node scripts/milestones-check.mjs",
+    "test:zzzax": "node scripts/zzzax-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

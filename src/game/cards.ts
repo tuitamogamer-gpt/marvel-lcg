@@ -1,4 +1,5 @@
 import { ghostSpiderEnemyModifiers } from "./ghost-spider.js";
+import { zzzaxEnemyStats } from "./zzzax.js";
 import { antManStats } from "./ant-man.js";
 import { waspStats, waspHeroTraits, waspEnemyHP } from "./wasp.js";
 import { waspPackAllyHP } from "./wasp-pack.js";
@@ -688,6 +689,7 @@ export const MODULES = [
   { id: "legions_of_hydra", name: "Legions of Hydra", difficulty: 4 },
   { id: "the_doomsday_chair", name: "The Doomsday Chair", difficulty: 5 },
   { id: "armadillo", name: "Armadillo", difficulty: 3 },
+  { id: "zzzax", name: "Zzzax", difficulty: 3 },
 ];
 export const ASPECTS: {
   id: Aspect;
@@ -1114,6 +1116,7 @@ export function pieceHP(s: GameState, p: Piece) {
     waspEnemyHP(s, p) +
     ghostSpiderEnemyModifiers(s, p).health +
     ironheartEnemyStats(s, p, { isTextBlank }).health +
+    zzzaxEnemyStats(s, p).health +
     gamoraPackAllyHP(s, p) +
     nebulaPackModifiers(s, p.id).health +
     novaIronheartCharacterModifiers(s, p.id).health +

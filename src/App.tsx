@@ -18,6 +18,7 @@ import {
 } from "./game/hero-runtime";
 import { deckSizeFor } from "./game/decks";
 import { resourcesFor } from "./game/payment";
+import { zzzaxEnemyStats } from "./game/zzzax";
 import {
   SPECTRUM_FORM_CODES,
   spectrumEnergyForm,
@@ -3961,17 +3962,21 @@ function AttachedCards({
             {[
               ...mutagenAttachmentActions(game, p),
               ...goblinModuleAttachmentActions(game, p),
-              ...(p.code === "25032" ? abilityOptions(game, p) : []),
+              ...(["25032", "29038"].includes(p.code)
+                ? abilityOptions(game, p)
+                : []),
             ].map((a) => (
               <button
                 key={a.id}
                 className="text-button"
                 disabled={!send}
+                aria-label={p.code === "29038" ? a.label : undefined}
+                title={p.code === "29038" ? a.label : undefined}
                 onClick={() =>
                   send?.({ type: "ABILITY", id: p.id, action: a.id })
                 }
               >
-                {a.label}
+                {p.code === "29038" ? "Remove" : a.label}
               </button>
             ))}
           </div>
@@ -4441,11 +4446,31 @@ function Tabletop({
                     <div>
                       <span className="small-label">ENVIRONMENT</span>
                       <strong>{card(p).name}</strong>
-                      <span className="environment-counter">
-                        <PremiumToken kind="counter" />
-                        {p.counters}{" "}
-                        {p.code === "02006a" ? "Infamy" : "Madness"}
-                      </span>
+                      {p.code !== "29039" && (
+                        <span className="environment-counter">
+                          <PremiumToken kind="counter" />
+                          {p.counters}{" "}
+                          {p.code === "02006a" ? "Infamy" : "Madness"}
+                        </span>
+                      )}
+                      {p.code === "29039" &&
+                        abilityOptions(s, p).map((a) => (
+                          <button
+                            key={a.id}
+                            disabled={!canUseAction}
+                            aria-label={a.label}
+                            title={a.label}
+                            onClick={() =>
+                              sendAction({
+                                type: "ABILITY",
+                                id: p.id,
+                                action: a.id,
+                              })
+                            }
+                          >
+                            Remove
+                          </button>
+                        ))}
                     </div>
                   </div>
                 ))}
@@ -4574,7 +4599,8 @@ function Tabletop({
                                   ? pieceHP(s, p)
                                   : p.code === "01162"
                                     ? pieceHP(s, p) - p.damage
-                                    : card(p).attack}
+                                    : (card(p).attack || 0) +
+                                      zzzaxEnemyStats(s, p).attack}
                               </b>
                               <small>ATK</small>
                             </span>
@@ -5329,6 +5355,19 @@ function Tabletop({
                           </span>
                           <ArrowRight size={14} />
                         </button>
+                        <AttachedCards
+                          game={s}
+                          host={{
+                            ...s.villain,
+                            id: `hero:${seat.id}`,
+                            code: heroCard(view).code,
+                            counters: 0,
+                            damage: 0,
+                            exhausted: view.player.exhausted,
+                          }}
+                          inspect={inspect}
+                          send={canUseAction ? sendAction : undefined}
+                        />
                         <div className="teammate-cards">
                           {view.player.inPlay
                             .filter((p) => !p.attachedTo)
