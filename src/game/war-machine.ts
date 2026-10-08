@@ -384,8 +384,10 @@ export function warMachineBoost(s: GameState, p: Piece): Effect[] | null {
     ? [W("laser-strike", { surge: false })]
     : [];
 }
-export function warMachineSchemeDefeated(_s: GameState, p: Piece): Effect[] {
-  return p.code === "23030" ? [W("light-show", { sourceCode: p.code })] : [];
+export function warMachineSchemeDefeated(s: GameState, p: Piece): Effect[] {
+  return p.code === "23030" && !isTextBlank(s, p)
+    ? [W("light-show", { sourceCode: p.code })]
+    : [];
 }
 
 function attack(

@@ -1,6 +1,7 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import players from "../data/core-player.json" with { type: "json" };
 import type { Card, GameState, Piece } from "./types.js";
+import { novaIronheartPackTextBlank } from "./nova-ironheart-pack.js";
 
 const definitions = new Map(
   ([...catalog, ...players] as Card[]).map((c) => [c.code, c]),
@@ -11,6 +12,22 @@ export function isTextBlank(
   s: GameState,
   p: (Pick<Piece, "code"> & { id?: string }) | string,
 ) {
+  const physical =
+    typeof p !== "string" && p.id
+      ? [{ id: p.id }]
+      : [
+          s.villain,
+          ...s.minions,
+          ...s.sideSchemes,
+          ...s.attachments,
+          ...s.players.flatMap((seat) =>
+            seat.id === s.activePlayerId ? s.player.inPlay : seat.player.inPlay,
+          ),
+        ].filter(
+          (piece) => piece.code === (typeof p === "string" ? p : p.code),
+        );
+  if (physical.some((piece) => novaIronheartPackTextBlank(s, piece)))
+    return true;
   if (typeof p !== "string" && "treatedAsMinion" in p && p.treatedAsMinion)
     return true;
   const physicalCode = typeof p === "string" ? p : p.code;
@@ -29,7 +46,13 @@ export function isTextBlank(
     );
     if (owner?.inPlay.some((piece) => piece.code === "26028")) return true;
   }
-  if (!s.sideSchemes.some((scheme) => scheme.code === "12026")) return false;
+  if (
+    !s.sideSchemes.some(
+      (scheme) =>
+        scheme.code === "12026" && !novaIronheartPackTextBlank(s, scheme),
+    )
+  )
+    return false;
   const code = typeof p === "string" ? p : p.code;
   const inPlay = [
     s.player,
@@ -87,7 +110,19 @@ export function defenseEventSources(s: GameState): Piece[] {
 /** Read-only view for older continuous-effect adapters. Physical zones in the
  * real state remain intact; only sources of printed continuous text are hidden. */
 export function textActiveState(s: GameState): GameState {
-  if (!s.sideSchemes.some((scheme) => scheme.code === "12026")) return s;
+  if (
+    !s.sideSchemes.some(
+      (scheme) =>
+        scheme.code === "12026" && !novaIronheartPackTextBlank(s, scheme),
+    ) &&
+    !s.players.some((seat) =>
+      (seat.id === s.activePlayerId
+        ? s.player.inPlay
+        : seat.player.inPlay
+      ).some((piece) => novaIronheartPackTextBlank(s, piece)),
+    )
+  )
+    return s;
   const player = (p: GameState["player"]) => ({
     ...p,
     inPlay: p.inPlay.filter((piece) => !isTextBlank(s, piece)),

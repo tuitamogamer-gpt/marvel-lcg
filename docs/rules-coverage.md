@@ -57,7 +57,7 @@ All 25 groups from the [core audit](rules-audit-2026-09-23.md) have regression c
 
 ## Verification
 
-`npm test` runs deterministic rule fixtures plus full seeded missions across the 31 registered identities and five scenarios, checking that missions terminate and every player card remains accounted for. The exact-source suite additionally is configured for 2,340 configurations: twenty-six expansion preconstructed decks across five scenarios, both difficulties and nine modular sets. Doctor Strange invariants account for its five supplementary Invocation cards separately from the 40 ordinary cards. The smoke strategy is deliberately simple; those simulations test progression and invariants, not balance or an optimal policy.
+`npm test` runs deterministic rule fixtures plus full seeded missions across the 33 registered identities and five scenarios, checking that missions terminate and every player card remains accounted for. The exact-source suite additionally is configured for 2,520 configurations: twenty-eight expansion preconstructed decks across five scenarios, both difficulties and nine modular sets. Doctor Strange invariants account for its five supplementary Invocation cards separately from the 40 ordinary cards. The smoke strategy is deliberately simple; those simulations test progression and invariants, not balance or an optimal policy.
 
 The suite includes focused transparency tests for immediate hero form changes with preserved triggered-effect reviews, pending paid cards, reloadable payment receipts, rejected typed payments, single-use wild requirements, last-counter resource generators, unchanged-count card replacements, hidden encounters, reveal-before-resolution, star-ability timing, and Klaw's individual boosts.
 

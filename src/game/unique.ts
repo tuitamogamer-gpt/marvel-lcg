@@ -1,8 +1,9 @@
 import catalogCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay } from "./team.js";
 import type { Card, GameState } from "./types.js";
+import { printedCardMetadata } from "./printed-card-metadata.js";
 
-const cards = catalogCards as unknown as Card[];
+const cards = (catalogCards as unknown as Card[]).map(printedCardMetadata);
 const byCode = new Map(cards.map((c) => [c.code, c]));
 const normalize = (name: string) =>
   name
@@ -60,6 +61,8 @@ function overlap(a: Set<string>, b: Set<string>) {
  * subtitle/alter-ego title must match a title or another secondary title.
  * Typographic apostrophes are equivalent across imported printings. */
 export function uniqueMatches(a: Card, b: Card): boolean {
+  a = printedCardMetadata(a);
+  b = printedCardMetadata(b);
   if (!a.is_unique || !b.is_unique) return false;
   const left = names(a),
     right = names(b);
@@ -86,6 +89,7 @@ export function uniqueConflict(
   c: Card,
   excludeId?: string,
 ): boolean {
+  c = printedCardMetadata(c);
   if (!c.is_unique || c.type_code === "villain") return false;
   if (
     s.players.some((seat) => !seat.eliminated && identityMatch(seat.heroId, c))

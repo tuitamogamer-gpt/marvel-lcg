@@ -118,10 +118,8 @@ export function rocketEnemyStats(s: GameState, p: Piece) {
   // this catalog's transcription of Blackjack's Bazooka.
   return {
     attack:
-      s.attachments.filter(
-        (a) =>
-          a.code === "16056" && a.attachedTo === p.id && !isTextBlank(s, a),
-      ).length * 2,
+      s.attachments.filter((a) => a.code === "16056" && a.attachedTo === p.id)
+        .length * 2,
   };
 }
 export function rocketPhaseEnded(s: GameState): void {

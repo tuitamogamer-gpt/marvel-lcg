@@ -1,4 +1,5 @@
 import { printedCardMetadata } from "./printed-card-metadata.js";
+import { isTextBlank } from "./card-text.js";
 import type {
   Card,
   Effect,
@@ -154,7 +155,7 @@ export function goblinModuleDefeated(
   s: GameState,
   piece: Piece,
 ): Effect[] | null {
-  if (piece.code === "02041")
+  if (piece.code === "02041" && !isTextBlank(s, piece))
     return [gm("power-drain", { actorId: s.firstPlayerId })];
   return GOBLIN_MODULE_SCRIPT_CODES.includes(
     piece.code as (typeof GOBLIN_MODULE_SCRIPT_CODES)[number],
@@ -179,7 +180,7 @@ export function goblinModuleAttackResponses(
   const current = s.minions.find(
     (p) => p.id === result.attacker.id && p.code === result.attacker.code,
   );
-  if (!current) return [];
+  if (!current || isTextBlank(s, current)) return [];
   const response = (
     suffix: string,
     effects: Effect[],
@@ -230,7 +231,10 @@ export function goblinIdentityLocked(
   playerId = s.activePlayerId,
 ): boolean {
   return s.attachments.some(
-    (p) => p.code === "02048" && p.attachedTo === `hero:${playerId}`,
+    (p) =>
+      p.code === "02048" &&
+      p.attachedTo === `hero:${playerId}` &&
+      !isTextBlank(s, p),
   );
 }
 /** Additional resolutions of each When Revealed ability, not additional card entry.
@@ -241,7 +245,10 @@ export function goblinWhenRevealedCopies(
   playerId = s.activePlayerId,
 ): number {
   return s.attachments.filter(
-    (p) => p.code === "02049" && p.attachedTo === `hero:${playerId}`,
+    (p) =>
+      p.code === "02049" &&
+      p.attachedTo === `hero:${playerId}` &&
+      !isTextBlank(s, p),
   ).length;
 }
 export function goblinModuleAttachmentActions(

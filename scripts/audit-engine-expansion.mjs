@@ -892,23 +892,29 @@ export async function generateAudit(
   audit.runtimeMetadataCorrections = cards.flatMap((imported) => {
     const corrected = printedCardMetadata(imported);
     if (corrected === imported) return [];
-    const changes = ["attack", "boost"].flatMap((field) =>
-      corrected[field] !== imported[field]
-        ? [
-            {
-              field,
-              imported: imported[field] ?? null,
-              runtime: corrected[field],
-            },
-          ]
-        : [],
+    const changes = ["attack", "boost", "is_unique", "subname"].flatMap(
+      (field) =>
+        corrected[field] !== imported[field]
+          ? [
+              {
+                field,
+                imported: imported[field] ?? null,
+                runtime: corrected[field],
+              },
+            ]
+          : [],
     );
     return changes.length
       ? [
           {
             code: imported.code,
             source: "Original English card scan",
-            url: `https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/${imported.code}.jpg`,
+            url:
+              imported.code === "29001a"
+                ? "https://hallofheroeslcg.com/wp-content/uploads/2022/05/i0d.jpg"
+                : imported.code === "13018"
+                  ? "https://hallofheroeslcg.com/wp-content/uploads/2020/12/a8.jpg"
+                  : `https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/${imported.code}.jpg`,
             changes,
           },
         ]
@@ -1080,6 +1086,9 @@ export async function generateAudit(
     "src/game/ghost-spider.ts",
     "src/game/miles-morales.ts",
     "src/game/sinister-player-pack.ts",
+    "src/game/nova.ts",
+    "src/game/ironheart.ts",
+    "src/game/nova-ironheart-pack.ts",
     "src/game/printed-card-metadata.ts",
     "src/game/card-text.ts",
     "src/game/expansion-errata.ts",

@@ -515,7 +515,10 @@ function allies(s: GameState) {
 }
 const beguiledControllerKey = (id: string) =>
   `valkyrieBeguiledController:${id}`;
-function beguiledController(s: GameState, id: string): string | undefined {
+export function valkyrieBeguiledController(
+  s: GameState,
+  id: string,
+): string | undefined {
   for (const seat of s.players) {
     const value = seatView(s, seat).flags[beguiledControllerKey(id)];
     if (typeof value === "string") return value;
@@ -525,7 +528,9 @@ function beguiledController(s: GameState, id: string): string | undefined {
 export function valkyrieBeguiledEnemy(s: GameState, p: Piece): boolean {
   return (
     definition(p)?.type_code === "ally" &&
-    s.attachments.some((a) => a.code === "25031" && a.attachedTo === p.id)
+    s.attachments.some(
+      (a) => a.code === "25031" && a.attachedTo === p.id && !isTextBlank(s, a),
+    )
   );
 }
 export function valkyrieEnemyStats(
@@ -552,7 +557,7 @@ export function valkyrieAttachmentDiscarded(
     ? [
         V("restore-ally", {
           id: attachment.attachedTo,
-          playerId: beguiledController(s, attachment.attachedTo),
+          playerId: valkyrieBeguiledController(s, attachment.attachedTo),
         }),
       ]
     : [];
@@ -1177,7 +1182,7 @@ export function resolveValkyrieEffect(
       );
       if (p && valkyrieBeguiledEnemy(s, p)) break;
       const controller =
-        e.playerId || beguiledController(s, e.id) || p?.engagedWith;
+        e.playerId || valkyrieBeguiledController(s, e.id) || p?.engagedWith;
       for (const seat of s.players)
         delete seatView(s, seat).flags[beguiledControllerKey(e.id)];
       if (!p) break;

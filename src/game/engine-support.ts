@@ -31,6 +31,9 @@ import { VISION_PACK_SCRIPT_CODES } from "./vision-pack.js";
 import { GHOST_SPIDER_SCRIPT_CODES } from "./ghost-spider.js";
 import { MILES_MORALES_SCRIPT_CODES } from "./miles-morales.js";
 import { SINISTER_PLAYER_PACK_SCRIPT_CODES } from "./sinister-player-pack.js";
+import { NOVA_SCRIPT_CODES } from "./nova.js";
+import { IRONHEART_SCRIPT_CODES } from "./ironheart.js";
+import { NOVA_IRONHEART_PACK_SCRIPT_CODES } from "./nova-ironheart-pack.js";
 import { GOBLIN_MODULE_SCRIPT_CODES } from "./goblin-modules.js";
 import { BLACK_WIDOW_SCRIPT_CODES } from "./black-widow.js";
 import { DOCTOR_STRANGE_SCRIPT_CODES } from "./doctor-strange.js";
@@ -78,6 +81,8 @@ export const SCRIPTED_HERO_IDS = new Set([
   "vision",
   "ghost_spider",
   "spider_man_morales",
+  "nova",
+  "ironheart",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ANT_MAN_SCRIPT_CODES,
@@ -113,6 +118,9 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...GHOST_SPIDER_SCRIPT_CODES,
   ...MILES_MORALES_SCRIPT_CODES,
   ...SINISTER_PLAYER_PACK_SCRIPT_CODES,
+  ...NOVA_SCRIPT_CODES,
+  ...IRONHEART_SCRIPT_CODES,
+  ...NOVA_IRONHEART_PACK_SCRIPT_CODES,
   ...CAPTAIN_AMERICA_SCRIPT_CODES,
   ...HULK_SCRIPT_CODES,
   ...CAPTAIN_PACK_SCRIPT_CODES,

@@ -3,6 +3,7 @@ import sourceDecks from "../data/catalog-decks.json" with { type: "json" };
 import type { Card } from "./types.js";
 import { SCRIPTED_HERO_IDS } from "./engine-support.js";
 import { identityMatch } from "./unique.js";
+import { printedCardMetadata } from "./printed-card-metadata.js";
 
 type ImportedCard = Card & { duplicate_of?: string; permanent?: boolean };
 export type HeroAspect =
@@ -28,7 +29,9 @@ const cardTypes = new Set([
   "upgrade",
   "player_side_scheme",
 ]);
-const cards = catalogCards as unknown as ImportedCard[];
+const cards = (catalogCards as unknown as ImportedCard[]).map(
+  printedCardMetadata,
+) as ImportedCard[];
 const byCode = new Map(cards.map((c) => [c.code, c]));
 const plain = (s = "") => s.replace(/<[^>]*>/g, "");
 export const isPermanent = (c: Card) =>
@@ -102,7 +105,17 @@ const ruleFor = (id: string): HeroDeckRule => {
 
 export const HERO_RUNTIME: HeroRuntime[] = (
   sourceDecks as unknown as HeroStarter[]
-).map((starter) => {
+).map((sourceStarter) => {
+  // Ironheart's insert sets aside two physical, double-sided identity cards.
+  // They are neither player-deck cards nor four separate identity faces.
+  // https://hallofheroeslcg.com/wp-content/uploads/2022/04/insert.jpg
+  const starter: HeroStarter =
+    sourceStarter.heroCode === "29001a"
+      ? {
+          ...sourceStarter,
+          supplementaryCards: { "29002a": 1, "29003a": 1 },
+        }
+      : sourceStarter;
   const front = byCode.get(starter.heroCode)!;
   const id = front.set_code!;
   const forms = cards.filter(

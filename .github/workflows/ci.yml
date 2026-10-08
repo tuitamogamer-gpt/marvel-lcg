@@ -9,7 +9,7 @@ jobs:
   verify:
     name: Test, build and format
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,7 +25,7 @@ jobs:
   browser:
     name: Browser flow (${{ matrix.group }})
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: ${{ matrix.timeout || 25 }}
     needs: verify
     strategy:
       fail-fast: false
@@ -55,6 +55,9 @@ jobs:
             scripts: test:vision
           - group: sinister-heroes
             scripts: test:sinister-heroes
+          - group: nova-ironheart
+            scripts: test:nova-ironheart
+            timeout: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

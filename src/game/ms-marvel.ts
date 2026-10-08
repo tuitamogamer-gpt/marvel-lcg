@@ -611,7 +611,7 @@ export function msMarvelRobotBlank(s: GameState, id: string): boolean {
 }
 export function msMarvelDamageImmune(s: GameState, id: string): boolean {
   const p = s.minions.find((p) => p.id === id);
-  if (!p) return false;
+  if (!p || isTextBlank(s, p)) return false;
   if (p.code === "05028") return !msMarvelRobotBlank(s, p.id);
   return (
     p.code === "05027" &&

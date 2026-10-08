@@ -1,4 +1,5 @@
 import { visionCanAttack } from "./game/vision";
+import { ironheartProgress, ironheartVersion } from "./game/ironheart";
 import { valkyrieCannotBasicAttack } from "./game/valkyrie";
 import {
   doctorStrangeAbilityOptions,
@@ -4651,11 +4652,13 @@ function Tabletop({
                 </div>
                 <div className="identity-info">
                   <span className="small-label">
-                    {s.player.form === "hero"
-                      ? ["ant", "wsp"].includes(s.heroId)
-                        ? `${(s.player.heroForm || "tiny").toUpperCase()} HERO`
-                        : "YOUR HERO"
-                      : "YOUR ALTER-EGO"}
+                    {s.heroId === "ironheart"
+                      ? `VERSION ${ironheartVersion(s)} ${s.player.form === "hero" ? "HERO" : "ALTER-EGO"}`
+                      : s.player.form === "hero"
+                        ? ["ant", "wsp"].includes(s.heroId)
+                          ? `${(s.player.heroForm || "tiny").toUpperCase()} HERO`
+                          : "YOUR HERO"
+                        : "YOUR ALTER-EGO"}
                   </span>
                   <h2>{heroCard(s).name}</h2>
                   <HealthDial
@@ -4711,6 +4714,16 @@ function Tabletop({
                         kind="counter"
                         value={warMachineAmmo(s)}
                         label="AMMO"
+                        compact
+                      />
+                    </div>
+                  )}
+                  {s.heroId === "ironheart" && (
+                    <div className="identity-stats stat-row">
+                      <StatToken
+                        kind="counter"
+                        value={ironheartProgress(s)}
+                        label="PROGRESS"
                         compact
                       />
                     </div>

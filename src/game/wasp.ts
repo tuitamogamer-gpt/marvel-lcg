@@ -1,4 +1,5 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
+import { isTextBlank } from "./card-text.js";
 import { allInPlay, controller, playerOrder } from "./team.js";
 import { consumeStatus } from "./keywords.js";
 import type { AntManPorts, AntManForm } from "./ant-man.js";
@@ -155,13 +156,15 @@ export function waspBasicPiercing(s: GameState): boolean {
 }
 export function waspEnemyHP(s: GameState, p: Piece): number {
   return (
-    s.attachments.filter((a) => a.code === "13029" && a.attachedTo === p.id)
-      .length * 4
+    s.attachments.filter(
+      (a) => a.code === "13029" && a.attachedTo === p.id && !isTextBlank(s, a),
+    ).length * 4
   );
 }
 /** Mother's Orders adds a resource cost for every hero, before exhaustion. */
 export function waspBasicAttackCost(s: GameState): number {
-  return s.sideSchemes.filter((p) => p.code === "13027").length;
+  return s.sideSchemes.filter((p) => p.code === "13027" && !isTextBlank(s, p))
+    .length;
 }
 export function waspPlayRestriction(
   s: GameState,
@@ -457,12 +460,12 @@ export function waspEncounterReveal(s: GameState, p: Piece): Effect[] | null {
 /** Native engine calls this before discarding Beetle, with the defeating actor
  * active. Its erratum requires that player, not the first player, to choose. */
 export function waspDefeatInterrupt(
-  _s: GameState,
+  s: GameState,
   p: Piece,
   source: string,
   attack: boolean,
 ): Effect[] | null {
-  return p.code === "13028"
+  return p.code === "13028" && !isTextBlank(s, p)
     ? [W("beetle-defeat", { id: p.id, source, attack, mandatory: true })]
     : null;
 }

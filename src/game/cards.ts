@@ -48,6 +48,14 @@ import {
 } from "./vision.js";
 import { warMachineTraits } from "./war-machine.js";
 import { sinisterPlayerPackIdentityModifiers } from "./sinister-player-pack.js";
+import { novaHandSize, novaTraits } from "./nova.js";
+import {
+  ironheartIdentityCode,
+  ironheartEnemyStats,
+  ironheartSignatureHPBonus,
+} from "./ironheart.js";
+import { novaIronheartPackCharacterModifiers } from "./nova-ironheart-pack.js";
+import { allInPlay, seatView } from "./team.js";
 import { msMarvelStats } from "./ms-marvel.js";
 import { identityMatch, uniqueMatches } from "./unique.js";
 import { rulesCode } from "./rules-code.js";
@@ -573,6 +581,34 @@ export const HEROES = [
     style: "Venom Blast · Justice",
     complexity: 2,
   },
+  {
+    id: "nova",
+    code: "28001a",
+    alter: "28001b",
+    name: "Nova",
+    identity: "Sam Alexander",
+    aspect: "aggression" as Aspect,
+    color: "#d1ab66",
+    tag: "The helmet chose you.",
+    description:
+      "Generate wild resources with the Supernova Helmet, ready it after basic powers, and chain enemy defeats with Unleash Nova Force.",
+    style: "Wild resources · Aggression",
+    complexity: 2,
+  },
+  {
+    id: "ironheart",
+    code: "29001a",
+    alter: "29001b",
+    name: "Ironheart",
+    identity: "Riri Williams",
+    aspect: "leadership" as Aspect,
+    color: "#b77e9d",
+    tag: "Always improving.",
+    description:
+      "Build progress, develop three versions of your armor, and coordinate Champions allies while upgrading your identity.",
+    style: "Progress counters · Leadership",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -770,6 +806,8 @@ export function deckCodes(
       (hero === "vision" && aspect === "protection") ||
       (hero === "ghost_spider" && aspect === "protection") ||
       (hero === "spider_man_morales" && aspect === "justice") ||
+      (hero === "nova" && aspect === "aggression") ||
+      (hero === "ironheart" && aspect === "leadership") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
@@ -849,7 +887,33 @@ export function heroCard(s: GameState) {
     return card(s.player.heroForm === "giant" ? "12001c" : "12001a");
   if (s.heroId === "wsp" && s.player.form === "hero")
     return card(s.player.heroForm === "giant" ? "13001c" : "13001a");
+  if (s.heroId === "ironheart") return card(ironheartIdentityCode(s));
   return card(s.player.form === "hero" ? h.code : h.alter);
+}
+function novaIronheartCharacterModifiers(s: GameState, target: string) {
+  return novaIronheartPackCharacterModifiers(s, target, {
+    isTextBlank,
+    hasTrait(state, id, trait) {
+      if (id.startsWith("hero:")) {
+        const seat = state.players.find((p) => p.id === id.slice(5));
+        if (!seat || seat.eliminated) return false;
+        const view = seatView(state, seat);
+        return (
+          (trait === "Aerial" && aerial(view)) ||
+          !!heroCard(view).traits?.includes(`${trait}.`)
+        );
+      }
+      const p = allInPlay(state).find((piece) => piece.id === id);
+      return (
+        !!p &&
+        (!!card(p).traits?.includes(`${trait}.`) ||
+          (trait === "Aerial" &&
+            p.code === "29023" &&
+            p.counters === 2 &&
+            !isTextBlank(state, p)))
+      );
+    },
+  });
 }
 export function has(s: GameState, code: string) {
   return s.player.inPlay.some(
@@ -871,6 +935,8 @@ export function maxHP(s: GameState) {
     rocketMaxHpBonus(s) +
     nebulaPackModifiers(s, "hero").health +
     valkyrieHPBonus(s) +
+    ironheartSignatureHPBonus(s, { isTextBlank }) +
+    novaIronheartCharacterModifiers(s, "hero").health +
     sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).health +
     captainPackModifiers(s, "hero").hp
   );
@@ -886,14 +952,20 @@ export function aerial(s: GameState) {
     warMachineTraits(s).includes("Aerial") ||
     valkyrieTraits(s).includes("Aerial") ||
     visionTraits(s).includes("Aerial") ||
+    novaTraits(s, { isTextBlank }).includes("Aerial") ||
+    (s.heroId === "ironheart" &&
+      s.player.form === "hero" &&
+      !!heroCard(s).traits?.includes("Aerial.")) ||
     waspHeroTraits(textActiveState(s)).includes("Aerial")
   );
 }
 export function heroStats(s: GameState) {
   const h =
-    ["ant", "wsp"].includes(s.heroId) && s.player.form === "hero"
-      ? heroCard(s)
-      : card(HEROES.find((h) => h.id === s.heroId)!.code);
+    s.heroId === "ironheart"
+      ? card(ironheartIdentityCode(s, "hero"))
+      : ["ant", "wsp"].includes(s.heroId) && s.player.form === "hero"
+        ? heroCard(s)
+        : card(HEROES.find((h) => h.id === s.heroId)!.code);
   s = textActiveState(s);
   return {
     attack:
@@ -927,6 +999,7 @@ export function heroStats(s: GameState) {
       valkyrieStats(s).attack +
       visionStats(s).attack +
       sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).attack +
+      novaIronheartCharacterModifiers(s, "hero").attack +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
@@ -952,6 +1025,7 @@ export function heroStats(s: GameState) {
       valkyrieStats(s).thwart +
       visionStats(s).thwart +
       sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).thwart +
+      novaIronheartCharacterModifiers(s, "hero").thwart +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
@@ -975,6 +1049,7 @@ export function heroStats(s: GameState) {
       valkyrieStats(s).defense +
       visionStats(s).defense +
       sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).defense +
+      novaIronheartCharacterModifiers(s, "hero").defense +
       nebulaNamedCharacterModifiers(s, h.name).defense +
       quicksilverPackHeroStatBonus(s, "defense") +
       scriptedModifier(s, "defense"),
@@ -988,8 +1063,9 @@ export function heroStats(s: GameState) {
   };
 }
 export function handSize(s: GameState) {
-  return s.player.form === "hero" && s.heroId === "iron_man"
-    ? heroCard(s).hand_size! +
+  const base =
+    s.player.form === "hero" && s.heroId === "iron_man"
+      ? heroCard(s).hand_size! +
         Math.min(
           6,
           s.player.inPlay.filter(
@@ -1004,7 +1080,7 @@ export function handSize(s: GameState) {
         starLordHandSizeBonus(s) +
         antManPackHandSize(s) +
         sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).handSize
-    : heroCard(s).hand_size! +
+      : heroCard(s).hand_size! +
         scriptedModifier(s, "hand_size") +
         doctorStrangeHandSize(s) +
         spiderWomanHandSize(s) +
@@ -1012,18 +1088,22 @@ export function handSize(s: GameState) {
         antManPackHandSize(s) +
         visionAlterStats(s).handSize +
         sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).handSize;
+  return novaHandSize(s, base, { isTextBlank });
 }
 export function pieceHP(s: GameState, p: Piece) {
   return (
     (p.code === "drone"
       ? (visionDroneStats(s, p)?.health ?? 1) +
-        s.attachments.filter((p) => rulesCode(p) === "01142").length
+        s.attachments.filter(
+          (p) => rulesCode(p) === "01142" && !isTextBlank(s, p),
+        ).length
       : (card(p).health || 0) * (card(p).health_per_hero ? s.playerCount : 1)) +
     (rulesCode(s.villain) === "01136" && card(p).traits?.includes("Drone.")
       ? 1
       : 0) +
     s.attachments.filter(
-      (a) => a.attachedTo === p.id && rulesCode(a) === "01163",
+      (a) =>
+        a.attachedTo === p.id && rulesCode(a) === "01163" && !isTextBlank(s, a),
     ).length *
       3 +
     scriptedModifier(s, "health", p) +
@@ -1032,8 +1112,10 @@ export function pieceHP(s: GameState, p: Piece) {
     waspPackAllyHP(s, p) +
     waspEnemyHP(s, p) +
     ghostSpiderEnemyModifiers(s, p).health +
+    ironheartEnemyStats(s, p, { isTextBlank }).health +
     gamoraPackAllyHP(s, p) +
     nebulaPackModifiers(s, p.id).health +
+    novaIronheartCharacterModifiers(s, p.id).health +
     captainPackModifiers(textActiveState(s), p.id).hp
   );
 }

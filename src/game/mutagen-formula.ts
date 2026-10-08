@@ -7,6 +7,7 @@ import type {
   Resource,
 } from "./types.js";
 import { playerOrder } from "./team.js";
+import { isTextBlank } from "./card-text.js";
 import catalogCards from "../data/catalog-cards.json" with { type: "json" };
 
 const cards = new Map((catalogCards as Card[]).map((c) => [c.code, c]));
@@ -186,7 +187,8 @@ export function mutagenAttackModifiers(s: GameState, enemy: Piece) {
       (a) => a.attachedTo === enemy.id && glider(a),
     ).length,
     goblinNation: goblin(enemy)
-      ? s.sideSchemes.filter((p) => p.code === "02027").length
+      ? s.sideSchemes.filter((p) => p.code === "02027" && !isTextBlank(s, p))
+          .length
       : 0,
   };
 }
@@ -200,7 +202,8 @@ export function mutagenAdditionalBoosts(s: GameState, enemyId: string): number {
       : s.minions.find((p) => p.id === enemyId);
   return cards.get(enemy?.code || "")?.name === "Green Goblin"
     ? s.attachments.filter(
-        (a) => a.code === "02020" && a.attachedTo === enemyId,
+        (a) =>
+          a.code === "02020" && a.attachedTo === enemyId && !isTextBlank(s, a),
       ).length
     : 0;
 }
@@ -266,7 +269,7 @@ export function mutagenAttackResponses(
     });
   if (current.id === s.villain.id)
     for (const p of s.attachments.filter(
-      (p) => p.attachedTo === current.id && bombs(p),
+      (p) => p.attachedTo === current.id && bombs(p) && !isTextBlank(s, p),
     ))
       responses.push({
         id: p.id,
@@ -280,6 +283,12 @@ export function mutagenAttackResponses(
 /** When Defeated is a Forced Interrupt, before leaving play. No ordinary
  * discard/banish may trigger this hook. Ownership must be captured before exit. */
 export function mutagenDefeated(s: GameState, piece: Piece): Effect[] | null {
+  if (isTextBlank(s, piece))
+    return MUTAGEN_FORMULA_SCRIPT_CODES.includes(
+      piece.code as (typeof MUTAGEN_FORMULA_SCRIPT_CODES)[number],
+    )
+      ? []
+      : null;
   if (piece.code === "02023")
     return [
       E("damage", {
@@ -304,6 +313,7 @@ export function mutagenAttachmentActions(s: GameState, piece: Piece): Option[] {
   if (
     s.phase !== "player" ||
     s.player.form !== "hero" ||
+    isTextBlank(s, piece) ||
     !s.attachments.some((p) => p.id === piece.id)
   )
     return [];

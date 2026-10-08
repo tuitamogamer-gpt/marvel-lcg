@@ -746,9 +746,18 @@ try {
         );
         await reload();
         await payWith(["Strength"]);
-        state = await findChoice((o) => o.id === "yes", "Flow Like Water");
-        assert.match(state.prompt.title, /Flow Like Water/);
-        await choice("yes");
+        const flowResponseId = `flow:${f.flowId}`;
+        state = await findChoice(
+          (o) => o.id === flowResponseId,
+          "Flow Like Water actual source",
+        );
+        assert.equal(state.prompt.title, "After resolving the event");
+        const flowResponse = state.prompt.options.find(
+          (o) => o.id === flowResponseId,
+        );
+        assert.equal(flowResponse.image, "26016");
+        assert.match(flowResponse.label, /Flow Like Water/);
+        await choice(flowResponseId);
         state = await skipAll();
         assert.equal(state.player.hp, 9);
         assert.equal(state.villain.hp, 49);

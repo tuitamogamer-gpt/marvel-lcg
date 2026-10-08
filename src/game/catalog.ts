@@ -1,6 +1,7 @@
 import packData from "../data/catalog-packs.json" with { type: "json" };
 import deckData from "../data/catalog-decks.json" with { type: "json" };
 import { CATALOG_CARDS, HEROES, card, deckCodes } from "./cards.js";
+import { heroSupplementaryCards } from "./hero-runtime.js";
 
 export interface Product {
   code: string;
@@ -93,11 +94,18 @@ const appStarters: CatalogDeck[] = HEROES.map((hero) => ({
   ...(hero.id === "warlock"
     ? { aspects: ["aggression", "justice", "leadership", "protection"] }
     : {}),
+  ...(hero.id === "ironheart"
+    ? { supplementaryCards: heroSupplementaryCards(hero.id) }
+    : {}),
 }));
 export const STARTER_DECKS: CatalogDeck[] = [
   // JSON inference gives each deck optional keys belonging to other decks;
   // the importer and catalog tests validate actual counts as positive integers.
-  ...(deckData as unknown as CatalogDeck[]),
+  ...(deckData as unknown as CatalogDeck[]).map((deck) =>
+    deck.heroCode === "29001a"
+      ? { ...deck, supplementaryCards: heroSupplementaryCards("ironheart") }
+      : deck,
+  ),
   ...appStarters,
 ];
 

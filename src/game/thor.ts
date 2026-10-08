@@ -1,4 +1,4 @@
-import { eventPlaySources } from "./card-text.js";
+import { eventPlaySources, isTextBlank } from "./card-text.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { consumeStatus } from "./keywords.js";
@@ -516,7 +516,12 @@ export function thorPreventsDefeat(
   p: Piece,
   ports: Pick<ThorEnginePorts, "discardEncounterTop">,
 ): boolean {
-  if (p.code !== "06028" || !s.minions.some((m) => m.id === p.id)) return false;
+  if (
+    p.code !== "06028" ||
+    isTextBlank(s, p) ||
+    !s.minions.some((m) => m.id === p.id)
+  )
+    return false;
   const { piece } = ports.discardEncounterTop(s);
   if (piece && definition(piece).type_code === "treachery") {
     p.damage = 0;

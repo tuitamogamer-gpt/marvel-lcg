@@ -325,6 +325,11 @@ export function ContentBrowser({
         ([code, count]) =>
           (DOCTOR_STRANGE_INVOCATIONS as readonly string[]).includes(code) &&
           count === 1,
+      )) ||
+    (hero.id === "ironheart" &&
+      Object.keys(deck?.supplementaryCards || {}).length === 2 &&
+      Object.entries(deck?.supplementaryCards || {}).every(
+        ([code, count]) => ["29002a", "29003a"].includes(code) && count === 1,
       ));
   const deckSize = deck?.deckSize ?? codes.length - setupCount;
   const deckAspect =

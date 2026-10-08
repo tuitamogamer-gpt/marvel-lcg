@@ -21,6 +21,9 @@ import * as valkyrie from "./valkyrie.js";
 import * as vision from "./vision.js";
 import * as miles from "./miles-morales.js";
 import * as ghostSpider from "./ghost-spider.js";
+import * as nova from "./nova.js";
+import * as ironheart from "./ironheart.js";
+import * as niPack from "./nova-ironheart-pack.js";
 import * as nebula from "./nebula.js";
 import { isPermanent } from "./hero-runtime.js";
 import * as venomPack from "./venom-pack.js";
@@ -245,6 +248,7 @@ import type {
   Option,
   Pacing,
   Piece,
+  PlayerSeat,
   Prompt,
   Resource,
 } from "./types.js";
@@ -272,6 +276,7 @@ import {
   paymentStatus,
   suggestPayment,
   paidResourceAllocations,
+  generatedResourceAllocations,
   venomPaymentDamageCostAvailable,
 } from "./payment.js";
 import { combatCharacter, recordCombat } from "./combat.js";
@@ -460,8 +465,16 @@ export function makePiece(s: GameState, code: string): Piece {
     confused: false,
   };
 }
-function keyword(p: Piece | string, name: string) {
-  return printedKeyword(card(p), name as PrintedKeyword) > 0;
+function keyword(p: Piece | string, name: string, s?: GameState) {
+  return (
+    !(s && isTextBlank(s, p)) &&
+    printedKeyword(card(p), name as PrintedKeyword) > 0
+  );
+}
+function nativeStatusModifiers(s: GameState, p: StatusState) {
+  return "code" in p && isTextBlank(s, p as Piece)
+    ? { stalwart: false, steady: false }
+    : {};
 }
 function giveCharacterStatus(
   s: GameState,
@@ -484,12 +497,12 @@ function giveCharacterStatus(
             nebula.nebulaAttackKeywords(identity).stalwart ||
             vision.visionStalwart(identity),
         }
-      : {},
+      : nativeStatusModifiers(s, p),
   );
   if (
     changed &&
     "code" in p &&
-    keyword(p as Piece, "Vulnerable") &&
+    keyword(p as Piece, "Vulnerable", s) &&
     (p.stunned || p.confused)
   )
     discardPiece(s, (p as Piece).id);
@@ -505,6 +518,16 @@ function syncNebulaIdentityStatuses(s: GameState) {
     )
       syncStatuses(view.player, heroCard(view), { stalwart: true });
   }
+  for (const p of [
+    s.villain,
+    ...s.minions,
+    ...allInPlay(s).filter((piece) => card(piece).type_code === "ally"),
+  ])
+    if (
+      printedKeyword(card(p), "Steady") ||
+      printedKeyword(card(p), "Stalwart")
+    )
+      syncStatuses(p, card(p), nativeStatusModifiers(s, p));
 }
 function canReadyIdentity(s: GameState) {
   return !goblinIdentityLocked(s) && quicksilver.quicksilverCanReady(s);
@@ -555,7 +578,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     starLordPackPorts,
   );
   return Math.max(
-    printedKeyword(card(p), name),
+    isTextBlank(s, p) ? 0 : printedKeyword(card(p), name),
     Number(
       name === "Piercing" &&
         (granted.piercing ||
@@ -575,7 +598,17 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
             .ranged ||
           venomPack.venomPackAllyKeywords(s, p).ranged),
     ),
-    Number(name === "Overkill" && packTraits.overkill),
+    Number(
+      name === "Overkill" &&
+        (packTraits.overkill ||
+          niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
+            .overkill),
+    ),
+    name === "Retaliate"
+      ? niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
+          .retaliate +
+          ironheart.ironheartEnemyKeywords(s, p, { isTextBlank }).retaliate
+      : 0,
   );
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
@@ -594,6 +627,39 @@ function resetPiece(p: Piece, entering = false): Piece {
     confuseCards: undefined,
     toughCards: undefined,
   };
+}
+function removeDefeatedIronheartIdentities(s: GameState, seat: PlayerSeat) {
+  if (seat.heroId !== "ironheart") return;
+  const view = seatView(s, seat);
+  const versions = new Set(["29001a", "29002a", "29003a"]);
+  const identities = [
+    ...(view.player.ironheartIdentity ? [view.player.ironheartIdentity] : []),
+    ...(view.player.setAside || []).filter((p) => versions.has(p.code)),
+  ];
+  const identityIds = new Set(identities.map((p) => p.id));
+  view.player.ironheartIdentity = undefined;
+  view.player.setAside = (view.player.setAside || []).filter(
+    (p) => !identityIds.has(p.id),
+  );
+  for (const p of identities) {
+    for (const stored of p.storedCards || []) {
+      const owner = s.players.find((other) => other.id === stored.ownerId);
+      if (owner && !owner.eliminated)
+        seatView(s, owner).player.discard.push(resetPiece(stored));
+      else s.removed.push(resetPiece(stored));
+    }
+    if (!s.removed.some((piece) => piece.id === p.id))
+      s.removed.push(resetPiece(p));
+  }
+  const attachmentTargets = new Set([
+    ...identityIds,
+    `hero:${seat.id}`,
+    ...(s.activePlayerId === seat.id ? ["hero"] : []),
+  ]);
+  for (const p of [...allInPlay(s), ...s.attachments].filter((piece) =>
+    attachmentTargets.has(piece.attachedTo || ""),
+  ))
+    movePieceFromPlay(s, p.id, p.ownerId === seat.id);
 }
 function beginResolution(s: GameState, p: Piece) {
   if (!s.resolving.some((x) => x.id === p.id)) s.resolving.push(p);
@@ -765,7 +831,10 @@ function attachPackUpgrade(s: GameState, upgradeId: string, target: string) {
 }
 const villainAt = (s: GameState, code: string) =>
   s.attachments.filter(
-    (p) => rulesCode(p) === rulesCode(code) && p.attachedTo === s.villain.id,
+    (p) =>
+      rulesCode(p) === rulesCode(code) &&
+      p.attachedTo === s.villain.id &&
+      !isTextBlank(s, p),
   );
 function discardHand(s: GameState, id: string) {
   const i = s.player.hand.findIndex((p) => p.id === id);
@@ -936,6 +1005,48 @@ function movePieceFromPlay(
     );
     return;
   }
+  if (
+    removedSource &&
+    !removed &&
+    !setAsideOwnerId &&
+    card(removedSource).faction_code !== "encounter" &&
+    !s.flags[`niLeaveCommitted:${id}`]
+  ) {
+    const ownerId =
+      removedSource.ownerId || controlling?.id || s.activePlayerId;
+    const receipt: niPack.NovaIronheartLeaveReceipt = {
+      token: `leave:${s.nextId++}`,
+      pieceId: id,
+      code: removedSource.code,
+      ownerId,
+      playerCard: true,
+      fromPlay: true,
+      toDiscard: true,
+    };
+    const players = playerOrder(s).map((seat) => seat.id);
+    if (
+      players.some((pid) =>
+        niPack.novaIronheartPackLeaveInterrupt(
+          seatView(s, pid),
+          receipt,
+          niPackPorts,
+        ),
+      )
+    ) {
+      add(
+        s,
+        E("niNativeLeaveWindow", {
+          receipt,
+          players,
+          index: 0,
+          originalActorId: s.activePlayerId,
+          removed,
+          setAsideOwnerId,
+        }),
+      );
+      return;
+    }
+  }
   const leaveReceipt =
     removedSource && controlling && card(removedSource).type_code === "ally"
       ? {
@@ -966,6 +1077,13 @@ function movePieceFromPlay(
     }
   }
   if (!p) return;
+  if (
+    rulesCode(p) === "01127" &&
+    ((p as ImmortalKlawScheme).immortalKlawHealthActive ?? !blankBefore)
+  ) {
+    s.villain.maxHp -= 10;
+    s.villain.hp -= 10;
+  }
   if (leaveReceipt)
     for (const seat of playerOrder(s))
       add(
@@ -980,8 +1098,13 @@ function movePieceFromPlay(
       );
   warmPack.warMachinePackCardLeftPlay(s, p);
   visionPack.visionPackCardLeftPlay(s, p);
+  niPack.novaIronheartPackCardLeftPlay(s, p);
   add(s, ...valkyrie.valkyrieAttachmentDiscarded(s, p));
-  if (p.code === "13029" && p.attachedTo === s.villain.id) {
+  if (
+    p.code === "13029" &&
+    p.attachedTo === s.villain.id &&
+    ((p as BeetleArmorAttachment).beetleArmorHealthActive ?? !blankBefore)
+  ) {
     s.villain.maxHp -= 4;
     s.villain.hp -= 4;
   }
@@ -989,7 +1112,7 @@ function movePieceFromPlay(
     const view = seatView(s, before.id);
     view.player.hp += maxHP(view) - before.hp;
   }
-  for (const stored of p.storedCards || []) {
+  for (const stored of [...(p.storedCards || []), ...(p.captured || [])]) {
     const owner = s.players.find((seat) => seat.id === stored.ownerId);
     if (!owner || owner.eliminated) s.removed.push(resetPiece(stored));
     else seatView(s, owner).player.discard.push(resetPiece(stored));
@@ -1018,7 +1141,18 @@ function movePieceFromPlay(
       view.player.setAside ||= [];
       view.player.setAside.push(discarded);
     } else if (removed || owner.eliminated) s.removed.push(discarded);
-    else seatView(s, owner).player.discard.push(discarded);
+    else if (s.flags[`niLeaveShuffle:${id}`]) {
+      const target =
+        s.players.find((seat) => seat.id === s.flags[`niLeaveShuffle:${id}`]) ||
+        owner;
+      seatView(s, target).player.deck.push(discarded);
+      seatView(s, target).player.deck = shuffle(
+        s,
+        seatView(s, target).player.deck,
+      );
+      delete s.flags[`niLeaveShuffle:${id}`];
+    } else seatView(s, owner).player.discard.push(discarded);
+    delete s.flags[`niLeaveCommitted:${id}`];
     const view = controlling ? seatView(s, controlling) : s;
     if (rulesCode(p) === "01036" && !blankBefore) view.player.hp -= 6;
     if (rulesCode(p) === "01039" && !blankBefore) view.player.hp--;
@@ -1028,6 +1162,7 @@ function movePieceFromPlay(
       p.code === "16035" ||
       p.code === "25007" ||
       p.code === "27191" ||
+      ["29012", "29013"].includes(p.code) ||
       (p.code === "22035" && p.attachedTo?.startsWith("hero:")) ||
       (p.code === "03025" && p.attachedTo?.startsWith("hero:"))
     )
@@ -1077,9 +1212,42 @@ function nativeIdentityDamageSource(s: GameState, source: string) {
   return event?.ownerId ? `hero:${event.ownerId}` : undefined;
 }
 function syncValkyrieConvertedCards(s: GameState) {
-  for (const p of s.minions) {
-    if (valkyrie.valkyrieBeguiledEnemy(s, p)) p.treatedAsMinion = true;
-    else delete p.treatedAsMinion;
+  for (const p of [...s.minions]) {
+    if (valkyrie.valkyrieBeguiledEnemy(s, p)) {
+      p.treatedAsMinion = true;
+      continue;
+    }
+    delete p.treatedAsMinion;
+    if (card(p.code).type_code !== "ally") continue;
+    const savedController = valkyrie.valkyrieBeguiledController(s, p.id);
+    const attachment = s.attachments.some(
+      (a) => a.code === "25031" && a.attachedTo === p.id,
+    );
+    if (!savedController && !attachment) continue;
+    const seat = s.players.find(
+      (seat) =>
+        seat.id === (savedController || p.engagedWith) && !seat.eliminated,
+    );
+    if (!seat) continue;
+    s.minions.splice(s.minions.indexOf(p), 1);
+    delete p.engagedWith;
+    seatView(s, seat).player.inPlay.push(p);
+  }
+  for (const p of allInPlay(s)) {
+    if (!valkyrie.valkyrieBeguiledEnemy(s, p)) continue;
+    const controlling = controller(s, p.id);
+    const seat = s.players.find(
+      (seat) =>
+        seat.id ===
+          (valkyrie.valkyrieBeguiledController(s, p.id) || controlling?.id) &&
+        !seat.eliminated,
+    );
+    if (!controlling || !seat) continue;
+    const zone = seatView(s, controlling).player.inPlay;
+    zone.splice(zone.indexOf(p), 1);
+    p.engagedWith = seat.id;
+    p.treatedAsMinion = true;
+    s.minions.push(p);
   }
   for (const seat of s.players)
     for (const p of [
@@ -1090,8 +1258,42 @@ function syncValkyrieConvertedCards(s: GameState) {
     ])
       delete p.treatedAsMinion;
 }
+type ImmortalKlawScheme = Piece & { immortalKlawHealthActive?: boolean };
+type BeetleArmorAttachment = Piece & { beetleArmorHealthActive?: boolean };
+function syncVillainTextHealth(s: GameState) {
+  let decreased = false;
+  for (const p of s.sideSchemes.filter(
+    (piece) => rulesCode(piece) === "01127",
+  ) as ImmortalKlawScheme[]) {
+    // Earlier saves already applied the continuous bonus when this physical
+    // scheme entered play. Preserve that state before observing blanking.
+    const previous = p.immortalKlawHealthActive ?? true;
+    const active = !isTextBlank(s, p);
+    p.immortalKlawHealthActive = active;
+    if (active === previous) continue;
+    const change = active ? 10 : -10;
+    s.villain.maxHp += change;
+    s.villain.hp += change;
+    decreased ||= change < 0;
+  }
+  for (const p of s.attachments.filter(
+    (piece) => piece.code === "13029" && piece.attachedTo === s.villain.id,
+  ) as BeetleArmorAttachment[]) {
+    const previous = p.beetleArmorHealthActive ?? true;
+    const active = !isTextBlank(s, p);
+    p.beetleArmorHealthActive = active;
+    if (active === previous) continue;
+    const change = active ? 4 : -4;
+    s.villain.maxHp += change;
+    s.villain.hp += change;
+    decreased ||= change < 0;
+  }
+  if (decreased && s.villain.hp <= 0 && !["won", "lost"].includes(s.phase))
+    advanceVillain(s);
+}
 function check(s: GameState) {
   syncValkyrieConvertedCards(s);
+  syncVillainTextHealth(s);
   // Simultaneous Spectrum batches place every prepared packet before checking
   // hero elimination. This flag exists only during the synchronous commit.
   if (
@@ -1190,6 +1392,7 @@ function check(s: GameState) {
     }
     seat.eliminated = true;
     seat.ended = true;
+    removeDefeatedIronheartIdentities(s, seat);
     if (s.attack?.targetPlayerId === seat.id) {
       s.encounter.discard.push(...(s.attack.pendingBoosts || []));
       for (const id of s.attack.boostIds || []) finishResolution(s, id);
@@ -1353,6 +1556,8 @@ function recordMilesEnemyAttackDefeat(
     ] = true;
 }
 function damageProhibition(s: GameState, target: string, panther: boolean) {
+  if (niPack.novaIronheartPackCannotTakeDamage(s, target, niPackPorts))
+    return "This Champion cannot take damage this round.";
   if (msMarvelDamageImmune(s, target)) return "This enemy cannot take damage.";
   if (
     target === s.villain.id &&
@@ -1376,7 +1581,9 @@ function attackExcess(s: GameState, packet: Effect): number {
   const target = find(s, packet.target);
   if (!target || !packet.attack) return 0;
   const source = packet.source || "hero";
-  let amount = Number(packet.amount || 0);
+  let amount =
+    Number(packet.amount || 0) +
+    Number(s.flags[`niHoned:${s.currentEventId}`] || 0);
   if (["hero", `hero:${s.activePlayerId}`].includes(source))
     amount += msMarvelEventAmountModifier(s, s.currentEventId, "damage");
   const resistance = s.attachments.filter(
@@ -1434,7 +1641,9 @@ function dealDamage(
     target !== "hero" &&
     !target.startsWith("hero:")
   )
-    n += msMarvelEventAmountModifier(s, s.currentEventId, "damage");
+    n +=
+      msMarvelEventAmountModifier(s, s.currentEventId, "damage") +
+      Number(s.flags[`niHoned:${s.currentEventId}`] || 0);
   const original = find(s, target);
   const dealt = Math.max(0, traits.damageDealt ?? n);
   const code = original?.code;
@@ -1581,6 +1790,13 @@ function dealDamage(
             ? 0
             : printedKeyword(card(original), "Retaliate")) +
           antMan.antManEnemyRetaliate(s, original) +
+          ironheart.ironheartEnemyKeywords(s, original, { isTextBlank })
+            .retaliate +
+          niPack.novaIronheartPackCharacterModifiers(
+            s,
+            original.id,
+            niPackPorts,
+          ).retaliate +
           (target === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -1928,7 +2144,8 @@ function defeatCharacter(
     return true;
   }
   const bio = s.attachments.find(
-    (a) => rulesCode(a) === "01185" && a.attachedTo === m.id,
+    (a) =>
+      rulesCode(a) === "01185" && a.attachedTo === m.id && !isTextBlank(s, a),
   );
   if (bio) {
     m.damage = 0;
@@ -1965,6 +2182,7 @@ function defeatCharacter(
       rulesCode(a) === "01007" && a.attachedTo === m.id && !isTextBlank(s, a),
   );
   const name = card(m).name;
+  const textWasBlank = isTextBlank(s, m);
   const allyController = controller(s, m.id)?.id;
   if (!minion) recordMilesEnemyAttackDefeat(s, source, enemyAttack);
   discardPiece(s, m.id);
@@ -1979,7 +2197,8 @@ function defeatCharacter(
     );
   log(s, `${name} is defeated.`, "good");
   if (minion) {
-    if (rulesCode(m) !== "01182")
+    niNativeAchievement(s, source, "enemy-defeat", m.id);
+    if (rulesCode(m) !== "01182" && !textWasBlank)
       add(
         s,
         ...captainMinionDefeated(s, m).map((e) => ({ ...e, mandatory: false })),
@@ -2048,7 +2267,7 @@ function defeatCharacter(
           ],
         }),
       );
-    if (rulesCode(m) === "01143")
+    if (rulesCode(m) === "01143" && !textWasBlank)
       add(
         s,
         E("drone", {
@@ -2056,7 +2275,8 @@ function defeatCharacter(
           mandatory: true,
         }),
       );
-    if (rulesCode(m) === "01182") dealEncounter(s, m.engagedWith);
+    if (rulesCode(m) === "01182" && !textWasBlank)
+      dealEncounter(s, m.engagedWith);
     const tigra = find(s, source);
     if (tigra && rulesCode(tigra) === "01051")
       tigra.damage = Math.max(0, tigra.damage - 1);
@@ -2085,6 +2305,12 @@ function advanceVillain(
     return;
   }
   add(s, ...receipts.flatMap((r) => valkyrie.valkyrieEnemyDefeated(s, r)));
+  niNativeAchievement(
+    s,
+    source,
+    "enemy-defeat",
+    `${s.villain.id}:${s.villain.stage}`,
+  );
   const previousTitle = card(s.villain).name;
   const last = s.difficulty === "expert" ? 3 : 2;
   if (s.villain.stage === last) {
@@ -2103,7 +2329,17 @@ function advanceVillain(
   s.villain.maxHp =
     card(s.villain).health! * s.playerCount +
     wasp.waspEnemyHP(s, s.villain) +
-    (s.sideSchemes.some((p) => rulesCode(p) === "01127") ? 10 : 0);
+    s.sideSchemes.filter((p) => rulesCode(p) === "01127" && !isTextBlank(s, p))
+      .length *
+      10;
+  for (const p of s.sideSchemes.filter(
+    (piece) => rulesCode(piece) === "01127",
+  ) as ImmortalKlawScheme[])
+    p.immortalKlawHealthActive = !isTextBlank(s, p);
+  for (const p of s.attachments.filter(
+    (piece) => piece.code === "13029" && piece.attachedTo === s.villain.id,
+  ) as BeetleArmorAttachment[])
+    p.beetleArmorHealthActive = !isTextBlank(s, p);
   s.villain.hp = s.villain.maxHp;
   if (card(s.villain).name !== previousTitle) {
     for (const p of [...allInPlay(s), ...s.attachments].filter(
@@ -2277,6 +2513,8 @@ function thwart(
     s.scheme.threat -= removed;
     track(s, "threatRemoved", removed);
     log(s, `Remove ${removed} threat from the main scheme.`, "good");
+    if (removed > 0 && s.scheme.threat === 0)
+      niNativeAchievement(s, source, "last-threat", `main:${s.scheme.code}`);
     return removed;
   } else {
     const p = s.sideSchemes.find((p) => p.id === target);
@@ -2285,6 +2523,8 @@ function thwart(
     p.counters = Math.max(0, p.counters - n);
     track(s, "threatRemoved", removed);
     log(s, `Remove ${removed} threat from ${card(p).name}.`, "good");
+    if (removed > 0 && !p.counters)
+      niNativeAchievement(s, source, "last-threat", p.id);
     if (!p.counters) {
       add(
         s,
@@ -2300,16 +2540,12 @@ function thwart(
 function defeatScheme(s: GameState, p: Piece, source = "hero") {
   if (p.counters || !s.sideSchemes.some((x) => x.id === p.id)) return;
   log(s, `${card(p).name} is defeated.`, "good");
-  if (rulesCode(p) === "01166" && p.captured)
-    for (const x of p.captured) {
+  if (rulesCode(p) === "01166" && p.captured && !isTextBlank(s, p))
+    for (const x of p.captured.splice(0)) {
       const owner = s.players.find((a) => a.id === x.ownerId);
       if (owner && !owner.eliminated) seatView(s, owner).player.hand.push(x);
       else s.removed.push(x);
     }
-  if (rulesCode(p) === "01127") {
-    s.villain.maxHp -= 10;
-    s.villain.hp -= 10;
-  }
   doctorStrangeSchemeDefeated(s, p, dsPorts);
   add(s, ...hawkeyeSchemeDefeated(s, p), ...spiderWomanSchemeDefeated(s, p));
   add(
@@ -2334,7 +2570,7 @@ export function targets(
       return [
         ...(!attack ||
         nebula.nebulaIgnoresRestrictions(s).guard ||
-        !engaged(s).some((p) => keyword(p, "Guard"))
+        !engaged(s).some((p) => keyword(p, "Guard", s))
           ? [
               {
                 id: s.villain.id,
@@ -2362,7 +2598,7 @@ export function targets(
         !(
           thwarting &&
           !nebula.nebulaIgnoresRestrictions(s).patrol &&
-          engaged(s).some((p) => keyword(p, "Patrol"))
+          engaged(s).some((p) => keyword(p, "Patrol", s))
         ) &&
         rulesCode(s.scheme) !== "01139b" &&
         s.scheme.threat > 0
@@ -2467,7 +2703,12 @@ function scriptContext(
         const definition = id?.startsWith("hero")
           ? heroCard(id === "hero" ? s : seatView(s, id.slice(5)))
           : card(target as Piece);
-        return giveStatus({ ...target }, definition, node.status);
+        return giveStatus(
+          { ...target },
+          definition,
+          node.status,
+          nativeStatusModifiers(s, target),
+        );
       }
       return true;
     },
@@ -2479,6 +2720,10 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
     0,
     (c.cost || 0) * (c.cost_per_hero ? s.playerCount : 1) -
       Number(s.flags.discount || 0) -
+      ironheart.ironheartCostReduction(
+        s,
+        physical || ({ code: c.code } as Piece),
+      ) -
       captainAllyDiscount(s, c) -
       captainPackDiscount(s, c) -
       msMarvelDiscount(s) -
@@ -2543,9 +2788,13 @@ function captainPackHasTrait(
   return (
     !!p &&
     !!seat &&
-    starLord
-      .starLordAllyTraits(seatView(s, seat), p)
-      .some((t) => t.toLowerCase() === trait.toLowerCase())
+    ((trait.toLowerCase() === "aerial" &&
+      p.code === "29023" &&
+      p.counters === 2 &&
+      !isTextBlank(s, p)) ||
+      starLord
+        .starLordAllyTraits(seatView(s, seat), p)
+        .some((t) => t.toLowerCase() === trait.toLowerCase()))
   );
 }
 function targetPrompt(s: GameState, e: Effect) {
@@ -2560,7 +2809,11 @@ function targetPrompt(s: GameState, e: Effect) {
     add(s, { ...e.action, target: "" });
     return;
   }
-  const list = targets(s, e.group, !!e.action.attack, !!e.action.action).filter(
+  const list = (
+    character && source !== "hero" && e.action.type === "allyAction"
+      ? niAllyTargets(s, character as Piece, e.action.kind)
+      : targets(s, e.group, !!e.action.attack, !!e.action.action)
+  ).filter(
     (t) =>
       (!e.exclude || t.id !== e.exclude) &&
       (!e.scriptSelector?.controller ||
@@ -2615,7 +2868,12 @@ function attackAction(
   }
   if (
     !traits.initiated &&
-    !targets(s, "enemy", true).some((t) => t.id === target)
+    !(
+      source !== "hero" &&
+      niPack.novaIronheartPackWaspIgnores(s, p as Piece, niPackPorts)
+        ? niAllyTargets(s, p as Piece, "attack")
+        : targets(s, "enemy", true)
+    ).some((t) => t.id === target)
   ) {
     log(s, "The attack has no eligible target.");
     return;
@@ -2673,12 +2931,22 @@ function thwartAction(
     return;
   }
   if (
+    source !== "hero" &&
+    niPack.novaIronheartPackWaspIgnores(s, p as Piece, niPackPorts)
+  ) {
+    ignorePatrol = true;
+    ignoreCrisis = true;
+  }
+  if (
     !(
-      ignorePatrol
-        ? visionPorts.schemeTargets(s, true, ignoreCrisis, true)
-        : ignoreCrisis
-          ? hawkeyePorts.schemeTargets(s, true)
-          : targets(s, "scheme", false, true)
+      source !== "hero" &&
+      niPack.novaIronheartPackWaspIgnores(s, p as Piece, niPackPorts)
+        ? niAllyTargets(s, p as Piece, "thwart")
+        : ignorePatrol
+          ? visionPorts.schemeTargets(s, true, ignoreCrisis, true)
+          : ignoreCrisis
+            ? hawkeyePorts.schemeTargets(s, true)
+            : targets(s, "scheme", false, true)
     ).some((entry) => entry.id === target)
   )
     return;
@@ -2787,6 +3055,7 @@ function sinisterPlayRequirements(p: Piece): Resource[] {
   return [
     ...sinisterPlayerPack.sinisterPlayerPackRequirements(p),
     ...ghostSpider.ghostSpiderEventRequirements(p),
+    ...niPack.novaIronheartPackRequirements(p),
   ];
 }
 function requestPayment(
@@ -2807,9 +3076,16 @@ function requestPayment(
 ) {
   const paymentTarget = abilityCost ? targetCode : targetCode || piece?.code;
   if (!abilityCost && piece) {
-    for (const resource of sinisterPlayRequirements(piece)) {
-      if (!requirements.includes(resource))
-        requirements = [...requirements, resource];
+    const printedRequirements = sinisterPlayRequirements(piece);
+    for (const resource of new Set(printedRequirements)) {
+      const missing =
+        printedRequirements.filter((r) => r === resource).length -
+        requirements.filter((r) => r === resource).length;
+      if (missing > 0)
+        requirements = [
+          ...requirements,
+          ...Array<Resource>(missing).fill(resource),
+        ];
     }
   }
   if (!abilityCost && piece?.code === "27032" && !milesPorts.canChangeForm(s)) {
@@ -2918,6 +3194,10 @@ function requestPayment(
     const zeroAfter = after.map((e) => ({
       ...e,
       paid: [],
+      ...(e.paymentReceipt ||
+      (piece && ["nova", "ironheart"].includes(card(piece).pack_code || ""))
+        ? { paidForCard: [], generatedForCard: [], generated: [] }
+        : {}),
       ...([
         "20002",
         "20003",
@@ -2946,7 +3226,14 @@ function requestPayment(
         spentResponseCards,
         visionPackPorts,
       ).length ||
-      warMachine.warMachineResourceSources(s, paymentTarget).length
+      warMachine.warMachineResourceSources(s, paymentTarget).length ||
+      spentResponseCards.some((p) => p.code === "29009") ||
+      niPack.novaIronheartPackResourcesSpent(
+        s,
+        spentResponseCards,
+        s.activePlayerId,
+        niPackPorts,
+      ).length
     ) {
       choose(
         s,
@@ -3049,6 +3336,7 @@ function pay(
   ids: string[],
   wildAs: Resource = "energy",
   actualAllocation?: Resource[],
+  actualGeneration?: Resource[],
 ) {
   const p = s.prompt!;
   need(p?.kind === "payment", "No payment is pending.");
@@ -3121,7 +3409,98 @@ function pay(
     "Crushing Blow can only be paid with physical resources.",
   );
   let paidForCard: Resource[] | undefined;
+  let generatedForCard: Resource[] | undefined;
+  let spentAssignment: Resource[] | undefined;
+  const trackGeneration =
+    !!p.after?.some((e) => e.paymentReceipt) ||
+    !!(
+      p.card &&
+      !p.abilityCost &&
+      (["nova", "ironheart"].includes(card(p.card).pack_code || "") ||
+        niPack.novaIronheartPackAttackEventBonus(
+          s,
+          p.card,
+          ["mental"],
+          niPackPorts,
+        ))
+    );
+  if (trackGeneration) {
+    const allocations = generatedResourceAllocations(
+      printed,
+      p.cost || 0,
+      req,
+      wildAs,
+    );
+    need(
+      allocations.length,
+      "The generated resources cannot pay the actual cost.",
+    );
+    if (actualAllocation && actualGeneration) {
+      const key = (rs: Resource[]) => [...rs].sort().join(":");
+      const assignment = allocations.find(
+        (a) =>
+          key(a.paid) === key(actualAllocation) &&
+          key(a.generated) === key(actualGeneration),
+      );
+      need(
+        assignment,
+        "The selected generated-resource allocation cannot pay this cost.",
+      );
+      paidForCard = actualAllocation;
+      generatedForCard = actualGeneration;
+      spentAssignment = assignment!.spent;
+    } else if (allocations.length > 1) {
+      choose(
+        s,
+        "Allocate payment resources",
+        "Choose the generated resources that pay the actual cost. Other generated resources are overpaid.",
+        allocations.map((a, index) => {
+          const generatedLabel = [...new Set(a.generated)]
+            .map((r) => `${a.generated.filter((v) => v === r).length} ${r}`)
+            .join(" + ");
+          const sameGenerated = allocations.filter(
+            (other) =>
+              [...other.generated].sort().join(":") ===
+              [...a.generated].sort().join(":"),
+          ).length;
+          const label =
+            sameGenerated > 1
+              ? `${generatedLabel} as ${a.paid.join(" + ")}`
+              : generatedLabel;
+          const id =
+            sameGenerated === 1 &&
+            a.generated.length &&
+            a.generated.every((r) => r === a.generated[0])
+              ? a.generated[0]
+              : `allocation:${index}`;
+          return option(id, label, [
+            E("commitPaymentAllocation", {
+              payment: p,
+              ids,
+              wildAs,
+              paidForCard: a.paid,
+              generatedForCard: a.generated,
+            }),
+          ]);
+        }),
+        true,
+      );
+      s.prompt!.cancellationQueue = [
+        E("restorePaymentPrompt", {
+          actorId: s.activePlayerId,
+          payment: p,
+          queue: [...s.queue],
+        }),
+      ];
+      return;
+    } else {
+      paidForCard = allocations[0].paid;
+      generatedForCard = allocations[0].generated;
+      spentAssignment = allocations[0].spent;
+    }
+  }
   if (
+    !trackGeneration &&
     [
       "14015",
       "20002",
@@ -3225,6 +3604,19 @@ function pay(
           ...antMan.antManResourceSpent(s, spent, antManPorts),
         );
         spentResponses.push(...wasp.waspResourceSpent(s, spent, waspPorts));
+        spentResponses.push(
+          ...ironheart.ironheartResourceCardSpent(s, {
+            token: `spend:${s.nextId++}`,
+            playerId: s.activePlayerId,
+            piece: spent,
+          }),
+          ...niPack.novaIronheartPackResourcesSpent(
+            s,
+            [spent],
+            paymentActor,
+            niPackPorts,
+          ),
+        );
         spentResponses.push(...rocket.rocketResourceSpent(s, spent));
         spentResponses.push(...nebulaPack.nebulaPackResourcesSpent(s, [spent]));
         spentResponses.push(
@@ -3248,6 +3640,11 @@ function pay(
         starLordPack.starLordPackResourceSpent(s, source.id, { discardPiece });
         draxPack.draxPackResourceSpent(s, source.id, { discardPiece });
         venomPack.venomPackResourceSpent(s, source.id, { discardPiece });
+        nova.novaResourceSpent(s, source.id, { isTextBlank });
+        ironheart.ironheartResourceSpent(s, source.id, p.paymentTarget, {
+          isTextBlank,
+        });
+        niPack.novaIronheartPackResourceSpent(s, source.id, { isTextBlank });
         spectrumResourceSpent(s, source.id, { isTextBlank });
         warlockResourceSpent(s, source.id, { isTextBlank });
         nebula.nebulaResourceSpent(s, source.id, { isTextBlank });
@@ -3322,8 +3719,10 @@ function pay(
     ...spentResponses,
     ...(p.after || []).map((e) => ({
       ...e,
-      paid,
+      paid: spentAssignment ?? paid,
       ...(paidForCard !== undefined ? { paidForCard } : {}),
+      ...(generatedForCard !== undefined ? { generatedForCard } : {}),
+      generated: [...printed],
       overpaid: Math.max(0, printed.length - (p.cost || 0)),
     })),
   );
@@ -3486,6 +3885,8 @@ export function newGame(config: {
     vision.visionInitializeNemesis(s, { makePiece });
     miles.milesInitializeNemesis(s, { makePiece });
     ghostSpider.ghostSpiderInitializeNemesis(s, { makePiece });
+    nova.novaInitializeNemesis(s, { makePiece });
+    ironheart.ironheartInitialize(s, { makePiece });
     // Extract the SAME three source-composition IDs before drawing an opening
     // hand. The ordinary40-card deck never contains the setup upgrades.
     for (const effect of spectrum.spectrumSetup(s))
@@ -3696,6 +4097,8 @@ export function playable(s: GameState, p: Piece): string | null {
     vision.visionPlayRestriction(s, p, visionPorts) ||
     miles.milesPlayRestriction(s, p, milesPorts) ||
     ghostSpider.ghostSpiderPlayRestriction(s, p) ||
+    nova.novaPlayRestriction(s, p, novaPorts) ||
+    ironheart.ironheartPlayRestriction(s, p, ironheartPorts) ||
     nebula.nebulaPlayRestriction(s, p, nebulaPorts) ||
     spectrum.spectrumPlayRestriction(s, p) ||
     starLordPack.starLordPackPlayRestriction(s, p, starLordPackPorts) ||
@@ -3707,6 +4110,7 @@ export function playable(s: GameState, p: Piece): string | null {
     warmPack.warMachinePackPlayRestriction(s, p, warMachinePackPorts) ||
     valkPack.valkyriePackPlayRestriction(s, p, valkyriePackPorts) ||
     visionPack.visionPackPlayRestriction(s, p, visionPackPorts) ||
+    niPack.novaIronheartPackPlayRestriction(s, p, niPackPorts) ||
     sinisterPlayerPack.sinisterPlayerPackPlayRestriction(
       s,
       p,
@@ -4004,6 +4408,7 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
 function nativeCardPlayCommitted(s: GameState, p: Piece) {
   const playToken = `play:${s.nextId++}`;
   miles.milesCardPlayCommitted(s, p, playToken);
+  nova.novaCardPlayCommitted(s, p, playToken);
   if (card(p).type_code === "event") {
     const kind = /Interrupt/i.test(card(p).text || "")
       ? "interrupt"
@@ -4046,6 +4451,8 @@ function play(
   overpaid = 0,
   paidForCard?: Resource[],
   fromDeck = false,
+  generatedForCard?: Resource[],
+  novaDamageContext?: nova.NovaDamageContext,
 ) {
   const c = card(p);
   const agility = !agilityHandled ? spiderWomanCardPlayed(s, c) : [];
@@ -4063,6 +4470,8 @@ function play(
         overpaid,
         paidForCard,
         fromDeck,
+        generatedForCard,
+        novaDamageContext,
       }),
     );
     return;
@@ -4111,6 +4520,29 @@ function play(
     );
   else zone.splice(i, 1);
   const playToken = nativeCardPlayCommitted(s, p);
+  const niBonus = niPack.novaIronheartPackAttackEventBonus(
+    s,
+    p,
+    paidForCard || [],
+    niPackPorts,
+  );
+  if (niBonus) s.flags[`niHoned:${p.id}`] = niBonus;
+  const niPlayed = {
+    token: playToken,
+    playerId: s.activePlayerId,
+    pieceId: p.id,
+    code: p.code,
+    traits: sinisterNativeTraits(s, p),
+    paid: paidForCard || [],
+    fromHand:
+      !fromDeck &&
+      !storedArrow &&
+      !storedPanther &&
+      !storedDefense &&
+      !storedGeorge,
+  };
+  if (c.type_code !== "event")
+    add(s, E("niNativePlayed", { receipt: niPlayed }));
   starLord.starLordHandPlayFinished(s, p.id);
   for (const e of doctorStrangeCardPlayed(s, c)) discardPiece(s, e.id);
   msMarvelCardPlayed(s);
@@ -4146,6 +4578,8 @@ function play(
                 piece: p,
                 paid,
                 paidForCard,
+                generatedForCard,
+                novaDamageContext,
                 lightningX,
                 masterInvocationId,
                 eventId: p.id,
@@ -4160,6 +4594,7 @@ function play(
         eventId: p.id,
         playToken,
         playedEvent: { ...p },
+        niPlayed,
       }),
     );
   } else {
@@ -4194,6 +4629,7 @@ function play(
       ...warmPack.warMachinePackCardEntered(s, p),
       ...valkPack.valkyriePackCardEntered(s, p),
       ...visionPack.visionPackCardEntered(s, p),
+      ...niPack.novaIronheartPackCardEntered(s, p),
       ...sinisterPlayerPack.sinisterPlayerPackCardEntered(s, p),
       ...valkyrie.valkyrieCardEntered(s, p),
       ...nebulaPack
@@ -4220,7 +4656,8 @@ function play(
       cardScript(p)?.implementation === "script" ||
       p.code === "16035" ||
       p.code === "25007" ||
-      p.code === "27191"
+      p.code === "27191" ||
+      ["29012", "29013"].includes(p.code)
     )
       s.player.hp += maxHP(s) - healthBefore;
     if (["01057", "01065", "01081"].includes(rulesCode(p)) && s.playerCount > 1)
@@ -4323,6 +4760,11 @@ function allyEnter(
   paidForCard: Resource[] = [],
 ) {
   if (isTextBlank(s, p)) return;
+  const niAlly = niPack.novaIronheartPackAllyEntered(s, p, niPackPorts);
+  if (niAlly !== null) {
+    add(s, ...niAlly);
+    return;
+  }
   const warMachineAlly = warMachine.warMachineAllyEnter(s, p, warMachinePorts);
   if (warMachineAlly !== null) {
     add(s, ...warMachineAlly);
@@ -4515,6 +4957,7 @@ function event(
   valkyriePackReceipt: { amount?: number } = {},
   visionMeditationCostPaid = false,
   playToken?: string,
+  generatedForCard?: Resource[],
 ) {
   const ant =
     antMan.antManEvent(s, p.code === "13020" ? { ...p, code: "12020" } : p) ??
@@ -4536,6 +4979,8 @@ function event(
     vision.visionEvent(s, p) ??
     miles.milesEvent(s, p, { paid, paidForCard, playToken }) ??
     ghostSpider.ghostSpiderEvent(s, p) ??
+    nova.novaEvent(s, p, { paidForCard, generatedForCard, playToken }) ??
+    ironheart.ironheartEvent(s, p, { paid, paidForCard, playToken }) ??
     warlock.warlockEvent(s, p, warlockDiscarded) ??
     nebula.nebulaEvent(s, p, lightningX ?? 0) ??
     spectrum.spectrumEvent(s, p) ??
@@ -4551,7 +4996,8 @@ function event(
     visionPack.visionPackEvent(s, p, {
       meditationCostPaid: visionMeditationCostPaid,
     }) ??
-    sinisterPlayerPack.sinisterPlayerPackEvent(s, p, paidForCard ?? paid);
+    sinisterPlayerPack.sinisterPlayerPackEvent(s, p, paidForCard ?? paid) ??
+    niPack.novaIronheartPackEvent(s, p, paidForCard || []);
   if (ant !== null) {
     add(s, ...ant);
     return;
@@ -5094,6 +5540,7 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
       p,
     )[kind] +
     vision.visionAllyStats(s, p)[kind] +
+    niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)[kind] +
     scriptedModifier(s, kind, p) +
     antPack.antManPackModifiers(s, p.id, { maxAllyHP: pieceHP })[kind] +
     starLordPack.starLordPackModifiers(s, p.id, starLordPackPorts)[kind] +
@@ -5140,6 +5587,28 @@ function ability(s: GameState, id: string, action = "special") {
   )
     return;
   if (ghostSpider.ghostSpiderAbility(s, id, ghostSpiderPorts, action)) return;
+  if (id === "identity" && nova.novaHeroAbility(s, novaPorts, action)) return;
+  if (nova.novaAbility(s, id, novaPorts, action)) return;
+  if (
+    ironheart.ironheartAbility(
+      s,
+      id === "identity" ? "hero" : id,
+      ironheartPorts,
+    )
+  )
+    return;
+  const niAbility = niPack.novaIronheartPackAbility(
+    s,
+    id,
+    action ||
+      niPack.novaIronheartPackAbilityOptions(s, id, niPackPorts)[0]?.id ||
+      "",
+    niPackPorts,
+  );
+  if (niAbility !== null) {
+    add(s, ...niAbility);
+    return;
+  }
   if (
     sinisterPlayerPack.sinisterPlayerPackAbility(
       s,
@@ -6336,6 +6805,7 @@ const dsPorts: DoctorStrangePorts = {
       target === "hero" || target.startsWith("hero:")
         ? heroCard(v)
         : card(find(s, target)!),
+      nativeStatusModifiers(s, piece!),
     );
   },
   canAddStatus: (s, target, status) => {
@@ -6354,7 +6824,7 @@ const dsPorts: DoctorStrangePorts = {
         status,
         target === "hero" || target.startsWith("hero:")
           ? { stalwart: !!sourceKeyword(v, "hero", "Stalwart") }
-          : {},
+          : nativeStatusModifiers(s, piece),
       )
     );
   },
@@ -6388,7 +6858,7 @@ const hawkeyePorts: HawkeyePorts = {
     if (
       ignoreCrisis &&
       !ordinary.some((p) => p.id === "main") &&
-      !engaged(s).some((p) => keyword(p, "Patrol")) &&
+      !engaged(s).some((p) => keyword(p, "Patrol", s)) &&
       rulesCode(s.scheme) !== "01139b" &&
       s.scheme.threat > 0
     ) {
@@ -7225,6 +7695,7 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
       ...warmPack.warMachinePackCardEntered(s, p),
       ...valkPack.valkyriePackCardEntered(s, p),
       ...visionPack.visionPackCardEntered(s, p),
+      ...niPack.novaIronheartPackCardEntered(s, p),
       ...sinisterPlayerPack.sinisterPlayerPackCardEntered(s, p),
       ...captainPackCardEntered(s, p),
       ...hulkPackCardEntered(s, p),
@@ -7772,7 +8243,7 @@ const spectrumPorts: spectrum.SpectrumPorts = {
     if (
       ignoreCrisis &&
       !list.some((t) => t.id === "main") &&
-      !(thwarting && engaged(s).some((p) => keyword(p, "Patrol"))) &&
+      !(thwarting && engaged(s).some((p) => keyword(p, "Patrol", s))) &&
       rulesCode(s.scheme) !== "01139b" &&
       s.scheme.threat > 0 &&
       !hulkThreatLocked(s, "main")
@@ -7940,6 +8411,14 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...vision.visionAbilityOptions(s, id, visionPorts),
     ...miles.milesAbilityOptions(s, id, milesPorts),
     ...ghostSpider.ghostSpiderAbilityOptions(s, id, ghostSpiderPorts),
+    ...(id === "identity" ? nova.novaHeroAbilityOptions(s, novaPorts) : []),
+    ...nova.novaAbilityOptions(s, id, novaPorts),
+    ...ironheart.ironheartAbilityOptions(
+      s,
+      id === "identity" ? "hero" : id,
+      ironheartPorts,
+    ),
+    ...niPack.novaIronheartPackAbilityOptions(s, id, niPackPorts),
     ...(s.attachments.find((p) => p.id === id)
       ? valkyrie.valkyrieAttachmentActions(
           s,
@@ -8896,6 +9375,538 @@ const milesPorts: miles.MilesMoralesPorts = {
   },
 };
 
+function niNativeAchievement(
+  s: GameState,
+  source: string,
+  kind: nova.NovaAchievementReceipt["kind"],
+  targetId: string,
+) {
+  const identity = nativeIdentityDamageSource(s, source);
+  if (!identity) return;
+  const playerId = identity.slice(5);
+  add(
+    s,
+    ...nova.novaAchievement(s, {
+      token: `achievement:${s.nextId++}`,
+      playerId,
+      kind,
+      targetId,
+      attributedToIdentity: true,
+      performed: true,
+    }),
+  );
+}
+function niAllyTargets(s: GameState, p: Piece, kind: "attack" | "thwart") {
+  if (!niPack.novaIronheartPackWaspIgnores(s, p, niPackPorts))
+    return targets(
+      s,
+      kind === "attack" ? "enemy" : "scheme",
+      kind === "attack",
+      kind === "thwart",
+    );
+  if (kind === "attack") return targets(s, "enemy", false);
+  const schemes = targets(s, "scheme", false, false);
+  if (
+    !schemes.some((t) => t.id === "main") &&
+    s.scheme.threat > 0 &&
+    rulesCode(s.scheme) !== "01139b" &&
+    !hulkThreatLocked(s, "main") &&
+    gamora.gamoraCanRemoveThreat(s, "main") &&
+    !venom.venomSchemeLocked(s, "main") &&
+    !warlock.warlockSchemeLocked(s, "main")
+  )
+    schemes.unshift({
+      id: "main",
+      code: s.scheme.code,
+      label: card(s.scheme.code).name,
+    });
+  return schemes;
+}
+function niAttackProgram(s: GameState, effects: Effect[], after: Effect[]) {
+  if (s.player.stunned) {
+    consumeStatus(s.player, "stunned");
+    add(s, ...after);
+    return;
+  }
+  const id = `program${s.nextId++}`;
+  add(
+    s,
+    ...effects.map((e) => ({
+      ...e,
+      attackProgramId: id,
+      eventId: s.currentEventId,
+      responseGroup: undefined,
+    })),
+    E("attackProgramEnd", {
+      id,
+      attackProgramId: id,
+      eventId: s.currentEventId,
+    }),
+    ...after.map((e) => ({
+      ...e,
+      attackProgramId: undefined,
+      responseGroup: undefined,
+    })),
+  );
+}
+function niNativeReactionPlay(
+  s: GameState,
+  id: string,
+  after: Effect[],
+  context?: nova.NovaDamageContext,
+  cancellationAfter: Effect[] = after,
+) {
+  const p = eventPlaySources(s).find((p) => p.id === id);
+  need(p, "The actual owned reaction event is unavailable.");
+  requestPayment(
+    s,
+    card(p!).name,
+    cardCost(s, card(p!), p),
+    [E("niNativeReactionCommit", { piece: p, after, context })],
+    sinisterPlayRequirements(p!),
+    p,
+    true,
+  );
+  if (s.prompt?.cancelable)
+    s.prompt.cancellationQueue = [...cancellationAfter, ...s.queue];
+}
+function niNativeDamageOptions(s: GameState, packet: Effect, after: Effect[]) {
+  if (!packet.attack || packet.amount <= 0) return [];
+  const targetId =
+    packet.target === "hero" ? `hero:${s.activePlayerId}` : packet.target;
+  const friendly =
+    targetId?.startsWith("hero:") ||
+    allInPlay(s).some((p) => p.id === targetId && card(p).type_code === "ally");
+  if (!friendly) return [];
+  packet.damageWindowId ||= `nova-damage:${s.nextId++}`;
+  const context: nova.NovaDamageContext = {
+    token: packet.damageWindowId,
+    playerId: s.activePlayerId,
+    targetId,
+    fromAttack: true,
+    amount: packet.amount,
+    friendly: true,
+  };
+  s.flags[`novaDamageKind:${context.token}`] = packet.kind || "packet";
+  const original = s.activePlayerId;
+  const victim = targetId?.startsWith("hero:")
+    ? heroCard(seatView(s, targetId.slice(5))).name
+    : card(allInPlay(s).find((p) => p.id === targetId)!).name;
+  return playerOrder(s).flatMap((seat) =>
+    nova
+      .novaDamageOptions(
+        seatView(s, seat),
+        context,
+        after.map((e) => ({ ...e, actorId: original })),
+        novaPorts,
+      )
+      .map((o) => ({
+        ...o,
+        id: `nova:${seat.id}:${context.token}:${context.targetId}:${o.id}`,
+        label: `${o.label} (${packet.kind === "overkill" ? "overkill damage to" : "damage to"} ${victim})`,
+        effects: o.effects.map((e) => ({ ...e, actorId: seat.id })),
+      })),
+  );
+}
+function niQueuePacketReceipt(
+  s: GameState,
+  e: Effect,
+  result: DamageResult | undefined,
+  snapshot: { id: string; code?: string; stage?: number },
+) {
+  if (!e.afterResolved?.length) return;
+  const receipt = effectContext(
+    s,
+    E("niNativeDamageReceipt", {
+      snapshot,
+      result: result || { actualDamage: 0, damageDealt: 0, excessDamage: 0 },
+      performed: !!result,
+      after: e.afterResolved,
+    }),
+  );
+  const boundary = s.queue.findIndex(
+    (q) =>
+      q.afterAttack ||
+      q.type === "attackAftermathOrder" ||
+      (q.mandatory === false && q.responseGroup),
+  );
+  s.queue.splice(boundary < 0 ? 0 : boundary, 0, receipt);
+}
+const novaPorts: nova.NovaPorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  makePiece,
+  isIdentityTextBlank: (s) => isTextBlank(s, heroCard(s)),
+  canReadyIdentity: (s, id) => canReadyIdentity(seatView(s, id)),
+  canReadyPiece: (s, p) =>
+    nova.novaCanReadyPiece(s, p, { isTextBlank }) &&
+    warMachinePackPorts.canReady(s, p.id),
+  canDraw: (s) => s.player.deck.length + s.player.discard.length > 0,
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  canPay,
+  pay: (s, title, cost, req, after, targetCode) =>
+    requestPayment(
+      s,
+      title,
+      cost,
+      after.map((e) => ({ ...e, paymentReceipt: true })),
+      req,
+      undefined,
+      true,
+      targetCode,
+      false,
+      [],
+      true,
+      false,
+      false,
+      true,
+    ),
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  schemeTargets: (s, thwart) => targets(s, "scheme", false, thwart),
+  attackProgram: niAttackProgram,
+  shufflePlayerDeck: warMachinePortsShufflePlayer,
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  putPlayerCard: (s, p, after) => {
+    const before = maxHP(s);
+    Object.assign(p, resetPiece(p, true));
+    s.player.inPlay.push(p);
+    s.player.hp += maxHP(s) - before;
+    add(s, ...niPack.novaIronheartPackCardEntered(s, p), ...after);
+  },
+  canDiscardPiece: (s, p) =>
+    !isPermanent(card(p)) && valkyrie.valkyrieCanDiscardAttachment(s, p),
+  discardPiece,
+  canPayAllyDamageCost: (s, p, n) =>
+    !p.exhausted &&
+    !p.tough &&
+    pieceHP(s, p) - p.damage >= n &&
+    !niPack.novaIronheartPackCannotTakeDamage(s, p.id, niPackPorts),
+  payAllyDamageCost: (s, id, amount, after) => {
+    const p = find(s, id);
+    need(
+      p && novaPorts.canPayAllyDamageCost(s, p, amount),
+      "Ms. Marvel cannot pay the actual damage cost.",
+    );
+    p!.exhausted = true;
+    const before = new Set(s.queue);
+    dealDamage(s, id, amount, id);
+    const generated = s.queue.filter((e) => !before.has(e));
+    s.queue = s.queue.filter((e) => before.has(e));
+    add(s, ...generated, ...after);
+  },
+  reactionEvents: eventPlaySources,
+  canPlayDamageReaction: (s, p) =>
+    !ghostSpider.ghostSpiderCannotPlayEvents(s) &&
+    s.player.form === "hero" &&
+    !isTextBlank(s, p),
+  playDamageReaction: (s, id, context, after) =>
+    niNativeReactionPlay(s, id, after, context),
+  preventAttackDamage: (s, context, amount) => {
+    const kind = String(s.flags[`novaDamageKind:${context.token}`] || "packet");
+    if (kind === "attack" && s.attack) s.attack.prevented += amount;
+    else if (kind === "overkill" && s.attack)
+      s.attack.identityPrevented =
+        Number(s.attack.identityPrevented || 0) + amount;
+    else
+      s.flags[`msPrevent:${context.token}`] =
+        Number(s.flags[`msPrevent:${context.token}`] || 0) + amount;
+  },
+  giveObligation: spectrumPorts.giveObligation,
+  removeEncounter: milesPorts.removeEncounter,
+  controlledCards: (s) => [
+    ...s.player.inPlay,
+    ...s.attachments.filter(
+      (p) => controller(s, p.id)?.id === s.activePlayerId,
+    ),
+  ],
+  enemyAttack: (s, id, playerId, _allowAlter, continuation) => {
+    if (!find(s, id)) return false;
+    add(
+      s,
+      E("enemyAttack", {
+        id,
+        actorId: playerId,
+        activation: {
+          enemyId: id,
+          playerId,
+          kind: "attack",
+          after: continuation,
+        },
+      }),
+    );
+    return true;
+  },
+  discardEncounterTop: (s, count, after) => {
+    for (let n = 0; n < count; n++) {
+      const p = drawEncounter(s);
+      if (!p) break;
+      s.encounter.discard.push(p);
+    }
+    add(s, ...after);
+  },
+};
+const ironheartPorts: ironheart.IronheartPorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  makePiece,
+  isIdentityTextBlank: (s) => isTextBlank(s, heroCard(s)),
+  canPay,
+  payAbility: (s, cost, requirements, after, commit = []) =>
+    requestPayment(
+      s,
+      "Child Prodigy",
+      cost,
+      after,
+      requirements,
+      undefined,
+      true,
+      undefined,
+      false,
+      commit,
+      true,
+      false,
+      false,
+      true,
+    ),
+  canReadyIdentity: novaPorts.canReadyIdentity,
+  canGiveStatus: quicksilverPorts.canGiveStatus,
+  enemyTargets: novaPorts.enemyTargets,
+  schemeTargets: novaPorts.schemeTargets,
+  attack: (s, target, amount, continuation) =>
+    niAttackProgram(
+      s,
+      [
+        E("damage", {
+          target,
+          amount,
+          attack: true,
+          attackInitiated: true,
+          source: "hero",
+          afterResolved: [continuation],
+        }),
+      ],
+      [],
+    ),
+  thwart: (s, target, amount, continuation) =>
+    add(
+      s,
+      E("thwart", {
+        target,
+        amount,
+        action: true,
+        source: "hero",
+        afterResolved: [continuation],
+      }),
+    ),
+  lookPlayerDeck: (s, count, continuation) => {
+    const ids = s.player.deck.slice(0, count).map((p) => p.id);
+    if (ids.length) revealHidden(s);
+    add(s, { ...continuation, ids });
+  },
+  addDeckCardToHand: (s, id) => {
+    const i = s.player.deck.findIndex((p) => p.id === id);
+    need(i >= 0, "The actual looked deck card is unavailable.");
+    s.player.hand.push(s.player.deck.splice(i, 1)[0]);
+  },
+  discardDeckCard: (s, id) => {
+    const i = s.player.deck.findIndex((p) => p.id === id);
+    need(i >= 0, "The actual looked deck card is unavailable.");
+    s.player.discard.push(resetPiece(s.player.deck.splice(i, 1)[0]));
+  },
+  shufflePlayerDeck: warMachinePortsShufflePlayer,
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  enemyTraits: (s, p) => sinisterNativeTraits(s, p),
+  attachEncounter: milesPorts.attachEncounter,
+  giveObligation: spectrumPorts.giveObligation,
+  discardEncounter: milesPorts.discardEncounter,
+  shuffleObligationIntoEncounter: (s, p) => {
+    if (find(s, p.id)) {
+      movePieceFromPlay(s, p.id, true);
+      s.removed = s.removed.filter((q) => q.id !== p.id);
+    }
+    removeEncounterInstance(s, p.id);
+    s.encounter.deck.push(resetPiece(p));
+    mutagenPorts.shuffleEncounter(s);
+  },
+  dealEncounter,
+  dealBoostCard: (s, p, playerId) => {
+    const a = s.scheming || s.attack;
+    if (a) (a.retainedBoostIds ||= []).push(p.id);
+    removeEncounterInstance(s, p.id);
+    p.dealtTo = playerId;
+    s.encounter.dealt.push(p);
+  },
+  enemyScheme: (s, id, continuation) =>
+    add(
+      s,
+      E("enemyScheme", {
+        id,
+        activation: {
+          enemyId: id,
+          playerId: s.activePlayerId,
+          kind: "scheme",
+          after: continuation,
+        },
+      }),
+    ),
+  placeThreat: threat,
+  revealEncounter: (s, p, after) => add(s, E("reveal", { piece: p }), ...after),
+};
+const niPackPorts: niPack.NovaIronheartPackPorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  identityHasTrait: (s, t) => captainPackHasTrait(s, "hero", t),
+  hasTrait: captainPackHasTrait,
+  friendlyTargets: antPackPorts.friendlyTargets,
+  enemyTargets: novaPorts.enemyTargets,
+  schemeTargets: novaPorts.schemeTargets,
+  allEnemies: (s) =>
+    [s.villain, ...s.minions].map((p) => ({
+      id: p.id,
+      code: p.code,
+      label: card(p).name,
+    })),
+  shieldSupportTargets: (s) =>
+    allInPlay(s)
+      .filter(
+        (p) =>
+          card(p).type_code === "support" &&
+          sinisterNativeHasTrait(s, p.id, "S.H.I.E.L.D.") &&
+          p.exhausted &&
+          warMachinePackPorts.canReady(s, p.id),
+      )
+      .map((p) => ({ id: p.id, code: p.code, label: card(p).name })),
+  blankableTargets: (s) =>
+    [
+      ...s.attachments.filter((p) => card(p).type_code === "attachment"),
+      ...s.minions.filter(
+        (p) => !(card(p).traits || "").split(/\.\s*/).includes("Elite"),
+      ),
+      ...s.sideSchemes.filter((p) => !isPermanent(card(p))),
+    ].map((p) => ({ id: p.id, code: p.code, label: card(p).name })),
+  canReady: (s, id) =>
+    id === "hero"
+      ? !!s.player.exhausted && canReadyIdentity(s)
+      : id.startsWith("hero:")
+        ? !!seatView(s, id.slice(5)).player.exhausted &&
+          canReadyIdentity(seatView(s, id.slice(5)))
+        : !!find(s, id)?.exhausted && warMachinePackPorts.canReady(s, id),
+  heroStats: (s) => {
+    const { attack, thwart, defense } = heroStats(s);
+    return { attack, thwart, defense };
+  },
+  canExhaustIdentity: (s) => s.player.form === "hero" && !s.player.exhausted,
+  exhaustIdentity: (s) => {
+    need(!s.player.exhausted, "Your hero is exhausted.");
+    s.player.exhausted = true;
+  },
+  canPay,
+  handPlayableCards: eventPlaySources,
+  cardCost: novaPorts.cardCost,
+  playResponse: (s, id, after) =>
+    niNativeReactionPlay(
+      s,
+      id,
+      after,
+      undefined,
+      after.map((e) =>
+        e.type === "nova-ironheart-pack:aerial-played"
+          ? { ...e, type: "nova-ironheart-pack:aerial-window" }
+          : e,
+      ),
+    ),
+  payAbility: (s, cost, req, after) =>
+    requestPayment(
+      s,
+      "Falcon",
+      cost,
+      after,
+      req,
+      undefined,
+      true,
+      undefined,
+      false,
+      [],
+      true,
+      false,
+      false,
+      true,
+    ),
+  attackProgram: niAttackProgram,
+  thwartProgram: (s, effects, after) => {
+    if (s.player.confused) {
+      consumeStatus(s.player, "confused");
+      add(s, ...after);
+    } else add(s, ...effects, ...after);
+  },
+  attackDamage: (s, _source, target, amount, after) =>
+    add(
+      s,
+      E("damage", {
+        target,
+        amount,
+        source: "hero",
+        attack: true,
+        attackInitiated: true,
+        afterResolved: after,
+      }),
+    ),
+  discardTopPlayer: (s, count, after) => {
+    const before = new Set(s.queue);
+    const availableBefore = s.player.deck.length;
+    const pieces = mill(s, count);
+    const generated = s.queue.filter((e) => !before.has(e));
+    s.queue = s.queue.filter((e) => before.has(e));
+    add(
+      s,
+      ...generated,
+      ...after.map((e) => ({
+        ...e,
+        discardedIds: pieces.map((p) => p.id),
+        deckExhausted: count > 0 && availableBefore <= count,
+      })),
+    );
+  },
+  discardHand,
+  discardPiece,
+  removeResolvingFromGame: (s, id) => {
+    const i = s.resolving.findIndex((p) => p.id === id);
+    need(i >= 0, "The actual played event is unavailable for its remove cost.");
+    s.removed.push(resetPiece(s.resolving.splice(i, 1)[0]));
+  },
+  replaceLeaveWithShuffle: (s, receipt, after) => {
+    need(
+      niPackPorts.leaveAvailable(s, receipt),
+      "The actual pending card is unavailable.",
+    );
+    s.flags[`niLeaveShuffle:${receipt.pieceId}`] = receipt.ownerId;
+    add(s, E("niNativeLeaveCommit", { receipt, replaced: true }), ...after);
+  },
+  leaveAvailable: (s, r) =>
+    !!find(s, r.pieceId) && !s.flags[`niLeaveComplete:${r.token}`],
+  revealHidden,
+  maxHP: (s, id) => maxHP(seatView(s, id)),
+  spendUseCost: (s, id, after) => {
+    const p = find(s, id);
+    need(p && p.counters > 0, "The actual research counter is unavailable.");
+    p!.counters--;
+    add(s, ...after);
+  },
+  finishUse: (s, id, after) => {
+    const p = find(s, id);
+    if (p && p.counters === 0) {
+      const before = new Set(s.queue);
+      discardPiece(s, id);
+      const generated = s.queue.filter((e) => !before.has(e));
+      s.queue = s.queue.filter((e) => before.has(e));
+      add(s, ...generated, ...after);
+    } else add(s, ...after);
+  },
+};
+
 const visionPorts: vision.VisionPorts = {
   defenseEventSources: (s) =>
     visionPack.visionPackDefenseEvents(s, visionPackPorts),
@@ -8919,7 +9930,7 @@ const visionPorts: vision.VisionPorts = {
         ignoreCrisis ||
         nebula.nebulaIgnoresRestrictions(s).crisis) &&
       (!thwarting ||
-        !engaged(s).some((p) => keyword(p, "Patrol")) ||
+        !engaged(s).some((p) => keyword(p, "Patrol", s)) ||
         ignorePatrol ||
         nebula.nebulaIgnoresRestrictions(s).patrol) &&
       rulesCode(s.scheme) !== "01139b" &&
@@ -9234,7 +10245,12 @@ function enemyAttack(
   const isVillain = id === s.villain.id;
   if (isVillain && s.heroId === "spider_man" && s.player.form === "hero")
     draw(s, 1);
-  const base = nebulaNativeAttackStrength(s, p, s.activePlayerId, nebulaSource);
+  const novaModifiers = friendlySource
+    ? { attack: 0, overkill: false }
+    : nova.novaEnemyAttackModifiers(s, p, s.activePlayerId, { isTextBlank });
+  const base =
+    nebulaNativeAttackStrength(s, p, s.activePlayerId, nebulaSource) +
+    novaModifiers.attack;
   log(
     s,
     `${card(p).name} attacks ${originalTarget && find(s, originalTarget) ? card(find(s, originalTarget)!).name : heroCard(s).name}: ${base} base ATK${isVillain ? " before boost cards" : ""}.`,
@@ -9255,15 +10271,16 @@ function enemyAttack(
     prevented: 0,
     damage: 0,
     overkill:
+      novaModifiers.overkill ||
       (isVillain && !!villainAt(s, "01099").length) ||
       (!!nebulaSource && !!sourceKeyword(s, id, "Overkill")),
     extra,
-    modifier: activation?.modifier || 0,
+    modifier: (activation?.modifier || 0) + novaModifiers.attack,
     omitNormalBoost: activation?.omitNormalBoost,
     activationAfter: activation?.after,
     attackerSnapshot: structuredClone(p),
   };
-  if (rulesCode(p) === "01130" && extra !== "whirlwind")
+  if (rulesCode(p) === "01130" && extra !== "whirlwind" && !isTextBlank(s, p))
     add(
       s,
       ...playerOrder(s)
@@ -9330,6 +10347,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     base +
     bonus +
     attachments +
+    ironheart.ironheartEnemyStats(s, p, { isTextBlank }).attack +
     blackWidowEnemyModifier(s, p, originalPlayerId) +
     rocket.rocketEnemyStats(s, p).attack +
     drax.draxEnemyStats(s, p).attack +
@@ -9387,7 +10405,7 @@ function prepareAttackBoosts(s: GameState) {
       ? s.villainId === "klaw"
         ? 2
         : 1
-      : attacker && keyword(attacker, "Villainous")
+      : attacker && keyword(attacker, "Villainous", s)
         ? 1
         : 0;
   if (a.isVillain)
@@ -9508,6 +10526,8 @@ function boostEffects(s: GameState, p: Piece) {
     vision.visionBoost(s, p) ??
     miles.milesBoost(s, p) ??
     ghostSpider.ghostSpiderBoost(s, p) ??
+    nova.novaBoost(s, p) ??
+    ironheart.ironheartBoost(s, p) ??
     spectrum.spectrumBoost(s, p) ??
     warlock.warlockBoost(s, p) ??
     mtsPlayerPack.mtsPlayerPackBoost(s, p) ??
@@ -9690,7 +10710,7 @@ function enemyScheme(
     pendingBoosts.push(...(s.encounter.storedBoosts || []).splice(0));
   const normal = request?.omitNormalBoost
     ? 0
-    : id === s.villain.id || keyword(p, "Villainous")
+    : id === s.villain.id || keyword(p, "Villainous", s)
       ? 1
       : 0;
   const n = request?.omitNormalBoost
@@ -9724,6 +10744,7 @@ function finishScheme(s: GameState) {
         (activation.modifier || 0) +
         (activation.extraBoostIcons || 0) +
         blackWidowEnemyModifier(s, p, s.activePlayerId) +
+        ironheart.ironheartEnemyStats(s, p, { isTextBlank }).scheme +
         s.attachments
           .filter((a) => a.attachedTo === id)
           .reduce((n, a) => n + (card(a).scheme || 0), 0)) +
@@ -9971,7 +10992,7 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
       (target !== "hero" && !!find(s, target)))
       ? target === "hero"
         ? sourceKeyword(s, "hero", "Retaliate")
-        : printedKeyword(card(find(s, target)!), "Retaliate")
+        : sourceKeyword(s, target, "Retaliate")
       : 0;
   if (a.isVillain) {
     for (const c of [...villainAt(s, "01099")]) discardPiece(s, c.id);
@@ -9989,7 +11010,8 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
     if (a.extra === "rage") mill(s, a.damage);
   }
   if (rulesCode(p) === "01129") randomDiscard(s);
-  if (p && rulesCode(p) === "01131") giveCharacterStatus(s, p, "tough");
+  if (p && rulesCode(p) === "01131" && !isTextBlank(s, p))
+    giveCharacterStatus(s, p, "tough");
   if (rulesCode(p) === "01177")
     add(
       s,
@@ -10605,6 +11627,8 @@ function reveal(
     vision.visionEncounterReveal(s, p) ??
     miles.milesEncounterReveal(s, p) ??
     ghostSpider.ghostSpiderEncounterReveal(s, p) ??
+    nova.novaEncounterReveal(s, p) ??
+    ironheart.ironheartEncounterReveal(s, p) ??
     warlock.warlockEncounterReveal(s, p) ??
     rocket.rocketEncounterReveal(s, p) ??
     groot.grootEncounterReveal(s, p) ??
@@ -10749,8 +11773,12 @@ function reveal(
     )
       add(s, E("threat", { target: p.id, amount: s.playerCount }));
     if (!repeat && rulesCode(p) === "01127") {
-      s.villain.maxHp += 10;
-      s.villain.hp += 10;
+      const active = !isTextBlank(s, p);
+      (p as ImmortalKlawScheme).immortalKlawHealthActive = active;
+      if (active) {
+        s.villain.maxHp += 10;
+        s.villain.hp += 10;
+      }
     }
     if (rulesCode(p) === "01128")
       add(
@@ -11150,6 +12178,16 @@ function treachery(s: GameState, p: Piece) {
       else surge();
       break;
     case "01190": {
+      const novaNemesis = nova.novaShadowOfPast(s);
+      if (novaNemesis !== null) {
+        add(s, ...novaNemesis);
+        break;
+      }
+      const ironheartNemesis = ironheart.ironheartShadowOfPast(s);
+      if (ironheartNemesis !== null) {
+        add(s, ...ironheartNemesis);
+        break;
+      }
       const ghostNemesis = ghostSpider.ghostSpiderShadowOfPast(s);
       if (ghostNemesis !== null) {
         add(s, ...ghostNemesis);
@@ -11294,6 +12332,9 @@ function resolve(s: GameState, e: Effect) {
   if (warMachine.resolveWarMachineEffect(s, e, warMachinePorts)) return;
   if (valkyrie.resolveValkyrieEffect(s, e, valkyriePorts)) return;
   if (vision.resolveVisionEffect(s, e, visionPorts)) return;
+  if (nova.resolveNovaEffect(s, e, novaPorts)) return;
+  if (ironheart.resolveIronheartEffect(s, e, ironheartPorts)) return;
+  if (niPack.resolveNovaIronheartPackEffect(s, e, niPackPorts)) return;
   if (starLordPack.resolveStarLordPackEffect(s, e, starLordPackPorts)) return;
   if (gamoraPack.resolveGamoraPackEffect(s, e, gamoraPackPorts)) return;
   if (draxPack.resolveDraxPackEffect(s, e, draxPackPorts)) return;
@@ -11332,6 +12373,8 @@ function resolve(s: GameState, e: Effect) {
           vision.visionEncounterReveal(state, piece) ??
           miles.milesEncounterReveal(state, piece) ??
           ghostSpider.ghostSpiderEncounterReveal(state, piece) ??
+          nova.novaEncounterReveal(state, piece) ??
+          ironheart.ironheartEncounterReveal(state, piece) ??
           warlock.warlockEncounterReveal(state, piece) ??
           rocket.rocketEncounterReveal(state, piece) ??
           groot.grootEncounterReveal(state, piece) ??
@@ -11527,6 +12570,25 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "scarletHeroThwartResponse": {
+      if (!e.niPowerHandled) {
+        add(
+          s,
+          ...(niPack.novaIronheartPackPowerResponses(
+            s,
+            {
+              token: `thwart:${s.nextId++}`,
+              playerId: e.snapshot.playerId,
+              sourceId: "hero",
+              power: "thwart",
+              performed: true,
+              hero: true,
+            },
+            niPackPorts,
+          ) || []),
+          { ...e, niPowerHandled: true },
+        );
+        break;
+      }
       const after = [{ ...e }];
       const poolOptions = nebulaPack.nebulaPackAfterThwartOptions(
         s,
@@ -11707,6 +12769,26 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "eventResolve": {
+      if (e.novaDamageContext && e.piece.code === "28003") {
+        add(
+          s,
+          ...nova.novaForcefieldEffects(s, e.piece, e.novaDamageContext, {
+            paidForCard: e.paidForCard,
+            generatedForCard: e.generatedForCard,
+            playToken: e.playToken,
+          }),
+        );
+        break;
+      }
+      if (!e.niAdditionalCostPaid) {
+        const effects = niPack.novaIronheartPackBeforeEvent(s, e.piece, [
+          { ...e, niAdditionalCostPaid: true },
+        ]);
+        if (effects) {
+          add(s, ...effects);
+          break;
+        }
+      }
       if (!e.sinisterAdditionalCostPaid) {
         const cost = sinisterPlayerPack.sinisterPlayerPackBeforeEvent(
           s,
@@ -11852,6 +12934,7 @@ function resolve(s: GameState, e: Effect) {
         e.valkyriePackReceipt,
         !!e.visionMeditationCostPaid,
         e.playToken,
+        e.generatedForCard,
       );
       break;
     }
@@ -12206,6 +13289,20 @@ function resolve(s: GameState, e: Effect) {
     case "quicksilverBasicUsed":
       add(
         s,
+        ...nova.novaAfterBasicPower(
+          s,
+          {
+            token: e.basicUseToken || `basic:${s.nextId++}`,
+            playerId: s.activePlayerId,
+            power: e.power,
+            performed: true,
+            wasHero: !!e.basicWasHero,
+          },
+          novaPorts,
+        ),
+      );
+      add(
+        s,
         ...miles.milesAfterBasicPower(
           s,
           {
@@ -12550,6 +13647,25 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "heroAttackResponses":
+      if (!e.niPowerHandled) {
+        add(
+          s,
+          ...(niPack.novaIronheartPackPowerResponses(
+            s,
+            {
+              token: `attack:${s.nextId++}`,
+              playerId: s.activePlayerId,
+              sourceId: "hero",
+              power: "attack",
+              performed: true,
+              hero: true,
+            },
+            niPackPorts,
+          ) || []),
+          { ...e, niPowerHandled: true },
+        );
+        break;
+      }
       if (
         e.excessDamage > 0 &&
         (!find(s, e.target) || find(s, e.target)?.code !== e.defeatedCode)
@@ -12599,6 +13715,7 @@ function resolve(s: GameState, e: Effect) {
         (e.playedEvent as Piece | undefined) ||
         s.resolving.find((p) => p.id === e.id);
       finishResolution(s, e.id);
+      delete s.flags[`niHoned:${e.id}`];
       if (p && card(p).type_code === "event") {
         const previous = s.activePlayerId;
         if (e.actorId || p.ownerId) activateSeat(s, e.actorId || p.ownerId);
@@ -12623,6 +13740,7 @@ function resolve(s: GameState, e: Effect) {
             usedFlow: [],
             playToken: e.playToken,
             ghostAllowed: !s.flags[`ghostCancelled:${p.id}`],
+            niPlayed: e.niPlayed,
           }),
         );
         add(
@@ -12639,6 +13757,28 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "nativeEventPlayResponses": {
+      if (!e.niPlayedHandled) {
+        add(
+          s,
+          ...(e.niPlayed
+            ? niPack.novaIronheartPackCardPlayed(s, e.niPlayed, niPackPorts) ||
+              []
+            : []),
+          ...nova.novaAfterEventPlayed(
+            s,
+            {
+              token: e.playToken || `play:${s.nextId++}`,
+              playerId: s.activePlayerId,
+              eventId: e.id,
+              code: e.piece.code,
+              played: true,
+            },
+            novaPorts,
+          ),
+          { ...e, niPlayedHandled: true },
+        );
+        break;
+      }
       const again = { ...e };
       const ghostOptions = e.ghostAllowed
         ? ghostNativeEventOptions(s, e.id, [again], true)
@@ -13165,6 +14305,38 @@ function resolve(s: GameState, e: Effect) {
         add(s, { ...e, target: "hero", actorId: e.target.slice(5) });
         break;
       }
+      if (
+        (e.attack || e.damageFromAttack) &&
+        !e.novaDamageHandled &&
+        e.amount > 0 &&
+        (e.target === "hero" ||
+          allInPlay(s).some(
+            (p) => p.id === e.target && card(p).type_code === "ally",
+          ))
+      ) {
+        e.damageWindowId ||= `damage${s.nextId++}`;
+        const amount = Math.max(
+          0,
+          e.amount - Number(s.flags[`msPrevent:${e.damageWindowId}`] || 0),
+        );
+        const opts = niNativeDamageOptions(s, { ...e, attack: true, amount }, [
+          { ...e },
+        ]);
+        if (opts.length) {
+          choose(
+            s,
+            "Forcefield Projection",
+            "Prevent damage from this actual attack?",
+            [
+              ...opts,
+              option("allow", `Take ${amount} damage`, [
+                { ...e, novaDamageHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
+      }
       if (e.target === "hero" && e.damageDealt === undefined)
         e.damageDealt = e.amount;
       if (e.target === "hero" && !e.grootDamageHandled) {
@@ -13405,6 +14577,12 @@ function resolve(s: GameState, e: Effect) {
         break;
       }
       if (e.attack) {
+        const targetPiece = find(s, e.target);
+        const receiptSnapshot = {
+          id: e.target,
+          code: targetPiece?.code,
+          stage: e.target === s.villain.id ? s.villain.stage : undefined,
+        };
         const result = attackAction(
           s,
           e.target,
@@ -13421,6 +14599,7 @@ function resolve(s: GameState, e: Effect) {
             initiated: e.attackInitiated || e.attackAlreadyInitiated,
           },
         );
+        niQueuePacketReceipt(s, e, result, receiptSnapshot);
         if (e.basic && result)
           add(
             s,
@@ -13572,6 +14751,15 @@ function resolve(s: GameState, e: Effect) {
           ),
         );
       }
+      if (e.afterResolved?.length)
+        add(
+          s,
+          ...e.afterResolved.map((q: Effect) => ({
+            ...q,
+            removed: Number(removed || 0),
+            lastThreatRemoved: beforeThreat > 0 && removed === beforeThreat,
+          })),
+        );
       delete s.flags.additionalThwartPacket;
       break;
     }
@@ -13607,7 +14795,8 @@ function resolve(s: GameState, e: Effect) {
       } else if (e.target === "hero") readyIdentity(s);
       else {
         const p = find(s, e.target);
-        if (p) p.exhausted = false;
+        if (p && nova.novaCanReadyPiece(s, p, { isTextBlank }))
+          p.exhausted = false;
       }
       break;
     case "discardHand":
@@ -13825,12 +15014,101 @@ function resolve(s: GameState, e: Effect) {
         e.overpaid || 0,
         e.paidForCard,
         !!e.fromDeck,
+        e.generatedForCard,
+        e.novaDamageContext,
       );
       break;
     case "commitPaymentAllocation":
       s.prompt = e.payment;
-      pay(s, e.ids, e.wildAs, e.paidForCard);
+      pay(s, e.ids, e.wildAs, e.paidForCard, e.generatedForCard);
       break;
+    case "niNativeLeaveWindow": {
+      if (
+        !find(s, e.receipt.pieceId) ||
+        s.flags[`niLeaveComplete:${e.receipt.token}`]
+      )
+        break;
+      const next = { ...e, index: e.index + 1, actorId: e.originalActorId };
+      if (e.index >= e.players.length) {
+        add(
+          s,
+          E("niNativeLeaveCommit", {
+            receipt: e.receipt,
+            actorId: e.originalActorId,
+          }),
+        );
+        break;
+      }
+      const playerId = e.players[e.index];
+      const effects = niPack.novaIronheartPackLeaveInterrupt(
+        seatView(s, playerId),
+        e.receipt,
+        niPackPorts,
+        [next],
+      );
+      if (effects)
+        add(s, ...effects.map((q: Effect) => ({ ...q, actorId: playerId })));
+      else add(s, next);
+      break;
+    }
+    case "niNativeLeaveCommit":
+      if (
+        find(s, e.receipt.pieceId) &&
+        !s.flags[`niLeaveComplete:${e.receipt.token}`]
+      ) {
+        s.flags[`niLeaveComplete:${e.receipt.token}`] = true;
+        s.flags[`niLeaveCommitted:${e.receipt.pieceId}`] = true;
+        movePieceFromPlay(s, e.receipt.pieceId, false);
+      }
+      break;
+    case "niNativePlayed":
+      add(
+        s,
+        ...(niPack.novaIronheartPackCardPlayed(s, e.receipt, niPackPorts) ||
+          []),
+      );
+      break;
+    case "niNativeReactionCommit":
+      add(s, ...e.after);
+      play(
+        s,
+        e.piece,
+        e.paid || [],
+        undefined,
+        undefined,
+        undefined,
+        false,
+        e.overpaid || 0,
+        e.paidForCard,
+        false,
+        e.generatedForCard,
+        e.context,
+      );
+      break;
+    case "niNativeDamageReceipt": {
+      const p = find(s, e.snapshot.id);
+      const defeated =
+        e.performed &&
+        (e.snapshot.stage !== undefined
+          ? s.villain.stage !== e.snapshot.stage
+          : !p);
+      const damageReceipt = {
+        target: e.snapshot.id,
+        damageDealt: e.result.damageDealt,
+        actualDamage: e.result.actualDamage,
+        excessDamage: e.result.excessDamage,
+        defeated: !!defeated,
+      };
+      add(
+        s,
+        ...e.after.map((q: Effect) => ({
+          ...q,
+          damageReceipt,
+          defeatedEnemy: !!defeated,
+        })),
+      );
+      break;
+    }
     case "restorePaymentPrompt":
       s.prompt = e.payment;
       s.queue = e.queue;
@@ -14310,7 +15588,68 @@ function resolve(s: GameState, e: Effect) {
         e.visionPackMachineAction === (attack ? "attack" : "thwart")
           ? Number(e.visionPackMachineBonus || 0)
           : 0);
-      if (attack)
+      if (
+        attack &&
+        p.code === "29033" &&
+        !isTextBlank(s, p) &&
+        !p.stunned &&
+        !e.bombshellPackets
+      ) {
+        const divisions = niPack.novaIronheartPackBombshellDivisions(
+          amount,
+          [s.villain, ...s.minions].map((q) => q.id),
+        );
+        choose(
+          s,
+          "Bombshell",
+          "Divide this attack's damage as evenly as possible among every enemy.",
+          divisions.map((d) =>
+            option(
+              d.id,
+              d.allocations
+                .map(
+                  (a) =>
+                    `${find(s, a.target) ? card(find(s, a.target)!).name : "Enemy"}: ${a.amount}`,
+                )
+                .join(" · "),
+              [{ ...e, bombshellPackets: d.allocations, amount }],
+              undefined,
+              p.code,
+            ),
+          ),
+        );
+        break;
+      }
+      if (attack && e.bombshellPackets) {
+        const program = `program${s.nextId++}`;
+        s.currentAttackProgramId = program;
+        const previousDefer = s.flags.waspDeferDefeats;
+        s.flags.waspDeferDefeats = true;
+        try {
+          for (const packet of e.bombshellPackets)
+            if (packet.amount > 0)
+              attackAction(
+                s,
+                packet.target,
+                packet.amount,
+                p.id,
+                !!e.overkill,
+                false,
+                { initiated: true, piercing: e.piercing, ranged: e.ranged },
+              );
+        } finally {
+          s.flags.waspDeferDefeats = previousDefer;
+        }
+        for (const enemy of [...s.minions].filter(
+          (q) => q.damage >= pieceHP(s, q),
+        ))
+          defeatCharacter(s, enemy, p.id, true);
+        if (s.villain.hp <= 0) advanceVillain(s, p.id, true);
+        add(
+          s,
+          E("attackProgramEnd", { id: program, attackProgramId: program }),
+        );
+      } else if (attack)
         attackAction(s, e.target, amount, p.id, !!e.overkill, false, {
           piercing: e.piercing,
           ranged: e.ranged,
@@ -14355,6 +15694,21 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "allyResponse": {
+      add(
+        s,
+        ...(niPack.novaIronheartPackPowerResponses(
+          s,
+          {
+            token: e.sinisterPowerToken || `ally-basic:${s.nextId++}`,
+            playerId: s.activePlayerId,
+            sourceId: e.id,
+            power: e.attack ? "attack" : "thwart",
+            performed: true,
+            hero: false,
+          },
+          niPackPorts,
+        ) || []),
+      );
       const p = find(s, e.id);
       if (!p) break;
       add(
@@ -14752,7 +16106,7 @@ function resolve(s: GameState, e: Effect) {
       }
       break;
     case "enemyAttack":
-      enemyAttack(s, e.id, e.extra);
+      enemyAttack(s, e.id, e.extra, e.activation, e.originalTarget);
       break;
     case "sinisterNativePlayed":
       add(
@@ -15204,7 +16558,7 @@ function resolve(s: GameState, e: Effect) {
       if (s.attack && e.keyword === "piercing") s.attack.piercing = true;
       break;
     case "enemyScheme":
-      enemyScheme(s, e.id, e.extra);
+      enemyScheme(s, e.id, e.extra, e.activation);
       break;
     case "defensePrompt":
       choose(
@@ -15546,7 +16900,12 @@ function resolve(s: GameState, e: Effect) {
         const prevented = Math.min(
           Math.max(0, a.base - a.defense - a.prevented),
           nebula.nebulaAttackDamageReduction(s) +
-            vision.visionAttackDamageReduction(s),
+            vision.visionAttackDamageReduction(s) +
+            niPack.novaIronheartPackAttackDamageReduction(
+              s,
+              "hero",
+              niPackPorts,
+            ),
         );
         a.prevented += prevented;
         a.nebulaDamageHandled = true;
@@ -15596,7 +16955,12 @@ function resolve(s: GameState, e: Effect) {
         const prevented = Math.min(
           excess,
           nebula.nebulaAttackDamageReduction(s) +
-            vision.visionAttackDamageReduction(s),
+            vision.visionAttackDamageReduction(s) +
+            niPack.novaIronheartPackAttackDamageReduction(
+              s,
+              "hero",
+              niPackPorts,
+            ),
         );
         a.identityPrevented = (a.identityPrevented || 0) + prevented;
         a.nebulaOverkillHandled = true;
@@ -15633,6 +16997,19 @@ function resolve(s: GameState, e: Effect) {
           );
       }
       const opts = [
+        ...(!(heroTarget ? s.player.tough : find(s, damageTarget)?.tough)
+          ? niNativeDamageOptions(
+              s,
+              {
+                type: "attackDamage",
+                kind: "attack",
+                target: heroTarget ? "hero" : damageTarget,
+                attack: true,
+                amount: Math.max(0, a.base - a.defense - a.prevented),
+              },
+              [E("damageWindow")],
+            )
+          : []),
         option(
           "resolve",
           `Resolve ${Math.max(0, a.base - a.defense - a.prevented)} damage`,
@@ -15823,6 +17200,20 @@ function resolve(s: GameState, e: Effect) {
                   (a.identityPrevented || 0),
               )
             : 0;
+        if (!s.player.tough)
+          opts.unshift(
+            ...niNativeDamageOptions(
+              s,
+              {
+                type: "attackDamage",
+                kind: "overkill",
+                target: "hero",
+                attack: true,
+                amount: excess,
+              },
+              [E("damageWindow")],
+            ),
+          );
         if (!s.player.tough)
           opts.unshift(
             ...warmPackDamageOptions(
@@ -16088,6 +17479,24 @@ function resolve(s: GameState, e: Effect) {
     }
     case "defenseResponses": {
       s.attack = null;
+      if (e.snapshot?.basicDefense && !e.novaBasicHandled) {
+        add(
+          s,
+          ...nova.novaAfterBasicPower(
+            s,
+            {
+              token: `basic:${s.nextId++}`,
+              playerId: e.snapshot.playerId,
+              power: "defense",
+              performed: true,
+              wasHero: true,
+            },
+            novaPorts,
+          ),
+          { ...e, novaBasicHandled: true },
+        );
+        break;
+      }
       if (e.snapshot?.basicDefense && !e.ghostBasicReceipt)
         e.ghostBasicReceipt = {
           token: `basic:${s.nextId++}`,
@@ -16483,6 +17892,7 @@ function resolve(s: GameState, e: Effect) {
         villainSetup(s);
       break;
     case "beginTurn":
+      add(s, ...niPack.novaIronheartPackTurnBegan(s, s.activePlayerId));
       s.turnPlayerId = s.activePlayerId;
       log(s, `${heroCard(s).name} takes their turn.`, "phase");
       add(s, ...captainPackTurnStart(s));
@@ -16532,7 +17942,7 @@ function resolve(s: GameState, e: Effect) {
       }
       antPack.antManPackPhaseEnded(s);
       for (const p of s.player.inPlay) {
-        p.exhausted = false;
+        if (nova.novaCanReadyPiece(s, p, { isTextBlank })) p.exhausted = false;
         p.bonusAtk = 0;
         p.bonusThw = 0;
       }
@@ -16543,6 +17953,7 @@ function resolve(s: GameState, e: Effect) {
       log(s, `${heroCard(s).name} and their cards are ready.`, "phase");
       break;
     case "beginVillain":
+      niPack.novaIronheartPackPhaseEnded(s);
       warmPack.warMachinePackPhaseEnded(s, warMachinePackPorts);
       warMachine.warMachinePhaseEnded(s);
       if (!e.starLordBlazeEnded) {
@@ -16588,7 +17999,7 @@ function resolve(s: GameState, e: Effect) {
     case "villainStepOne":
       log(
         s,
-        `Place ${escalation(s)} threat for ${s.playerCount} starting hero(es), plus ${s.encounter.acceleration + s.sideSchemes.reduce((n, p) => n + (card(p).scheme_acceleration || 0) + Number(p.accelerationTokens || 0), 0)} acceleration.`,
+        `Place ${escalation(s)} threat for ${s.playerCount} starting hero(es), plus ${s.encounter.acceleration + s.sideSchemes.reduce((n, p) => n + (card(p).scheme_acceleration || 0) + ironheart.ironheartSchemeIcons(s, p, { isTextBlank }).acceleration + Number(p.accelerationTokens || 0), 0)} acceleration.`,
         "bad",
       );
       add(
@@ -16602,6 +18013,8 @@ function resolve(s: GameState, e: Effect) {
               (n, p) =>
                 n +
                 (card(p).scheme_acceleration || 0) +
+                ironheart.ironheartSchemeIcons(s, p, { isTextBlank })
+                  .acceleration +
                 Number(p.accelerationTokens || 0),
               0,
             ),
@@ -16673,7 +18086,13 @@ function resolve(s: GameState, e: Effect) {
       const hazard =
         sinisterPlayerPack.sinisterPlayerPackHazards(s) +
         (card(s.scheme.code).scheme_hazard || 0) +
-        s.sideSchemes.reduce((n, p) => n + (card(p).scheme_hazard || 0), 0);
+        s.sideSchemes.reduce(
+          (n, p) =>
+            n +
+            (card(p).scheme_hazard || 0) +
+            ironheart.ironheartSchemeIcons(s, p, { isTextBlank }).hazard,
+          0,
+        );
       for (let i = 0; i < hazard; i++)
         dealEncounter(s, order[i % order.length].id);
       log(
@@ -16696,6 +18115,18 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "newRound": {
+      if (!e.ironheartEnded) {
+        const ended = ironheart.ironheartVillainPhaseEnded(s, ironheartPorts);
+        if (ended.length) {
+          add(s, ...ended, { ...e, ironheartEnded: true });
+          break;
+        }
+      }
+      nova.novaRoundEnded(s);
+      niPack.novaIronheartPackPhaseEnded(s);
+      niPack.novaIronheartPackRoundEnded(s);
+      syncValkyrieConvertedCards(s);
+      syncVillainTextHealth(s);
       warMachine.warMachinePhaseEnded(s);
       if (!e.draxPackRegroupEnded) {
         const expired = draxPack.draxPackRoundEnded(s);
@@ -16751,7 +18182,11 @@ function resolve(s: GameState, e: Effect) {
           nemesis: s.flags.nemesis || false,
           ...Object.fromEntries(
             Object.entries(s.flags).filter(
-              ([key]) => key.startsWith("valkyrie") || key.startsWith("vision"),
+              ([key]) =>
+                key.startsWith("valkyrie") ||
+                key.startsWith("vision") ||
+                key.startsWith("nova") ||
+                key.startsWith("ironheart"),
             ),
           ),
           ...(s.heroId === "warm"
@@ -16804,7 +18239,11 @@ function resolve(s: GameState, e: Effect) {
         `Round ${s.round} · ${heroCard(s).name} holds the first-player token.`,
         "phase",
       );
-      add(s, ...nebula.nebulaTurnBegan(s, s.turnPlayerId, nebulaPorts));
+      add(
+        s,
+        ...nebula.nebulaTurnBegan(s, s.turnPlayerId, nebulaPorts),
+        ...niPack.novaIronheartPackTurnBegan(s, s.turnPlayerId),
+      );
       break;
     }
     case "lead":

@@ -250,6 +250,9 @@ export interface GameState {
     form: "hero" | "alter";
     /** Three-sided identities retain their selected hero face through saves. */
     heroForm?: "tiny" | "giant";
+    /** Ironheart's current physical identity. Its two other physical versions
+     * remain set aside and swap with this instance without leaving play. */
+    ironheartIdentity?: Piece;
     hp: number;
     exhausted: boolean;
     flipped: boolean;

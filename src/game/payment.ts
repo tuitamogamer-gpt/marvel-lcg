@@ -12,6 +12,12 @@ import { spectrumResourceSources } from "./spectrum.js";
 import { warlockResourceSources } from "./warlock.js";
 import { warMachineResourceSources } from "./war-machine.js";
 import { visionResourceSources } from "./vision.js";
+import { novaPaymentResources, novaResourceSources } from "./nova.js";
+import { ironheartResourceSources } from "./ironheart.js";
+import {
+  novaIronheartPackCanShareResource,
+  novaIronheartPackResourceSources,
+} from "./nova-ironheart-pack.js";
 import { warMachinePackResourceSources } from "./war-machine-pack.js";
 import { mtsPlayerPackCardResources } from "./mts-player-pack.js";
 import { isTextBlank } from "./card-text.js";
@@ -147,6 +153,9 @@ function localPaymentSources(
   sources.push(...warMachineResourceSources(s, targetCode, { isTextBlank }));
   sources.push(...warMachinePackResourceSources(s, { isTextBlank }));
   sources.push(...visionResourceSources(s, { isTextBlank }));
+  sources.push(...novaResourceSources(s, { isTextBlank }));
+  sources.push(...ironheartResourceSources(s, targetCode, { isTextBlank }));
+  sources.push(...novaIronheartPackResourceSources(s, { isTextBlank }));
   sources.push(...hawkeyeResourceSources(s, targetCode));
   sources.push(...spiderWomanResourceSources(s, targetCode));
   sources.push(...blackWidowResourceSources(s, targetCode));
@@ -170,12 +179,23 @@ function localPaymentSources(
         kind: "ability",
       });
   }
-  return sources.filter(
-    (x) =>
-      x.resources.length &&
-      (!handOnly || x.kind === "card") &&
-      (x.kind === "card" || !isTextBlank(s, x.code)),
-  );
+  return sources
+    .filter(
+      (x) =>
+        x.resources.length &&
+        (!handOnly || x.kind === "card") &&
+        (x.kind === "card" || !isTextBlank(s, x.code)),
+    )
+    .map((source) => ({
+      ...source,
+      // These printed modifiers apply to every generated wild, including
+      // resource abilities, once for this payment's actual target card.
+      resources: novaPaymentResources(
+        targetCode,
+        source.resources,
+        !!targetCode && isTextBlank(s, targetCode),
+      ),
+    }));
 }
 
 /** An Alliance payment may use resources from any surviving player. Local
@@ -188,20 +208,33 @@ export function paymentSources(
   alliance = false,
 ): PaymentSource[] {
   const sources = localPaymentSources(s, exclude, targetCode, handOnly);
-  if (!alliance) return sources;
   for (const seat of playerOrder(s)) {
     if (seat.id === s.activePlayerId) continue;
     const view = seatView(s, seat);
     sources.push(
-      ...localPaymentSources(view, exclude, targetCode, handOnly).map(
-        (source) => ({
+      ...localPaymentSources(view, exclude, targetCode, handOnly)
+        .filter(
+          (source) =>
+            alliance ||
+            (source.kind === "card" &&
+              novaIronheartPackCanShareResource(
+                view,
+                { code: source.code } as Piece,
+                {
+                  identityHasTrait: (state, trait) =>
+                    (heroCard(state).traits || "")
+                      .split(/\.\s*/)
+                      .includes(trait),
+                },
+              )),
+        )
+        .map((source) => ({
           ...source,
           id: `alliance:${seat.id}:${source.id}`,
           localId: source.id,
           playerId: seat.id,
           name: `${heroCard(view).name} · ${source.name}`,
-        }),
-      ),
+        })),
     );
   }
   return sources;
@@ -440,4 +473,93 @@ export function paidResourceAllocations(
       a.join(":").localeCompare(b.join(":"))
     );
   });
+}
+
+/** Keep generated wild provenance alongside the resources actually allocated
+ * to the cost. Generating an extra wild does not mean that wild paid the cost. */
+export function generatedResourceAllocations(
+  printed: Resource[],
+  cost: number,
+  requirements: Resource[] = [],
+  wildAs: Resource = "energy",
+): { paid: Resource[]; generated: Resource[]; spent: Resource[] }[] {
+  const types: Resource[] = ["energy", "mental", "physical", "wild"];
+  const initial = types.map((type) => printed.filter((r) => r === type).length);
+  type Pair = { generated: Resource; paid: Resource };
+  let assignments: { counts: number[]; pairs: Pair[] }[] = [
+    { counts: initial, pairs: [] },
+  ];
+  // Requirements constrain the WHOLE SPEND, including excess generation. Keep
+  // each wildcard's compulsory type before choosing which resources pay cost.
+  for (const required of requirements) {
+    const next: typeof assignments = [];
+    for (const assignment of assignments) {
+      for (const generated of new Set<Resource>([required, "wild"])) {
+        const index = types.indexOf(generated);
+        if (!assignment.counts[index]) continue;
+        const counts = [...assignment.counts];
+        counts[index]--;
+        next.push({
+          counts,
+          pairs: [...assignment.pairs, { generated, paid: required }],
+        });
+      }
+    }
+    assignments = next;
+  }
+  const results = new Map<
+    string,
+    { paid: Resource[]; generated: Resource[]; spent: Resource[] }
+  >();
+  const order = (resources: Resource[]) =>
+    [...resources].sort((a, b) => types.indexOf(a) - types.indexOf(b));
+  for (const assignment of assignments) {
+    const pairs = [
+      ...assignment.pairs,
+      ...types.flatMap((type, index) =>
+        Array.from({ length: assignment.counts[index] }, () => ({
+          generated: type,
+          paid: type === "wild" ? wildAs : type,
+        })),
+      ),
+    ];
+    const groups = new Map<string, { pair: Pair; count: number }>();
+    for (const pair of pairs) {
+      const key = `${pair.generated}:${pair.paid}`;
+      const group = groups.get(key);
+      if (group) group.count++;
+      else groups.set(key, { pair, count: 1 });
+    }
+    const options = [...groups.values()];
+    function visit(
+      index: number,
+      remaining: number,
+      paid: Resource[],
+      generated: Resource[],
+    ) {
+      if (index === options.length) {
+        if (remaining) return;
+        const allocation = {
+          paid: order(paid),
+          generated: order(generated),
+          spent: order(pairs.map((pair) => pair.paid)),
+        };
+        results.set(
+          `${allocation.paid.join(":")}|${allocation.generated.join(":")}`,
+          allocation,
+        );
+        return;
+      }
+      const group = options[index];
+      for (let count = 0; count <= Math.min(remaining, group.count); count++)
+        visit(
+          index + 1,
+          remaining - count,
+          [...paid, ...Array<Resource>(count).fill(group.pair.paid)],
+          [...generated, ...Array<Resource>(count).fill(group.pair.generated)],
+        );
+    }
+    if (cost >= 0 && printed.length >= cost) visit(0, cost, [], []);
+  }
+  return [...results.values()];
 }

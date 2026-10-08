@@ -1,4 +1,4 @@
-import { defenseEventSources } from "./card-text.js";
+import { defenseEventSources, isTextBlank } from "./card-text.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, playerOrder, seatView } from "./team.js";
 import { consumeStatus } from "./keywords.js";
@@ -82,6 +82,7 @@ export function gamoraIdentityBlank(s: GameState): boolean {
     s.attachments.some(
       (p) =>
         p.code === "18027" &&
+        !isTextBlank(s, p) &&
         ["hero", `hero:${s.activePlayerId}`].includes(p.attachedTo || ""),
     )
   );
@@ -89,7 +90,9 @@ export function gamoraIdentityBlank(s: GameState): boolean {
 export function gamoraCanRemoveThreat(s: GameState, target: string): boolean {
   return (
     active(s) ||
-    !s.sideSchemes.some((p) => p.id === target && p.code === "18025")
+    !s.sideSchemes.some(
+      (p) => p.id === target && p.code === "18025" && !isTextBlank(s, p),
+    )
   );
 }
 function schemes(

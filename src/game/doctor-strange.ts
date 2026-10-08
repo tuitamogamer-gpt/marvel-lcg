@@ -1,4 +1,4 @@
-import { eventPlaySources } from "./card-text.js";
+import { eventPlaySources, isTextBlank } from "./card-text.js";
 import { defenseEventSources } from "./card-text.js";
 import { printedCardMetadata } from "./printed-card-metadata.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
@@ -374,7 +374,7 @@ export function doctorStrangeBeforeEvent(
   p: Piece,
   after: Effect[],
 ): Effect[] {
-  const counter = attached(s, "09030")[0];
+  const counter = attached(s, "09030").find((p) => !isTextBlank(s, p));
   if (counter && s.flags[`ghostEvent:${p.id}`])
     s.flags[`ghostCancelled:${p.id}`] = true;
   return counter ? [E("discardPiece", { id: counter.id })] : after;
@@ -879,6 +879,7 @@ export function doctorStrangeSchemeDefeated(
   ports: DoctorStrangePorts,
 ) {
   if (p.code !== "09029") return;
+  const blank = isTextBlank(s, p);
   const held = p.storedCards?.splice(0) || [];
   for (const invocation of held) {
     const owner = s.players.find(
@@ -890,6 +891,13 @@ export function doctorStrangeSchemeDefeated(
     }
     const view = seatView(s, owner),
       z = zones(view);
+    if (blank) {
+      // Generic leave-play discard still uses the Invocation discard pile.
+      // Only the scheme's printed return-to-deck response is suppressed.
+      (z.invocationDiscard ||= []).push(resetInvocation(invocation));
+      recycleInvocations(s, ports, owner.id);
+      continue;
+    }
     z.invocationDeck = ports.shuffle(s, [
       ...(z.invocationDeck || []),
       resetInvocation(invocation),

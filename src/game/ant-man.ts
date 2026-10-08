@@ -1,4 +1,5 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
+import { isTextBlank } from "./card-text.js";
 import { allInPlay, playerOrder, seatView } from "./team.js";
 import { consumeStatus } from "./keywords.js";
 import type {
@@ -135,20 +136,34 @@ export function antManEnemyStats(s: GameState, p: Piece) {
     ).length * 2;
   return {
     attack:
-      increase + (p.code === "12027" && engagedForm(s, p) === "tiny" ? 1 : 0),
+      increase +
+      (p.code === "12027" && !isTextBlank(s, p) && engagedForm(s, p) === "tiny"
+        ? 1
+        : 0),
     scheme: increase,
   };
 }
 export function antManEnemyTraits(s: GameState, p: Piece): string[] {
-  const form = p.code === "12027" ? engagedForm(s, p) : undefined;
+  const form =
+    p.code === "12027" && !isTextBlank(s, p) ? engagedForm(s, p) : undefined;
   return form === "giant" ? ["Giant"] : form === "tiny" ? ["Tiny"] : [];
 }
 export function antManEnemyRetaliate(s: GameState, p: Piece): number {
-  return p.code === "12027" && engagedForm(s, p) === "giant" ? 1 : 0;
+  return p.code === "12027" &&
+    !isTextBlank(s, p) &&
+    engagedForm(s, p) === "giant"
+    ? 1
+    : 0;
 }
 export function antManEnemyActivated(s: GameState, id: string): Effect[] {
   return s.attachments
-    .filter((p) => p.code === "12028" && p.attachedTo === id && p.counters > 0)
+    .filter(
+      (p) =>
+        p.code === "12028" &&
+        p.attachedTo === id &&
+        p.counters > 0 &&
+        !isTextBlank(s, p),
+    )
     .map((p) => A("increase-used", { id: p.id, enemyId: id }));
 }
 /** Call at every player's turn boundary, before changing turnPlayerId. */
@@ -812,7 +827,7 @@ export function resolveAntManEffect(
         (p) =>
           p.id === e.id && p.code === "12028" && p.attachedTo === e.enemyId,
       );
-      if (p && p.counters > 0 && --p.counters === 0)
+      if (p && !isTextBlank(s, p) && p.counters > 0 && --p.counters === 0)
         ports.discardPiece(s, p.id);
       break;
     }

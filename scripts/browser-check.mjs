@@ -137,9 +137,17 @@ try {
   assert.equal(
     await page
       .locator(".hero-tile")
-      .filter({ hasText: "Spider-Man" })
+      .filter({ hasText: "Peter Parker" })
       .isDisabled(),
     true,
+  );
+  assert.equal(
+    await page
+      .locator(".hero-tile")
+      .filter({ hasText: "Miles Morales" })
+      .isDisabled(),
+    false,
+    "Miles Morales remains a distinct eligible identity when Peter Parker is assigned",
   );
   await page
     .locator(".aspect-option")

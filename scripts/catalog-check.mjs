@@ -439,7 +439,12 @@ try {
     true,
   );
   await fit("lobby-1440", 1440);
-  await page.locator(".hero-tile").filter({ hasText: "Spider-Man" }).click();
+  await page.locator(".hero-tile").filter({ hasText: "Peter Parker" }).click();
+  assert.match(
+    await page.locator(".hero-tile.selected").innerText(),
+    /Peter Parker/,
+    "The selected Spider-Man is Peter Parker rather than Miles Morales",
+  );
   await page.getByRole("button", { name: "2 heroes", exact: true }).click();
   await openCatalog();
   await selectHero("Captain Marvel");

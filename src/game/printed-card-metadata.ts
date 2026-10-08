@@ -1,6 +1,8 @@
 import type { Card } from "./types.js";
 
-type PrintedMetadata = Readonly<Partial<Pick<Card, "attack" | "boost">>>;
+type PrintedMetadata = Readonly<
+  Partial<Pick<Card, "attack" | "boost" | "is_unique" | "subname">>
+>;
 
 /** Missing fields verified against the original English card scans. These are
  * printing metadata, not text errata. Keep the downloaded catalog unchanged.
@@ -20,6 +22,12 @@ const printedMetadata: Readonly<Record<string, PrintedMetadata>> = {
   "19029": { boost: 2 },
   // public/cards/catalog/22030.webp: printed +1 ATK icon below the text box.
   "22030": { attack: 1 },
+  // Original Version 1 hero face has the unique diamond before Ironheart.
+  // https://hallofheroeslcg.com/wp-content/uploads/2022/05/i0d.jpg
+  "29001a": { is_unique: true },
+  // The Wasp-pack ally's printed secondary title is RIRI WILLIAMS.
+  // https://hallofheroeslcg.com/wp-content/uploads/2020/12/a8.jpg
+  "13018": { subname: "Riri Williams" },
 };
 
 /** Return a playable face with verified printing fields, without mutating its

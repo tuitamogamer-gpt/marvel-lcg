@@ -26,15 +26,17 @@ const audited = new Map(
 );
 
 describe("complete expansion rules inventory", () => {
-  it("records scan-verified printed numeric metadata separately from text errata", () => {
+  it("records scan-verified printed metadata separately from text errata", () => {
     const corrections = inventory.runtimeMetadataCorrections;
     expect(corrections.map((entry: { code: string }) => entry.code)).toEqual([
+      "13018",
       "19025",
       "19026",
       "19027",
       "19028",
       "19029",
       "22030",
+      "29001a",
     ]);
     for (const [code, boost] of [
       ["19025", 2],
@@ -66,6 +68,18 @@ describe("complete expansion rules inventory", () => {
       corrections.find((entry: { code: string }) => entry.code === "22030")
         .changes,
     ).toEqual([{ field: "attack", imported: null, runtime: 1 }]);
+    expect(
+      corrections.find((entry: { code: string }) => entry.code === "13018"),
+    ).toMatchObject({
+      url: "https://hallofheroeslcg.com/wp-content/uploads/2020/12/a8.jpg",
+      changes: [{ field: "subname", imported: null, runtime: "Riri Williams" }],
+    });
+    expect(
+      corrections.find((entry: { code: string }) => entry.code === "29001a"),
+    ).toMatchObject({
+      url: "https://hallofheroeslcg.com/wp-content/uploads/2022/05/i0d.jpg",
+      changes: [{ field: "is_unique", imported: false, runtime: true }],
+    });
     expect(
       corrections.some((entry: { code: string }) =>
         entry.code.startsWith("20"),
@@ -208,10 +222,10 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(1260);
-    expect(coverage.unsupportedFaces).toBe(3291);
-    expect(coverage.dedicatedFaces).toBe(786);
-    expect(coverage.registeredHeroIds).toHaveLength(31);
+    expect(coverage.executableFaces).toBe(1321);
+    expect(coverage.unsupportedFaces).toBe(3230);
+    expect(coverage.dedicatedFaces).toBe(848);
+    expect(coverage.registeredHeroIds).toHaveLength(33);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
         coverage.registeredHeroes.some(
@@ -291,7 +305,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(76);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(79);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

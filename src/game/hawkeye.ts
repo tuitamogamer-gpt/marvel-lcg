@@ -1,4 +1,5 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
+import { isTextBlank } from "./card-text.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { consumeStatus } from "./keywords.js";
 import type { PaymentSource } from "./payment.js";
@@ -155,9 +156,9 @@ export function hawkeyeAllyAttackTraits(p: Piece) {
 }
 export function hawkeyeEnemyAttackTraits(s: GameState, p: Piece) {
   return {
-    piercing: p.code === "04027",
+    piercing: p.code === "04027" && !isTextBlank(s, p),
     ranged: s.attachments.some(
-      (x) => x.code === "04029" && x.attachedTo === p.id,
+      (x) => x.code === "04029" && x.attachedTo === p.id && !isTextBlank(s, x),
     ),
   };
 }

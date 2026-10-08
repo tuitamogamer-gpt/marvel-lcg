@@ -1,4 +1,5 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
+import { isTextBlank } from "./card-text.js";
 import type {
   Card,
   Effect,
@@ -237,7 +238,10 @@ export function hulkEvent(
 export function hulkThreatLocked(s: GameState, schemeId: string): boolean {
   return (
     s.sideSchemes.some(
-      (scheme) => scheme.id === schemeId && scheme.code === "10027",
+      (scheme) =>
+        scheme.id === schemeId &&
+        scheme.code === "10027" &&
+        !isTextBlank(s, scheme),
     ) && s.minions.some((piece) => piece.code === "10026")
   );
 }
