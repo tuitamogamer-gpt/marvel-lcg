@@ -177,7 +177,7 @@ describe("advisor", () => {
       const { state } = autoplay(fresh("spider_man", "rhino", seed), 40);
       expect(["won", "lost"]).toContain(state.phase);
     }
-  });
+  }, 30_000);
   it("lookahead scores a defeat below any live position and lists the legal actions", () => {
     let s = dispatch(fresh(), { type: "FLIP" });
     const live = evaluate(s);

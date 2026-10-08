@@ -95,6 +95,7 @@ export function deckErrors(
       "warlock",
       "nebu",
       "warm",
+      "valk",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

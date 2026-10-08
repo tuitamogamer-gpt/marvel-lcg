@@ -17,12 +17,14 @@ import * as draxPack from "./drax-pack.js";
 import * as venom from "./venom.js";
 import * as warlock from "./warlock.js";
 import * as warMachine from "./war-machine.js";
+import * as valkyrie from "./valkyrie.js";
 import * as nebula from "./nebula.js";
 import { isPermanent } from "./hero-runtime.js";
 import * as venomPack from "./venom-pack.js";
 import * as mtsPlayerPack from "./mts-player-pack.js";
 import * as nebulaPack from "./nebula-pack.js";
 import * as warmPack from "./war-machine-pack.js";
+import * as valkPack from "./valkyrie-pack.js";
 import { spectrumResourceSpent } from "./spectrum.js";
 import { warlockResourceSpent } from "./warlock.js";
 import * as spectrum from "./spectrum.js";
@@ -836,6 +838,11 @@ function dealEncounter(s: GameState, playerId = s.activePlayerId) {
   }
 }
 function discardPiece(s: GameState, id: string) {
+  const p = find(s, id);
+  need(
+    !p || valkyrie.valkyrieCanDiscardAttachment(s, p),
+    "Powerful Enchantments prevents discarding this attachment.",
+  );
   movePieceFromPlay(s, id, false);
 }
 function removePlayerCard(s: GameState, id: string) {
@@ -848,7 +855,12 @@ function removePlayerCard(s: GameState, id: string) {
 }
 /** Leaving-play cleanup is shared; a removed source never enters a discard
  * pile. Attached and stored cards keep their ordinary native destinations. */
-function movePieceFromPlay(s: GameState, id: string, removed: boolean) {
+function movePieceFromPlay(
+  s: GameState,
+  id: string,
+  removed: boolean,
+  setAsideOwnerId?: string,
+) {
   const controlling = controller(s, id);
   const viewBefore = controlling ? seatView(s, controlling) : s;
   const healthBefore = maxHP(viewBefore);
@@ -883,6 +895,7 @@ function movePieceFromPlay(s: GameState, id: string, removed: boolean) {
   }
   if (!p) return;
   warmPack.warMachinePackCardLeftPlay(s, p);
+  add(s, ...valkyrie.valkyrieAttachmentDiscarded(s, p));
   if (p.code === "13029" && p.attachedTo === s.villain.id) {
     s.villain.maxHp -= 4;
     s.villain.hp -= 4;
@@ -915,7 +928,11 @@ function movePieceFromPlay(s: GameState, id: string, removed: boolean) {
       controlling ||
       s.players.find((x) => x.id === s.activePlayerId)!;
     const discarded = resetPiece(p);
-    if (removed || owner.eliminated) s.removed.push(discarded);
+    if (setAsideOwnerId) {
+      const view = seatView(s, setAsideOwnerId);
+      view.player.setAside ||= [];
+      view.player.setAside.push(discarded);
+    } else if (removed || owner.eliminated) s.removed.push(discarded);
     else seatView(s, owner).player.discard.push(discarded);
     const view = controlling ? seatView(s, controlling) : s;
     if (rulesCode(p) === "01036" && !blankBefore) view.player.hp -= 6;
@@ -924,6 +941,7 @@ function movePieceFromPlay(s: GameState, id: string, removed: boolean) {
     if (
       cardScript(p)?.implementation === "script" ||
       p.code === "16035" ||
+      p.code === "25007" ||
       (p.code === "22035" && p.attachedTo?.startsWith("hero:")) ||
       (p.code === "03025" && p.attachedTo?.startsWith("hero:"))
     )
@@ -957,7 +975,37 @@ function restrictedLimitExceeded(s: GameState) {
   const weaponSlots = venomPack.venomPackRestrictedWeaponAllowance(s);
   return restricted.length - Math.min(weapons, weaponSlots) > general;
 }
+function nativeIdentityDamageSource(s: GameState, source: string) {
+  if (source === "hero" || source === "audacity")
+    return `hero:${s.activePlayerId}`;
+  if (source.startsWith("hero:")) return source;
+  const p = find(s, source);
+  if (p && card(p).type_code === "upgrade") {
+    const seat = controller(s, p.id);
+    return seat ? `hero:${seat.id}` : undefined;
+  }
+  const event = s.resolving.find(
+    (p) =>
+      (p.id === source || p.code === source) && card(p).type_code === "event",
+  );
+  return event?.ownerId ? `hero:${event.ownerId}` : undefined;
+}
+function syncValkyrieConvertedCards(s: GameState) {
+  for (const p of s.minions) {
+    if (valkyrie.valkyrieBeguiledEnemy(s, p)) p.treatedAsMinion = true;
+    else delete p.treatedAsMinion;
+  }
+  for (const seat of s.players)
+    for (const p of [
+      ...seatView(s, seat).player.inPlay,
+      ...seatView(s, seat).player.discard,
+      ...seatView(s, seat).player.deck,
+      ...seatView(s, seat).player.hand,
+    ])
+      delete p.treatedAsMinion;
+}
 function check(s: GameState) {
+  syncValkyrieConvertedCards(s);
   // Simultaneous Spectrum batches place every prepared packet before checking
   // hero elimination. This flag exists only during the synchronous commit.
   if (
@@ -1618,7 +1666,7 @@ function applyDamage(
     log(s, `${card(s.villain).name} takes ${n} damage.`, "good");
     if (s.villain.hp <= 0) {
       if (s.flags.waspDeferDefeats) return result;
-      advanceVillain(s);
+      advanceVillain(s, source, attack);
       return result;
     }
     if (villainAt(s, "01152").length)
@@ -1739,6 +1787,7 @@ function defeatCharacter(
   attack = false,
   interrupted = false,
   enemyAttack = false,
+  valkyrieReceipts?: valkyrie.ValkyrieDefeatReceipt[],
 ) {
   if (m.pendingDefeat && !interrupted) return true;
   if (!interrupted && thorPreventsDefeat(s, m, thorPorts)) return false;
@@ -1788,6 +1837,29 @@ function defeatCharacter(
     return false;
   }
   const minion = s.minions.some((x) => x.id === m.id);
+  const receipts =
+    valkyrieReceipts ??
+    (minion
+      ? valkyrie.valkyrieDefeatReceipt(s, m.id, {
+          identityId: nativeIdentityDamageSource(s, source),
+          attack,
+        })
+      : []);
+  if (receipts.length && valkyrieReceipts === undefined) {
+    m.pendingDefeat = true;
+    add(
+      s,
+      ...receipts.flatMap((r) => valkyrie.valkyrieEnemyDefeatInterrupt(s, r)),
+      E("finishDefeat", {
+        id: m.id,
+        source,
+        attack,
+        enemyAttack,
+        valkyrieReceipts: receipts,
+      }),
+    );
+    return true;
+  }
   const tracers = allInPlay(s).filter(
     (a) =>
       rulesCode(a) === "01007" && a.attachedTo === m.id && !isTextBlank(s, a),
@@ -1833,6 +1905,12 @@ function defeatCharacter(
         ...e,
         mandatory: false,
       })),
+      ...valkPack.valkyriePackMinionDefeated(
+        s,
+        identitySource,
+        s.activePlayerId,
+        valkyriePackPorts,
+      ),
     );
     track(s, "enemiesDefeated", 1);
     add(s, ...wasp.waspDefeated(s, "minion", source, s.currentEventId, attack));
@@ -1882,9 +1960,30 @@ function defeatCharacter(
     if (tigra && rulesCode(tigra) === "01051")
       tigra.damage = Math.max(0, tigra.damage - 1);
   }
+  add(s, ...receipts.flatMap((r) => valkyrie.valkyrieEnemyDefeated(s, r)));
   return true;
 }
-function advanceVillain(s: GameState) {
+function advanceVillain(
+  s: GameState,
+  source = "",
+  attack = false,
+  captured?: valkyrie.ValkyrieDefeatReceipt[],
+) {
+  const receipts =
+    captured ??
+    valkyrie.valkyrieDefeatReceipt(s, s.villain.id, {
+      identityId: nativeIdentityDamageSource(s, source),
+      attack,
+    });
+  if (receipts.length && captured === undefined) {
+    add(
+      s,
+      ...receipts.flatMap((r) => valkyrie.valkyrieEnemyDefeatInterrupt(s, r)),
+      E("valkyrieAdvanceVillain", { source, attack, receipts }),
+    );
+    return;
+  }
+  add(s, ...receipts.flatMap((r) => valkyrie.valkyrieEnemyDefeated(s, r)));
   const previousTitle = card(s.villain).name;
   const last = s.difficulty === "expert" ? 3 : 2;
   if (s.villain.stage === last) {
@@ -2148,7 +2247,7 @@ export function targets(
           label: card(p).name,
           code: p.code,
         })),
-      ];
+      ].filter((t) => !attack || valkyrie.valkyrieCanAttackTarget(s, t.id));
     case "minion":
       return s.minions.map((p) => ({
         id: p.id,
@@ -2387,6 +2486,7 @@ function attackAction(
 ) {
   const p = source === "hero" ? s.player : find(s, source);
   if (!p) return;
+  if (source === "hero" && !valkyrie.valkyrieCanAttackTarget(s, target)) return;
   if (p.stunned && !traits.initiated) {
     consumeStatus(p, "stunned");
     if (source === "hero") s.flags.basicAttack = false;
@@ -2676,6 +2776,7 @@ function requestPayment(
       ).length ||
       nebulaPack.nebulaPackResourcesSpent(s, spentResponseCards).length ||
       warmPack.warMachinePackResourcesSpent(s, spentResponseCards).length ||
+      valkPack.valkyriePackResourcesSpent(s, spentResponseCards).length ||
       warMachine.warMachineResourceSources(s, targetCode || piece?.code).length
     ) {
       choose(
@@ -2913,6 +3014,7 @@ function pay(
         spentResponses.push(...nebulaPack.nebulaPackResourcesSpent(s, [spent]));
         spentResponses.push(
           ...warmPack.warMachinePackResourcesSpent(s, [spent]),
+          ...valkPack.valkyriePackResourcesSpent(s, [spent]),
         );
         spentResponses.push(
           ...mtsPlayerPack.mtsPlayerPackResourcesSpent(
@@ -3154,16 +3256,16 @@ export function newGame(config: {
   s.startSeed = s.seed;
   for (const seat of players) {
     activateSeat(s, seat.id);
-    s.player.deck = shuffle(
-      s,
-      (seat.deckCards || deckCodes(seat.heroId, seat.aspect)).map((c) =>
-        makePiece(s, c),
-      ),
+    s.player.deck = (seat.deckCards || deckCodes(seat.heroId, seat.aspect)).map(
+      (c) => makePiece(s, c),
     );
+    valkyrie.valkyrieSetup(s);
+    s.player.deck = shuffle(s, s.player.deck);
     doctorStrangeSetup(s, dsPorts);
     venom.venomInitializeNemesis(s, { makePiece });
     warlock.warlockInitializeNemesis(s, { makePiece });
     warMachine.warMachineInitializeNemesis(s, { makePiece });
+    valkyrie.valkyrieInitializeNemesis(s, { makePiece });
     // Extract the SAME three source-composition IDs before drawing an opening
     // hand. The ordinary40-card deck never contains the setup upgrades.
     for (const effect of spectrum.spectrumSetup(s))
@@ -3349,6 +3451,7 @@ export function playable(s: GameState, p: Piece): string | null {
     venom.venomPlayRestriction(s, p) ||
     warlock.warlockPlayRestriction(s, p) ||
     warMachine.warMachinePlayRestriction(s, p, warMachinePorts) ||
+    valkyrie.valkyriePlayRestriction(s, p, valkyriePorts) ||
     nebula.nebulaPlayRestriction(s, p, nebulaPorts) ||
     spectrum.spectrumPlayRestriction(s, p) ||
     starLordPack.starLordPackPlayRestriction(s, p, starLordPackPorts) ||
@@ -3357,7 +3460,8 @@ export function playable(s: GameState, p: Piece): string | null {
     venomPack.venomPackPlayRestriction(s, p, venomPackPorts) ||
     mtsPlayerPack.mtsPlayerPackPlayRestriction(s, p, mtsPlayerPackPorts) ||
     nebulaPack.nebulaPackPlayRestriction(s, p, nebulaPackPorts) ||
-    warmPack.warMachinePackPlayRestriction(s, p, warMachinePackPorts);
+    warmPack.warMachinePackPlayRestriction(s, p, warMachinePackPorts) ||
+    valkPack.valkyriePackPlayRestriction(s, p, valkyriePackPorts);
   if (antRestriction) return antRestriction;
   const hawkeyeRestriction = hawkeyePlayRestriction(s, p, hawkeyePorts);
   if (hawkeyeRestriction) return hawkeyeRestriction;
@@ -3645,6 +3749,7 @@ function play(
   agilityHandled = false,
   overpaid = 0,
   paidForCard?: Resource[],
+  fromDeck = false,
 ) {
   const c = card(p);
   const agility = !agilityHandled ? spiderWomanCardPlayed(s, c) : [];
@@ -3661,6 +3766,7 @@ function play(
         agilityHandled: true,
         overpaid,
         paidForCard,
+        fromDeck,
       }),
     );
     return;
@@ -3669,13 +3775,19 @@ function play(
   const storedPanther = warmPack
     .warMachinePackStoredPlayable(s, warMachinePackPorts)
     .some((x) => x.id === p.id);
+  const fromSetAside =
+    p.code === "25002" && !!s.player.setAside?.some((x) => x.id === p.id);
   const stored = storedArrow || storedPanther;
   const fromHand = s.player.hand.some((x) => x.id === p.id);
   const zone = fromHand
     ? s.player.hand
-    : msMarvelDiscardPlayable(s, p)
-      ? s.player.discard
-      : s.player.hand;
+    : fromSetAside
+      ? s.player.setAside!
+      : fromDeck
+        ? s.player.deck
+        : msMarvelDiscardPlayable(s, p)
+          ? s.player.discard
+          : s.player.hand;
   const i = zone.findIndex((x) => x.id === p.id);
   need(stored || i >= 0, "Card is no longer available to play.");
   if (storedArrow)
@@ -3758,6 +3870,8 @@ function play(
       ...venomPack.venomPackCardEntered(s, p),
       ...mtsPlayerPack.mtsPlayerPackCardEntered(s, p),
       ...warmPack.warMachinePackCardEntered(s, p),
+      ...valkPack.valkyriePackCardEntered(s, p),
+      ...valkyrie.valkyrieCardEntered(s, p),
       ...nebulaPack
         .nebulaPackCardEntered(s, p)
         .filter((e) => !attachedTarget || e.type !== "nebula-pack:attach"),
@@ -3778,7 +3892,11 @@ function play(
           ]
         : []),
     );
-    if (cardScript(p)?.implementation === "script" || p.code === "16035")
+    if (
+      cardScript(p)?.implementation === "script" ||
+      p.code === "16035" ||
+      p.code === "25007"
+    )
       s.player.hp += maxHP(s) - healthBefore;
     if (["01057", "01065", "01081"].includes(rulesCode(p)) && s.playerCount > 1)
       choosePlayer(
@@ -3913,7 +4031,8 @@ function allyEnter(
       paidForCard,
       nebulaPackPorts,
     ) ??
-    warmPack.warMachinePackAllyEnter(s, p, warMachinePackPorts);
+    warmPack.warMachinePackAllyEnter(s, p, warMachinePackPorts) ??
+    valkPack.valkyriePackAllyEnter(s, p, valkyriePackPorts);
   if (playerPackAlly !== null) {
     add(s, ...playerPackAlly);
     return;
@@ -4052,6 +4171,7 @@ function event(
   warlockDiscarded: Piece[] = [],
   warMachineTarget?: string,
   warMachinePackReceipt: { allyId?: string; amount?: number } = {},
+  valkyriePackReceipt: { amount?: number } = {},
 ) {
   const ant =
     antMan.antManEvent(s, p.code === "13020" ? { ...p, code: "12020" } : p) ??
@@ -4069,6 +4189,7 @@ function event(
     drax.draxEvent(s, p) ??
     venom.venomEvent(s, p, paidForCard ?? paid) ??
     warMachine.warMachineEvent(s, p, warMachineTarget) ??
+    valkyrie.valkyrieEvent(s, p) ??
     warlock.warlockEvent(s, p, warlockDiscarded) ??
     nebula.nebulaEvent(s, p, lightningX ?? 0) ??
     spectrum.spectrumEvent(s, p) ??
@@ -4079,7 +4200,8 @@ function event(
     venomPack.venomPackEvent(s, p) ??
     mtsPlayerPack.mtsPlayerPackEvent(s, p) ??
     nebulaPack.nebulaPackEvent(s, p) ??
-    warmPack.warMachinePackEvent(s, p, warMachinePackReceipt);
+    warmPack.warMachinePackEvent(s, p, warMachinePackReceipt) ??
+    valkPack.valkyriePackEvent(s, p, valkyriePackReceipt);
   if (ant !== null) {
     add(s, ...ant);
     return;
@@ -4470,6 +4592,7 @@ export function abilityOptions(
     ...gamora.gamoraAttachmentActions(s, p, gamoraPorts),
     ...spectrum.spectrumAttachmentOptions(s, p.id, spectrumPorts),
     ...nebula.nebulaAttachmentActions(s, p, nebulaPorts),
+    ...valkyrie.valkyrieAttachmentActions(s, p, valkyriePorts),
   ];
   if (attachmentOptions.length)
     return attachmentOptions.map(({ id, label }) => ({ id, label }));
@@ -4642,6 +4765,24 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   );
 }
 function ability(s: GameState, id: string, action = "special") {
+  if (
+    valkPack.valkyriePackAbility(
+      s,
+      id,
+      valkyriePackPorts,
+      action === "special" ? undefined : action,
+    )
+  )
+    return;
+  if (
+    valkyrie.valkyrieAbility(
+      s,
+      id,
+      valkyriePorts,
+      action === "special" ? undefined : action,
+    )
+  )
+    return;
   if (
     warMachine.warMachineAbility(
       s,
@@ -6631,6 +6772,7 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
       ...venomPack.venomPackCardEntered(s, p),
       ...mtsPlayerPack.mtsPlayerPackCardEntered(s, p),
       ...warmPack.warMachinePackCardEntered(s, p),
+      ...valkPack.valkyriePackCardEntered(s, p),
       ...captainPackCardEntered(s, p),
       ...hulkPackCardEntered(s, p),
       ...msMarvelCardEntered(s, p),
@@ -6658,6 +6800,146 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
     preventNativeIdentityDamage(view, packet, amount);
   },
 };
+const valkyriePackPorts: valkPack.ValkyriePackPorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  hasTrait: captainPackHasTrait,
+  characters: warMachinePackPorts.characters,
+  characterThwart: (s, id) => {
+    if (id.startsWith("hero:")) {
+      const view = seatView(s, id.slice(5));
+      return view.player.form === "hero" ? heroStats(view).thwart : 0;
+    }
+    const p = find(s, id),
+      seat = controller(s, id);
+    return p && seat ? allyStat(seatView(s, seat), p, "thwart") : 0;
+  },
+  exhaustCharacter: warMachinePackPorts.exhaustCharacter,
+  canReady: warMachinePackPorts.canReady,
+  canDiscardPiece: (s, p) =>
+    !isPermanent(card(p)) && valkyrie.valkyrieCanDiscardAttachment(s, p),
+  discardPiece,
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  schemeTargets: (s, thwarting) =>
+    captainThwartBlocked(s) && thwarting
+      ? []
+      : targets(s, "scheme", false, thwarting),
+  heroAttack: (s, target, attacking) =>
+    heroStats(s).attack +
+    (attacking && target
+      ? valkyrie.valkyrieAttackBonusForTarget(s, target)
+      : 0),
+  maxHeroHP: maxHP,
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  canPay: (s, cost, requirements = [], exclude, code, alliance) =>
+    alliance
+      ? canPayAlliance(s, cost, requirements, exclude, code)
+      : canPay(s, cost, requirements, exclude, code),
+  revealHidden,
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  shufflePlayerDeck: (s, after) => warMachinePortsShufflePlayer(s, after),
+  canPutMinion: (s, p) => valkyriePorts.canPutMinion(s, p),
+  putMinion: (s, id, playerId, after) =>
+    valkyriePorts.putMinion(s, id, playerId, after),
+  canPlayDeckAlly: (s, p) => {
+    if (
+      !s.player.deck.some((a) => a.id === p.id) ||
+      card(p).type_code !== "ally"
+    )
+      return false;
+    return !playable(
+      {
+        ...s,
+        prompt: null,
+        review: null,
+        phase: "player",
+        turnPlayerId: s.activePlayerId,
+      },
+      p,
+    );
+  },
+  playDeckAlly: (s, id, after) => {
+    const p = s.player.deck.find((p) => p.id === id);
+    need(
+      p && valkyriePackPorts.canPlayDeckAlly(s, p),
+      "The Bifrost needs its actual playable deck ally.",
+    );
+    const continuation = after.map((e) => effectContext(s, e));
+    requestPayment(
+      s,
+      `The Bifrost · ${card(p!).name}`,
+      cardCost(s, card(p!), p),
+      [E("play", { piece: p, fromDeck: true }), ...continuation],
+      [],
+      p,
+      true,
+      p!.code,
+    );
+    if (s.prompt?.cancelable)
+      s.prompt.cancellationQueue = [...continuation, ...s.queue];
+  },
+  attackProgram: (s, effects, after) =>
+    bwPorts.attackProgram(s, effects, after),
+  thwartBatch: (s, ids, amount, after) => {
+    const before = s.queue.length;
+    waspPorts.thwartDistribution(
+      s,
+      ids.map((target) => ({ target, amount })),
+    );
+    const generated = s.queue.splice(0, s.queue.length - before);
+    add(s, ...generated, ...after);
+  },
+  allyAttackBatch: (s, allyId, targetIds, after) => {
+    const key = `valkPackThorPacket:${allyId}`;
+    const original: Effect = JSON.parse(String(s.flags[key] || "{}"));
+    delete s.flags[key];
+    const ally = s.player.inPlay.find((p) => p.id === allyId);
+    if (!ally) {
+      add(s, ...after);
+      return;
+    }
+    const bonus =
+      Number(original.amount ?? allyStat(s, ally, "attack")) -
+      allyStat(s, ally, "attack");
+    bwPorts.attackProgram(
+      s,
+      targetIds.map((target) =>
+        E("valkPackThorAttackPacket", {
+          ...original,
+          type: "valkPackThorAttackPacket",
+          id: allyId,
+          target,
+          extraAmount: bonus,
+        }),
+      ),
+      [
+        E("allyResponse", { id: allyId, attack: true }),
+        E("allyConsequence", {
+          id: allyId,
+          attack: true,
+          amount: starLordPack.starLordPackConsequentialDamage(
+            original,
+            (card(ally).attack_cost || 0) +
+              captainPackModifiers(s, allyId).consequentialAttack,
+          ),
+        }),
+        E("scarletAfterAllyAttack", { id: allyId }),
+        ...after,
+      ],
+    );
+  },
+  useAttackForDefense: (s) => {
+    if (!s.attack || s.attack.defender !== "hero") return;
+    s.attack.valkyriePackAttackDefensePlayerId = s.activePlayerId;
+    s.attack.defense = heroStats(s).attack;
+  },
+  usesAttackForDefense: (s) =>
+    s.attack?.defender === "hero" &&
+    s.attack.valkyriePackAttackDefensePlayerId === s.activePlayerId,
+  discardIdentityStatus: (s, status) => dsPorts.removeStatus(s, "hero", status),
+};
+
 const mtsPlayerPackPorts: mtsPlayerPack.MtsPlayerPackPorts = {
   queue: add,
   choose,
@@ -6983,7 +7265,10 @@ const spectrumPorts: spectrum.SpectrumPorts = {
       s.attack.defender === "hero" &&
       s.attack.targetPlayerId === s.activePlayerId
     )
-      s.attack.defense = heroStats(s).defense + (s.attack.defenseBonus || 0);
+      s.attack.defense =
+        heroStats(s).defense +
+        valkyrie.valkyrieDefenseBonusForAttacker(s, s.attack.attacker) +
+        (s.attack.defenseBonus || 0);
   },
   damageBatch: (s, ids, amount, source) => {
     // Interrupt/prevention windows prepare saved packet amounts before any HP
@@ -7118,6 +7403,14 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
       : []),
     ...warlock.warlockAbilityOptions(s, id, warlockPorts),
     ...warMachine.warMachineAbilityOptions(s, id, warMachinePorts),
+    ...valkyrie.valkyrieAbilityOptions(s, id, valkyriePorts),
+    ...(s.attachments.find((p) => p.id === id)
+      ? valkyrie.valkyrieAttachmentActions(
+          s,
+          s.attachments.find((p) => p.id === id)!,
+          valkyriePorts,
+        )
+      : []),
     ...gmwPack.gmwPlayerPackAbilityOptions(s, id, gmwPorts),
     ...starLordPack.starLordPackAbilityOptions(s, id, starLordPackPorts),
     ...draxPack.draxPackAbilityOptions(s, id, draxPackPorts),
@@ -7125,6 +7418,7 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...mtsPlayerPack.mtsPlayerPackAbilityOptions(s, id, mtsPlayerPackPorts),
     ...nebulaPack.nebulaPackAbilityOptions(s, id, nebulaPackPorts),
     ...warmPack.warMachinePackAbilityOptions(s, id, warMachinePackPorts),
+    ...valkPack.valkyriePackAbilityOptions(s, id, valkyriePackPorts),
     ...quicksilverPack.quicksilverPackAbilityOptions(
       s,
       id,
@@ -7162,7 +7456,11 @@ const thorPorts: ThorEnginePorts = {
     if (!p || p.engagedWith === playerId) return;
     const old = p.engagedWith;
     p.engagedWith = playerId;
-    add(s, ...thorEngagementResponses(s, p, old, false));
+    add(
+      s,
+      E("valkPackEngagementWindow", { id: p.id, actorId: playerId }),
+      ...thorEngagementResponses(s, p, old, false),
+    );
   },
   identityMaxHP: (s, id) => maxHP(seatView(s, id)),
   allyPower: allyStat,
@@ -7325,7 +7623,12 @@ function minionEntered(s: GameState, p: Piece) {
     `${card(p).name} engages ${HEROES.find((h) => h.id === s.heroId)!.name}.`,
     "bad",
   );
-  add(s, E("minionReactions", { id: p.id }), ...thorEngagementResponses(s, p));
+  add(
+    s,
+    E("valkPackEngagementWindow", { id: p.id }),
+    E("minionReactions", { id: p.id }),
+    ...thorEngagementResponses(s, p),
+  );
 }
 function minionResponses(s: GameState, p: Piece) {
   add(s, ...waspPack.waspPackMinionEngaged(s, p));
@@ -7388,6 +7691,87 @@ function nebulaNativeAttackStrength(
     return seat ? allyStat(seatView(s, seat), p, "attack") : 0;
   }
   return enemyATK(s, p, recipientId);
+}
+const valkyriePorts: valkyrie.ValkyriePorts = {
+  ...antManPorts,
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  makePiece,
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  shufflePlayerDeck: warMachinePortsShufflePlayer,
+  isIdentityTextBlank: (s) => isTextBlank(s, heroCard(s)),
+  canPutMinion: (s, p) =>
+    card(p).type_code === "minion" && !uniqueConflict(s, card(p), p.id),
+  putMinion: (s, id, playerId, after) => {
+    const p = [...s.encounter.deck, ...s.encounter.discard].find(
+      (p) => p.id === id,
+    );
+    if (!p || !valkyriePorts.canPutMinion(s, p)) return false;
+    const before = s.queue.length;
+    mutagenPorts.putMinion(s, p, playerId);
+    const entry = s.queue.splice(0, s.queue.length - before);
+    add(s, ...entry, ...after);
+    return s.minions.some((m) => m.id === id);
+  },
+  playSetAside: (s, id, after) => {
+    const p = s.player.setAside?.find((p) => p.id === id && p.code === "25002");
+    need(p, "Death Perception requires the same set-aside Death-Glow.");
+    const reason = playable({ ...s, turnPlayerId: s.activePlayerId }, p!);
+    need(!reason, reason || "Death-Glow cannot be played.");
+    requestPlay(s, p!);
+    if (s.prompt?.kind === "payment")
+      s.prompt.after!.push(...after.map((e) => effectContext(s, e)));
+    else add(s, ...after);
+  },
+  setAsideOwnedPiece: (s, id) => {
+    const p = s.player.inPlay.find((p) => p.id === id);
+    if (!p) return false;
+    movePieceFromPlay(s, id, false, s.activePlayerId);
+    return !!s.player.setAside?.some((p) => p.id === id);
+  },
+  canDeclareIdentityDefender: (s, playerId) => {
+    const seat = s.players.find(
+      (seat) => seat.id === playerId && !seat.eliminated,
+    );
+    return (
+      !!s.attack &&
+      !!seat &&
+      seatView(s, seat).player.form === "hero" &&
+      !attackTargetsEnemy(s, s.attack) &&
+      !(
+        rulesCode(find(s, s.attack.attacker) || s.attack.attackerSnapshot!) ===
+          "01132" && friends(seatView(s, seat)).some((p) => !p.exhausted)
+      )
+    );
+  },
+  declareIdentityDefender: (s, playerId, bonus, after) => {
+    need(
+      valkyriePorts.canDeclareIdentityDefender(s, playerId),
+      "Valkyrie cannot defend this attack.",
+    );
+    activateSeat(s, playerId);
+    const a = s.attack!;
+    a.defender = "hero";
+    a.targetPlayerId = playerId;
+    a.basicDefense = false;
+    a.valkyrieDefense = true;
+    a.defenseBonus = (a.defenseBonus || 0) + bonus;
+    a.defense =
+      heroStats(s).defense +
+      valkyrie.valkyrieDefenseBonusForAttacker(s, a.attacker) +
+      a.defenseBonus;
+    log(
+      s,
+      `Shieldmaiden declares ${heroCard(s).name} the defender with ${a.defense} DEF without exhausting.`,
+    );
+    add(s, E("spectrumDefenseWindow", { used: [] }), ...after);
+  },
+};
+function warMachinePortsShufflePlayer(s: GameState, after: Effect[]) {
+  const before = s.queue.length;
+  recyclePlayer(s);
+  hawkeyePorts.shufflePlayerDeck(s);
+  const exhaustion = s.queue.splice(0, s.queue.length - before);
+  add(s, ...exhaustion, ...after);
 }
 const warMachinePorts: warMachine.WarMachinePorts = {
   ...antManPorts,
@@ -7759,6 +8143,10 @@ function declareDefense(s: GameState) {
     add(s, E("boostAttack"));
     return;
   }
+  if (a.valkyrieDefense) {
+    add(s, E("boostAttack", { actorId: a.targetPlayerId }));
+    return;
+  }
   const base =
     nebulaNativeAttackStrength(s, p, a.originalPlayerId || s.activePlayerId) +
     (a.modifier || 0);
@@ -7823,6 +8211,7 @@ function boostEffects(s: GameState, p: Piece) {
     venom.venomBoost(s, p) ??
     nebula.nebulaBoost(s, p) ??
     warMachine.warMachineBoost(s, p) ??
+    valkyrie.valkyrieBoost(s, p) ??
     spectrum.spectrumBoost(s, p) ??
     warlock.warlockBoost(s, p) ??
     mtsPlayerPack.mtsPlayerPackBoost(s, p) ??
@@ -8092,7 +8481,16 @@ function calculateAttack(s: GameState) {
       "bad",
     );
   }
-  if (a.basicDefense) a.defense = heroStats(s).defense + (a.defenseBonus || 0);
+  if (a.basicDefense || a.valkyrieDefense)
+    a.defense =
+      heroStats(s).defense +
+      valkyrie.valkyrieDefenseBonusForAttacker(s, a.attacker) +
+      (a.defenseBonus || 0);
+  if (
+    a.defender === "hero" &&
+    a.valkyriePackAttackDefensePlayerId === s.activePlayerId
+  )
+    a.defense = heroStats(s).attack;
 }
 function schemeWindow(
   s: GameState,
@@ -8728,11 +9126,16 @@ function reveal(
       ...spectrum.SPECTRUM_SCRIPT_CODES,
       ...warlock.WARLOCK_SCRIPT_CODES,
       ...warMachine.WAR_MACHINE_SCRIPT_CODES,
+      ...valkyrie.VALKYRIE_SCRIPT_CODES,
     ].some((code) => code === p.code) ||
       CARDS.some(
         (core) => core.code === rulesCode(p) && core.type_code === "treachery",
       ))
   ) {
+    if (c.type_code === "attachment" && ["25031", "25032"].includes(p.code)) {
+      s.resolving = s.resolving.filter((x) => x.id !== p.id);
+      if (!s.attachments.some((x) => x.id === p.id)) s.attachments.push(p);
+    }
     add(
       s,
       ...beginRevealWindow(
@@ -8804,6 +9207,7 @@ function reveal(
     nebula.nebulaEncounterReveal(s, p) ??
     spectrum.spectrumEncounterReveal(s, p) ??
     warMachine.warMachineEncounterReveal(s, p) ??
+    valkyrie.valkyrieEncounterReveal(s, p) ??
     warlock.warlockEncounterReveal(s, p) ??
     rocket.rocketEncounterReveal(s, p) ??
     groot.grootEncounterReveal(s, p) ??
@@ -9337,6 +9741,11 @@ function treachery(s: GameState, p: Piece) {
       else surge();
       break;
     case "01190": {
+      const valkyrieNemesis = valkyrie.valkyrieShadowOfPast(s);
+      if (valkyrieNemesis !== null) {
+        add(s, ...valkyrieNemesis);
+        break;
+      }
       const warMachineNemesis = warMachine.warMachineShadowOfPast(s);
       if (warMachineNemesis !== null) {
         add(s, ...warMachineNemesis);
@@ -9449,6 +9858,7 @@ function resolve(s: GameState, e: Effect) {
   if (spectrum.resolveSpectrumEffect(s, e, spectrumPorts)) return;
   if (warlock.resolveWarlockEffect(s, e, warlockPorts)) return;
   if (warMachine.resolveWarMachineEffect(s, e, warMachinePorts)) return;
+  if (valkyrie.resolveValkyrieEffect(s, e, valkyriePorts)) return;
   if (starLordPack.resolveStarLordPackEffect(s, e, starLordPackPorts)) return;
   if (gamoraPack.resolveGamoraPackEffect(s, e, gamoraPackPorts)) return;
   if (draxPack.resolveDraxPackEffect(s, e, draxPackPorts)) return;
@@ -9457,6 +9867,7 @@ function resolve(s: GameState, e: Effect) {
     return;
   if (nebulaPack.resolveNebulaPackEffect(s, e, nebulaPackPorts)) return;
   if (warmPack.resolveWarMachinePackEffect(s, e, warMachinePackPorts)) return;
+  if (valkPack.resolveValkyriePackEffect(s, e, valkyriePackPorts)) return;
   if (resolveHawkeyeEffect(s, e, hawkeyePorts)) return;
   if (resolveSpiderWomanEffect(s, e, swPorts)) return;
   if (resolveDoctorStrangeEffect(s, e, dsPorts)) return;
@@ -9481,6 +9892,7 @@ function resolve(s: GameState, e: Effect) {
           nebula.nebulaEncounterReveal(state, piece) ??
           spectrum.spectrumEncounterReveal(state, piece) ??
           warMachine.warMachineEncounterReveal(state, piece) ??
+          valkyrie.valkyrieEncounterReveal(state, piece) ??
           warlock.warlockEncounterReveal(state, piece) ??
           rocket.rocketEncounterReveal(state, piece) ??
           groot.grootEncounterReveal(state, piece) ??
@@ -9499,7 +9911,13 @@ function resolve(s: GameState, e: Effect) {
         E("bwSurgeResponses", { piece, actorId: playerId }),
       ],
       finish: (state, piece) =>
-        add(state, E("finishResolution", { id: piece.id })),
+        add(
+          state,
+          ...(["25031", "25032"].includes(piece.code)
+            ? [E("valkyrieFinishReveal", { id: piece.id })]
+            : []),
+          E("finishResolution", { id: piece.id }),
+        ),
     })
   )
     return;
@@ -9849,6 +10267,13 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "eventResolve": {
+      if (!e.valkyriePackCostPaid) {
+        const cost = valkPack.valkyriePackBeforeEvent(s, e.piece, [e]);
+        if (cost) {
+          add(s, ...cost);
+          break;
+        }
+      }
       if (!e.warMachinePackCostPaid) {
         const cost = warmPack.warMachinePackBeforeEvent(s, e.piece, [e]);
         if (cost) {
@@ -9953,6 +10378,7 @@ function resolve(s: GameState, e: Effect) {
         e.warlockDiscarded || [],
         e.warMachineTarget,
         e.warMachinePackReceipt,
+        e.valkyriePackReceipt,
       );
       break;
     }
@@ -10754,9 +11180,26 @@ function resolve(s: GameState, e: Effect) {
       else add(s, after);
       break;
     }
+    case "valkyrieFinishReveal": {
+      const p = s.attachments.find((p) => p.id === e.id);
+      if (p && !p.attachedTo) discardPiece(s, p.id);
+      break;
+    }
+    case "valkyrieAdvanceVillain":
+      advanceVillain(s, e.source, e.attack, e.receipts);
+      break;
     case "finishDefeat": {
       const p = find(s, e.id);
-      if (p) defeatCharacter(s, p, e.source, e.attack, true, !!e.enemyAttack);
+      if (p)
+        defeatCharacter(
+          s,
+          p,
+          e.source,
+          e.attack,
+          true,
+          !!e.enemyAttack,
+          e.valkyrieReceipts,
+        );
       break;
     }
     case "defeatScheme": {
@@ -10785,6 +11228,38 @@ function resolve(s: GameState, e: Effect) {
             ? [E("enemyAttack", { id: p.id })]
             : []),
           E("minionResponses", { id: p.id }),
+        );
+      break;
+    }
+    case "valkPackEngagementWindow": {
+      const p = s.minions.find((p) => p.id === e.id);
+      const options = p
+        ? valkPack.valkyriePackEngagementOptions(s, p.id, [], valkyriePackPorts)
+        : [];
+      if (options.length)
+        choose(
+          s,
+          "Minion engagement interrupts",
+          "Use Anticipation before resolving this minion's engagement responses?",
+          [...options, option("continue", "Continue", [])],
+        );
+      break;
+    }
+    case "valkPackThorRemember":
+      s.flags[`valkPackThorPacket:${e.id}`] = JSON.stringify(e.packet);
+      break;
+    case "valkPackThorAttackPacket": {
+      const ally = s.player.inPlay.find((p) => p.id === e.id),
+        target = s.minions.find((p) => p.id === e.target);
+      if (ally && target)
+        attackAction(
+          s,
+          target.id,
+          allyStat(s, ally, "attack") + Number(e.extraAmount || 0),
+          ally.id,
+          !!e.overkill,
+          false,
+          { initiated: true, piercing: e.piercing, ranged: e.ranged },
         );
       break;
     }
@@ -11155,6 +11630,10 @@ function resolve(s: GameState, e: Effect) {
         }
       }
       if (e.heroAttackAmount) e.amount = heroStats(s).attack;
+      if (e.basic && e.attack && !e.valkyrieTargetAttackHandled && e.target) {
+        e.amount += valkyrie.valkyrieAttackBonusForTarget(s, e.target);
+        e.valkyrieTargetAttackHandled = true;
+      }
       if (e.basic && e.basicStatAmount !== undefined) {
         e.amount += heroStats(s).attack - e.basicStatAmount;
         delete e.basicStatAmount;
@@ -11670,6 +12149,7 @@ function resolve(s: GameState, e: Effect) {
         !!e.agilityHandled,
         e.overpaid || 0,
         e.paidForCard,
+        !!e.fromDeck,
       );
       break;
     case "commitPaymentAllocation":
@@ -12051,6 +12531,31 @@ function resolve(s: GameState, e: Effect) {
         break;
       }
       if (p.code === "03014" && attack) p.exhausted = true;
+      if (attack && !e.valkPackThorHandled && !p.stunned) {
+        const packet = {
+          ...e,
+          amount: e.amount ?? allyStat(s, p, "attack"),
+          valkPackThorHandled: true,
+        };
+        const options = valkPack
+          .valkyriePackAllyAttackOptions(s, p, e.target, [], valkyriePackPorts)
+          .map((o) => ({
+            ...o,
+            effects: [
+              E("valkPackThorRemember", { id: p.id, packet }),
+              ...o.effects,
+            ],
+          }));
+        if (options.length) {
+          choose(
+            s,
+            "Thor attack interrupts",
+            "Spend an energy resource to resolve this one attack against each minion engaged with that player?",
+            [...options, option("continue", "Continue this attack", [packet])],
+          );
+          break;
+        }
+      }
       const stunned = attack ? p.stunned : p.confused;
       const minionTarget = attack
         ? s.minions.find((minion) => minion.id === e.target)
@@ -12672,6 +13177,24 @@ function resolve(s: GameState, e: Effect) {
               venomPorts,
             )
           : [];
+        const shieldmaiden =
+          againstPlayer && !friendlySource
+            ? valkyrie
+                .valkyrieAttackInitiationOptions(
+                  view,
+                  a.attacker,
+                  [],
+                  valkyriePorts,
+                )
+                .filter((entry) => !usedIds.includes(entry.id))
+                .map((entry) => ({
+                  ...entry,
+                  effects: entry.effects.map((effect) => ({
+                    ...effect,
+                    after: [resume(entry.id)],
+                  })),
+                }))
+            : [];
         const pip = againstPlayer
           ? warlock.warlockAttackInitiatedOptions(
               view,
@@ -12687,6 +13210,7 @@ function resolve(s: GameState, e: Effect) {
             ...firstHit,
             ...subdue,
             ...identity,
+            ...shieldmaiden,
             ...pip,
           ]),
         );
@@ -12727,7 +13251,9 @@ function resolve(s: GameState, e: Effect) {
         if (e.id === "hero") {
           s.attack.basicDefense = true;
           s.player.exhausted = true;
-          s.attack.defense = heroStats(s).defense;
+          s.attack.defense =
+            heroStats(s).defense +
+            valkyrie.valkyrieDefenseBonusForAttacker(s, s.attack.attacker);
         } else if (e.id !== "none") {
           const p = find(s, e.id);
           if (p) p.exhausted = true;
@@ -12774,6 +13300,11 @@ function resolve(s: GameState, e: Effect) {
       }
       if (!e.expertChecked) {
         const options = [
+          ...valkPack.valkyriePackDefenseOptions(
+            s,
+            [E("boostAttack")],
+            valkyriePackPorts,
+          ),
           ...groot.grootDefenseOptions(s, [E("boostAttack")], grootPorts),
           ...gmwPack.gmwPlayerPackDefenseOptions(
             s,
@@ -14109,12 +14640,20 @@ function resolve(s: GameState, e: Effect) {
       const prev = s.activePlayerId;
       for (const seat of playerOrder(s)) {
         activateSeat(s, seat.id);
-        for (const p of [...s.player.inPlay].filter(
-          (p) => rulesCode(p) === "01084",
-        ))
+        for (const p of [
+          ...s.player.inPlay,
+          ...s.minions.filter(
+            (p) => p.treatedAsMinion && p.ownerId === seat.id,
+          ),
+        ].filter((p) => rulesCode(p) === "01084"))
           discardPiece(s, p.id);
         s.flags = {
           nemesis: s.flags.nemesis || false,
+          ...Object.fromEntries(
+            Object.entries(s.flags).filter(([key]) =>
+              key.startsWith("valkyrie"),
+            ),
+          ),
           ...(s.heroId === "warm"
             ? { warMachineAmmo: warMachine.warMachineAmmo(s) }
             : {}),
@@ -14341,6 +14880,7 @@ function run(s: GameState) {
     s.currentRevealWindowId = e.revealWindowId;
     syncNebulaIdentityStatuses(s);
     resolve(s, e);
+    syncValkyrieConvertedCards(s);
     syncNebulaIdentityStatuses(s);
     delete s.currentEventId;
     delete s.currentAttackProgramId;
@@ -14394,6 +14934,7 @@ export function dispatch(state: GameState, command: Command): GameState {
     warMachine.warMachineInitializeNemesis(seatView(s, seat), {
       makePiece: (_view, code) => makePiece(s, code),
     });
+  syncValkyrieConvertedCards(s);
   syncNebulaIdentityStatuses(s);
   s.combatEvents = [];
   delete s.error;
@@ -14535,6 +15076,11 @@ export function dispatch(state: GameState, command: Command): GameState {
             heal(s, "hero", stats.recover);
           } else {
             need(s.player.form === "hero", "Change to hero form first.");
+            if (command.action === "attack")
+              need(
+                !valkyrie.valkyrieCannotBasicAttack(s),
+                "Seduced prevents basic attacks.",
+              );
             need(
               (command.action === "attack"
                 ? s.player.stunned
@@ -14569,6 +15115,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...gamora.gamoraAttachmentActions(s, p, gamoraPorts),
               ...spectrum.spectrumAttachmentOptions(s, p.id, spectrumPorts),
               ...nebula.nebulaAttachmentActions(s, p, nebulaPorts),
+              ...valkyrie.valkyrieAttachmentActions(s, p, valkyriePorts),
               ...quicksilver.quicksilverAttachmentActions(
                 s,
                 p,

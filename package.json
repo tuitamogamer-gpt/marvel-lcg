@@ -36,7 +36,8 @@
     "test:drax-venom": "node scripts/drax-venom-check.mjs",
     "test:mts-heroes": "node scripts/mts-heroes-check.mjs",
     "test:nebula": "node scripts/nebula-check.mjs",
-    "test:war-machine": "node scripts/war-machine-check.mjs"
+    "test:war-machine": "node scripts/war-machine-check.mjs",
+    "test:valkyrie": "node scripts/valkyrie-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

@@ -1073,6 +1073,8 @@ export async function generateAudit(
     "src/game/nebula-pack.ts",
     "src/game/war-machine.ts",
     "src/game/war-machine-pack.ts",
+    "src/game/valkyrie.ts",
+    "src/game/valkyrie-pack.ts",
     "src/game/printed-card-metadata.ts",
     "src/game/card-text.ts",
     "src/game/expansion-errata.ts",

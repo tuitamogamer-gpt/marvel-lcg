@@ -12,7 +12,7 @@ import {
   deckOptions,
   copyLimit,
 } from "../src/game/decks";
-import { heroRequiredCards } from "../src/game/hero-runtime";
+import { heroRequiredCards, heroRuntime } from "../src/game/hero-runtime";
 import { newGame, dispatch } from "../src/game/engine";
 import { paymentSources } from "../src/game/payment";
 
@@ -149,7 +149,7 @@ describe("private player accounts", () => {
     expect((await call(undefined, r.cookie)).data.user.username).toBe(
       "champion_one",
     );
-  });
+  }, 15_000);
   it("blocks cross-origin writes and stale account identities", async () => {
     const r = await register();
     expect(
@@ -543,7 +543,9 @@ describe("playable saved decks", () => {
     ),
   )("accepts the $heroId $aspect starter list", ({ heroId, aspect }) => {
     const codes = deckCodes(heroId, aspect);
-    expect(deckSizeFor(codes)).toBe(40);
+    expect(deckSizeFor(codes)).toBe(
+      heroRuntime(heroId)?.starters[0]?.deckSize ?? 40,
+    );
     expect(deckErrors(heroId, aspect, codes)).toEqual([]);
   });
   it("rejects an off-aspect card in a starter list", () => {

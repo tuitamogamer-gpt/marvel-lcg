@@ -63,6 +63,8 @@ export interface MissionStats {
   enemiesDefeated: number;
 }
 export interface Piece {
+  /** Beguiled changes the actual ally's current type without changing its face. */
+  treatedAsMinion?: boolean;
   /** Actual owned cards tucked beneath this instance; faces stay private. */
   storedCards?: Piece[];
   pendingDefeat?: boolean;
@@ -160,6 +162,10 @@ export interface Attack {
   targetPlayerId?: string;
   originalPlayerId?: string;
   basicDefense?: boolean;
+  /** Shieldmaiden declares a defense without performing the basic power. */
+  valkyrieDefense?: boolean;
+  /** The Best Defense replaces DEF with current ATK for this defender only. */
+  valkyriePackAttackDefensePlayerId?: string;
   attacker: string;
   base: number;
   boostCodes: string[];

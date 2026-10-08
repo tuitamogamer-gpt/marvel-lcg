@@ -11,6 +11,8 @@ export function isTextBlank(
   s: GameState,
   p: (Pick<Piece, "code"> & { id?: string }) | string,
 ) {
+  if (typeof p !== "string" && "treatedAsMinion" in p && p.treatedAsMinion)
+    return true;
   if (!s.sideSchemes.some((scheme) => scheme.code === "12026")) return false;
   const code = typeof p === "string" ? p : p.code;
   const inPlay = [

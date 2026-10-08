@@ -324,6 +324,9 @@ export function DeckEditor({
   const setup = heroSetupCards(heroId);
   const setupCount = Object.values(setup).reduce((total, n) => total + n, 0);
   const required = heroRequiredCards(heroId);
+  const requiredPlayingCount =
+    Object.values(required).reduce((total, count) => total + count, 0) -
+    setupCount;
   const counts = countsFor(codes);
   const errors = deckErrors(heroId, aspect, codes, aspects);
   const options = deckOptions(heroId, aspect, aspects);
@@ -456,8 +459,10 @@ export function DeckEditor({
           )}
         </div>
         <p className="account-hint">
-          Changing hero or aspect loads its starter list. Keep all 15 hero cards
-          and choose 25–35 aspect or basic cards.
+          Changing hero or aspect loads its starter list. Keep all{" "}
+          {requiredPlayingCount} hero cards and choose{" "}
+          {40 - requiredPlayingCount}–{50 - requiredPlayingCount} aspect or
+          basic cards.
           {dualAspect &&
             " Include equal numbers of your two chosen aspects, counting required hero cards of those colors."}
           {fourAspects &&

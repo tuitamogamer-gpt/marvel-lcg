@@ -24,6 +24,8 @@ import { NEBULA_SCRIPT_CODES } from "./nebula.js";
 import { NEBULA_PACK_SCRIPT_CODES } from "./nebula-pack.js";
 import { WAR_MACHINE_SCRIPT_CODES } from "./war-machine.js";
 import { WAR_MACHINE_PACK_SCRIPT_CODES } from "./war-machine-pack.js";
+import { VALKYRIE_SCRIPT_CODES } from "./valkyrie.js";
+import { VALKYRIE_PACK_SCRIPT_CODES } from "./valkyrie-pack.js";
 import { GOBLIN_MODULE_SCRIPT_CODES } from "./goblin-modules.js";
 import { BLACK_WIDOW_SCRIPT_CODES } from "./black-widow.js";
 import { DOCTOR_STRANGE_SCRIPT_CODES } from "./doctor-strange.js";
@@ -67,6 +69,7 @@ export const SCRIPTED_HERO_IDS = new Set([
   "warlock",
   "nebu",
   "warm",
+  "valk",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ANT_MAN_SCRIPT_CODES,
@@ -95,6 +98,8 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...NEBULA_PACK_SCRIPT_CODES,
   ...WAR_MACHINE_SCRIPT_CODES,
   ...WAR_MACHINE_PACK_SCRIPT_CODES,
+  ...VALKYRIE_SCRIPT_CODES,
+  ...VALKYRIE_PACK_SCRIPT_CODES,
   ...CAPTAIN_AMERICA_SCRIPT_CODES,
   ...HULK_SCRIPT_CODES,
   ...CAPTAIN_PACK_SCRIPT_CODES,

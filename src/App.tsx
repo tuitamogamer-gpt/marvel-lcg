@@ -1,3 +1,4 @@
+import { valkyrieCannotBasicAttack } from "./game/valkyrie";
 import {
   doctorStrangeAbilityOptions,
   doctorStrangeTopInvocation,
@@ -3935,6 +3936,7 @@ function AttachedCards({
             {[
               ...mutagenAttachmentActions(game, p),
               ...goblinModuleAttachmentActions(game, p),
+              ...(p.code === "25032" ? abilityOptions(game, p) : []),
             ].map((a) => (
               <button
                 key={a.id}
@@ -5241,8 +5243,16 @@ function Tabletop({
                   <>
                     <button
                       className="attack-action"
-                      title="Attack an enemy. Exhaust your identity."
-                      disabled={!acting || s.player.exhausted}
+                      title={
+                        valkyrieCannotBasicAttack(s)
+                          ? "Seduced prevents basic attacks."
+                          : "Attack an enemy. Exhaust your identity."
+                      }
+                      disabled={
+                        !acting ||
+                        s.player.exhausted ||
+                        valkyrieCannotBasicAttack(s)
+                      }
                       onClick={() => send({ type: "BASIC", action: "attack" })}
                     >
                       <span className="action-emblem">

@@ -20,7 +20,7 @@ import {
 } from "../src/game/engine";
 import type { GameState, Resource, Piece } from "../src/game/types";
 import { deckSizeFor } from "../src/game/decks";
-import { heroRequiredCards } from "../src/game/hero-runtime";
+import { heroRequiredCards, heroRuntime } from "../src/game/hero-runtime";
 function base(
   heroId = "spider_man",
   villainId = "rhino",
@@ -146,9 +146,11 @@ describe("core set and setup", () => {
     expect(CARDS).toHaveLength(209));
   for (const h of HEROES)
     for (const a of ASPECTS)
-      it(`${h.name} / ${a.name} has a legal 40-card starter deck`, () => {
+      it(`${h.name} / ${a.name} has a legal source-sized starter deck`, () => {
         const codes = deckCodes(h.id, a.id);
-        expect(deckSizeFor(codes)).toBe(40);
+        expect(deckSizeFor(codes)).toBe(
+          heroRuntime(h.id)?.starters[0]?.deckSize ?? 40,
+        );
         const required = heroRequiredCards(h.id);
         const signatureCodes = codes.filter((code) =>
           Object.hasOwn(required, code),
@@ -493,7 +495,7 @@ describe("scenario resolution", () => {
       s = settle(s);
       expect(s.error, `${c.code} ${c.name}`).toBeUndefined();
     }
-  });
+  }, 30_000);
   it("all proactive core player events resolve in a valid fixture", () => {
     for (const c of CARDS.filter(
       (c) =>

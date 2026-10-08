@@ -38,6 +38,7 @@ import { warlockStats } from "./warlock.js";
 import { mtsPlayerPackHeroStats } from "./mts-player-pack.js";
 import { nebulaStats, nebulaNamedCharacterModifiers } from "./nebula.js";
 import { nebulaPackModifiers } from "./nebula-pack.js";
+import { valkyrieHPBonus, valkyrieStats, valkyrieTraits } from "./valkyrie.js";
 import { warMachineTraits } from "./war-machine.js";
 import { msMarvelStats } from "./ms-marvel.js";
 import { identityMatch, uniqueMatches } from "./unique.js";
@@ -101,8 +102,18 @@ DB.drone = {
   traits: "Drone.",
   text: "Facedown card from your deck. When defeated, return it to your discard pile.",
 };
-export const card = (piece: Piece | string) =>
-  DB[typeof piece === "string" ? piece : piece.code];
+export const card = (piece: Piece | string): Card => {
+  const printed = DB[typeof piece === "string" ? piece : piece.code];
+  return typeof piece !== "string" && piece.treatedAsMinion
+    ? {
+        ...printed,
+        type_code: "minion",
+        text: "",
+        scheme: printed.thwart || 0,
+        traits: `${printed.traits || ""} Enthralled.`,
+      }
+    : printed;
+};
 export const plain = (text = "") =>
   text
     .replace(/<[^>]*>/g, "")
@@ -498,6 +509,20 @@ export const HEROES = [
     style: "Ammo counters · Leadership",
     complexity: 3,
   },
+  {
+    id: "valk",
+    code: "25001a",
+    alter: "25001b",
+    name: "Valkyrie",
+    identity: "Brunnhilde",
+    aspect: "aggression" as Aspect,
+    color: "#86a9b7",
+    tag: "Choose the fallen.",
+    description:
+      "Mark an enemy with Death-Glow, wield Asgardian weapons, and turn each marked defeat into a new opportunity.",
+    style: "Death-Glow · Aggression",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -691,6 +716,7 @@ export function deckCodes(
       (hero === "spectrum" && aspect === "leadership") ||
       (hero === "nebu" && aspect === "justice") ||
       (hero === "warm" && aspect === "leadership") ||
+      (hero === "valk" && aspect === "aggression") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
@@ -789,6 +815,7 @@ export function maxHP(s: GameState) {
     msMarvelStats(s).health +
     rocketMaxHpBonus(s) +
     nebulaPackModifiers(s, "hero").health +
+    valkyrieHPBonus(s) +
     captainPackModifiers(s, "hero").hp
   );
 }
@@ -801,6 +828,7 @@ export function aerial(s: GameState) {
     rocketHeroTraits(s).includes("Aerial") ||
     starLordHeroTraits(s).includes("Aerial") ||
     warMachineTraits(s).includes("Aerial") ||
+    valkyrieTraits(s).includes("Aerial") ||
     waspHeroTraits(textActiveState(s)).includes("Aerial")
   );
 }
@@ -839,6 +867,7 @@ export function heroStats(s: GameState) {
       warlockStats(s).attack +
       mtsPlayerPackHeroStats(s).attack +
       nebulaStats(s).attack +
+      valkyrieStats(s).attack +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
@@ -861,6 +890,7 @@ export function heroStats(s: GameState) {
       warlockStats(s).thwart +
       mtsPlayerPackHeroStats(s).thwart +
       nebulaStats(s).thwart +
+      valkyrieStats(s).thwart +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
@@ -881,6 +911,7 @@ export function heroStats(s: GameState) {
       warlockStats(s).defense +
       mtsPlayerPackHeroStats(s).defense +
       nebulaStats(s).defense +
+      valkyrieStats(s).defense +
       nebulaNamedCharacterModifiers(s, h.name).defense +
       quicksilverPackHeroStatBonus(s, "defense") +
       scriptedModifier(s, "defense"),
