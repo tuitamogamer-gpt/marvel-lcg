@@ -4446,14 +4446,14 @@ function Tabletop({
                     <div>
                       <span className="small-label">ENVIRONMENT</span>
                       <strong>{card(p).name}</strong>
-                      {p.code !== "29039" && (
+                      {p.code !== "29039" && p.code !== "31037" && (
                         <span className="environment-counter">
                           <PremiumToken kind="counter" />
                           {p.counters}{" "}
                           {p.code === "02006a" ? "Infamy" : "Madness"}
                         </span>
                       )}
-                      {p.code === "29039" &&
+                      {(p.code === "29039" || p.code === "31037") &&
                         abilityOptions(s, p).map((a) => (
                           <button
                             key={a.id}

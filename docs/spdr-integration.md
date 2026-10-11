@@ -54,7 +54,7 @@ Sandman's forced response discards seven encounter cards after **surviving actua
 
 The native boundary comprises `src/game/spdr.ts`, `src/game/spdr-pack.ts` and `src/game/ironspider-sinister.ts`, connected through the engine's actual payment, damage, defense, reveal, defeat and physical-card hooks. Independent source review inspected all 39 original imported card images and confirmed the forty-card source, two physical identity cards and preserved printed metadata. Imported catalog and starter JSON remain unchanged.
 
-The final eight focused suites completed on **11 October 2026 at 19:52 UTC: 308 tests passed**. Evidence is recorded in `output/spdr/focus-final.log`:
+The final eight focused suites completed on **11 October 2026 at 20:12 UTC: 308 tests passed**. Evidence is recorded in `output/spdr/focus-r4-final.log` and `output/spdr/metadata-r4-final.log`:
 
 | Boundary                                     | Passing tests |
 | -------------------------------------------- | ------------: |
@@ -73,8 +73,10 @@ Electro's stored original VEN#m adds one HP from its Energy icon, while its prin
 
 Sandman’s damage response retains its actual source ID and rechecks that the same unblanked minion survived before it initiates. Original Wasp forty-card BASIC and paid Wasp Sting distributions prove that deferred batch defeat suppresses the lethal response while surviving attacks discard exactly seven cards. Sandman’s independent boost still discards seven without an in-play source. Saved response packets also respect a defeated or newly blanked source.
 
+Surge in Crime displays its native removal action on the table when the active hero can pay two resources and no Criminal minion is in play. The action opens the actual payment window and discards that physical environment once. It has no Infamy or Madness counter; the table preserves those labels only for the relevant Risky Business environments.
+
 TypeScript/build, formatting, generated inventory and production-entry startup pass. Native Node 24.19.0 resolves 74 runtime modules and six JSON imports; API startup returns HTTP 200. The generated inventory covers 35 native heroes, 1,408 executable faces, 935 dedicated faces and 87 source hashes.
 
-The final frozen production artifact is `index-DRvhLLgp.js`, SHA256 `535328b57bbe81b6949709ce1bd048d9e9ec401e7cfc97473f2cf52be5e299f2` (1,501,162 bytes). CSS is `index-CCow7VPF.css`, SHA256 `bd92f463c83d279e62c502af2733ec622431fa53916439fc83664c6bfaa27720`. Independent HTTP 200 body comparisons match the immutable copy; evidence is `output/spdr/frozen-artifact.json`.
+The final frozen production artifact is `index-z_-sN5ly.js`, SHA256 `ef27c2a76083a38ddbc16b1d8cf7f067cb9ff00933de3f27db8fc43fd9f054ad` (1,501,200 bytes). CSS is `index-CCow7VPF.css`, SHA256 `bd92f463c83d279e62c502af2733ec622431fa53916439fc83664c6bfaa27720`. Independent HTTP 200 body comparisons match the immutable copy; evidence is `output/spdr/frozen-artifact-r4.json`.
 
 **Full regression, final production-browser acceptance, remote CI and production deployment are separate pending gates.** The target browser coverage is 216 SP//dr flows across 1920/1440/1280/390, plus retained Spider-Ham, Inheritors, Zzzax and engine-continuation flows. Earlier acceptance artifacts with another JS hash are historical evidence only. The PR records the completed final counts and deployment once these gates finish.
