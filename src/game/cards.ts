@@ -56,6 +56,10 @@ import {
   ironheartSignatureHPBonus,
 } from "./ironheart.js";
 import { novaIronheartPackCharacterModifiers } from "./nova-ironheart-pack.js";
+import { spiderHamStats, spiderHamTraits } from "./spider-ham.js";
+import { spiderHamPackCharacterModifiers } from "./spider-ham-pack.js";
+import { spdrPackCharacterModifiers } from "./spdr-pack.js";
+import { ironspiderSinisterHealthBonus } from "./ironspider-sinister.js";
 import { allInPlay, seatView } from "./team.js";
 import { msMarvelStats } from "./ms-marvel.js";
 import { identityMatch, uniqueMatches } from "./unique.js";
@@ -610,6 +614,34 @@ export const HEROES = [
     style: "Progress counters · Leadership",
     complexity: 3,
   },
+  {
+    id: "spiderham",
+    code: "30001a",
+    alter: "30001b",
+    name: "Spider-Ham",
+    identity: "Peter Porker",
+    aspect: "justice" as Aspect,
+    color: "#d16c7e",
+    tag: "A cartoon answer to every problem.",
+    description:
+      "Turn damage and recovery into toon counters, spend them as wild resources, and coordinate Web-Warrior allies.",
+    style: "Toon counters · Justice",
+    complexity: 2,
+  },
+  {
+    id: "spdr",
+    code: "31001a",
+    alter: "31002a",
+    name: "SP//dr",
+    identity: "Peni Parker",
+    aspect: "protection" as Aspect,
+    color: "#bd665e",
+    tag: "The pilot and the machine.",
+    description:
+      "Coordinate Peni Parker and the SP//dr Suit, generate resources through Interface upgrades, and redirect your technology into basic powers.",
+    style: "Interface resources · Protection",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -690,6 +722,12 @@ export const MODULES = [
   { id: "the_doomsday_chair", name: "The Doomsday Chair", difficulty: 5 },
   { id: "armadillo", name: "Armadillo", difficulty: 3 },
   { id: "zzzax", name: "Zzzax", difficulty: 3 },
+  { id: "inheritors", name: "The Inheritors", difficulty: 5 },
+  {
+    id: "ironspider_sinister",
+    name: "Iron Spider's Sinister Six",
+    difficulty: 5,
+  },
 ];
 export const ASPECTS: {
   id: Aspect;
@@ -811,6 +849,8 @@ export function deckCodes(
       (hero === "spider_man_morales" && aspect === "justice") ||
       (hero === "nova" && aspect === "aggression") ||
       (hero === "ironheart" && aspect === "leadership") ||
+      (hero === "spiderham" && aspect === "justice") ||
+      (hero === "spdr" && aspect === "protection") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
@@ -956,6 +996,7 @@ export function aerial(s: GameState) {
     valkyrieTraits(s).includes("Aerial") ||
     visionTraits(s).includes("Aerial") ||
     novaTraits(s, { isTextBlank }).includes("Aerial") ||
+    spiderHamTraits(s).includes("Aerial") ||
     (s.heroId === "ironheart" &&
       s.player.form === "hero" &&
       !!heroCard(s).traits?.includes("Aerial.")) ||
@@ -1003,6 +1044,9 @@ export function heroStats(s: GameState) {
       visionStats(s).attack +
       sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).attack +
       novaIronheartCharacterModifiers(s, "hero").attack +
+      spiderHamStats(s, { isTextBlank }).attack +
+      spiderHamPackCharacterModifiers(s, "hero").attack +
+      spdrPackCharacterModifiers(s, "hero").attack +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
@@ -1029,6 +1073,8 @@ export function heroStats(s: GameState) {
       visionStats(s).thwart +
       sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).thwart +
       novaIronheartCharacterModifiers(s, "hero").thwart +
+      spiderHamStats(s, { isTextBlank }).thwart +
+      spdrPackCharacterModifiers(s, "hero").thwart +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
@@ -1053,6 +1099,7 @@ export function heroStats(s: GameState) {
       visionStats(s).defense +
       sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).defense +
       novaIronheartCharacterModifiers(s, "hero").defense +
+      spdrPackCharacterModifiers(s, "hero").defense +
       nebulaNamedCharacterModifiers(s, h.name).defense +
       quicksilverPackHeroStatBonus(s, "defense") +
       scriptedModifier(s, "defense"),
@@ -1093,6 +1140,21 @@ export function handSize(s: GameState) {
         sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).handSize;
   return novaHandSize(s, base, { isTextBlank });
 }
+/** Printed encounter attachment modifiers apply to their attached enemy.
+ * Player cards attached as resources retain their physical printed values,
+ * but those character values do not modify the enemy's ATK or SCH. */
+export function enemyAttachmentModifier(
+  s: GameState,
+  enemyId: string,
+  stat: "attack" | "scheme" = "attack",
+): number {
+  return s.attachments
+    .filter(
+      (p) => p.attachedTo === enemyId && card(p).type_code === "attachment",
+    )
+    .reduce((total, p) => total + Number(card(p)[stat] || 0), 0);
+}
+
 export function pieceHP(s: GameState, p: Piece) {
   return (
     (p.code === "drone"
@@ -1117,6 +1179,7 @@ export function pieceHP(s: GameState, p: Piece) {
     ghostSpiderEnemyModifiers(s, p).health +
     ironheartEnemyStats(s, p, { isTextBlank }).health +
     zzzaxEnemyStats(s, p).health +
+    ironspiderSinisterHealthBonus(s, p) +
     gamoraPackAllyHP(s, p) +
     nebulaPackModifiers(s, p.id).health +
     novaIronheartCharacterModifiers(s, p.id).health +

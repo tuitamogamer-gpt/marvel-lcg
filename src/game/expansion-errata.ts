@@ -5,6 +5,23 @@ const url =
 /** Keep imported printing text intact. Apply published rules corrections in the
  * playable database and card inspector, independently of module registration. */
 export function expansionErrata(c: Card): Card {
+  if (c.code === "31027")
+    return {
+      ...c,
+      text: "<b>Forced Response</b>: After the engaged player generates any number of resources, deal an equal amount of damage to that player's hero.\n<i>(SP//dr's nemesis minion.)</i>",
+      errata: {
+        reference: "FFG Rules Reference 1.8, p. 68",
+        url: url.replace("#page=66", "#page=68"),
+      },
+    };
+  if (c.code === "31001b")
+    return {
+      ...c,
+      errata: {
+        reference: "FFG Rules Reference 1.8, p. 68",
+        url: url.replace("#page=66", "#page=68"),
+      },
+    };
   if (c.code === "22011")
     return {
       ...c,

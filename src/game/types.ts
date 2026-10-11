@@ -67,6 +67,8 @@ export interface Piece {
   treatedAsMinion?: boolean;
   /** Actual owned cards tucked beneath this instance; faces stay private. */
   storedCards?: Piece[];
+  /** Physical facedown boosts assigned to this enemy; consumed only on activation. */
+  inheritorBoosts?: Piece[];
   /** Physical acceleration tokens on this side scheme leave with its instance. */
   accelerationTokens?: number;
   pendingDefeat?: boolean;
@@ -133,6 +135,8 @@ export interface Prompt {
   sourceRequirement?: { ids: string[]; minimum: number; label: string };
   /** The physical payment subject is using an ability, not being played. */
   abilityCost?: boolean;
+  /** Actual already generated sources whose paid ability costs completed. */
+  committedResources?: import("./payment.js").PaymentSource[];
   wildAs?: Resource;
   selectAction?: Effect;
 }
@@ -163,6 +167,8 @@ export interface Attack {
   attackerSnapshot?: Piece;
   identityDamage?: number;
   damagePlaced?: number;
+  /** Actual per-character attack damage after a simultaneous replacement. */
+  attackDamageReceipts?: { target: string; actualDamage: number }[];
   defenseBonus?: number;
   originalTarget?: string;
   targetPlayerId?: string;
@@ -253,6 +259,13 @@ export interface GameState {
     /** Ironheart's current physical identity. Its two other physical versions
      * remain set aside and swap with this instance without leaving play. */
     ironheartIdentity?: Piece;
+    /** Spider-Ham's actual identity retains its physical ID and toon counters
+     * when its face changes and through JSON saves. */
+    spiderHamIdentity?: Piece;
+    /** Active physical SP//dr identity; the other card occupies inPlay once. */
+    spdrIdentity?: Piece;
+    spdrSuitId?: string;
+    spdrPilotId?: string;
     hp: number;
     exhausted: boolean;
     flipped: boolean;
@@ -316,6 +329,19 @@ export interface GameState {
     kind: "info" | "good" | "bad" | "phase";
   }[];
   flags: Record<string, number | boolean | string>;
+  /** Consequential-damage receipts remain attached to the actual ally until
+   * its defeat window finishes, including saves during an interrupt. */
+  spiderHamConsequentialReceipts?: Record<
+    string,
+    {
+      token: string;
+      playerId: string;
+      consequential: boolean;
+      amount: number;
+      remainingHP: number;
+      textBlank: boolean;
+    }
+  >;
   attack: Attack | null;
   lastEncounter?: string;
   result?: string;

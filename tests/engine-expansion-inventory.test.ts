@@ -6,7 +6,7 @@ import {
   EXPLICIT_CARD_SCRIPTS,
   SCRIPTED_HERO_IDS,
 } from "../src/game/engine-support";
-import { CATALOG_CARDS, HEROES, VILLAINS } from "../src/game/cards";
+import { CATALOG_CARDS, HEROES, MODULES, VILLAINS } from "../src/game/cards";
 import {
   candidatePatterns,
   normalizeRules,
@@ -21,8 +21,18 @@ const inventory = read("docs/engine-expansion-inventory.json");
 const byCode = new Map<string, object>(
   cards.map((card: { code: string }) => [card.code, card]),
 );
-const audited = new Map(
-  inventory.cards.map((card: { code: string }) => [card.code, card]),
+interface AuditedCard {
+  code: string;
+  mechanics: string[];
+  installedRegistry: {
+    code: string;
+    executable: boolean;
+    mechanism: string;
+    compilerStatus: string;
+  };
+}
+const audited = new Map<string, AuditedCard>(
+  inventory.cards.map((card: AuditedCard) => [card.code, card]),
 );
 
 describe("complete expansion rules inventory", () => {
@@ -141,6 +151,8 @@ describe("complete expansion rules inventory", () => {
       ["vision", 38],
       ["nova", 33],
       ["ironheart", 43],
+      ["spiderham", 39],
+      ["spdr", 39],
     ] as const) {
       expect(
         coverage.products.find((pack: { code: string }) => pack.code === code),
@@ -224,10 +236,10 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(1331);
-    expect(coverage.unsupportedFaces).toBe(3220);
-    expect(coverage.dedicatedFaces).toBe(858);
-    expect(coverage.registeredHeroIds).toHaveLength(33);
+    expect(coverage.executableFaces).toBe(1408);
+    expect(coverage.unsupportedFaces).toBe(3143);
+    expect(coverage.dedicatedFaces).toBe(935);
+    expect(coverage.registeredHeroIds).toHaveLength(35);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
         coverage.registeredHeroes.some(
@@ -261,6 +273,64 @@ describe("complete expansion rules inventory", () => {
         (scenario: { id: string }) => scenario.id === "mutagen_formula",
       ).registered,
     ).toBe(true);
+  });
+  it("retains the independent nine-card Inheritors closure beside the complete Spider-Ham pack", () => {
+    const codes = [
+      "30030",
+      "30031",
+      "30032",
+      "30033",
+      "30034",
+      "30035",
+      "30036",
+      "30037",
+      "30038",
+    ];
+    const source = cards.filter(
+      (entry: { set_code?: string }) => entry.set_code === "inheritors",
+    );
+    expect(source.map((entry: { code: string }) => entry.code)).toEqual(codes);
+    expect(
+      source.reduce(
+        (n: number, entry: { quantity: number }) => n + entry.quantity,
+        0,
+      ),
+    ).toBe(9);
+    for (const code of codes) {
+      const record = audited.get(code);
+      if (!record) throw new Error(`Missing audited Inheritors face ${code}`);
+      expect(record.installedRegistry).toMatchObject({
+        executable: true,
+        mechanism: "dedicated-module",
+        compilerStatus: "unsupported",
+      });
+      expect(EXPLICIT_CARD_SCRIPTS.has(code), code).toBe(true);
+    }
+    expect(MODULES.filter((module) => module.id === "inheritors")).toEqual([
+      { id: "inheritors", name: "The Inheritors", difficulty: 5 },
+    ]);
+    expect(MODULES.slice(-2).map((module) => module.id)).toEqual([
+      "inheritors",
+      "ironspider_sinister",
+    ]);
+    const pack = inventory.installedRegistryCoverage.products.find(
+      (entry: { code: string }) => entry.code === "spiderham",
+    );
+    expect(pack).toMatchObject({
+      faceCount: 39,
+      executableFaces: 39,
+      installedCardClosure: true,
+    });
+    expect(pack.unsupportedFaceCodes).toEqual([]);
+    expect(
+      inventory.heroes.find(
+        (hero: { id: string }) => hero.id === "spiderham:spiderham",
+      ),
+    ).toMatchObject({
+      registeredHeroIds: ["spiderham"],
+      installedCardClosure: true,
+      installedUnsupportedDependencies: [],
+    });
   });
   it("records live compiler outcomes separately from inventory and whole-game certification", () => {
     const coverage = inventory.compilerCoverage;
@@ -307,7 +377,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(81);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(87);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
@@ -390,6 +460,12 @@ describe("complete expansion rules inventory", () => {
       "src/game/vision-pack.ts",
       "src/game/armadillo.ts",
       "src/game/zzzax.ts",
+      "src/game/inheritors.ts",
+      "src/game/spider-ham.ts",
+      "src/game/spider-ham-pack.ts",
+      "src/game/spdr.ts",
+      "src/game/spdr-pack.ts",
+      "src/game/ironspider-sinister.ts",
       "src/game/printed-card-metadata.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",

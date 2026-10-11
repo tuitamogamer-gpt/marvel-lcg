@@ -66,6 +66,8 @@ const heroIds = [
   "spider_man_morales",
   "nova",
   "ironheart",
+  "spiderham",
+  "spdr",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -91,6 +93,7 @@ function ownedPieces(s: GameState, originalIds: Set<string>): Piece[] {
       ...p.deck,
       ...p.discard,
       ...p.inPlay,
+      ...(p.spdrIdentity ? [p.spdrIdentity] : []),
       ...(p.setAside || []),
       ...(p.invocationDeck || []),
       ...(p.invocationDiscard || []),
@@ -153,7 +156,9 @@ function runMission(config: (typeof missions)[number]) {
   const initial = [
     ...s.player.hand,
     ...s.player.deck,
-    ...s.player.inPlay.filter((p) => isPermanent(card(p))),
+    ...s.player.inPlay.filter(
+      (p) => isPermanent(card(p)) && codes.includes(p.code),
+    ),
     ...(s.player.setAside || []).filter((p) => codes.includes(p.code)),
   ];
   expect(initial.map((p) => p.code).sort()).toEqual([...codes].sort());
@@ -161,8 +166,24 @@ function runMission(config: (typeof missions)[number]) {
     ...(s.player.invocationDeck || []),
     ...(s.player.invocationDiscard || []),
   ];
-  const total = codes.length + supplementary.length;
-  const originalIds = new Set([...initial, ...supplementary].map((p) => p.id));
+  const identities = s.player.spdrIdentity
+    ? [
+        s.player.spdrIdentity,
+        ...s.player.inPlay.filter(
+          (p) => p.id === s.player.spdrSuitId || p.id === s.player.spdrPilotId,
+        ),
+      ]
+    : [];
+  if (hero.id === "spdr") {
+    expect(identities).toHaveLength(2);
+    expect(identities.map((p) => p.id).sort()).toEqual(
+      [s.player.spdrSuitId, s.player.spdrPilotId].sort(),
+    );
+  }
+  const total = codes.length + supplementary.length + identities.length;
+  const originalIds = new Set(
+    [...initial, ...supplementary, ...identities].map((p) => p.id),
+  );
   expect(originalIds.size, "Original physical source IDs are distinct").toBe(
     total,
   );
@@ -330,9 +351,9 @@ describe("published expansion starters across every supported mission setting", 
       heroIds.length * VILLAINS.length * 2 * MODULES.length,
     );
     expect(VILLAINS).toHaveLength(5);
-    expect(MODULES).toHaveLength(11);
-    expect(heroIds).toHaveLength(28);
-    expect(missions).toHaveLength(3080);
+    expect(MODULES).toHaveLength(13);
+    expect(heroIds).toHaveLength(30);
+    expect(missions).toHaveLength(3900);
   });
   for (const mission of missions)
     it(

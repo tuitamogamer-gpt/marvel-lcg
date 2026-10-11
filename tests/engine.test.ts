@@ -640,12 +640,14 @@ describe("complete seeded missions", () => {
             ...s.player.hand,
             ...s.player.deck,
             ...s.player.inPlay,
+            ...(s.player.spdrIdentity ? [s.player.spdrIdentity] : []),
             ...(s.player.setAside || []).filter(
               (p) => card(p).faction_code !== "encounter",
             ),
           ].map((p) => p.id),
         );
         if (h.id === "vision") expect(originalIds.size).toBe(41);
+        if (h.id === "spdr") expect(originalIds.size).toBe(42);
         s = settle(dispatch(s, { type: "MULLIGAN", ids: [] }));
         const command = (c: any) => {
           s = settle(dispatch(s, c));
@@ -726,6 +728,7 @@ describe("complete seeded missions", () => {
             ...s.player.deck,
             ...s.player.discard,
             ...s.player.inPlay,
+            ...(s.player.spdrIdentity ? [s.player.spdrIdentity] : []),
             ...(s.player.setAside || []),
             ...s.resolving,
             ...s.removed,

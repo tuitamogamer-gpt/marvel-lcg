@@ -7,6 +7,7 @@ import {
   heroRequiredCards,
   heroAllowsOffAspectEvent,
   heroDeckRule,
+  heroRuntime,
   isPermanent,
   validateHeroDeck,
 } from "./hero-runtime.js";
@@ -42,9 +43,11 @@ export function deckOptions(
   )?.pack_code;
   const selectedAspects =
     chosenAspects || heroDeckAspects(heroId, deckCodes(heroId, aspect), aspect);
+  const identityCodes = new Set(heroRuntime(heroId)?.identityCodes || []);
   return CATALOG_CARDS.filter(
     (c) =>
       c.code !== "26002b" &&
+      !identityCodes.has(c.code) &&
       !identityMatch(heroId, c) &&
       (hasExecutableScript(c) ||
         (CAPTAIN_AMERICA_SCRIPT_CODES as readonly string[]).includes(c.code)) &&
@@ -102,6 +105,7 @@ export function deckErrors(
       "spider_man_morales",
       "nova",
       "ironheart",
+      "spdr",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

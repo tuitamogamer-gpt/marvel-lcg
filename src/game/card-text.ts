@@ -12,6 +12,8 @@ export function isTextBlank(
   s: GameState,
   p: (Pick<Piece, "code"> & { id?: string }) | string,
 ) {
+  const printedCode = typeof p === "string" ? p : p.code;
+  if (["31001b", "31002b"].includes(printedCode)) return false;
   const physical =
     typeof p !== "string" && p.id
       ? [{ id: p.id }]

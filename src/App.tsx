@@ -1,5 +1,7 @@
 import { visionCanAttack } from "./game/vision";
 import { ironheartProgress, ironheartVersion } from "./game/ironheart";
+import { spdrSuit, spdrPilot } from "./game/spdr";
+import { spiderHamToonCounters } from "./game/spider-ham";
 import { valkyrieCannotBasicAttack } from "./game/valkyrie";
 import {
   doctorStrangeAbilityOptions,
@@ -19,6 +21,7 @@ import {
 import { deckSizeFor } from "./game/decks";
 import { resourcesFor } from "./game/payment";
 import { zzzaxEnemyStats } from "./game/zzzax";
+import { inheritorsModifiers } from "./game/inheritors";
 import {
   SPECTRUM_FORM_CODES,
   spectrumEnergyForm,
@@ -132,6 +135,7 @@ import {
   imageFor,
   maxHP,
   pieceHP,
+  enemyAttachmentModifier,
   plain,
   resources,
 } from "./game/cards";
@@ -4351,9 +4355,7 @@ function Tabletop({
                         riskyBlankPower(s, "attack", s.villain.id)
                           ? 0
                           : (card(s.villain).attack || 0) +
-                            s.attachments
-                              .filter((p) => p.attachedTo === s.villain.id)
-                              .reduce((n, p) => n + (card(p).attack || 0), 0)
+                            enemyAttachmentModifier(s, s.villain.id, "attack")
                       }
                       label="ATK"
                       compact
@@ -4364,9 +4366,7 @@ function Tabletop({
                         riskyBlankPower(s, "scheme", s.villain.id)
                           ? 0
                           : (card(s.villain).scheme || 0) +
-                            s.attachments
-                              .filter((p) => p.attachedTo === s.villain.id)
-                              .reduce((n, p) => n + (card(p).scheme || 0), 0)
+                            enemyAttachmentModifier(s, s.villain.id, "scheme")
                       }
                       label="SCH"
                       compact
@@ -4446,14 +4446,14 @@ function Tabletop({
                     <div>
                       <span className="small-label">ENVIRONMENT</span>
                       <strong>{card(p).name}</strong>
-                      {p.code !== "29039" && (
+                      {p.code !== "29039" && p.code !== "31037" && (
                         <span className="environment-counter">
                           <PremiumToken kind="counter" />
                           {p.counters}{" "}
                           {p.code === "02006a" ? "Infamy" : "Madness"}
                         </span>
                       )}
-                      {p.code === "29039" &&
+                      {(p.code === "29039" || p.code === "31037") &&
                         abilityOptions(s, p).map((a) => (
                           <button
                             key={a.id}
@@ -4600,13 +4600,26 @@ function Tabletop({
                                   : p.code === "01162"
                                     ? pieceHP(s, p) - p.damage
                                     : (card(p).attack || 0) +
-                                      zzzaxEnemyStats(s, p).attack}
+                                      (p.bonusAtk || 0) +
+                                      enemyAttachmentModifier(
+                                        s,
+                                        p.id,
+                                        "attack",
+                                      ) +
+                                      zzzaxEnemyStats(s, p).attack +
+                                      inheritorsModifiers(s, p).attack}
                               </b>
                               <small>ATK</small>
                             </span>
                           </span>
-                          {card(p).text?.includes("Guard.") && (
+                          {(card(p).text?.includes("Guard.") ||
+                            inheritorsModifiers(s, p).guard) && (
                             <span className="minion-keyword">GUARD</span>
+                          )}
+                          {!!p.inheritorBoosts?.length && (
+                            <span className="minion-keyword">
+                              {p.inheritorBoosts.length} FACEDOWN BOOST
+                            </span>
                           )}
                           <Status piece={p} />
                         </span>
@@ -4661,6 +4674,10 @@ function Tabletop({
                     </span>
                   )}
                   <button
+                    data-identity-id={
+                      s.player.spdrIdentity?.id ||
+                      s.player.spiderHamIdentity?.id
+                    }
                     className={`table-card identity-card ${s.player.exhausted ? "is-exhausted" : ""}`}
                     onClick={() => inspect({ code: heroCard(s).code })}
                   >
@@ -4673,7 +4690,8 @@ function Tabletop({
                     game={s}
                     host={{
                       ...s.villain,
-                      id: `hero:${s.activePlayerId}`,
+                      id:
+                        s.player.spdrIdentity?.id || `hero:${s.activePlayerId}`,
                       code: heroCard(s).code,
                     }}
                     inspect={inspect}
@@ -4761,6 +4779,37 @@ function Tabletop({
                         label="PROGRESS"
                         compact
                       />
+                    </div>
+                  )}
+                  {s.heroId === "spiderham" && (
+                    <div
+                      className="identity-stats stat-row"
+                      role="group"
+                      aria-label="Toon counters"
+                      data-identity-id={s.player.spiderHamIdentity?.id}
+                    >
+                      <StatToken
+                        kind="counter"
+                        value={spiderHamToonCounters(s)}
+                        label="TOON"
+                        compact
+                      />
+                    </div>
+                  )}
+                  {s.heroId === "spdr" && (
+                    <div
+                      className="identity-stats stat-row"
+                      role="group"
+                      aria-label="SP//dr physical identity cards"
+                      data-suit-id={s.player.spdrSuitId}
+                      data-pilot-id={s.player.spdrPilotId}
+                    >
+                      <span>
+                        Suit: {spdrSuit(s)?.exhausted ? "exhausted" : "ready"}
+                      </span>
+                      <span>
+                        Peni: {spdrPilot(s)?.exhausted ? "exhausted" : "ready"}
+                      </span>
                     </div>
                   )}
                   <p className="identity-power">{plain(heroCard(s).text)}</p>

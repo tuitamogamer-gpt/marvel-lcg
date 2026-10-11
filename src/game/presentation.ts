@@ -4,8 +4,17 @@ import type { Attack, GameState } from "./types.js";
 
 /** Attachments retain their rules-engine zones; the table groups them by host. */
 export function attachmentsFor(s: GameState, hostId: string) {
+  const hostIds = new Set([hostId]);
+  for (const seat of s.players) {
+    const identityId = seatView(s, seat).player.spdrIdentity?.id;
+    if (!identityId) continue;
+    const aliases = [identityId, `hero:${seat.id}`];
+    if (seat.id === s.activePlayerId) aliases.push("hero");
+    if (aliases.includes(hostId))
+      for (const alias of aliases) hostIds.add(alias);
+  }
   return [...allInPlay(s), ...s.attachments].filter(
-    (piece) => piece.attachedTo === hostId,
+    (piece) => !!piece.attachedTo && hostIds.has(piece.attachedTo),
   );
 }
 

@@ -1,4 +1,11 @@
-import { CARDS, card, heroCard, heroStats, HEROES } from "./cards.js";
+import {
+  CARDS,
+  card,
+  heroCard,
+  heroStats,
+  HEROES,
+  enemyAttachmentModifier,
+} from "./cards.js";
 import { allInPlay, seatView } from "./team.js";
 import { paymentSources, paymentStatus, paymentSubject } from "./payment.js";
 import { attackContext } from "./presentation.js";
@@ -48,6 +55,8 @@ function cardLocations(s: GameState) {
     put(p.deck, "Deck", name, false);
     put(p.discard, "Discard", name);
     put(p.inPlay, "In play", name);
+    if (p.spdrIdentity) put([p.spdrIdentity], "Identity", name);
+    if (p.spiderHamIdentity) put([p.spiderHamIdentity], "Identity", name);
     put(p.invocationDeck?.slice(0, 1) || [], "Faceup Invocation", name);
     put(p.invocationDeck?.slice(1) || [], "Invocation deck", name, false);
     put(p.invocationDiscard || [], "Invocation discard", name);
@@ -87,6 +96,8 @@ function cardLocations(s: GameState) {
   for (const p of allInPlay(s))
     put(p.storedCards || [], "Stored", p.ownerId || "", false);
   put(s.removed, "Removed");
+  for (const p of s.minions)
+    put(p.inheritorBoosts || [], "Facedown boost", "Encounter", false);
   for (const p of s.minions)
     if (p.droneCard) put([p.droneCard], "Drone", "", false);
   for (const p of s.sideSchemes) put(p.captured || [], "Captured", "", false);
@@ -144,6 +155,13 @@ export function boardSnapshot(s: GameState) {
     put(`${seat.id}:hand`, `${name} hand`, p.hand.length, "cards");
     put(`${seat.id}:deck`, `${name} deck`, p.deck.length, "cards");
     put(`${seat.id}:discard`, `${name} discard`, p.discard.length, "cards");
+    if (p.spiderHamIdentity)
+      put(
+        `${p.spiderHamIdentity.id}:counters`,
+        `${name} toon counters`,
+        p.spiderHamIdentity.counters,
+        "status",
+      );
     put(
       `${seat.id}:encounters`,
       `${name} encounters`,
@@ -852,9 +870,7 @@ export function recordReview(
     );
     const base =
       (attacker ? card(attacker).scheme || 0 : 0) +
-      s.attachments
-        .filter((p) => p.attachedTo === attacker?.id)
-        .reduce((n, p) => n + (card(p).scheme || 0), 0);
+      (attacker ? enemyAttachmentModifier(s, attacker.id, "scheme") : 0);
     const boost = s.scheming.boostCodes.reduce(
       (n, _code, index) => n + boostCount(s.scheming!, index),
       0,

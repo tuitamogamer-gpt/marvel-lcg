@@ -11,6 +11,9 @@ const fingerprints = new Map(
   originals.map((card) => [fingerprint(card), card.code]),
 );
 const aliases = new Map<string, string>();
+// Exact non-Core reprints share an installed native handler while their
+// physical cards retain the actual printing code.
+const nativeAliases = new Map<string, string>([["31018", "05017"]]);
 for (const card of catalog as Card[]) {
   const canonical = fingerprints.get(fingerprint(card));
   if (canonical && !originalCodes.has(card.code))
@@ -21,9 +24,10 @@ export function rulesCode(
   card: string | Pick<Piece, "code"> | null | undefined,
 ): string {
   const code = typeof card === "string" ? card : card?.code || "";
-  return aliases.get(code) || code;
+  return nativeAliases.get(code) || aliases.get(code) || code;
 }
 export function hasCoreScript(card: string | Pick<Piece, "code">): boolean {
   return originalCodes.has(rulesCode(card));
 }
 export const CORE_SCRIPT_REPRINTS = Object.fromEntries(aliases);
+export const NATIVE_SCRIPT_REPRINTS = Object.fromEntries(nativeAliases);
