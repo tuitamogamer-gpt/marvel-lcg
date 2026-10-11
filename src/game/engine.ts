@@ -1,4 +1,5 @@
 import * as armadillo from "./armadillo.js";
+import * as inheritors from "./inheritors.js";
 import * as zzzax from "./zzzax.js";
 import * as antMan from "./ant-man.js";
 import * as antPack from "./ant-man-pack.js";
@@ -468,17 +469,25 @@ export function makePiece(s: GameState, code: string): Piece {
   };
 }
 function keyword(p: Piece | string, name: string, s?: GameState) {
-  return (
+  const printed =
     !(s && isTextBlank(s, p)) &&
-    printedKeyword(card(p), name as PrintedKeyword) > 0
-  );
+    printedKeyword(card(p), name as PrintedKeyword) > 0;
+  const inherited =
+    s && typeof p !== "string"
+      ? inheritors.inheritorsModifiers(s, p)
+      : undefined;
+  return printed || !!inherited?.[name.toLowerCase() as keyof typeof inherited];
 }
 function nativeStatusModifiers(s: GameState, p: StatusState) {
-  return "code" in p && isTextBlank(s, p as Piece)
-    ? { stalwart: false, steady: false }
-    : "code" in p
-      ? armadillo.armadilloStatusModifiers(s, p as Piece)
-      : {};
+  if (!("code" in p)) return {};
+  const piece = p as Piece;
+  const inherited = inheritors.inheritorsModifiers(s, piece);
+  return {
+    ...(isTextBlank(s, piece)
+      ? { stalwart: false, steady: false }
+      : armadillo.armadilloStatusModifiers(s, piece)),
+    ...(inherited.stalwart ? { stalwart: true } : {}),
+  };
 }
 function giveCharacterStatus(
   s: GameState,
@@ -529,7 +538,8 @@ function syncNebulaIdentityStatuses(s: GameState) {
   ])
     if (
       printedKeyword(card(p), "Steady") ||
-      printedKeyword(card(p), "Stalwart")
+      printedKeyword(card(p), "Stalwart") ||
+      inheritors.inheritorsModifiers(s, p).stalwart
     )
       syncStatuses(p, card(p), nativeStatusModifiers(s, p));
 }
@@ -581,32 +591,38 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     p.id,
     starLordPackPorts,
   );
-  return Math.max(
+  const intrinsic = Math.max(
     isTextBlank(s, p) ? 0 : printedKeyword(card(p), name),
     Number(
-      name === "Piercing" &&
+      !!(
+        name === "Piercing" &&
         (granted.piercing ||
           nebula.nebulaNamedCharacterModifiers(s, card(p).name).piercing ||
           warMachine.warMachineEnemyKeywords(s, p).piercing ||
           miles.milesEnemyAttackKeywords(s, p, { isTextBlank }).piercing ||
           allyTraits.piercing ||
           nebulaPack.nebulaPackModifiers(s, p.id, nebulaPackPorts).piercing ||
-          (s.attack?.attacker === p.id && s.attack.piercing)),
+          (s.attack?.attacker === p.id && s.attack.piercing))
+      ),
     ),
     Number(
-      name === "Ranged" &&
+      !!(
+        name === "Ranged" &&
         (granted.ranged ||
           allyTraits.ranged ||
           packTraits.ranged ||
           warmPack.warMachinePackAllyModifiers(s, p, warMachinePackPorts)
             .ranged ||
-          venomPack.venomPackAllyKeywords(s, p).ranged),
+          venomPack.venomPackAllyKeywords(s, p).ranged)
+      ),
     ),
     Number(
-      name === "Overkill" &&
+      !!(
+        name === "Overkill" &&
         (packTraits.overkill ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
-            .overkill),
+            .overkill)
+      ),
     ),
     name === "Retaliate"
       ? niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
@@ -614,6 +630,13 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           ironheart.ironheartEnemyKeywords(s, p, { isTextBlank }).retaliate
       : 0,
   );
+  const inherited = inheritors.inheritorsModifiers(s, p);
+  const grantedValue = Number(
+    inherited[name.toLowerCase() as keyof typeof inherited] || 0,
+  );
+  return name === "Retaliate"
+    ? intrinsic + grantedValue
+    : Math.max(intrinsic, grantedValue);
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
 function resetPiece(p: Piece, entering = false): Piece {
@@ -1118,6 +1141,9 @@ function movePieceFromPlay(
     const view = seatView(s, before.id);
     view.player.hp += maxHP(view) - before.hp;
   }
+  s.encounter.discard.push(
+    ...(p.inheritorBoosts || []).map((boost) => resetPiece(boost)),
+  );
   for (const stored of [...(p.storedCards || []), ...(p.captured || [])]) {
     const owner = s.players.find((seat) => seat.id === stored.ownerId);
     if (!owner || owner.eliminated) s.removed.push(resetPiece(stored));
@@ -1808,6 +1834,7 @@ function dealDamage(
             ? 0
             : printedKeyword(card(original), "Retaliate")) +
           antMan.antManEnemyRetaliate(s, original) +
+          inheritors.inheritorsModifiers(s, original).retaliate +
           ironheart.ironheartEnemyKeywords(s, original, { isTextBlank })
             .retaliate +
           niPack.novaIronheartPackCharacterModifiers(
@@ -1826,6 +1853,8 @@ function dealDamage(
           amount,
           source: "retaliate",
           retaliateSource: original.id,
+          inheritorRetaliate: inheritors.inheritorsModifiers(s, original)
+            .retaliate,
           title: `${card(original).name} · Retaliate ${amount}`,
           mandatory: true,
           afterAttack: true,
@@ -3926,18 +3955,20 @@ export function newGame(config: {
         c.faction_code === "encounter" &&
         ((((c.set_code === s.module &&
           c.pack_code ===
-            (s.module === "zzzax"
-              ? "ironheart"
-              : s.module === "armadillo"
-                ? "nova"
-                : [
-                      "goblin_gimmicks",
-                      "a_mess_of_things",
-                      "power_drain",
-                      "running_interference",
-                    ].includes(s.module)
-                  ? "gob"
-                  : "core")) ||
+            (s.module === "inheritors"
+              ? "spiderham"
+              : s.module === "zzzax"
+                ? "ironheart"
+                : s.module === "armadillo"
+                  ? "nova"
+                  : [
+                        "goblin_gimmicks",
+                        "a_mess_of_things",
+                        "power_drain",
+                        "running_interference",
+                      ].includes(s.module)
+                    ? "gob"
+                    : "core")) ||
           (c.set_code === v.id && c.pack_code === scenarioPack) ||
           (c.set_code === "standard" && c.pack_code === "core") ||
           (difficulty === "expert" &&
@@ -8746,6 +8777,36 @@ const riskyPorts: RiskyBusinessEnginePorts = {
   giveBoost: mutagenPorts.giveBoost,
   activate: mutagenPorts.activate,
 };
+const inheritorsPorts: inheritors.InheritorsPorts = {
+  queue: add,
+  choose,
+  discardTop: mutagenPorts.discardTop,
+  putMinion: mutagenPorts.putMinion,
+  hasTrait: captainPackHasTrait,
+  controlledCharacters: (s) => targets(s, "controlled"),
+  statusEligible: dsPorts.canAddStatus,
+  canDiscardControlled: (s, p) => zzzaxPorts.canDiscardControlled(s, p),
+  discardControlled: discardPiece,
+  giveBoost: (s, id) => {
+    const enemy = s.minions.find((p) => p.id === id);
+    if (!enemy) return;
+    const boost = drawEncounter(s);
+    if (boost) (enemy.inheritorBoosts ||= []).push(boost);
+  },
+  damageSimultaneously: (s, ids, amount, source) =>
+    spectrumPorts.damageBatch(
+      s,
+      ids.map((id) => (id === "hero" ? `hero:${s.activePlayerId}` : id)),
+      amount,
+      source,
+    ),
+};
+function inheritorsAcceleration(s: GameState) {
+  return s.minions.reduce(
+    (total, p) => total + inheritors.inheritorsModifiers(s, p).acceleration,
+    0,
+  );
+}
 function minionWillEnter(s: GameState, p: Piece) {
   gamora.gamoraMinionWillEnter(s, p, gamoraPorts);
   nebula.nebulaMinionWillEnter(s, p, nebulaPorts);
@@ -9722,14 +9783,17 @@ const novaPorts: nova.NovaPorts = {
   playDamageReaction: (s, id, context, after) =>
     niNativeReactionPlay(s, id, after, context),
   preventAttackDamage: (s, context, amount) => {
-    const kind = String(s.flags[`novaDamageKind:${context.token}`] || "packet");
+    // A teammate pays and reacts in their own seat, but the pending damage
+    // receipt and its prevention belong to the originally attacked seat.
+    const flags = seatView(s, context.playerId).flags;
+    const kind = String(flags[`novaDamageKind:${context.token}`] || "packet");
     if (kind === "attack" && s.attack) s.attack.prevented += amount;
     else if (kind === "overkill" && s.attack)
       s.attack.identityPrevented =
         Number(s.attack.identityPrevented || 0) + amount;
     else
-      s.flags[`msPrevent:${context.token}`] =
-        Number(s.flags[`msPrevent:${context.token}`] || 0) + amount;
+      flags[`msPrevent:${context.token}`] =
+        Number(flags[`msPrevent:${context.token}`] || 0) + amount;
   },
   giveObligation: spectrumPorts.giveObligation,
   removeEncounter: milesPorts.removeEncounter,
@@ -10446,7 +10510,8 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     (p.bonusAtk || 0) +
     mutagenAttackModifiers(s, p).goblinNation +
     armadillo.armadilloAttackBonus(s, p) +
-    zzzax.zzzaxEnemyStats(s, p).attack;
+    zzzax.zzzaxEnemyStats(s, p).attack +
+    inheritors.inheritorsModifiers(s, p).attack;
   const attachments = s.attachments
     .filter((a) => a.attachedTo === p.id)
     .reduce((n, a) => n + (card(a).attack || 0), 0);
@@ -10537,6 +10602,7 @@ function prepareAttackBoosts(s: GameState) {
         : 0;
   if (a.isVillain)
     a.pendingBoosts.push(...(s.encounter.storedBoosts || []).splice(0));
+  a.pendingBoosts.push(...(attacker.inheritorBoosts || []).splice(0));
   const n = a.omitNormalBoost
     ? 0
     : normal + mutagenAdditionalBoosts(s, a.attacker);
@@ -10845,6 +10911,7 @@ function enemyScheme(
   const pendingBoosts: Piece[] = [];
   if (id === s.villain.id)
     pendingBoosts.push(...(s.encounter.storedBoosts || []).splice(0));
+  pendingBoosts.push(...(p.inheritorBoosts || []).splice(0));
   const normal = request?.omitNormalBoost
     ? 0
     : id === s.villain.id || keyword(p, "Villainous", s)
@@ -11100,7 +11167,12 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
     },
   );
   a.damage = result.actualDamage;
-  if (a.overkill && target !== "hero" && damage > before && !wasTough)
+  if (
+    (a.overkill || !!sourceKeyword(s, a.attacker, "Overkill")) &&
+    target !== "hero" &&
+    damage > before &&
+    !wasTough
+  )
     dealDamage(
       s,
       "hero",
@@ -11659,6 +11731,7 @@ function reveal(
       ...GOBLIN_MODULE_SCRIPT_CODES,
       ...armadillo.ARMADILLO_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
+      ...inheritors.INHERITORS_SCRIPT_CODES,
       ...RISKY_BUSINESS_SCRIPT_CODES,
       ...MUTAGEN_FORMULA_SCRIPT_CODES,
       ...BLACK_WIDOW_SCRIPT_CODES,
@@ -11708,6 +11781,7 @@ function reveal(
       ...MUTAGEN_FORMULA_SCRIPT_CODES,
       ...armadillo.ARMADILLO_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
+      ...inheritors.INHERITORS_SCRIPT_CODES,
     ].some((code) => code === p.code)
   ) {
     const window = beginRevealWindow(
@@ -11766,6 +11840,7 @@ function reveal(
   const rise =
     armadillo.armadilloReveal(s, p) ??
     zzzax.zzzaxReveal(s, p) ??
+    inheritors.inheritorsReveal(s, p) ??
     starLord.starLordEncounterReveal(s, p) ??
     gamora.gamoraEncounterReveal(s, p) ??
     drax.draxEncounterReveal(s, p) ??
@@ -12429,6 +12504,26 @@ function treachery(s: GameState, p: Piece) {
       throw Error(`No encounter script for ${p.code}.`);
   }
 }
+/** Continuous Retaliate grants are read when their after-attack window opens,
+ * after all simultaneous damage and defeats. Retain unrelated native grants. */
+function refreshInheritorsRetaliate(
+  s: GameState,
+  e: Effect,
+): Effect | undefined {
+  if (e.inheritorRetaliate === undefined) return e;
+  const recipient = find(s, e.retaliateSource);
+  if (!recipient) return undefined;
+  const inherited = inheritors.inheritorsModifiers(s, recipient).retaliate;
+  const amount = e.amount - e.inheritorRetaliate + inherited;
+  return amount > 0
+    ? {
+        ...e,
+        amount,
+        inheritorRetaliate: inherited,
+        title: `${card(recipient).name} · Retaliate ${amount}`,
+      }
+    : undefined;
+}
 function resolve(s: GameState, e: Effect) {
   if (
     sinisterPlayerPack.resolveSinisterPlayerPackEffect(
@@ -12441,6 +12536,11 @@ function resolve(s: GameState, e: Effect) {
   if (miles.resolveMilesMoralesEffect(s, e, milesPorts)) return;
   if (ghostSpider.resolveGhostSpiderEffect(s, e, ghostSpiderPorts)) return;
   if (e.retaliateSource && !find(s, e.retaliateSource)) return;
+  if (e.inheritorRetaliate !== undefined) {
+    const refreshed = refreshInheritorsRetaliate(s, e);
+    if (!refreshed) return;
+    e = { ...refreshed, inheritorRetaliate: undefined };
+  }
   if (e.type === "ms:preemptive" && !e.scarletCounted) {
     countActivationBoost(s, e.boostId, [{ ...e, scarletCounted: true }]);
     return;
@@ -12509,6 +12609,7 @@ function resolve(s: GameState, e: Effect) {
         const effects =
           armadillo.armadilloReveal(state, piece) ??
           zzzax.zzzaxReveal(state, piece) ??
+          inheritors.inheritorsReveal(state, piece) ??
           goblinModuleReveal(state, piece) ??
           riskyEncounterReveal(state, piece) ??
           mutagenEncounterReveal(state, piece) ??
@@ -12557,6 +12658,7 @@ function resolve(s: GameState, e: Effect) {
     return;
   if (armadillo.resolveArmadilloEffect(s, e, armadilloPorts)) return;
   if (zzzax.resolveZzzaxEffect(s, e, zzzaxPorts)) return;
+  if (inheritors.resolveInheritorsEffect(s, e, inheritorsPorts)) return;
   if (resolveGoblinModuleEffect(s, e, goblinPorts)) return;
   if (resolveThorEffect(s, e, thorPorts)) return;
   if (resolveMsMarvelEffect(s, e, msPorts)) return;
@@ -13836,11 +13938,15 @@ function resolve(s: GameState, e: Effect) {
       );
       break;
     case "attackAftermathOrder": {
-      const forced = s.queue.filter(
+      const queued = s.queue.filter(
         (x) =>
           x.responseGroup === e.responseGroup && x.afterAttack && x.mandatory,
       );
-      s.queue = s.queue.filter((x) => !forced.includes(x));
+      s.queue = s.queue.filter((x) => !queued.includes(x));
+      const forced = queued.flatMap((x) => {
+        const current = refreshInheritorsRetaliate(s, x);
+        return current ? [current] : [];
+      });
       if (forced.length < 2) add(s, ...forced);
       else
         add(
@@ -13979,7 +14085,15 @@ function resolve(s: GameState, e: Effect) {
           effects: Effect[];
           sourceId?: string;
         }[]
-      ).filter((r) => !r.sourceId || !!find(s, r.sourceId));
+      )
+        .filter((r) => !r.sourceId || !!find(s, r.sourceId))
+        .flatMap((r) => {
+          const effects = r.effects.flatMap((effect) => {
+            const current = refreshInheritorsRetaliate(s, effect);
+            return current ? [current] : [];
+          });
+          return effects.length ? [{ ...r, effects }] : [];
+        });
       if (!remaining.length) break;
       const next = (r: (typeof remaining)[number]) => [
         ...r.effects,
@@ -17217,7 +17331,7 @@ function resolve(s: GameState, e: Effect) {
       if (
         !heroTarget &&
         !a.originalTarget &&
-        a.overkill &&
+        (a.overkill || !!sourceKeyword(s, a.attacker, "Overkill")) &&
         !a.nebulaOverkillHandled
       ) {
         const ally = find(s, damageTarget);
@@ -17252,7 +17366,7 @@ function resolve(s: GameState, e: Effect) {
       if (
         !heroTarget &&
         !a.originalTarget &&
-        a.overkill &&
+        (a.overkill || !!sourceKeyword(s, a.attacker, "Overkill")) &&
         !a.grootOverkillHandled
       ) {
         const ally = find(s, damageTarget);
@@ -17465,7 +17579,10 @@ function resolve(s: GameState, e: Effect) {
               ],
             })),
         );
-      if (!heroTarget && a.overkill) {
+      if (
+        !heroTarget &&
+        (a.overkill || !!sourceKeyword(s, a.attacker, "Overkill"))
+      ) {
         const ally = find(s, damageTarget);
         const excess =
           ally && !ally.tough
@@ -18268,7 +18385,20 @@ function resolve(s: GameState, e: Effect) {
       log(s, "Villain phase · threat, activations, then encounters.", "phase");
       add(
         s,
-        ...zzzax.zzzaxVillainPhaseInterrupts(s),
+        E("villainPhaseForcedInterrupts", {
+          remaining: [
+            ...inheritors.inheritorsVillainPhaseInterrupts(s),
+            ...(s.environments || [])
+              .filter((p) => p.code === "29039" && !isTextBlank(s, p))
+              .map((p) =>
+                E("zzzax:static-source", {
+                  id: p.id,
+                  actorId: s.firstPlayerId,
+                }),
+              ),
+          ],
+          actorId: s.firstPlayerId,
+        }),
         ...groot.grootVillainPhaseBegin(s, grootPorts),
         ...ghostSpider.ghostSpiderVillainPhaseBegins(s, ghostSpiderPorts),
         ...gamora.gamoraVillainPhaseBegin(s, gamoraPorts),
@@ -18278,10 +18408,39 @@ function resolve(s: GameState, e: Effect) {
         E("newRound"),
       );
       break;
+    case "villainPhaseForcedInterrupts": {
+      const remaining = (e.remaining as Effect[])
+        .filter((effect) => {
+          const p = find(s, effect.id);
+          return !!p && !isTextBlank(s, p);
+        })
+        .map((effect): Effect => ({ ...effect, actorId: s.firstPlayerId }));
+      if (remaining.length === 1) add(s, remaining[0]);
+      else if (remaining.length > 1)
+        choose(
+          s,
+          "Villain phase · forced interrupt order",
+          "Choose the next effect to resolve.",
+          remaining.map((effect, index) => ({
+            id: effect.id,
+            label: card(find(s, effect.id)!).name,
+            image: find(s, effect.id)!.code,
+            effects: [
+              effect,
+              {
+                ...e,
+                remaining: remaining.filter((_, i) => i !== index),
+                actorId: s.firstPlayerId,
+              },
+            ],
+          })),
+        );
+      break;
+    }
     case "villainStepOne":
       log(
         s,
-        `Place ${escalation(s)} threat for ${s.playerCount} starting hero(es), plus ${s.encounter.acceleration + s.sideSchemes.reduce((n, p) => n + (card(p).scheme_acceleration || 0) + ironheart.ironheartSchemeIcons(s, p, { isTextBlank }).acceleration + Number(p.accelerationTokens || 0), 0)} acceleration.`,
+        `Place ${escalation(s)} threat for ${s.playerCount} starting hero(es), plus ${s.encounter.acceleration + inheritorsAcceleration(s) + s.sideSchemes.reduce((n, p) => n + (card(p).scheme_acceleration || 0) + ironheart.ironheartSchemeIcons(s, p, { isTextBlank }).acceleration + Number(p.accelerationTokens || 0), 0)} acceleration.`,
         "bad",
       );
       add(
@@ -18291,6 +18450,7 @@ function resolve(s: GameState, e: Effect) {
           amount:
             escalation(s) +
             s.encounter.acceleration +
+            inheritorsAcceleration(s) +
             s.sideSchemes.reduce(
               (n, p) =>
                 n +
@@ -18661,6 +18821,7 @@ function run(s: GameState) {
         "zzzaxDiscardCostCommit",
         "dealEncounters",
         "beginVillain",
+        "villainPhaseForcedInterrupts",
         "villainStepOne",
         "nextMulligan",
         "vision:stun-after",

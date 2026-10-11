@@ -19,6 +19,7 @@ import {
 import { deckSizeFor } from "./game/decks";
 import { resourcesFor } from "./game/payment";
 import { zzzaxEnemyStats } from "./game/zzzax";
+import { inheritorsModifiers } from "./game/inheritors";
 import {
   SPECTRUM_FORM_CODES,
   spectrumEnergyForm,
@@ -4600,13 +4601,20 @@ function Tabletop({
                                   : p.code === "01162"
                                     ? pieceHP(s, p) - p.damage
                                     : (card(p).attack || 0) +
-                                      zzzaxEnemyStats(s, p).attack}
+                                      zzzaxEnemyStats(s, p).attack +
+                                      inheritorsModifiers(s, p).attack}
                               </b>
                               <small>ATK</small>
                             </span>
                           </span>
-                          {card(p).text?.includes("Guard.") && (
+                          {(card(p).text?.includes("Guard.") ||
+                            inheritorsModifiers(s, p).guard) && (
                             <span className="minion-keyword">GUARD</span>
+                          )}
+                          {!!p.inheritorBoosts?.length && (
+                            <span className="minion-keyword">
+                              {p.inheritorBoosts.length} FACEDOWN BOOST
+                            </span>
                           )}
                           <Status piece={p} />
                         </span>

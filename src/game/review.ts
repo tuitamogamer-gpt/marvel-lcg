@@ -88,6 +88,8 @@ function cardLocations(s: GameState) {
     put(p.storedCards || [], "Stored", p.ownerId || "", false);
   put(s.removed, "Removed");
   for (const p of s.minions)
+    put(p.inheritorBoosts || [], "Facedown boost", "Encounter", false);
+  for (const p of s.minions)
     if (p.droneCard) put([p.droneCard], "Drone", "", false);
   for (const p of s.sideSchemes) put(p.captured || [], "Captured", "", false);
   return located;

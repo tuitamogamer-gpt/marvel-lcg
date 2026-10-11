@@ -6,7 +6,7 @@ import {
   EXPLICIT_CARD_SCRIPTS,
   SCRIPTED_HERO_IDS,
 } from "../src/game/engine-support";
-import { CATALOG_CARDS, HEROES, VILLAINS } from "../src/game/cards";
+import { CATALOG_CARDS, HEROES, MODULES, VILLAINS } from "../src/game/cards";
 import {
   candidatePatterns,
   normalizeRules,
@@ -21,8 +21,18 @@ const inventory = read("docs/engine-expansion-inventory.json");
 const byCode = new Map<string, object>(
   cards.map((card: { code: string }) => [card.code, card]),
 );
-const audited = new Map(
-  inventory.cards.map((card: { code: string }) => [card.code, card]),
+interface AuditedCard {
+  code: string;
+  mechanics: string[];
+  installedRegistry: {
+    code: string;
+    executable: boolean;
+    mechanism: string;
+    compilerStatus: string;
+  };
+}
+const audited = new Map<string, AuditedCard>(
+  inventory.cards.map((card: AuditedCard) => [card.code, card]),
 );
 
 describe("complete expansion rules inventory", () => {
@@ -224,9 +234,9 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(1331);
-    expect(coverage.unsupportedFaces).toBe(3220);
-    expect(coverage.dedicatedFaces).toBe(858);
+    expect(coverage.executableFaces).toBe(1340);
+    expect(coverage.unsupportedFaces).toBe(3211);
+    expect(coverage.dedicatedFaces).toBe(867);
     expect(coverage.registeredHeroIds).toHaveLength(33);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
@@ -261,6 +271,59 @@ describe("complete expansion rules inventory", () => {
         (scenario: { id: string }) => scenario.id === "mutagen_formula",
       ).registered,
     ).toBe(true);
+  });
+  it("closes the nine physical Inheritors cards without enabling the Spider-Ham hero or player pool", () => {
+    const codes = [
+      "30030",
+      "30031",
+      "30032",
+      "30033",
+      "30034",
+      "30035",
+      "30036",
+      "30037",
+      "30038",
+    ];
+    const source = cards.filter(
+      (entry: { set_code?: string }) => entry.set_code === "inheritors",
+    );
+    expect(source.map((entry: { code: string }) => entry.code)).toEqual(codes);
+    expect(
+      source.reduce(
+        (n: number, entry: { quantity: number }) => n + entry.quantity,
+        0,
+      ),
+    ).toBe(9);
+    for (const code of codes) {
+      const record = audited.get(code);
+      if (!record) throw new Error(`Missing audited Inheritors face ${code}`);
+      expect(record.installedRegistry).toMatchObject({
+        executable: true,
+        mechanism: "dedicated-module",
+        compilerStatus: "unsupported",
+      });
+      expect(EXPLICIT_CARD_SCRIPTS.has(code), code).toBe(true);
+    }
+    expect(MODULES.filter((module) => module.id === "inheritors")).toEqual([
+      { id: "inheritors", name: "The Inheritors", difficulty: 5 },
+    ]);
+    expect(MODULES.at(-1)?.id).toBe("inheritors");
+    const pack = inventory.installedRegistryCoverage.products.find(
+      (entry: { code: string }) => entry.code === "spiderham",
+    );
+    expect(pack).toMatchObject({
+      faceCount: 39,
+      executableFaces: 10,
+      installedCardClosure: false,
+    });
+    expect(pack.unsupportedFaceCodes).toHaveLength(29);
+    expect(pack.unsupportedFaceCodes).toContain("30001a");
+    expect(pack.unsupportedFaceCodes).toContain("30029");
+    expect(
+      inventory.heroes.find(
+        (hero: { id: string }) => hero.id === "spiderham:spiderham",
+      ),
+    ).toMatchObject({ registeredHeroIds: [], installedCardClosure: false });
   });
   it("records live compiler outcomes separately from inventory and whole-game certification", () => {
     const coverage = inventory.compilerCoverage;
@@ -307,7 +370,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(81);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(82);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
@@ -390,6 +453,7 @@ describe("complete expansion rules inventory", () => {
       "src/game/vision-pack.ts",
       "src/game/armadillo.ts",
       "src/game/zzzax.ts",
+      "src/game/inheritors.ts",
       "src/game/printed-card-metadata.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",

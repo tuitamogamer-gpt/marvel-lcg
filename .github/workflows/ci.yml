@@ -60,6 +60,8 @@ jobs:
             timeout: 45
           - group: zzzax
             scripts: test:zzzax
+          - group: inheritors
+            scripts: test:inheritors
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
