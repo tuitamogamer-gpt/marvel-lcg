@@ -4,6 +4,7 @@ import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { uniqueConflict } from "./unique.js";
 import { goblinIdentityLocked } from "./goblin-modules.js";
+import { rulesCode } from "./rules-code.js";
 import type { PaymentSource } from "./payment.js";
 import type {
   Card,
@@ -39,7 +40,7 @@ const option = (
   image?: string,
 ): Option => ({ id, label, effects, image });
 const ownPiece = (s: GameState, id: string, code?: string) =>
-  s.player.inPlay.find((p) => p.id === id && (!code || p.code === code));
+  s.player.inPlay.find((p) => p.id === id && (!code || rulesCode(p) === code));
 const enemy = (s: GameState, id: string) =>
   id === s.villain.id ? s.villain : s.minions.find((p) => p.id === id);
 const eventKey = (kind: string, id: string) => `msEvent:${kind}:${id}`;
@@ -350,7 +351,7 @@ export function msMarvelAllyEnter(s: GameState, p: Piece): Effect[] | null {
   return ["05002", "05012", "05018"].includes(p.code) ? [] : null;
 }
 export function msMarvelCardEntered(s: GameState, p: Piece): Effect[] {
-  if (["05017", "05024"].includes(p.code)) p.counters = 3;
+  if (["05017", "05024"].includes(rulesCode(p))) p.counters = 3;
   if (["05023", "05033"].includes(p.code))
     return [M("recipient", { id: p.id })];
   return [];
@@ -516,7 +517,9 @@ export function msMarvelDamageOptions(
           )
       : []),
     ...s.player.inPlay
-      .filter((p) => p.code === "05017" && p.counters > 0 && !isTextBlank(s, p))
+      .filter(
+        (p) => rulesCode(p) === "05017" && p.counters > 0 && !isTextBlank(s, p),
+      )
       .map((p) =>
         option(
           p.id,

@@ -152,6 +152,7 @@ describe("complete expansion rules inventory", () => {
       ["nova", 33],
       ["ironheart", 43],
       ["spiderham", 39],
+      ["spdr", 39],
     ] as const) {
       expect(
         coverage.products.find((pack: { code: string }) => pack.code === code),
@@ -235,10 +236,10 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(1369);
-    expect(coverage.unsupportedFaces).toBe(3182);
-    expect(coverage.dedicatedFaces).toBe(896);
-    expect(coverage.registeredHeroIds).toHaveLength(34);
+    expect(coverage.executableFaces).toBe(1408);
+    expect(coverage.unsupportedFaces).toBe(3143);
+    expect(coverage.dedicatedFaces).toBe(935);
+    expect(coverage.registeredHeroIds).toHaveLength(35);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
         coverage.registeredHeroes.some(
@@ -308,7 +309,10 @@ describe("complete expansion rules inventory", () => {
     expect(MODULES.filter((module) => module.id === "inheritors")).toEqual([
       { id: "inheritors", name: "The Inheritors", difficulty: 5 },
     ]);
-    expect(MODULES.at(-1)?.id).toBe("inheritors");
+    expect(MODULES.slice(-2).map((module) => module.id)).toEqual([
+      "inheritors",
+      "ironspider_sinister",
+    ]);
     const pack = inventory.installedRegistryCoverage.products.find(
       (entry: { code: string }) => entry.code === "spiderham",
     );
@@ -373,7 +377,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(84);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(87);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
@@ -459,6 +463,9 @@ describe("complete expansion rules inventory", () => {
       "src/game/inheritors.ts",
       "src/game/spider-ham.ts",
       "src/game/spider-ham-pack.ts",
+      "src/game/spdr.ts",
+      "src/game/spdr-pack.ts",
+      "src/game/ironspider-sinister.ts",
       "src/game/printed-card-metadata.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",

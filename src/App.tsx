@@ -1,5 +1,6 @@
 import { visionCanAttack } from "./game/vision";
 import { ironheartProgress, ironheartVersion } from "./game/ironheart";
+import { spdrSuit, spdrPilot } from "./game/spdr";
 import { spiderHamToonCounters } from "./game/spider-ham";
 import { valkyrieCannotBasicAttack } from "./game/valkyrie";
 import {
@@ -134,6 +135,7 @@ import {
   imageFor,
   maxHP,
   pieceHP,
+  enemyAttachmentModifier,
   plain,
   resources,
 } from "./game/cards";
@@ -4353,9 +4355,7 @@ function Tabletop({
                         riskyBlankPower(s, "attack", s.villain.id)
                           ? 0
                           : (card(s.villain).attack || 0) +
-                            s.attachments
-                              .filter((p) => p.attachedTo === s.villain.id)
-                              .reduce((n, p) => n + (card(p).attack || 0), 0)
+                            enemyAttachmentModifier(s, s.villain.id, "attack")
                       }
                       label="ATK"
                       compact
@@ -4366,9 +4366,7 @@ function Tabletop({
                         riskyBlankPower(s, "scheme", s.villain.id)
                           ? 0
                           : (card(s.villain).scheme || 0) +
-                            s.attachments
-                              .filter((p) => p.attachedTo === s.villain.id)
-                              .reduce((n, p) => n + (card(p).scheme || 0), 0)
+                            enemyAttachmentModifier(s, s.villain.id, "scheme")
                       }
                       label="SCH"
                       compact
@@ -4603,13 +4601,11 @@ function Tabletop({
                                     ? pieceHP(s, p) - p.damage
                                     : (card(p).attack || 0) +
                                       (p.bonusAtk || 0) +
-                                      s.attachments
-                                        .filter((a) => a.attachedTo === p.id)
-                                        .reduce(
-                                          (total, a) =>
-                                            total + (card(a).attack || 0),
-                                          0,
-                                        ) +
+                                      enemyAttachmentModifier(
+                                        s,
+                                        p.id,
+                                        "attack",
+                                      ) +
                                       zzzaxEnemyStats(s, p).attack +
                                       inheritorsModifiers(s, p).attack}
                               </b>
@@ -4678,6 +4674,10 @@ function Tabletop({
                     </span>
                   )}
                   <button
+                    data-identity-id={
+                      s.player.spdrIdentity?.id ||
+                      s.player.spiderHamIdentity?.id
+                    }
                     className={`table-card identity-card ${s.player.exhausted ? "is-exhausted" : ""}`}
                     onClick={() => inspect({ code: heroCard(s).code })}
                   >
@@ -4690,7 +4690,8 @@ function Tabletop({
                     game={s}
                     host={{
                       ...s.villain,
-                      id: `hero:${s.activePlayerId}`,
+                      id:
+                        s.player.spdrIdentity?.id || `hero:${s.activePlayerId}`,
                       code: heroCard(s).code,
                     }}
                     inspect={inspect}
@@ -4793,6 +4794,22 @@ function Tabletop({
                         label="TOON"
                         compact
                       />
+                    </div>
+                  )}
+                  {s.heroId === "spdr" && (
+                    <div
+                      className="identity-stats stat-row"
+                      role="group"
+                      aria-label="SP//dr physical identity cards"
+                      data-suit-id={s.player.spdrSuitId}
+                      data-pilot-id={s.player.spdrPilotId}
+                    >
+                      <span>
+                        Suit: {spdrSuit(s)?.exhausted ? "exhausted" : "ready"}
+                      </span>
+                      <span>
+                        Peni: {spdrPilot(s)?.exhausted ? "exhausted" : "ready"}
+                      </span>
                     </div>
                   )}
                   <p className="identity-power">{plain(heroCard(s).text)}</p>

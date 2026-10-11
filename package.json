@@ -44,7 +44,8 @@
     "test:milestones": "node scripts/milestones-check.mjs",
     "test:zzzax": "node scripts/zzzax-check.mjs",
     "test:inheritors": "node scripts/inheritors-check.mjs",
-    "test:spider-ham": "node scripts/spider-ham-check.mjs"
+    "test:spider-ham": "node scripts/spider-ham-check.mjs",
+    "test:spdr": "node scripts/spdr-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

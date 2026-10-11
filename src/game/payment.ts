@@ -15,6 +15,8 @@ import { warMachineResourceSources } from "./war-machine.js";
 import { visionResourceSources } from "./vision.js";
 import { novaPaymentResources, novaResourceSources } from "./nova.js";
 import { ironheartResourceSources } from "./ironheart.js";
+import { spdrResourceSources } from "./spdr.js";
+import { spdrPackResourceSources } from "./spdr-pack.js";
 import { spiderHamResourceSources } from "./spider-ham.js";
 import {
   novaIronheartPackCanShareResource,
@@ -173,6 +175,28 @@ function localPaymentSources(
       },
     }),
   );
+  sources.push(...spdrResourceSources(s, { isTextBlank }));
+  sources.push(
+    ...spdrPackResourceSources(s, {
+      isTextBlank,
+      canDealDamageCost: (state, target, amount) => {
+        const id =
+          target === "hero"
+            ? state.activePlayerId
+            : target.startsWith("hero:")
+              ? target.slice(5)
+              : undefined;
+        return (
+          amount > 0 &&
+          (id
+            ? !!state.players.find((seat) => seat.id === id && !seat.eliminated)
+            : allInPlay(state).some(
+                (p) => p.id === target && card(p).type_code === "ally",
+              ))
+        );
+      },
+    }),
+  );
   sources.push(...novaIronheartPackResourceSources(s, { isTextBlank }));
   sources.push(...hawkeyeResourceSources(s, targetCode));
   sources.push(...spiderWomanResourceSources(s, targetCode));
@@ -197,22 +221,35 @@ function localPaymentSources(
         kind: "ability",
       });
   }
+  // Committed damage costs belong to the contributing seat. The prompt is
+  // shared by all seat views, so normalize only that seat's actual source.
+  const committed = (s.prompt?.committedResources || [])
+    .filter((source) => source.playerId === s.activePlayerId)
+    .map((source) => ({ ...source, id: source.localId || source.id }));
+  sources.push(
+    ...committed.filter((source) => !sources.some((p) => p.id === source.id)),
+  );
   return sources
     .filter(
       (x) =>
         x.resources.length &&
         (!handOnly || x.kind === "card") &&
-        (x.kind === "card" || !isTextBlank(s, x.code)),
+        (x.kind === "card" ||
+          x.id.startsWith("spdr-sync:") ||
+          committed.some((r) => r.id === x.id) ||
+          !isTextBlank(s, x.code)),
     )
     .map((source) => ({
       ...source,
       // These printed modifiers apply to every generated wild, including
       // resource abilities, once for this payment's actual target card.
-      resources: novaPaymentResources(
-        targetCode,
-        source.resources,
-        !!targetCode && isTextBlank(s, targetCode),
-      ),
+      resources: committed.some((paid) => paid.id === source.id)
+        ? [...source.resources]
+        : novaPaymentResources(
+            targetCode,
+            source.resources,
+            !!targetCode && isTextBlank(s, targetCode),
+          ),
     }));
 }
 

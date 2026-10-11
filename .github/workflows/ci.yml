@@ -65,6 +65,20 @@ jobs:
           - group: spider-ham
             scripts: test:spider-ham
             timeout: 45
+          - group: spdr-identity
+            scripts: test:spdr
+            spdrScenarios: maintenance,pilot-flip,sync-cancel,rapid-deployment,web-trap,venom,systems-ready,systems-search,may-hero,may-alter,command-draw,command-ready,host-ready,psychic-thwart,fluid-attack,alloy-defense,ejection
+            timeout: 35
+          - group: spdr-player-pool
+            scripts: test:spdr
+            spdrScenarios: pool-daredevil,pool-noir,pool-repurpose,pool-thwip,pool-barrier,pool-forcefield,pool-tingle-treachery,pool-tingle-minion,pool-ham,pool-spider-man,pool-stamina,pool-unshakable,pool-clarity
+            spdrFixtureOnly: "1"
+            timeout: 35
+          - group: spdr-nemesis-sinister
+            scripts: test:spdr
+            spdrScenarios: obligation-remove,obligation-discard,nemesis,giant-cost,morbius-sync,drain-energy,drain-damage,drain-alter,module-grand,module-bombshell,module-bombshell-remainder,module-bombshell-boost,module-electro,module-hobgoblin,module-iron-spider,module-iron-spider-overkill,module-sandman,module-sandman-boost,module-spot-exact,module-spot-excess,module-spot-boost,module-surge,module-surge-remove
+            spdrFixtureOnly: "1"
+            timeout: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -89,6 +103,8 @@ jobs:
         env:
           BASE_URL: http://127.0.0.1:5174
           CI_BROWSER_SCRIPTS: ${{ matrix.scripts }}
+          SPDR_SCENARIOS: ${{ matrix.spdrScenarios }}
+          SPDR_FIXTURE_ONLY: ${{ matrix.spdrFixtureOnly }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
