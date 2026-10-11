@@ -54,7 +54,7 @@ Sandman's forced response discards seven encounter cards after **surviving actua
 
 The native boundary comprises `src/game/spdr.ts`, `src/game/spdr-pack.ts` and `src/game/ironspider-sinister.ts`, connected through the engine's actual payment, damage, defense, reveal, defeat and physical-card hooks. Independent source review inspected all 39 original imported card images and confirmed the forty-card source, two physical identity cards and preserved printed metadata. Imported catalog and starter JSON remain unchanged.
 
-The final eight focused suites completed on **11 October 2026 at 19:35 UTC: 302 tests passed**. Evidence is recorded in `output/spdr/focus-final.log`:
+The final eight focused suites completed on **11 October 2026 at 19:52 UTC: 308 tests passed**. Evidence is recorded in `output/spdr/focus-final.log`:
 
 | Boundary                                     | Passing tests |
 | -------------------------------------------- | ------------: |
@@ -63,7 +63,7 @@ The final eight focused suites completed on **11 October 2026 at 19:35 UTC: 302 
 | Payment and physical attachment presentation |             6 |
 | Native identity and signature integration    |            61 |
 | Player-pool rules and native integration     |            73 |
-| Sinister Six rules and native integration    |           100 |
+| Sinister Six rules and native integration    |           106 |
 
 Native cases preserve original physical IDs through JSON hydration and cover independent identity exhaustion, counter/attachment transfer, simultaneous elimination, signatures, allocated Sync Ratio payments, nemesis costs and resource-generation responses. An actual Psychic Link basic thwart and Core Iron Man's Aerial Helmet pay Giant Monster Attack's additional cost before removal; the temporary permission clears afterward.
 
@@ -71,8 +71,10 @@ Two original-source Thwip regressions prove all costs finish before generation r
 
 Electro's stored original VEN#m adds one HP from its Energy icon, while its printed ally ATK remains inactive. Actual native Electro attacks therefore deal two damage. A retained Gobbler Glider control preserves its real encounter attachment's +1 ATK. Native enemy statistics, the table and scheme reviews share the encounter-attachment modifier.
 
+Sandman’s damage response retains its actual source ID and rechecks that the same unblanked minion survived before it initiates. Original Wasp forty-card BASIC and paid Wasp Sting distributions prove that deferred batch defeat suppresses the lethal response while surviving attacks discard exactly seven cards. Sandman’s independent boost still discards seven without an in-play source. Saved response packets also respect a defeated or newly blanked source.
+
 TypeScript/build, formatting, generated inventory and production-entry startup pass. Native Node 24.19.0 resolves 74 runtime modules and six JSON imports; API startup returns HTTP 200. The generated inventory covers 35 native heroes, 1,408 executable faces, 935 dedicated faces and 87 source hashes.
 
-The final frozen production artifact is `index-Bn0UYfm5.js`, SHA256 `9842d4884f549f5651e1593793b3600370e2d1fdfd737e4bc413e4aee7f061ed` (1,501,043 bytes). CSS is `index-CCow7VPF.css`, SHA256 `bd92f463c83d279e62c502af2733ec622431fa53916439fc83664c6bfaa27720`. Independent HTTP 200 body comparisons match the immutable copy; evidence is `output/spdr/frozen-artifact.json`.
+The final frozen production artifact is `index-DRvhLLgp.js`, SHA256 `535328b57bbe81b6949709ce1bd048d9e9ec401e7cfc97473f2cf52be5e299f2` (1,501,162 bytes). CSS is `index-CCow7VPF.css`, SHA256 `bd92f463c83d279e62c502af2733ec622431fa53916439fc83664c6bfaa27720`. Independent HTTP 200 body comparisons match the immutable copy; evidence is `output/spdr/frozen-artifact.json`.
 
 **Full regression, final production-browser acceptance, remote CI and production deployment are separate pending gates.** The target browser coverage is 216 SP//dr flows across 1920/1440/1280/390, plus retained Spider-Ham, Inheritors, Zzzax and engine-continuation flows. Earlier acceptance artifacts with another JS hash are historical evidence only. The PR records the completed final counts and deployment once these gates finish.

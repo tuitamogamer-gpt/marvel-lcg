@@ -111,7 +111,9 @@ function base(
     aspect:
       firstHero === "doctor_strange" || firstHero === "spdr"
         ? ("protection" as const)
-        : ("leadership" as const),
+        : firstHero === "wsp"
+          ? ("aggression" as const)
+          : ("leadership" as const),
   };
   let s = newGame({
     ...iron,
@@ -156,13 +158,15 @@ function base(
     p.hand = [];
     p.discard = [];
     p.inPlay = identities;
-    p.form = seat.heroId === "spdr" ? "alter" : "hero";
+    p.form = ["spdr", "wsp"].includes(seat.heroId) ? "alter" : "hero";
     p.exhausted = p.flipped = p.stunned = p.confused = p.tough = false;
   }
   (s as Fixture).ironspiderOriginalIds = physical(s).map((p) => p.id);
   s.scheme.threat = 0;
   activateSeat(s, "p1");
   if (firstHero === "spdr") s = command(reload(s), { type: "FLIP" });
+  if (firstHero === "wsp")
+    s = settle(command(reload(s), { type: "FLIP", target: "giant" }));
   return s;
 }
 function source(s: GameState, code: string, seatId = s.activePlayerId) {
@@ -822,6 +826,67 @@ describe("Iron Spider native keywords and overkill", () => {
 });
 
 describe("Sandman actual attack-damage and boost discard boundaries", () => {
+  it.each([
+    { damage: 4, surviving: true },
+    { damage: 5, surviving: false },
+  ])(
+    "original Giant Wasp's distributed basic attack respects surviving=$surviving Sandman",
+    ({ damage, surviving }) => {
+      let s = settle(
+        reveal(base(false, "rhino", "spider_man", "wsp"), "31035"),
+      );
+      const id = minion(s, "31035").id;
+      s = settle(native(s, { type: "damage", target: id, amount: damage }));
+      const before = s.encounter.deck.map((p) => p.id);
+      s = command(reload(s), { type: "BASIC", action: "attack" });
+      s = settle(s, (v) =>
+        v.prompt?.options.some((o) => o.id === `${id}:2`)
+          ? `${id}:2`
+          : undefined,
+      );
+      expect(s.minions.some((p) => p.id === id)).toBe(surviving);
+      expect(s.encounter.deck.map((p) => p.id)).toEqual(
+        surviving ? before.slice(7) : before,
+      );
+      if (surviving) expect(minion(s, "31035").damage).toBe(6);
+      else
+        expect(s.encounter.discard.filter((p) => p.id === id)).toHaveLength(1);
+    },
+  );
+  it.each([
+    { damage: 2, surviving: true },
+    { damage: 3, surviving: false },
+  ])(
+    "original paid Giant Wasp Sting respects surviving=$surviving Sandman after distributed damage",
+    ({ damage, surviving }) => {
+      let s = settle(
+        reveal(base(false, "rhino", "spider_man", "wsp"), "31035"),
+      );
+      const id = minion(s, "31035").id;
+      s = settle(native(s, { type: "damage", target: id, amount: damage }));
+      const sting = hand(s, "13006"),
+        energy = hand(s, "13021");
+      const before = s.encounter.deck.map((p) => p.id);
+      s = command(reload(s), { type: "PLAY", id: sting.id });
+      s = command(reload(s), { type: "PAY", ids: [energy.id] });
+      s = settle(s, (v) =>
+        v.prompt?.options.some((o) => o.id === `${id}:4`)
+          ? `${id}:4`
+          : undefined,
+      );
+      expect(s.minions.some((p) => p.id === id)).toBe(surviving);
+      expect(s.encounter.deck.map((p) => p.id)).toEqual(
+        surviving ? before.slice(7) : before,
+      );
+      expect(s.player.discard.filter((p) => p.id === sting.id)).toHaveLength(1);
+      expect(s.player.discard.filter((p) => p.id === energy.id)).toHaveLength(
+        1,
+      );
+      if (surviving) expect(minion(s, "31035").damage).toBe(6);
+      else
+        expect(s.encounter.discard.filter((p) => p.id === id)).toHaveLength(1);
+    },
+  );
   it("a surviving actual basic attack discards exactly seven native top cards", () => {
     let s = settle(reveal(base(), "31035"));
     const id = minion(s, "31035").id;

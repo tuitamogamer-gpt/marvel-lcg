@@ -1662,7 +1662,13 @@ try {
         state = await finishChoices();
         const enemy = physical(state, f.enemyId);
         assert.equal(enemy.tough, true);
-        assert.equal(enemy.toughCards, 1);
+        assert.equal(enemy.toughCards ?? Number(enemy.tough), 1);
+        const toughStatus = page
+          .locator(".enemy-unit")
+          .filter({ has: page.locator('.minion-card-face img[src*="31034"]') })
+          .locator(".status-card.tough");
+        assert.equal(await toughStatus.count(), 1);
+        assert.equal(await toughStatus.isVisible(), true);
         await minionStats("31034", 2, 6);
         await basic("attack");
         state = await save();

@@ -507,6 +507,25 @@ describe("Original Iron Spider's Sinister Six authored rules", () => {
     ).toEqual([]);
     expect(f.ports.discardTop).not.toHaveBeenCalled();
   });
+  it.each(["defeated", "blanked"])(
+    "Sandman's retained response cannot initiate after its actual source is %s",
+    (condition) => {
+      const f = fixture();
+      const sand = f.minion("31035");
+      const effects = ironspiderSinisterDamageResponses(f.s, {
+        piece: sand,
+        actualDamage: 2,
+        fromAttack: true,
+      });
+      expect(effects[0].sourceId).toBe(sand.id);
+      if (condition === "defeated") {
+        f.s.minions = [];
+        f.s.encounter.discard.push(sand);
+      } else f.blank(sand);
+      f.effects(effects);
+      expect(f.ports.discardTop).not.toHaveBeenCalled();
+    },
+  );
   it("Sandman ignores zero/prevented damage and nonattack damage", () => {
     const f = fixture();
     const sand = f.minion("31035");

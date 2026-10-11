@@ -265,7 +265,12 @@ export function ironspiderSinisterDamageResponses(
     receipt.fromAttack &&
     receipt.actualDamage > 0 &&
     !isTextBlank(s, receipt.piece)
-    ? [I("discard-seven", { actorId: s.activePlayerId })]
+    ? [
+        I("discard-seven", {
+          sourceId: receipt.piece.id,
+          actorId: s.activePlayerId,
+        }),
+      ]
     : [];
 }
 
@@ -389,9 +394,19 @@ export function resolveIronspiderSinisterEffect(
         });
       break;
     }
-    case "ironspider-sinister:discard-seven":
+    case "ironspider-sinister:discard-seven": {
+      // Distributed attacks defer physical defeats until every damage packet
+      // is placed. The response can initiate only if its actual Sandman source
+      // still survives that cleanup; printed boost effects have no live source.
+      if (e.sourceId) {
+        const source = s.minions.find(
+          (p) => p.id === e.sourceId && p.code === "31035",
+        );
+        if (!source || isTextBlank(s, source)) break;
+      }
       discard(s, 7, ports);
       break;
+    }
     case "ironspider-sinister:spot-boost":
       ports.putMinion(s, e.piece, s.activePlayerId);
       break;
