@@ -62,6 +62,9 @@ jobs:
             scripts: test:zzzax
           - group: inheritors
             scripts: test:inheritors
+          - group: spider-ham
+            scripts: test:spider-ham
+            timeout: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

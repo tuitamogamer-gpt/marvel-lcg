@@ -48,6 +48,7 @@ function cardLocations(s: GameState) {
     put(p.deck, "Deck", name, false);
     put(p.discard, "Discard", name);
     put(p.inPlay, "In play", name);
+    if (p.spiderHamIdentity) put([p.spiderHamIdentity], "Identity", name);
     put(p.invocationDeck?.slice(0, 1) || [], "Faceup Invocation", name);
     put(p.invocationDeck?.slice(1) || [], "Invocation deck", name, false);
     put(p.invocationDiscard || [], "Invocation discard", name);
@@ -146,6 +147,13 @@ export function boardSnapshot(s: GameState) {
     put(`${seat.id}:hand`, `${name} hand`, p.hand.length, "cards");
     put(`${seat.id}:deck`, `${name} deck`, p.deck.length, "cards");
     put(`${seat.id}:discard`, `${name} discard`, p.discard.length, "cards");
+    if (p.spiderHamIdentity)
+      put(
+        `${p.spiderHamIdentity.id}:counters`,
+        `${name} toon counters`,
+        p.spiderHamIdentity.counters,
+        "status",
+      );
     put(
       `${seat.id}:encounters`,
       `${name} encounters`,

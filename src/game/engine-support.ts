@@ -37,6 +37,8 @@ import { NOVA_IRONHEART_PACK_SCRIPT_CODES } from "./nova-ironheart-pack.js";
 import { ARMADILLO_SCRIPT_CODES } from "./armadillo.js";
 import { ZZZAX_SCRIPT_CODES } from "./zzzax.js";
 import { INHERITORS_SCRIPT_CODES } from "./inheritors.js";
+import { SPIDER_HAM_SCRIPT_CODES } from "./spider-ham.js";
+import { SPIDER_HAM_PACK_SCRIPT_CODES } from "./spider-ham-pack.js";
 import { GOBLIN_MODULE_SCRIPT_CODES } from "./goblin-modules.js";
 import { BLACK_WIDOW_SCRIPT_CODES } from "./black-widow.js";
 import { DOCTOR_STRANGE_SCRIPT_CODES } from "./doctor-strange.js";
@@ -86,6 +88,7 @@ export const SCRIPTED_HERO_IDS = new Set([
   "spider_man_morales",
   "nova",
   "ironheart",
+  "spiderham",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ANT_MAN_SCRIPT_CODES,
@@ -136,6 +139,8 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ARMADILLO_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,
+  ...SPIDER_HAM_SCRIPT_CODES,
+  ...SPIDER_HAM_PACK_SCRIPT_CODES,
   ...BLACK_WIDOW_SCRIPT_CODES,
   ...DOCTOR_STRANGE_SCRIPT_CODES,
   ...HAWKEYE_SCRIPT_CODES,

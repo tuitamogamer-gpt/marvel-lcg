@@ -1,5 +1,6 @@
 import { visionCanAttack } from "./game/vision";
 import { ironheartProgress, ironheartVersion } from "./game/ironheart";
+import { spiderHamToonCounters } from "./game/spider-ham";
 import { valkyrieCannotBasicAttack } from "./game/valkyrie";
 import {
   doctorStrangeAbilityOptions,
@@ -4601,6 +4602,14 @@ function Tabletop({
                                   : p.code === "01162"
                                     ? pieceHP(s, p) - p.damage
                                     : (card(p).attack || 0) +
+                                      (p.bonusAtk || 0) +
+                                      s.attachments
+                                        .filter((a) => a.attachedTo === p.id)
+                                        .reduce(
+                                          (total, a) =>
+                                            total + (card(a).attack || 0),
+                                          0,
+                                        ) +
                                       zzzaxEnemyStats(s, p).attack +
                                       inheritorsModifiers(s, p).attack}
                               </b>
@@ -4767,6 +4776,21 @@ function Tabletop({
                         kind="counter"
                         value={ironheartProgress(s)}
                         label="PROGRESS"
+                        compact
+                      />
+                    </div>
+                  )}
+                  {s.heroId === "spiderham" && (
+                    <div
+                      className="identity-stats stat-row"
+                      role="group"
+                      aria-label="Toon counters"
+                      data-identity-id={s.player.spiderHamIdentity?.id}
+                    >
+                      <StatToken
+                        kind="counter"
+                        value={spiderHamToonCounters(s)}
+                        label="TOON"
                         compact
                       />
                     </div>

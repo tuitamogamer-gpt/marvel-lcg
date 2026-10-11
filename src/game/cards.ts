@@ -56,6 +56,8 @@ import {
   ironheartSignatureHPBonus,
 } from "./ironheart.js";
 import { novaIronheartPackCharacterModifiers } from "./nova-ironheart-pack.js";
+import { spiderHamStats, spiderHamTraits } from "./spider-ham.js";
+import { spiderHamPackCharacterModifiers } from "./spider-ham-pack.js";
 import { allInPlay, seatView } from "./team.js";
 import { msMarvelStats } from "./ms-marvel.js";
 import { identityMatch, uniqueMatches } from "./unique.js";
@@ -610,6 +612,20 @@ export const HEROES = [
     style: "Progress counters · Leadership",
     complexity: 3,
   },
+  {
+    id: "spiderham",
+    code: "30001a",
+    alter: "30001b",
+    name: "Spider-Ham",
+    identity: "Peter Porker",
+    aspect: "justice" as Aspect,
+    color: "#d16c7e",
+    tag: "A cartoon answer to every problem.",
+    description:
+      "Turn damage and recovery into toon counters, spend them as wild resources, and coordinate Web-Warrior allies.",
+    style: "Toon counters · Justice",
+    complexity: 2,
+  },
 ];
 export const VILLAINS = [
   {
@@ -812,6 +828,7 @@ export function deckCodes(
       (hero === "spider_man_morales" && aspect === "justice") ||
       (hero === "nova" && aspect === "aggression") ||
       (hero === "ironheart" && aspect === "leadership") ||
+      (hero === "spiderham" && aspect === "justice") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
@@ -957,6 +974,7 @@ export function aerial(s: GameState) {
     valkyrieTraits(s).includes("Aerial") ||
     visionTraits(s).includes("Aerial") ||
     novaTraits(s, { isTextBlank }).includes("Aerial") ||
+    spiderHamTraits(s).includes("Aerial") ||
     (s.heroId === "ironheart" &&
       s.player.form === "hero" &&
       !!heroCard(s).traits?.includes("Aerial.")) ||
@@ -1004,6 +1022,8 @@ export function heroStats(s: GameState) {
       visionStats(s).attack +
       sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).attack +
       novaIronheartCharacterModifiers(s, "hero").attack +
+      spiderHamStats(s, { isTextBlank }).attack +
+      spiderHamPackCharacterModifiers(s, "hero").attack +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
@@ -1030,6 +1050,7 @@ export function heroStats(s: GameState) {
       visionStats(s).thwart +
       sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).thwart +
       novaIronheartCharacterModifiers(s, "hero").thwart +
+      spiderHamStats(s, { isTextBlank }).thwart +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +

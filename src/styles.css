@@ -5211,7 +5211,7 @@ option {
   height: 100%;
   background: #96dcba;
 }
-.team-seat.eliminated {
+.team-seat.eliminated > img {
   opacity: 0.58;
 }
 .team-strip-note {

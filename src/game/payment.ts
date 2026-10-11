@@ -15,6 +15,7 @@ import { warMachineResourceSources } from "./war-machine.js";
 import { visionResourceSources } from "./vision.js";
 import { novaPaymentResources, novaResourceSources } from "./nova.js";
 import { ironheartResourceSources } from "./ironheart.js";
+import { spiderHamResourceSources } from "./spider-ham.js";
 import {
   novaIronheartPackCanShareResource,
   novaIronheartPackResourceSources,
@@ -157,6 +158,21 @@ function localPaymentSources(
   sources.push(...visionResourceSources(s, { isTextBlank }));
   sources.push(...novaResourceSources(s, { isTextBlank }));
   sources.push(...ironheartResourceSources(s, targetCode, { isTextBlank }));
+  sources.push(
+    ...spiderHamResourceSources(s, targetCode, {
+      isTextBlank,
+      isIdentityTextBlank(state) {
+        return (
+          isTextBlank(state, {
+            code: heroCard(state).code,
+            id: `hero:${state.activePlayerId}`,
+          }) ||
+          (!!state.player.spiderHamIdentity &&
+            isTextBlank(state, state.player.spiderHamIdentity))
+        );
+      },
+    }),
+  );
   sources.push(...novaIronheartPackResourceSources(s, { isTextBlank }));
   sources.push(...hawkeyeResourceSources(s, targetCode));
   sources.push(...spiderWomanResourceSources(s, targetCode));

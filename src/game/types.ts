@@ -255,6 +255,9 @@ export interface GameState {
     /** Ironheart's current physical identity. Its two other physical versions
      * remain set aside and swap with this instance without leaving play. */
     ironheartIdentity?: Piece;
+    /** Spider-Ham's actual identity retains its physical ID and toon counters
+     * when its face changes and through JSON saves. */
+    spiderHamIdentity?: Piece;
     hp: number;
     exhausted: boolean;
     flipped: boolean;
@@ -318,6 +321,19 @@ export interface GameState {
     kind: "info" | "good" | "bad" | "phase";
   }[];
   flags: Record<string, number | boolean | string>;
+  /** Consequential-damage receipts remain attached to the actual ally until
+   * its defeat window finishes, including saves during an interrupt. */
+  spiderHamConsequentialReceipts?: Record<
+    string,
+    {
+      token: string;
+      playerId: string;
+      consequential: boolean;
+      amount: number;
+      remainingHP: number;
+      textBlank: boolean;
+    }
+  >;
   attack: Attack | null;
   lastEncounter?: string;
   result?: string;

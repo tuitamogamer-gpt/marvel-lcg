@@ -151,6 +151,7 @@ describe("complete expansion rules inventory", () => {
       ["vision", 38],
       ["nova", 33],
       ["ironheart", 43],
+      ["spiderham", 39],
     ] as const) {
       expect(
         coverage.products.find((pack: { code: string }) => pack.code === code),
@@ -234,10 +235,10 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(1340);
-    expect(coverage.unsupportedFaces).toBe(3211);
-    expect(coverage.dedicatedFaces).toBe(867);
-    expect(coverage.registeredHeroIds).toHaveLength(33);
+    expect(coverage.executableFaces).toBe(1369);
+    expect(coverage.unsupportedFaces).toBe(3182);
+    expect(coverage.dedicatedFaces).toBe(896);
+    expect(coverage.registeredHeroIds).toHaveLength(34);
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
         coverage.registeredHeroes.some(
@@ -272,7 +273,7 @@ describe("complete expansion rules inventory", () => {
       ).registered,
     ).toBe(true);
   });
-  it("closes the nine physical Inheritors cards without enabling the Spider-Ham hero or player pool", () => {
+  it("retains the independent nine-card Inheritors closure beside the complete Spider-Ham pack", () => {
     const codes = [
       "30030",
       "30031",
@@ -313,17 +314,19 @@ describe("complete expansion rules inventory", () => {
     );
     expect(pack).toMatchObject({
       faceCount: 39,
-      executableFaces: 10,
-      installedCardClosure: false,
+      executableFaces: 39,
+      installedCardClosure: true,
     });
-    expect(pack.unsupportedFaceCodes).toHaveLength(29);
-    expect(pack.unsupportedFaceCodes).toContain("30001a");
-    expect(pack.unsupportedFaceCodes).toContain("30029");
+    expect(pack.unsupportedFaceCodes).toEqual([]);
     expect(
       inventory.heroes.find(
         (hero: { id: string }) => hero.id === "spiderham:spiderham",
       ),
-    ).toMatchObject({ registeredHeroIds: [], installedCardClosure: false });
+    ).toMatchObject({
+      registeredHeroIds: ["spiderham"],
+      installedCardClosure: true,
+      installedUnsupportedDependencies: [],
+    });
   });
   it("records live compiler outcomes separately from inventory and whole-game certification", () => {
     const coverage = inventory.compilerCoverage;
@@ -370,7 +373,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(82);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(84);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
@@ -454,6 +457,8 @@ describe("complete expansion rules inventory", () => {
       "src/game/armadillo.ts",
       "src/game/zzzax.ts",
       "src/game/inheritors.ts",
+      "src/game/spider-ham.ts",
+      "src/game/spider-ham-pack.ts",
       "src/game/printed-card-metadata.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",

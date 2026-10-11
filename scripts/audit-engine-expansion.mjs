@@ -1092,6 +1092,8 @@ export async function generateAudit(
     "src/game/nova.ts",
     "src/game/ironheart.ts",
     "src/game/nova-ironheart-pack.ts",
+    "src/game/spider-ham.ts",
+    "src/game/spider-ham-pack.ts",
     "src/game/printed-card-metadata.ts",
     "src/game/card-text.ts",
     "src/game/expansion-errata.ts",

@@ -232,7 +232,7 @@ export function nebulaPackPlayRestriction(
     return "Daughters of Thanos requires both Gamora and Nebula in play.";
   if (p.code === "22015") {
     if (
-      playerOrder(s).some(
+      s.players.some(
         (seat) => seatView(s, seat).flags.nebulaPackOneWayRound === s.round,
       )
     )
