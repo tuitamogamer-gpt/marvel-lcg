@@ -252,7 +252,26 @@ export function spdrAbilityOptions(
       ),
     ];
   const p = own(s, id);
-  if (!p || p.exhausted || ports.isTextBlank(s, p)) return [];
+  if (!p || ports.isTextBlank(s, p)) return [];
+  if (p.code === "31008")
+    return active(s) &&
+      s.player.form === "hero" &&
+      (ports.canChangeForm(s) ||
+        s.player.hp !== 6 ||
+        !s.player.tough ||
+        s.player.inPlay.some(
+          (q) => q.id !== p.id && interfaceCard(q) && !q.exhausted,
+        ))
+      ? [
+          O(
+            "ejection-protocol",
+            "Ejection Protocol · discard, exhaust Interfaces, set HP to 6, gain tough and flip",
+            [D("ejection", { id })],
+            p.code,
+          ),
+        ]
+      : [];
+  if (p.exhausted) return [];
   if (p.code === "31007")
     return [
       O(
@@ -263,15 +282,6 @@ export function spdrAbilityOptions(
       ),
     ];
   if (s.player.form !== "hero") return [];
-  if (p.code === "31008" && active(s) && ports.canChangeForm(s))
-    return [
-      O(
-        "ejection-protocol",
-        "Ejection Protocol · discard, exhaust Interfaces, set HP to 6, gain tough and flip",
-        [D("ejection", { id })],
-        p.code,
-      ),
-    ];
   if (p.code === "31009")
     return [
       ...(s.player.inPlay.some((p) => interfaceCard(p) && !p.exhausted)

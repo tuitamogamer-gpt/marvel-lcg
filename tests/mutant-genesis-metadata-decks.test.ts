@@ -370,7 +370,7 @@ describe("Mutant Genesis printed scope and physical forms", () => {
       );
     }
     for (const c of catalog.filter(
-      (c) => c.pack_code === "mut_gen" && c.position > 83,
+      (c) => c.pack_code === "mut_gen" && c.position > 108,
     )) {
       expect(hasExecutableScript(c.code), c.code).toBe(false);
       expect(EXPLICIT_CARD_SCRIPTS.has(c.code), c.code).toBe(false);

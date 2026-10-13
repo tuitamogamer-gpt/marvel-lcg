@@ -209,6 +209,13 @@ export interface Attack {
   isVillain: boolean;
 }
 export interface GameState {
+  /** Actual set-aside Captive allies and saved Project Wideawake receipts. */
+  projectWideawake?: import("./project-wideawake.js").ProjectWideawakeState;
+  /** Saved confirmed defeat metadata, never another physical card zone. */
+  zeroToleranceDefeats?: Record<
+    string,
+    import("./zero-tolerance.js").ZeroToleranceAllyDefeatReceipt[]
+  >;
   /** One physical scenario ally, with independent control and saved receipts. */
   sabretooth?: import("./sabretooth.js").SabretoothState;
   /** Encounter cards with Victory remain outside every discard/recycle pile. */

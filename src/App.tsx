@@ -32,6 +32,8 @@ import {
   spectrumFormFaceup,
 } from "./game/spectrum";
 import { riskyBlankPower } from "./game/risky-business";
+import { zeroToleranceIsPermanent } from "./game/zero-tolerance";
+import { projectWideawakeBombCount } from "./game/project-wideawake";
 import { mutagenAttachmentActions } from "./game/mutagen-formula";
 import {
   goblinModuleAttachmentActions,
@@ -151,6 +153,7 @@ import {
   enemyAttachmentModifier,
   plain,
   resources,
+  scenarioModules,
 } from "./game/cards";
 import {
   SAVE_KEY,
@@ -771,6 +774,7 @@ export default function App() {
       }),
     );
   function setTeamSize(size: number) {
+    setCaptureAllocation(["", "", ""]);
     setTeam((prev) => {
       const next = prev.slice(0, size);
       while (next.length < size) {
@@ -788,7 +792,9 @@ export default function App() {
   const [module, setModule] = useState("bomb_scare");
   const [secondaryModule, setSecondaryModule] = useState("mystique");
   const [senatorDamage, setSenatorDamage] = useState("");
+  const [captureAllocation, setCaptureAllocation] = useState(["", "", ""]);
   function selectModule(id: string) {
+    if (!scenarioModules(villain.id).some((m) => m.id === id)) return;
     setModule(id);
     if (secondaryModule === id)
       setSecondaryModule(id === "mystique" ? "brotherhood" : "mystique");
@@ -814,6 +820,15 @@ export default function App() {
   const [heroic, setHeroic] = useState(0);
   const recommendedSenatorDamage =
     heroic > 0 ? 3 : difficulty === "expert" ? 2 : 1;
+  const resolvedCaptureAllocation = team.map((_, index) =>
+    captureAllocation[index]
+      ? Number(captureAllocation[index])
+      : index === 0
+        ? recommendedSenatorDamage
+        : 0,
+  );
+  const captureSetupValid =
+    resolvedCaptureAllocation.reduce((sum, n) => sum + n, 0) <= team.length + 2;
   const [seedText, setSeedText] = useState("");
   const history = useRef<GameState[]>([]);
   const [undoDepth, setUndoDepth] = useState(0);
@@ -1042,10 +1057,11 @@ export default function App() {
       list.map((p, i) => (i === setupSeat ? { heroId: h.id, aspect: a } : p)),
     );
     setVillain(v);
-    const primary = pick(MODULES).id;
+    const primary = pick(scenarioModules(v.id)).id;
     setModule(primary);
     setSecondaryModule(primary === "mystique" ? "brotherhood" : "mystique");
     setSenatorDamage("");
+    setCaptureAllocation(["", "", ""]);
   }
   function dailySetup() {
     const text = dailySeedText();
@@ -1056,10 +1072,12 @@ export default function App() {
     setTeam([{ heroId: h.id, aspect: a }]);
     setSetupSeat(0);
     setVillain(v);
-    const primary = MODULES[(n >>> 8) % MODULES.length].id;
+    const choices = scenarioModules(v.id);
+    const primary = choices[(n >>> 8) % choices.length].id;
     setModule(primary);
     setSecondaryModule(primary === "mystique" ? "brotherhood" : "mystique");
     setSenatorDamage("");
+    setCaptureAllocation(["", "", ""]);
     setDifficulty("standard");
     setHeroic(0);
     setSeedText(text);
@@ -1108,6 +1126,9 @@ export default function App() {
                 module: game.module,
                 modules: game.modules,
                 senatorDamage: game.sabretooth?.startingDamage,
+                captureAllocation: game.projectWideawake?.captureAllocation
+                  ? [...game.projectWideawake.captureAllocation]
+                  : undefined,
                 guided: true,
                 pacing,
                 heroic: game.heroic || 0,
@@ -1129,6 +1150,9 @@ export default function App() {
                           ? undefined
                           : Number(senatorDamage),
                     }
+                  : {}),
+                ...(villain.id === "project_wideawake"
+                  ? { captureAllocation: resolvedCaptureAllocation }
                   : {}),
                 pacing,
                 heroic,
@@ -1781,13 +1805,16 @@ export default function App() {
                         v.id === "sabretooth" ? "mystique" : "brotherhood",
                       );
                       setSenatorDamage("");
+                      setCaptureAllocation(["", "", ""]);
                     }}
                   >
                     {v.name}
                   </button>
                 ))}
               </div>
-              <div className="mission-preview">
+              <div
+                className={`mission-preview${villain.name.length > 14 ? " long-title" : ""}`}
+              >
                 <div className="mission-portrait">
                   <img
                     data-card-preview={villain.codes[0]}
@@ -1917,13 +1944,79 @@ export default function App() {
                     value={module}
                     onChange={(e) => selectModule(e.target.value)}
                   >
-                    {MODULES.map((m) => (
+                    {scenarioModules(villain.id).map((m) => (
                       <option value={m.id} key={m.id}>
                         {m.name}
                       </option>
                     ))}
                   </select>
                 </label>
+                {villain.id === "project_wideawake" && (
+                  <>
+                    <p>
+                      Zero Tolerance is included with this scenario. Choose one
+                      additional modular set; Sentinels is recommended.
+                    </p>
+                    <details className="capture-setup">
+                      <summary>Starting captures</summary>
+                      <p>
+                        We recommend {recommendedSenatorDamage} facedown{" "}
+                        {recommendedSenatorDamage === 1 ? "card" : "cards"} for
+                        the whole team. Choose which decks contribute before
+                        opening hands are drawn, or choose zero for an easier
+                        start.
+                      </p>
+                      {team.map((seat, index) => (
+                        <label className="seed-field" key={seat.heroId}>
+                          Starting captures for{" "}
+                          {HEROES.find((h) => h.id === seat.heroId)!.name}
+                          <input
+                            type="number"
+                            min={0}
+                            max={team.length + 2}
+                            step={1}
+                            value={captureAllocation[index] || ""}
+                            placeholder={String(
+                              index === 0 ? recommendedSenatorDamage : 0,
+                            )}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              const next = [...captureAllocation];
+                              next[index] = value;
+                              const total = team.reduce(
+                                (sum, _, i) =>
+                                  sum +
+                                  (next[i]
+                                    ? Number(next[i])
+                                    : i === 0
+                                      ? recommendedSenatorDamage
+                                      : 0),
+                                0,
+                              );
+                              if (
+                                (value === "" ||
+                                  (Number.isInteger(Number(value)) &&
+                                    Number(value) >= 0 &&
+                                    Number(value) <= team.length + 2)) &&
+                                total <= team.length + 2
+                              )
+                                setCaptureAllocation(next);
+                            }}
+                          />
+                        </label>
+                      ))}
+                      <p role="status">
+                        {resolvedCaptureAllocation.reduce(
+                          (sum, n) => sum + n,
+                          0,
+                        )}{" "}
+                        starting captures · loss at {team.length + 3}.
+                        {!captureSetupValid &&
+                          " Choose fewer starting captures before starting the mission."}
+                      </p>
+                    </details>
+                  </>
+                )}
                 {villain.id === "sabretooth" && (
                   <>
                     <label>
@@ -2012,11 +2105,20 @@ export default function App() {
               <button
                 id="start-btn"
                 className="primary-button start-button"
+                disabled={
+                  villain.id === "project_wideawake" && !captureSetupValid
+                }
                 onClick={() => startRequest()}
               >
                 <Play size={17} weight="fill" /> START MISSION{" "}
                 <ArrowRight size={20} />
               </button>
+              {villain.id === "project_wideawake" && !captureSetupValid && (
+                <p className="setting-help" role="alert">
+                  Reduce the starting captures before starting this mission. The
+                  team loses at {team.length + 3} facedown cards.
+                </p>
+              )}
               <span className="save-note">
                 <ShieldCheck size={13} />
                 {storageError && !gameOwner
@@ -2076,6 +2178,11 @@ export default function App() {
                           setup.senatorDamage === undefined
                             ? ""
                             : String(setup.senatorDamage),
+                        );
+                        setCaptureAllocation(
+                          setup.captureAllocation
+                            ? setup.captureAllocation.map(String)
+                            : ["", "", ""],
                         );
                         setSetupSeat(0);
                         setVillain(
@@ -2258,18 +2365,21 @@ export default function App() {
         />
       )}
       {game?.error && <span className="sr-only">{game.error}</span>}
-      {screen === "game" && game?.phase === "mulligan" && !game.review && (
-        <CardSelection
-          key={game.activePlayerId}
-          title={`${HEROES.find((h) => h.id === game.heroId)!.name} · opening hand`}
-          text="Keep the cards you want. Select any cards to replace once before your first turn."
-          pieces={game.player.hand}
-          min={0}
-          max={game.player.hand.length}
-          mode="mulligan"
-          onConfirm={(ids) => send({ type: "MULLIGAN", ids })}
-        />
-      )}
+      {screen === "game" &&
+        game?.phase === "mulligan" &&
+        !game.review &&
+        !game.prompt && (
+          <CardSelection
+            key={game.activePlayerId}
+            title={`${HEROES.find((h) => h.id === game.heroId)!.name} · opening hand`}
+            text="Keep the cards you want. Select any cards to replace once before your first turn."
+            pieces={game.player.hand}
+            min={0}
+            max={game.player.hand.length}
+            mode="mulligan"
+            onConfirm={(ids) => send({ type: "MULLIGAN", ids })}
+          />
+        )}
       {screen === "game" && game?.prompt && !game.review && !inspect && (
         <Decision
           key={`${game.prompt.title}-${game.prompt.kind}-${game.nextId}`}
@@ -4070,7 +4180,17 @@ function AttachedCards({
             {[
               ...mutagenAttachmentActions(game, p),
               ...goblinModuleAttachmentActions(game, p),
-              ...(["25032", "29038", "32059", "32067", "32068"].includes(p.code)
+              ...([
+                "25032",
+                "29038",
+                "32059",
+                "32067",
+                "32068",
+                "32094",
+                "32095",
+                "32096",
+                "32107",
+              ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
             ].map((a) => (
@@ -4298,7 +4418,13 @@ function Tabletop({
             </span>
             <span className={threatCritical ? "danger" : ""}>
               <Target size={18} />
-              <b>Keep threat below {threatLimit}</b>
+              <b>
+                {s.villainId === "project_wideawake"
+                  ? `Keep captured cards below ${3 + s.playerCount}`
+                  : hasThreatLimit
+                    ? `Keep threat below ${threatLimit}`
+                    : "No main-scheme threat limit"}
+              </b>
             </span>
           </div>
         </div>
@@ -4491,6 +4617,18 @@ function Tabletop({
                     Before boosts & triggered abilities
                   </span>
                   <Status piece={s.villain} />
+                  {projectWideawakeBombCount(s, s.villain.id) > 0 && (
+                    <span
+                      className="stat-caption"
+                      aria-label={`Bomb counters on ${card(s.villain).name}: ${projectWideawakeBombCount(s, s.villain.id)}`}
+                    >
+                      {projectWideawakeBombCount(s, s.villain.id)} bomb{" "}
+                      {projectWideawakeBombCount(s, s.villain.id) === 1
+                        ? "counter"
+                        : "counters"}{" "}
+                      · 2 damage each at the end of the player phase
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="scheme-area">
@@ -4637,7 +4775,11 @@ function Tabletop({
                   </div>
                 ))}
                 {s.sideSchemes.map((p) => (
-                  <div className="table-side-scheme" key={p.id}>
+                  <div
+                    className="table-side-scheme"
+                    key={p.id}
+                    data-piece-id={p.id}
+                  >
                     <span className="table-group-label">SIDE SCHEME</span>
                     <button
                       className="scheme-card"
@@ -4662,6 +4804,19 @@ function Tabletop({
                       </span>
                       {(p.accelerationTokens || 0) > 0 && (
                         <span>Acceleration tokens: {p.accelerationTokens}</span>
+                      )}
+                      {p.code === "32104" && (
+                        <>
+                          {zeroToleranceIsPermanent(s, p) && (
+                            <span>PERMANENT</span>
+                          )}
+                          <span
+                            aria-label={`Operation Zero Tolerance: ${p.captured?.length || 0} facedown cards; lose at ${s.playerCount + 3}`}
+                          >
+                            {p.captured?.length || 0} / {s.playerCount + 3}{" "}
+                            facedown cards
+                          </span>
+                        </>
                       )}
                     </div>
                   </div>
@@ -4744,6 +4899,18 @@ function Tabletop({
                               )?.name
                             }
                           </span>
+                          {projectWideawakeBombCount(s, p.id) > 0 && (
+                            <span
+                              className="engagement-label"
+                              aria-label={`Bomb counters on ${card(p).name}: ${projectWideawakeBombCount(s, p.id)}`}
+                            >
+                              {projectWideawakeBombCount(s, p.id)} bomb{" "}
+                              {projectWideawakeBombCount(s, p.id) === 1
+                                ? "counter"
+                                : "counters"}{" "}
+                              · 2 damage each at the end of the player phase
+                            </span>
+                          )}
                           <span className="minion-stats">
                             <span
                               className="minion-health"

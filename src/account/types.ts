@@ -21,6 +21,7 @@ export interface MissionRecord {
   module: string;
   modules?: string[];
   senatorDamage?: number;
+  captureAllocation?: number[];
   round: number;
   outcome: "active" | "won" | "lost";
   result?: string;

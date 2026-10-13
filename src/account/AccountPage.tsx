@@ -954,6 +954,10 @@ export function AccountPage({
                       m.senatorDamage !== undefined
                         ? ` · Kelly starts with ${m.senatorDamage} damage`
                         : ""}
+                      {m.villainId === "project_wideawake" &&
+                      m.captureAllocation
+                        ? ` · ${m.captureAllocation.reduce((sum, n) => sum + n, 0)} starting captures`
+                        : ""}
                     </p>
                     {m.result && <p>{m.result}</p>}
                   </div>

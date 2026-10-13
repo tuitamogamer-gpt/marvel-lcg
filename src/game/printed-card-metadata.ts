@@ -1,10 +1,12 @@
 import type { Card } from "./types.js";
 
 type PrintedMetadata = Readonly<
-  Partial<Pick<Card, "attack" | "boost" | "is_unique" | "subname">>
+  Partial<
+    Pick<Card, "attack" | "boost" | "health" | "is_unique" | "subname" | "text">
+  >
 >;
 
-/** Missing fields verified against the original English card scans. These are
+/** Missing or mistranscribed fields verified against original English scans. These are
  * printing metadata, not text errata. Keep the downloaded catalog unchanged.
  * Each public/cards/catalog/<code>.webp corresponds to the catalog's source:
  * https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/<code>.jpg
@@ -31,6 +33,17 @@ const printedMetadata: Readonly<Record<string, PrintedMetadata>> = {
   // Original Mutant Genesis ally has the printed secondary title PIOTR RASPUTIN.
   // public/cards/catalog/32048.webp; the downloaded text omitted this title.
   "32048": { subname: "Piotr Rasputin" },
+  // Original Sentinel III deals to EVERY player, including the first player.
+  // public/cards/catalog/32086.webp; the snapshot copied stage II's wording.
+  "32086": {
+    text: "Stalwart. Toughness.\n<b>When Revealed</b>: The first player searches the encounter deck and discard pile for a copy of the Abduction Protocols side scheme and reveals it. <i>(Shuffle.)</i> Deal each player a facedown encounter card.",
+  },
+  // public/cards/catalog/32088a.webp: one printed boost triangle.
+  "32088a": { boost: 1 },
+  // public/cards/catalog/32092.webp: printed Wolfsbane, not Wolfbane.
+  "32092": { text: "[star] Wolfsbane's attacks gain piercing." },
+  // public/cards/catalog/32106.webp: printed five hit points, not six.
+  "32106": { health: 5 },
 };
 
 /** Return a playable face with verified printing fields, without mutating its

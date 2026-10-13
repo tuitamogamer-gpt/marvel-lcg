@@ -57,6 +57,164 @@ const replay = (record: GuestRecord) =>
     ...replaySetup(record),
   });
 
+function wideawakeSource(
+  captureAllocation = [0, 1],
+  difficulty: "standard" | "expert" = "expert",
+) {
+  const heroes = [
+    { heroId: "colossus", aspect: "protection" as const },
+    { heroId: "shadowcat", aspect: "aggression" as const },
+    { heroId: "spider_man", aspect: "justice" as const },
+  ].slice(0, captureAllocation.length);
+  return newGame({
+    heroId: heroes[0].heroId,
+    aspect: heroes[0].aspect,
+    heroes,
+    villainId: "project_wideawake",
+    module: "sentinels",
+    difficulty,
+    captureAllocation,
+    seed: 3286123,
+  });
+}
+
+describe("native Project Wideawake saved setup and replay", () => {
+  it.each([
+    { allocation: [0], difficulty: "standard" as const },
+    { allocation: [1], difficulty: "standard" as const },
+    { allocation: [0, 1], difficulty: "standard" as const },
+    { allocation: [1, 1], difficulty: "expert" as const },
+    { allocation: [1, 1, 1], difficulty: "expert" as const },
+  ])(
+    "replays the actual starting captures, modules and opening cards: %j",
+    ({ allocation, difficulty }) => {
+      storage();
+      const original = wideawakeSource(allocation, difficulty);
+      const finished = structuredClone(original);
+      finished.phase = "lost";
+      finished.accountMission = {
+        id: "wideawake-replay",
+        startedAt: "2026-10-13T00:00:00Z",
+      };
+      const record = missionRecord(finished);
+      expect(writeHistory([record])).toBe(true);
+      const [loaded] = readHistory();
+      expect(loaded.captureAllocation).toEqual(allocation);
+      expect(loaded.modules).toEqual(["sentinels"]);
+      const restored = replay(loaded);
+      expect(restored.projectWideawake).toEqual(original.projectWideawake);
+      expect(restored.encounter).toEqual(original.encounter);
+      expect(restored.sideSchemes).toEqual(original.sideSchemes);
+      expect(restored.players.map((p) => p.player)).toEqual(
+        original.players.map((p) => p.player),
+      );
+      expect(() => validateGame(restored)).not.toThrow();
+    },
+  );
+
+  it("copies allocations at the state, record and replay boundaries", () => {
+    const original = wideawakeSource();
+    const finished = structuredClone(original);
+    finished.phase = "lost";
+    finished.accountMission = {
+      id: "wideawake-copy",
+      startedAt: "2026-10-13T00:00:00Z",
+    };
+    const record = missionRecord(finished);
+    const setup = replaySetup(record);
+    setup.captureAllocation![0] = 1;
+    expect(record.captureAllocation).toEqual([0, 1]);
+    record.captureAllocation![1] = 0;
+    expect(original.projectWideawake!.captureAllocation).toEqual([0, 1]);
+    expect(finished.projectWideawake!.captureAllocation).toEqual([0, 1]);
+  });
+
+  it.each([[1], [0, 1, 0], [-1, 0], [0.5, 0], [5, 0], ["1", 0]])(
+    "rejects invalid archived and saved capture allocation %j",
+    (...allocation) => {
+      const state = wideawakeSource([0, 0]);
+      state.phase = "lost";
+      state.accountMission = {
+        id: "wideawake-invalid",
+        startedAt: "2026-10-13T00:00:00Z",
+      };
+      const valid = missionRecord(state);
+      storage([{ ...valid, captureAllocation: allocation }, valid]);
+      expect(readHistory()).toEqual([valid]);
+      state.projectWideawake!.captureAllocation = allocation as number[];
+      expect(() => validateGame(state)).toThrow(/capture allocation/i);
+    },
+  );
+
+  it("rejects using the fixed Zero Tolerance set as the additional modular slot", () => {
+    const state = wideawakeSource();
+    state.phase = "lost";
+    state.accountMission = {
+      id: "wideawake-fixed",
+      startedAt: "2026-10-13T00:00:00Z",
+    };
+    const valid = missionRecord(state);
+    storage([
+      { ...valid, module: "zero_tolerance", modules: ["zero_tolerance"] },
+      valid,
+    ]);
+    expect(readHistory()).toEqual([valid]);
+    state.module = "zero_tolerance";
+    state.modules = ["zero_tolerance"];
+    expect(() => validateGame(state)).toThrow(/mission|modular/i);
+  });
+
+  it("keeps capture allocation in active and completed account metadata", async () => {
+    const store = await sqliteStore(":memory:");
+    const registered = await request(store, {
+      action: "register",
+      username: "wideawake_replay",
+      displayName: "Replay",
+      password: "a long testing passphrase",
+    });
+    expect(registered.status).toBe(200);
+    const state = wideawakeSource();
+    const body = {
+      action: "mission.save",
+      id: "saved-wideawake",
+      revision: 0,
+      accountId: registered.data.user.id,
+      startedAt: "2026-10-13T00:00:00Z",
+      state,
+    };
+    const active = await request(store, body, registered.cookie);
+    expect(active.status).toBe(200);
+    expect(active.data.library.missions[0]).toMatchObject({
+      captureAllocation: [0, 1],
+      modules: ["sentinels"],
+      outcome: "active",
+    });
+    expect(
+      active.data.library.missions[0].state.projectWideawake.captureAllocation,
+    ).toEqual([0, 1]);
+    const finished = await request(
+      store,
+      {
+        ...body,
+        revision: 1,
+        state: {
+          ...state,
+          phase: "lost",
+          result: "Operation Zero Tolerance reached its capture threshold.",
+        },
+      },
+      registered.cookie,
+    );
+    expect(finished.status).toBe(200);
+    expect(finished.data.library.missions[0]).toMatchObject({
+      captureAllocation: [0, 1],
+      modules: ["sentinels"],
+      outcome: "lost",
+    });
+    expect(finished.data.library.missions[0]).not.toHaveProperty("state");
+  });
+});
+
 async function request(
   store: Store,
   body: Record<string, unknown>,

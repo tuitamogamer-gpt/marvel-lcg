@@ -1,4 +1,10 @@
-import { ASPECTS, HEROES, MODULES, VILLAINS, deckCodes } from "./game/cards";
+import {
+  ASPECTS,
+  HEROES,
+  VILLAINS,
+  deckCodes,
+  scenarioModules,
+} from "./game/cards";
 import { deckErrors } from "./game/decks";
 import type { Aspect, GameState } from "./game/types";
 import { readStorage, writeStorage } from "./browser-storage";
@@ -18,6 +24,7 @@ export type GuestRecord = {
   module?: string;
   modules?: string[];
   senatorDamage?: number;
+  captureAllocation?: number[];
   difficulty: "standard" | "expert";
   heroic: number;
   round: number;
@@ -35,18 +42,27 @@ function validRecord(value: unknown): value is GuestRecord {
     Number.isFinite(Date.parse(record.date)) &&
     VILLAINS.some((v) => v.id === record.villainId) &&
     (record.module === undefined ||
-      MODULES.some((m) => m.id === record.module)) &&
+      scenarioModules(record.villainId).some((m) => m.id === record.module)) &&
     (record.modules === undefined ||
       (Array.isArray(record.modules) &&
         record.modules.length ===
           (VILLAINS.find((v) => v.id === record.villainId)?.moduleCount || 1) &&
         new Set(record.modules).size === record.modules.length &&
         (record.module === undefined || record.module === record.modules[0]) &&
-        record.modules.every((id) => MODULES.some((m) => m.id === id)))) &&
+        record.modules.every((id) =>
+          scenarioModules(record.villainId).some((m) => m.id === id),
+        ))) &&
     (record.senatorDamage === undefined ||
       (Number.isInteger(record.senatorDamage) &&
         record.senatorDamage >= 0 &&
         record.senatorDamage <= 8)) &&
+    (record.captureAllocation === undefined ||
+      (Array.isArray(record.captureAllocation) &&
+        Array.isArray(record.heroes) &&
+        record.captureAllocation.length === record.heroes.length &&
+        record.captureAllocation.every((n) => Number.isInteger(n) && n >= 0) &&
+        record.captureAllocation.reduce((sum, n) => sum + n, 0) <=
+          record.heroes.length + 2)) &&
     ["standard", "expert"].includes(record.difficulty) &&
     [0, 1, 2, 3].includes(record.heroic) &&
     Number.isInteger(record.round) &&
@@ -111,6 +127,9 @@ export function missionRecord(game: GameState): GuestRecord {
     module: game.module,
     modules: game.modules ? [...game.modules] : undefined,
     senatorDamage: game.sabretooth?.startingDamage,
+    captureAllocation: game.projectWideawake?.captureAllocation
+      ? [...game.projectWideawake.captureAllocation]
+      : undefined,
     difficulty: game.difficulty,
     heroic: game.heroic || 0,
     round: game.round,
@@ -133,6 +152,9 @@ export function replaySetup(record: GuestRecord) {
       VILLAINS.find((v) => v.id === record.villainId)!.module,
     modules: record.modules ? [...record.modules] : undefined,
     senatorDamage: record.senatorDamage,
+    captureAllocation: record.captureAllocation
+      ? [...record.captureAllocation]
+      : undefined,
     difficulty: record.difficulty,
     heroic: record.heroic,
     seed: record.seed || undefined,
