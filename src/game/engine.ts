@@ -791,16 +791,15 @@ function choose(
   options: Option[],
   cancelable = false,
 ) {
-  // A defense ability is illegal for unblanked Intangible Vision during an
-  // actual attack. Other identities and nonattack prevention retain their
-  // ordinary timing windows.
+  // Every labeled defense ability, including attack/defense interrupts, must
+  // respect the identity's defense restrictions during an actual attack.
   if (s.attack)
     options = options.filter((o) => {
       const c = o.image ? card(o.image) : undefined;
       const actorId =
         o.effects.find((e) => e.actorId)?.actorId || s.activePlayerId;
       return (
-        (!c?.text?.includes("(defense)") ||
+        (!/\([^)]*\bdefense\b/i.test(c?.text || "") ||
           (vision.visionCanDefend(seatView(s, actorId)) &&
             shadowcat.shadowcatCanDefend(
               seatView(s, actorId),

@@ -67,7 +67,13 @@ function base(heroId = "shadowcat", team = false, aspect?: Aspect) {
   s.minions = [];
   s.sideSchemes = [];
   s.attachments = [];
-  s.encounter.deck = Array.from({ length: 20 }, () => makePiece(s, "01186"));
+  const obligations = s.encounter.deck.filter(
+    (p) => card(p).type_code === "obligation",
+  );
+  s.encounter.deck = [
+    ...Array.from({ length: 20 }, () => makePiece(s, "01186")),
+    ...obligations,
+  ];
   s.encounter.dealt = [];
   s.encounter.discard = [];
   s.villain.hp = s.villain.maxHp = 50;
@@ -116,6 +122,62 @@ const hasNightcrawlerInterrupt = (s: GameState) =>
   );
 
 describe("Mutant Genesis independent host boundaries", () => {
+  it.each([false, true])(
+    "Powerful Punch respects Shadowcat's physical Permanently Phased lock: %s",
+    (locked) => {
+      let s = base();
+      const massId = s.player.inPlay.find((p) => p.code === "32031a")!.id;
+      if (locked) {
+        const index = s.encounter.deck.findIndex((p) => p.code === "32055");
+        expect(
+          index,
+          "original Permanently Phased obligation",
+        ).toBeGreaterThanOrEqual(0);
+        const obligation = s.encounter.deck.splice(index, 1)[0];
+        obligation.dealtTo = s.activePlayerId;
+        s.player.inPlay.push(obligation);
+        phased(s);
+      }
+      const [punch] = hand(s, "32014", "32022");
+      s = attack(s);
+      expect(s.attack?.attacker).toBe(s.villain.id);
+      expect(s.prompt?.options.some((o) => o.image === "32014")).toBe(!locked);
+      expect(s.player.hand.some((p) => p.id === punch.id)).toBe(true);
+      expect(physical(s).filter((p) => p.id === massId)).toHaveLength(1);
+      expect(s.player.inPlay.find((p) => p.id === massId)?.code).toBe(
+        locked ? "32031b" : "32031a",
+      );
+    },
+  );
+
+  it.each([false, true])(
+    "Powerful Punch respects Vision's actual Intangible mass form: %s",
+    (intangible) => {
+      let s = base("vision");
+      const index = s.player.deck.findIndex((p) =>
+        ["26002", "26002b"].includes(p.code),
+      );
+      expect(index, "original Vision mass-form piece").toBeGreaterThanOrEqual(
+        0,
+      );
+      const mass = s.player.deck.splice(index, 1)[0];
+      mass.code = intangible ? "26002" : "26002b";
+      expect(card(mass).name).toBe(intangible ? "Intangible" : "Dense");
+      s.player.inPlay.push(mass);
+      const [punch] = hand(s, "32014", "32022");
+      s = attack(s);
+      expect(s.attack?.attacker).toBe(s.villain.id);
+      expect(s.prompt?.options.some((o) => o.image === "32014")).toBe(
+        !intangible,
+      );
+      expect(s.player.hand.some((p) => p.id === punch.id)).toBe(true);
+      expect(physical(s).filter((p) => p.id === mass.id)).toHaveLength(1);
+      expect(s.player.inPlay.find((p) => p.id === mass.id)?.code).toBe(
+        intangible ? "26002" : "26002b",
+      );
+    },
+  );
+
   it.each([0, 1])(
     "keeps Tough on a Piercing attack dealing %s before a one-point constant reduction",
     (amount) => {
