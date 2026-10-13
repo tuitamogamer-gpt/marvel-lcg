@@ -926,7 +926,9 @@ export function Collection({
           Rules supported means this card’s effects are implemented. Your hero,
           aspect and deckbuilding rules still determine which cards you can use.
           Catalog-only cards are available to read while their rules are being
-          added.
+          added. Sabretooth, Brotherhood and Mystique are available for
+          standalone missions. The other Mutant Genesis scenarios and campaign
+          are still catalog-only.
         </span>
       </div>
       {cards.length ? (

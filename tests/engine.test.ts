@@ -688,9 +688,12 @@ describe("complete seeded missions", () => {
             (p) => card(p).type_code === "ally" && !p.exhausted,
           )) {
             if (s.phase !== "player") break;
+            const live = s.player.inPlay.find((piece) => piece.id === p.id);
+            if (!live || live.exhausted || card(live).type_code !== "ally")
+              continue;
             command({
               type: "ABILITY",
-              id: p.id,
+              id: live.id,
               action:
                 s.scheme.threat >= 3 || s.sideSchemes.length
                   ? "thwart"

@@ -25,7 +25,6 @@ import {
 } from "./game/hero-runtime";
 import { deckSizeFor } from "./game/decks";
 import { resourcesFor } from "./game/payment";
-import { zzzaxEnemyStats } from "./game/zzzax";
 import { inheritorsModifiers } from "./game/inheritors";
 import {
   SPECTRUM_FORM_CODES,
@@ -159,6 +158,7 @@ import {
   allyLimit,
   allyCount,
   dispatch,
+  enemyStats,
   newGame,
   paymentSources,
   canPay,
@@ -786,6 +786,13 @@ export default function App() {
     "standard",
   );
   const [module, setModule] = useState("bomb_scare");
+  const [secondaryModule, setSecondaryModule] = useState("mystique");
+  const [senatorDamage, setSenatorDamage] = useState("");
+  function selectModule(id: string) {
+    setModule(id);
+    if (secondaryModule === id)
+      setSecondaryModule(id === "mystique" ? "brotherhood" : "mystique");
+  }
   const [inspect, setInspect] = useState<Inspect | null>(null);
   const inspectedEnergyForm =
     game && inspect?.piece ? spectrumEnergyFormInfo(game, inspect.piece) : null;
@@ -805,6 +812,8 @@ export default function App() {
   );
   const [pacing, setPacingState] = useState<Pacing>(readPacing);
   const [heroic, setHeroic] = useState(0);
+  const recommendedSenatorDamage =
+    heroic > 0 ? 3 : difficulty === "expert" ? 2 : 1;
   const [seedText, setSeedText] = useState("");
   const history = useRef<GameState[]>([]);
   const [undoDepth, setUndoDepth] = useState(0);
@@ -1033,7 +1042,10 @@ export default function App() {
       list.map((p, i) => (i === setupSeat ? { heroId: h.id, aspect: a } : p)),
     );
     setVillain(v);
-    setModule(pick(MODULES).id);
+    const primary = pick(MODULES).id;
+    setModule(primary);
+    setSecondaryModule(primary === "mystique" ? "brotherhood" : "mystique");
+    setSenatorDamage("");
   }
   function dailySetup() {
     const text = dailySeedText();
@@ -1044,7 +1056,10 @@ export default function App() {
     setTeam([{ heroId: h.id, aspect: a }]);
     setSetupSeat(0);
     setVillain(v);
-    setModule(MODULES[(n >>> 8) % MODULES.length].id);
+    const primary = MODULES[(n >>> 8) % MODULES.length].id;
+    setModule(primary);
+    setSecondaryModule(primary === "mystique" ? "brotherhood" : "mystique");
+    setSenatorDamage("");
     setDifficulty("standard");
     setHeroic(0);
     setSeedText(text);
@@ -1091,6 +1106,8 @@ export default function App() {
                 villainId: game.villainId,
                 difficulty: game.difficulty,
                 module: game.module,
+                modules: game.modules,
+                senatorDamage: game.sabretooth?.startingDamage,
                 guided: true,
                 pacing,
                 heroic: game.heroic || 0,
@@ -1104,6 +1121,15 @@ export default function App() {
                 villainId: villain.id,
                 difficulty,
                 module,
+                ...(villain.id === "sabretooth"
+                  ? {
+                      modules: [module, secondaryModule],
+                      senatorDamage:
+                        senatorDamage === ""
+                          ? undefined
+                          : Number(senatorDamage),
+                    }
+                  : {}),
                 pacing,
                 heroic,
                 seed: parseSeed(seedText),
@@ -1751,6 +1777,10 @@ export default function App() {
                     onClick={() => {
                       setVillain(v);
                       setModule(v.module);
+                      setSecondaryModule(
+                        v.id === "sabretooth" ? "mystique" : "brotherhood",
+                      );
+                      setSenatorDamage("");
                     }}
                   >
                     {v.name}
@@ -1878,19 +1908,72 @@ export default function App() {
                   </button>
                 </div>
               </div>
-              <label className="module-label">
-                Modular encounter
-                <select
-                  value={module}
-                  onChange={(e) => setModule(e.target.value)}
-                >
-                  {MODULES.map((m) => (
-                    <option value={m.id} key={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="module-label">
+                <label>
+                  {villain.id === "sabretooth"
+                    ? "Modular encounter 1"
+                    : "Modular encounter"}
+                  <select
+                    value={module}
+                    onChange={(e) => selectModule(e.target.value)}
+                  >
+                    {MODULES.map((m) => (
+                      <option value={m.id} key={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {villain.id === "sabretooth" && (
+                  <>
+                    <label>
+                      Modular encounter 2
+                      <select
+                        value={secondaryModule}
+                        onChange={(e) => setSecondaryModule(e.target.value)}
+                      >
+                        {MODULES.map((m) => (
+                          <option
+                            value={m.id}
+                            key={m.id}
+                            disabled={m.id === module}
+                          >
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <details>
+                      <summary>Robert Kelly setup</summary>
+                      <p>
+                        Keep the recommended {recommendedSenatorDamage} starting
+                        damage, or adjust the challenge.
+                      </p>
+                      <label className="seed-field">
+                        Robert Kelly starting damage
+                        <input
+                          type="number"
+                          min={0}
+                          max={8}
+                          step={1}
+                          value={senatorDamage}
+                          placeholder={`Recommended: ${recommendedSenatorDamage}`}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (
+                              value === "" ||
+                              (Number.isInteger(Number(value)) &&
+                                Number(value) >= 0 &&
+                                Number(value) <= 8)
+                            )
+                              setSenatorDamage(value);
+                          }}
+                        />
+                      </label>
+                    </details>
+                  </>
+                )}
+              </div>
               <div className="mission-team-summary">
                 {team.map((p, i) => (
                   <div className="mission-loadout" key={p.heroId}>
@@ -1920,8 +2003,9 @@ export default function App() {
                   </span>
                   <span>
                     <Target size={16} />
-                    {card(villain.schemes[0]).threat! * team.length} threat
-                    limit
+                    {card(villain.schemes[0]).threat
+                      ? `${card(villain.schemes[0]).threat! * team.length} threat limit`
+                      : "No threat limit"}
                   </span>
                 </div>
               </div>
@@ -1982,6 +2066,17 @@ export default function App() {
                           })),
                         );
                         setModule(setup.module);
+                        setSecondaryModule(
+                          setup.modules?.[1] ||
+                            (setup.module === "mystique"
+                              ? "brotherhood"
+                              : "mystique"),
+                        );
+                        setSenatorDamage(
+                          setup.senatorDamage === undefined
+                            ? ""
+                            : String(setup.senatorDamage),
+                        );
                         setSetupSeat(0);
                         setVillain(
                           VILLAINS.find((v) => v.id === r.villainId) ||
@@ -1992,7 +2087,7 @@ export default function App() {
                         setSeedText(r.seed ? String(r.seed) : "");
                         setToast(
                           r.module && r.heroes.every((seat) => seat.deckCards)
-                            ? "Original team, decks, modular set and seed loaded. Start the mission to replay it."
+                            ? "Original team, decks, modular encounters and seed loaded. Start the mission to replay it."
                             : "This older result did not record full setup details. Starter decks and the recommended modular set are loaded with its original seed.",
                         );
                       }}
@@ -4077,7 +4172,8 @@ function Tabletop({
   const playableHand = s.player.hand.filter((p) => !playable(s, p));
   const visibleHand = handFilter === "playable" ? playableHand : s.player.hand;
   const threatLimit = schemeLimit(s);
-  const threatCritical = s.scheme.threat >= threatLimit - 2;
+  const hasThreatLimit = Number.isFinite(threatLimit) && threatLimit > 0;
+  const threatCritical = hasThreatLimit && s.scheme.threat >= threatLimit - 2;
   const [pile, setPile] = useState<{ title: string; cards: Piece[] } | null>(
     null,
   );
@@ -4162,7 +4258,9 @@ function Tabletop({
         </div>
         <span className="table-game-meta">
           {s.difficulty} <span>·</span>{" "}
-          {MODULES.find((m) => m.id === s.module)?.name}
+          {(s.modules || [s.module])
+            .map((id) => MODULES.find((m) => m.id === id)?.name)
+            .join(" + ")}
           {s.heroic ? (
             <>
               {" "}
@@ -4421,17 +4519,21 @@ function Tabletop({
                   <StatToken
                     kind="threat"
                     value={s.scheme.threat}
-                    max={threatLimit}
+                    max={hasThreatLimit ? threatLimit : undefined}
                     label="Main scheme threat"
                   />
-                  <div className="threat-track">
-                    {Array.from({ length: threatLimit }, (_, i) => (
-                      <i
-                        className={i < s.scheme.threat ? "filled" : ""}
-                        key={i}
-                      />
-                    ))}
-                  </div>
+                  {hasThreatLimit ? (
+                    <div className="threat-track">
+                      {Array.from({ length: threatLimit }, (_, i) => (
+                        <i
+                          className={i < s.scheme.threat ? "filled" : ""}
+                          key={i}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="small-label">NO LIMIT</span>
+                  )}
                   <p>
                     +
                     {escalation(s) +
@@ -4451,6 +4553,45 @@ function Tabletop({
                     </span>
                   )}
                 </div>
+                {s.sabretooth?.kelly && (
+                  <div
+                    className="scenario-environment"
+                    role="group"
+                    data-scenario-ally={s.sabretooth.kelly.id}
+                    data-piece-id={s.sabretooth.kelly.id}
+                    aria-label="Robert Kelly scenario ally"
+                  >
+                    <button
+                      className="environment-card"
+                      onClick={() =>
+                        inspect({
+                          code: s.sabretooth!.kelly!.code,
+                          piece: s.sabretooth!.kelly,
+                        })
+                      }
+                      aria-label="Inspect Robert Kelly"
+                    >
+                      <CardImage code={s.sabretooth.kelly.code} />
+                    </button>
+                    <div>
+                      <span className="small-label">SCENARIO ALLY</span>
+                      <strong>Robert Kelly</strong>
+                      <span
+                        aria-label={`Robert Kelly health: ${9 - s.sabretooth.kelly.damage} of 9`}
+                      >
+                        <Heart size={12} /> {9 - s.sabretooth.kelly.damage} / 9
+                        HP
+                      </span>
+                      <span>{s.sabretooth.kelly.damage} damage</span>
+                      <small>
+                        {s.sabretooth.kelly.attachedTo
+                          ? "Attached to Find the Senator · text blank · no controller"
+                          : `Controlled by ${HEROES.find((h) => h.id === s.players.find((p) => p.id === s.sabretooth?.controllerId)?.heroId)?.name || "the first player"}`}
+                      </small>
+                      <Status piece={s.sabretooth.kelly} />
+                    </div>
+                  </div>
+                )}
                 {(s.environments || []).map((p) => (
                   <div className="scenario-environment" key={p.id}>
                     <button
@@ -4463,14 +4604,18 @@ function Tabletop({
                     <div>
                       <span className="small-label">ENVIRONMENT</span>
                       <strong>{card(p).name}</strong>
-                      {p.code !== "29039" && p.code !== "31037" && (
-                        <span className="environment-counter">
-                          <PremiumToken kind="counter" />
-                          {p.counters}{" "}
-                          {p.code === "02006a" ? "Infamy" : "Madness"}
-                        </span>
-                      )}
-                      {(p.code === "29039" || p.code === "31037") &&
+                      {p.code !== "29039" &&
+                        p.code !== "31037" &&
+                        p.code !== "32065b" && (
+                          <span className="environment-counter">
+                            <PremiumToken kind="counter" />
+                            {p.counters}{" "}
+                            {p.code === "02006a" ? "Infamy" : "Madness"}
+                          </span>
+                        )}
+                      {(p.code === "29039" ||
+                        p.code === "31037" ||
+                        p.code === "32065b") &&
                         abilityOptions(s, p).map((a) => (
                           <button
                             key={a.id}
@@ -4485,7 +4630,7 @@ function Tabletop({
                               })
                             }
                           >
-                            Remove
+                            {p.code === "32065b" ? a.label : "Remove"}
                           </button>
                         ))}
                     </div>
@@ -4611,21 +4756,7 @@ function Tabletop({
                               </span>
                             </span>
                             <span className="minion-attack">
-                              <b>
-                                {p.code === "drone"
-                                  ? pieceHP(s, p)
-                                  : p.code === "01162"
-                                    ? pieceHP(s, p) - p.damage
-                                    : (card(p).attack || 0) +
-                                      (p.bonusAtk || 0) +
-                                      enemyAttachmentModifier(
-                                        s,
-                                        p.id,
-                                        "attack",
-                                      ) +
-                                      zzzaxEnemyStats(s, p).attack +
-                                      inheritorsModifiers(s, p).attack}
-                              </b>
+                              <b>{enemyStats(s, p).attack}</b>
                               <small>ATK</small>
                             </span>
                           </span>

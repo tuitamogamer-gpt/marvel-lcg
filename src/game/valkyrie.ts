@@ -1,7 +1,8 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { defenseEventSources, isTextBlank } from "./card-text.js";
 import { consumeStatus } from "./keywords.js";
-import { playerOrder, seatView } from "./team.js";
+import { controlledNPCs, playerOrder, seatView } from "./team.js";
+import { sabretoothFirstPlayerChanged } from "./sabretooth.js";
 import type { AntManPorts } from "./ant-man.js";
 import type { Card, Effect, GameState, Option, Piece } from "./types.js";
 
@@ -508,8 +509,8 @@ export function valkyrieEnemyDefeated(
 
 function allies(s: GameState) {
   return playerOrder(s).flatMap((seat) =>
-    seatView(s, seat)
-      .player.inPlay.filter((p) => definition(p)?.type_code === "ally")
+    [...seatView(s, seat).player.inPlay, ...controlledNPCs(s, seat.id)]
+      .filter((p) => definition(p)?.type_code === "ally")
       .map((p) => ({ p, playerId: seat.id })),
   );
 }
@@ -1158,9 +1159,11 @@ export function resolveValkyrieEffect(
       const a = s.attachments.find((p) => p.id === e.id && p.code === "25031"),
         seat = s.players.find((p) => p.id === e.playerId),
         view = seat && seatView(s, seat),
-        p = view?.player.inPlay.find(
-          (p) => p.id === e.target && definition(p)?.type_code === "ally",
-        );
+        p =
+          view &&
+          [...view.player.inPlay, ...controlledNPCs(s, seat!.id)].find(
+            (p) => p.id === e.target && definition(p)?.type_code === "ally",
+          );
       need(
         a &&
           p &&
@@ -1170,9 +1173,12 @@ export function resolveValkyrieEffect(
         "Beguiled needs the actual selected ally.",
       );
       a!.attachedTo = p!.id;
-      const actual = takeActual([view!.player.inPlay], p!.id)!;
+      const npc = p!.id === s.sabretooth?.kellyId;
+      const actual = npc ? p! : takeActual([view!.player.inPlay], p!.id)!;
+      if (npc) delete s.sabretooth!.kelly;
       view!.flags[beguiledControllerKey(actual.id)] = e.playerId;
       actual.engagedWith = e.playerId;
+      if (npc) actual.treatedAsMinion = true;
       s.minions.push(actual);
       break;
     }
@@ -1186,6 +1192,14 @@ export function resolveValkyrieEffect(
       for (const seat of s.players)
         delete seatView(s, seat).flags[beguiledControllerKey(e.id)];
       if (!p) break;
+      if (p.id === s.sabretooth?.kellyId) {
+        const actual = takeActual([s.minions], p.id)!;
+        delete actual.engagedWith;
+        delete actual.treatedAsMinion;
+        s.sabretooth.kelly = actual;
+        sabretoothFirstPlayerChanged(s);
+        break;
+      }
       const seat = s.players.find(
         (seat) => seat.id === controller && !seat.eliminated,
       );

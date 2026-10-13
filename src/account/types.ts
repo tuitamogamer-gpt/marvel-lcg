@@ -19,6 +19,8 @@ export interface MissionRecord {
   villainId: string;
   difficulty: "standard" | "expert";
   module: string;
+  modules?: string[];
+  senatorDamage?: number;
   round: number;
   outcome: "active" | "won" | "lost";
   result?: string;

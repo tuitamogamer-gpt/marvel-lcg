@@ -22,6 +22,7 @@ export interface Card {
   base_threat_per_group?: boolean;
   threat_per_group?: boolean;
   attack?: number;
+  attack_star?: boolean;
   thwart?: number;
   defense?: number;
   recover?: number;
@@ -30,6 +31,7 @@ export interface Card {
   attack_cost?: number;
   thwart_cost?: number;
   scheme?: number;
+  scheme_star?: boolean;
   boost?: number;
   boost_star?: boolean;
   stage?: number;
@@ -141,6 +143,9 @@ export interface Prompt {
   selectAction?: Effect;
 }
 export interface Attack {
+  primaryTargetControllerId?: string;
+  /** Actual Sabretooth Strikes boost sources retained for this attack only. */
+  sabretoothAllyDefeatBoostIds?: string[];
   /** Stable identity of this native enemy attack across saved interrupts. */
   id?: string;
   /** A played Defense event has already declared the current hero/ally defender. */
@@ -204,6 +209,14 @@ export interface Attack {
   isVillain: boolean;
 }
 export interface GameState {
+  /** One physical scenario ally, with independent control and saved receipts. */
+  sabretooth?: import("./sabretooth.js").SabretoothState;
+  /** Encounter cards with Victory remain outside every discard/recycle pile. */
+  victoryDisplay?: Piece[];
+  /** Last observed physical Shapeshifter hand entries, shared across seats. */
+  mystiqueHandPresence?: Record<string, string[]>;
+  /** Actual side-scheme entry receipt, independent of cooperative actor swaps. */
+  brotherhoodEntered?: Record<string, boolean>;
   /** Actual completed enemy attacks by physical attacker, across defending seats. */
   enemyAttackCounts?: Record<string, number>;
   /** Physical source event for the currently resolving effect only. */
@@ -240,6 +253,8 @@ export interface GameState {
   villainId: string;
   difficulty: "standard" | "expert";
   module: string;
+  /** Exact selected modular sets; the primary module preserves old saves. */
+  modules?: string[];
   phase: "mulligan" | "player" | "villain" | "won" | "lost";
   /** The part of the villain phase currently resolving. */
   villainStep?: VillainStep;
@@ -313,6 +328,7 @@ export interface GameState {
   removed: Piece[];
   resolving: Piece[];
   scheming?: {
+    id?: string;
     retainedBoostIds?: string[];
     modifier?: number;
     extraBoostIcons?: number;

@@ -264,6 +264,25 @@ export function validateGame(value: unknown): asserts value is GameState {
     "Invalid mission setup.",
   );
   requireValue(
+    s.modules === undefined ||
+      (Array.isArray(s.modules) &&
+        s.modules.length ===
+          (VILLAINS.find((v) => v.id === s.villainId)?.moduleCount || 1) &&
+        new Set(s.modules).size === s.modules.length &&
+        s.modules[0] === s.module &&
+        s.modules.every((id) => MODULES.some((m) => m.id === id))),
+    "Invalid modular encounter setup.",
+  );
+  requireValue(
+    s.sabretooth === undefined ||
+      (s.sabretooth !== null &&
+        typeof s.sabretooth === "object" &&
+        Number.isInteger(s.sabretooth.startingDamage) &&
+        s.sabretooth.startingDamage >= 0 &&
+        s.sabretooth.startingDamage <= 8),
+    "Invalid Robert Kelly starting damage.",
+  );
+  requireValue(
     ["mulligan", "player", "villain", "won", "lost"].includes(s.phase) &&
       Number.isInteger(s.round) &&
       s.round >= 1 &&
@@ -665,6 +684,8 @@ export function createAccountHandler(providedStore?: Store) {
             villainId: s.villainId,
             difficulty: s.difficulty,
             module: s.module,
+            modules: s.modules ? [...s.modules] : undefined,
+            senatorDamage: s.sabretooth?.startingDamage,
             round: s.round,
             outcome,
             ...(typeof s.result === "string"

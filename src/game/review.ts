@@ -17,6 +17,8 @@ import type {
   Piece,
   ReviewCard,
 } from "./types.js";
+const scenarioNPCs = (s: GameState) =>
+  s.sabretooth?.kelly ? [s.sabretooth.kelly] : [];
 
 type LocatedCard = {
   id: string;
@@ -90,12 +92,14 @@ function cardLocations(s: GameState) {
       ...s.sideSchemes,
       ...s.attachments,
       ...(s.environments || []),
+      ...scenarioNPCs(s),
     ],
     "In play",
   );
   for (const p of allInPlay(s))
     put(p.storedCards || [], "Stored", p.ownerId || "", false);
   put(s.removed, "Removed");
+  put(s.victoryDisplay || [], "Victory display");
   for (const p of s.minions)
     put(p.inheritorBoosts || [], "Facedown boost", "Encounter", false);
   for (const p of s.minions)
@@ -185,6 +189,7 @@ export function boardSnapshot(s: GameState) {
     ...allInPlay(s),
     ...s.attachments,
     ...(s.environments || []),
+    ...scenarioNPCs(s),
   ]) {
     const name = card(p).name;
     put(`${p.id}:zone`, name, "In play", "cards");
@@ -210,6 +215,8 @@ export function boardSnapshot(s: GameState) {
       if (p[status])
         put(`${p.id}:${status}`, `${name} · ${status}`, "Active", "status");
   }
+  for (const p of s.victoryDisplay || [])
+    put(`${p.id}:zone`, card(p).name, "Victory display", "cards");
   return {
     values,
     locations: cardLocations(s),
@@ -467,6 +474,7 @@ export function isMeaningful(review: ActionReview) {
   );
 }
 function sideOf(s: GameState, id: string, label: string) {
+  if (s.sabretooth && id === s.sabretooth.kellyId) return "friendly";
   if (
     id === s.villain.id ||
     [...s.minions, ...s.sideSchemes, ...s.attachments].some((p) => p.id === id)
@@ -706,7 +714,7 @@ export function recordReview(
     }
     const host =
       b?.attachedTo &&
-      [s.villain, ...s.minions, ...allInPlay(s)].find(
+      [s.villain, ...s.minions, ...allInPlay(s), ...scenarioNPCs(s)].find(
         (piece) => piece.id === b.attachedTo,
       );
     if (host && a?.attachedTo !== b?.attachedTo) {
@@ -892,7 +900,13 @@ export function recordReview(
     return;
   const p =
     effect.piece ||
-    [...allInPlay(s), s.villain, ...s.minions].find((p) => p.id === effect.id);
+    [
+      ...allInPlay(s),
+      s.villain,
+      ...s.minions,
+      ...scenarioNPCs(s),
+      ...(s.victoryDisplay || []),
+    ].find((p) => p.id === effect.id);
   // Steps the encounter deck drives are presented as the villain's, not the hero's.
   const villainDriven =
     s.phase === "villain" &&

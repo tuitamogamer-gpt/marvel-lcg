@@ -61,6 +61,7 @@ import { spiderHamPackCharacterModifiers } from "./spider-ham-pack.js";
 import { spdrPackCharacterModifiers } from "./spdr-pack.js";
 import { ironspiderSinisterHealthBonus } from "./ironspider-sinister.js";
 import { colossusStats } from "./colossus.js";
+import { brotherhoodModifiers } from "./brotherhood.js";
 import {
   mutantGenesisPlayerPackCharacterModifiers,
   mutantGenesisPlayerPackMinionModifiers,
@@ -752,6 +753,21 @@ export const VILLAINS = [
     description:
       "Expose Norman Osborn's criminal enterprise and face Green Goblin as his influence and madness change the battlefield.",
   },
+  {
+    id: "sabretooth",
+    name: "Sabretooth",
+    codes: ["32060", "32061", "32062"],
+    schemes: ["32063b", "32064b"],
+    module: "brotherhood",
+    moduleCount: 2,
+    defaultModules: ["brotherhood", "mystique"],
+    difficulty: 3,
+    title: "Stalked by Sabretooth",
+    location: "Washington, D.C.",
+    color: "#d6a44d",
+    description:
+      "Find Senator Robert Kelly, then defend him while Sabretooth relentlessly heals and attacks.",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -771,6 +787,8 @@ export const MODULES = [
     name: "Iron Spider's Sinister Six",
     difficulty: 5,
   },
+  { id: "brotherhood", name: "Brotherhood", difficulty: 3 },
+  { id: "mystique", name: "Mystique", difficulty: 3 },
 ];
 export const ASPECTS: {
   id: Aspect;
@@ -1230,6 +1248,11 @@ export function pieceHP(s: GameState, p: Piece) {
     ironspiderSinisterHealthBonus(s, p) +
     mutantGenesisPlayerPackCharacterModifiers(s, p.id, { isTextBlank }).health +
     mutantGenesisPlayerPackMinionModifiers(s, p, { isTextBlank }).health +
+    brotherhoodModifiers(s, p, {
+      isTextBlank,
+      hasTrait: (_s, _target, trait) =>
+        (card(p).traits || "").split(/\.\s*/).includes(trait),
+    }).health +
     gamoraPackAllyHP(s, p) +
     nebulaPackModifiers(s, p.id).health +
     novaIronheartCharacterModifiers(s, p.id).health +

@@ -45,6 +45,9 @@ import { IRONSPIDER_SINISTER_SCRIPT_CODES } from "./ironspider-sinister.js";
 import { COLOSSUS_SCRIPT_CODES } from "./colossus.js";
 import { SHADOWCAT_SCRIPT_CODES } from "./shadowcat.js";
 import { MUTANT_GENESIS_PLAYER_PACK_SCRIPT_CODES } from "./mutant-genesis-player-pack.js";
+import { SABRETOOTH_SCRIPT_CODES } from "./sabretooth.js";
+import { BROTHERHOOD_SCRIPT_CODES } from "./brotherhood.js";
+import { MYSTIQUE_SCRIPT_CODES } from "./mystique.js";
 import { GOBLIN_MODULE_SCRIPT_CODES } from "./goblin-modules.js";
 import { BLACK_WIDOW_SCRIPT_CODES } from "./black-widow.js";
 import { DOCTOR_STRANGE_SCRIPT_CODES } from "./doctor-strange.js";
@@ -151,6 +154,9 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ARMADILLO_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,
+  ...SABRETOOTH_SCRIPT_CODES,
+  ...BROTHERHOOD_SCRIPT_CODES,
+  ...MYSTIQUE_SCRIPT_CODES,
   ...SPIDER_HAM_SCRIPT_CODES,
   ...SPIDER_HAM_PACK_SCRIPT_CODES,
   ...SPDR_SCRIPT_CODES,

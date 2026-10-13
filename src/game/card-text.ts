@@ -13,6 +13,17 @@ export function isTextBlank(
   p: (Pick<Piece, "code"> & { id?: string }) | string,
 ) {
   const printedCode = typeof p === "string" ? p : p.code;
+  const kelly = s.sabretooth?.kelly;
+  if (
+    printedCode === "32066" &&
+    kelly &&
+    (typeof p === "string" || !p.id || p.id === kelly.id) &&
+    s.scheme.code === "32063b" &&
+    s.sideSchemes.some(
+      (scheme) => scheme.code === "32065a" && scheme.id === kelly.attachedTo,
+    )
+  )
+    return true;
   if (["31001b", "31002b"].includes(printedCode)) return false;
   const physical =
     typeof p !== "string" && p.id

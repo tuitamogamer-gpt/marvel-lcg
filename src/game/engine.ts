@@ -1,5 +1,6 @@
 import * as armadillo from "./armadillo.js";
 import * as inheritors from "./inheritors.js";
+import * as brotherhood from "./brotherhood.js";
 import * as zzzax from "./zzzax.js";
 import * as antMan from "./ant-man.js";
 import * as antPack from "./ant-man-pack.js";
@@ -35,6 +36,8 @@ import * as niPack from "./nova-ironheart-pack.js";
 import * as colossus from "./colossus.js";
 import * as shadowcat from "./shadowcat.js";
 import * as mgPack from "./mutant-genesis-player-pack.js";
+import * as sabretooth from "./sabretooth.js";
+import * as mystique from "./mystique.js";
 import * as nebula from "./nebula.js";
 import { isPermanent } from "./hero-runtime.js";
 import * as venomPack from "./venom-pack.js";
@@ -268,6 +271,7 @@ import {
   activateSeat,
   allInPlay,
   controller,
+  controlledNPCs,
   engaged,
   playerOrder,
   seatView,
@@ -489,6 +493,22 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
     !!(
       s &&
       typeof p !== "string" &&
+      name === "Quickstrike" &&
+      brotherhood.brotherhoodModifiers(s, p, {
+        isTextBlank,
+        hasTrait: captainPackHasTrait,
+      }).quickstrike
+    ) ||
+    !!(
+      s &&
+      typeof p !== "string" &&
+      sabretooth.sabretoothModifiers(s, p.id)[
+        name.toLowerCase() as "piercing" | "stalwart"
+      ]
+    ) ||
+    !!(
+      s &&
+      typeof p !== "string" &&
       name === "Patrol" &&
       mgPack.mutantGenesisPlayerPackMinionModifiers(s, p, { isTextBlank })
         .patrol
@@ -503,7 +523,10 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     ...(isTextBlank(s, piece)
       ? { stalwart: false, steady: false }
       : armadillo.armadilloStatusModifiers(s, piece)),
-    ...(inherited.stalwart ? { stalwart: true } : {}),
+    ...(inherited.stalwart ||
+    sabretooth.sabretoothModifiers(s, piece.id).stalwart
+      ? { stalwart: true }
+      : {}),
   };
 }
 function giveCharacterStatus(
@@ -560,7 +583,8 @@ function syncNebulaIdentityStatuses(s: GameState) {
     if (
       printedKeyword(card(p), "Steady") ||
       printedKeyword(card(p), "Stalwart") ||
-      inheritors.inheritorsModifiers(s, p).stalwart
+      inheritors.inheritorsModifiers(s, p).stalwart ||
+      sabretooth.sabretoothModifiers(s, p.id).stalwart
     )
       syncStatuses(p, card(p), nativeStatusModifiers(s, p));
 }
@@ -617,11 +641,22 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
   const intrinsic = Math.max(
     isTextBlank(s, p) ? 0 : printedKeyword(card(p), name),
     Number(
+      name === "Stalwart" && sabretooth.sabretoothModifiers(s, p.id).stalwart,
+    ),
+    Number(
+      name === "Quickstrike" &&
+        brotherhood.brotherhoodModifiers(s, p, {
+          isTextBlank,
+          hasTrait: captainPackHasTrait,
+        }).quickstrike,
+    ),
+    Number(
       !!(
         name === "Piercing" &&
         (granted.piercing ||
           nebula.nebulaNamedCharacterModifiers(s, card(p).name).piercing ||
           warMachine.warMachineEnemyKeywords(s, p).piercing ||
+          sabretooth.sabretoothModifiers(s, p.id).piercing ||
           miles.milesEnemyAttackKeywords(s, p, { isTextBlank }).piercing ||
           allyTraits.piercing ||
           mgPack.mutantGenesisPlayerPackPiercing(
@@ -852,6 +887,7 @@ const allPieces = (s: GameState) => [
   ...allInPlay(s),
   ...s.attachments,
   ...(s.environments || []),
+  ...(s.sabretooth?.kelly ? [s.sabretooth.kelly] : []),
 ];
 const find = (s: GameState, id: string) =>
   allPieces(s).find((p) => p.id === id) ||
@@ -862,9 +898,16 @@ const find = (s: GameState, id: string) =>
     })
     .find((p) => p?.id === id);
 const friends = (s: GameState) =>
-  s.player.inPlay.filter((p) => card(p).type_code === "ally");
+  [...s.player.inPlay, ...controlledNPCs(s)].filter(
+    (p) => card(p).type_code === "ally",
+  );
 export function allyCount(s: GameState) {
-  return friends(s).filter((p) => !antPack.antManPackAllyExcluded(s, p)).length;
+  return friends(s).filter(
+    (p) =>
+      !antPack.antManPackAllyExcluded(s, p) &&
+      (p.id !== sabretooth.sabretoothKelly(s)?.id ||
+        sabretooth.sabretoothKellyCountsAgainstAllyLimit(s)),
+  ).length;
 }
 export function allyLimit(s: GameState) {
   return (
@@ -902,6 +945,12 @@ function attachPackUpgrade(s: GameState, upgradeId: string, target: string) {
     ? s.players.find((seat) => seat.id === target.slice(5))
     : controller(s, target);
   need(
+    !p ||
+      target !== sabretooth.sabretoothKelly(s)?.id ||
+      sabretooth.sabretoothKellyCanAttach(s, card(p)),
+    "Robert Kelly cannot have player cards or upgrades attached.",
+  );
+  need(
     p &&
       source &&
       (targetSeat ||
@@ -927,11 +976,135 @@ const villainAt = (s: GameState, code: string) =>
       p.attachedTo === s.villain.id &&
       !isTextBlank(s, p),
   );
+type MystiquePlayerSource = { playerId: string; ids: string[] };
+function mystiqueNativeSourceSnapshot(s: GameState): MystiquePlayerSource[] {
+  const sources: MystiquePlayerSource[] = [];
+  for (const seat of s.players) {
+    const player = seatView(s, seat).player;
+    let ids: string[] | undefined;
+    for (const zone of [player.hand, player.deck])
+      for (const p of zone)
+        if (mystique.mystiqueDiscardFromPlayerZone(p, "hand"))
+          (ids ||= []).push(p.id);
+    if (ids) sources.push({ playerId: seat.id, ids });
+  }
+  return sources;
+}
+function mystiqueNativeSeedHands(s: GameState): void {
+  s.mystiqueHandPresence ||= Object.fromEntries(
+    s.players.map((seat) => [
+      seat.id,
+      seatView(s, seat)
+        .player.hand.filter((p) => ["32082", "32083"].includes(p.code))
+        .map((p) => p.id),
+    ]),
+  );
+}
+function mystiqueNativeReconcileDiscards(
+  s: GameState,
+  sources?: MystiquePlayerSource[],
+): void {
+  const raw = s.players[0]?.flags.mystiqueNativeSources;
+  if (!sources && !raw) return;
+  const snapshot =
+    sources || (JSON.parse(String(raw)) as MystiquePlayerSource[]);
+  if (!snapshot.length) return;
+  const sourceIds = new Set(snapshot.flatMap((p) => p.ids));
+  for (const seat of s.players) {
+    const discard = seatView(s, seat).player.discard;
+    for (let i = discard.length - 1; i >= 0; i--) {
+      const p = discard[i];
+      if (
+        sourceIds.has(p.id) &&
+        mystique.mystiqueDiscardFromPlayerZone(p, "hand")
+      ) {
+        discard.splice(i, 1);
+        need(
+          !s.encounter.discard.some((a) => a.id === p.id),
+          "A physical Shapeshifter cannot occupy two discard piles.",
+        );
+        s.encounter.discard.push(p);
+      }
+    }
+  }
+}
+function mystiqueNativeObserveHands(s: GameState): Effect[] {
+  mystiqueNativeSeedHands(s);
+  const effects: Effect[] = [];
+  const returnActor = s.activePlayerId;
+  for (const seat of s.players) {
+    const view = seatView(s, seat),
+      before = s.mystiqueHandPresence![seat.id] || [];
+    let currentIds: string[] | undefined;
+    for (const p of view.player.hand) {
+      if (p.code !== "32082" && p.code !== "32083") continue;
+      (currentIds ||= []).push(p.id);
+      if (!before.includes(p.id)) {
+        const receipt: mystique.MystiqueHandEntryReceipt = {
+          token: `mystique-entry:${s.nextId++}`,
+          playerId: seat.id,
+          pieceId: p.id,
+          code: p.code,
+        };
+        effects.push(
+          ...mystique
+            .mystiqueHandEntered(s, receipt, mystiquePorts)
+            .map((e) => ({
+              ...e,
+              mandatory: true,
+              after: [
+                E("mystique-native:return-actor", {
+                  playerId: returnActor,
+                  actorId: returnActor,
+                }),
+              ],
+            })),
+        );
+      }
+    }
+    if (currentIds || before.length)
+      s.mystiqueHandPresence![seat.id] = currentIds || [];
+  }
+  return effects;
+}
+function mystiqueNativeQueueHandEntries(s: GameState, effects: Effect[]): void {
+  if (!effects.length) return;
+  const prompt = s.prompt,
+    actorId = s.activePlayerId;
+  if (prompt) s.prompt = null;
+  add(
+    s,
+    ...effects,
+    ...(prompt ? [E("resumePrompt", { prompt, actorId })] : []),
+  );
+}
+function mystiqueNativeBeginMovement(s: GameState): MystiquePlayerSource[] {
+  mystiqueNativeSeedHands(s);
+  const sources = mystiqueNativeSourceSnapshot(s);
+  if (sources.length && s.players[0])
+    s.players[0].flags.mystiqueNativeSources = JSON.stringify(sources);
+  return sources;
+}
+function mystiqueNativeFinishMovement(
+  s: GameState,
+  sources: MystiquePlayerSource[],
+): void {
+  mystiqueNativeReconcileDiscards(s, sources);
+  if (s.players[0]) delete s.players[0].flags.mystiqueNativeSources;
+  mystiqueNativeQueueHandEntries(s, mystiqueNativeObserveHands(s));
+}
 function discardHand(s: GameState, id: string) {
+  mystiqueNativeQueueHandEntries(s, mystiqueNativeObserveHands(s));
   const i = s.player.hand.findIndex((p) => p.id === id);
   need(i >= 0, "That card is no longer in your hand.");
   const [p] = s.player.hand.splice(i, 1);
-  s.player.discard.push(p);
+  if (mystique.mystiqueDiscardFromPlayerZone(p, "hand"))
+    s.encounter.discard.push(p);
+  else s.player.discard.push(p);
+  if (s.mystiqueHandPresence?.[s.activePlayerId])
+    s.mystiqueHandPresence[s.activePlayerId] = s.mystiqueHandPresence[
+      s.activePlayerId
+    ].filter((physicalId) => physicalId !== id);
   return p;
 }
 function randomDiscard(s: GameState) {
@@ -942,6 +1115,7 @@ function randomDiscard(s: GameState) {
   );
 }
 function recyclePlayer(s: GameState) {
+  mystiqueNativeReconcileDiscards(s);
   if (s.player.deck.length) {
     s.flags.warlockDeckEmptyObserved = false;
     return;
@@ -980,16 +1154,48 @@ function takePlayer(s: GameState) {
   }
   return p;
 }
-function draw(s: GameState, n: number) {
+function draw(s: GameState, n: number): boolean {
+  mystiqueNativeSeedHands(s);
   let count = 0;
+  let interrupted = false;
   for (let i = 0; i < n; i++) {
+    const queuedBefore = s.queue.length;
     const p = takePlayer(s);
     if (p) {
       s.player.hand.push(p);
       count++;
+      const entries = mystiqueNativeObserveHands(s);
+      if (entries.length) {
+        const exhaustion = s.queue.splice(0, s.queue.length - queuedBefore);
+        add(
+          s,
+          ...exhaustion,
+          ...entries,
+          ...(i + 1 < n ? [E("draw", { amount: n - i - 1 })] : []),
+        );
+        interrupted = true;
+        break;
+      }
     }
   }
   if (count) log(s, `Draw ${count} card${count === 1 ? "" : "s"}.`);
+  return interrupted;
+}
+function mystiqueNativeDrawToHandSize(
+  s: GameState,
+  continuation: Effect,
+): boolean {
+  while (s.player.hand.length < handSize(s)) {
+    const beforeCards = s.player.hand.length,
+      beforeQueue = s.queue.length;
+    if (draw(s, 1)) {
+      const generated = s.queue.splice(0, s.queue.length - beforeQueue);
+      add(s, ...generated, continuation);
+      return true;
+    }
+    if (s.player.hand.length === beforeCards) break;
+  }
+  return false;
 }
 function mill(s: GameState, n: number) {
   const a: Piece[] = [];
@@ -999,7 +1205,9 @@ function mill(s: GameState, n: number) {
     if (p) {
       revealHidden(s);
       a.push(p);
-      s.player.discard.push(p);
+      if (mystique.mystiqueDiscardFromPlayerZone(p, "deck"))
+        s.encounter.discard.push(p);
+      else s.player.discard.push(p);
     }
   }
   recyclePlayer(s);
@@ -1063,11 +1271,26 @@ function movePieceFromPlay(
   id: string,
   removed: boolean,
   setAsideOwnerId?: string,
+  victory = false,
 ) {
   const controlling = controller(s, id);
   const viewBefore = controlling ? seatView(s, controlling) : s;
   const healthBefore = maxHP(viewBefore);
   const removedSource = find(s, id);
+  if (removedSource && removedSource.id === sabretooth.sabretoothKelly(s)?.id) {
+    delete s.spiderHamConsequentialReceipts?.[id];
+    const minionIndex = s.minions.findIndex((p) => p.id === id);
+    if (minionIndex >= 0) s.minions.splice(minionIndex, 1);
+    for (const attached of [...allInPlay(s), ...s.attachments].filter(
+      (piece) => piece.attachedTo === id,
+    ))
+      discardPiece(s, attached.id);
+    (removed ? s.removed : s.encounter.discard).push(resetPiece(removedSource));
+    sabretooth.sabretoothKellyLeftPlay(s, id, {
+      lose: (state, reason) => endGame(state, false, reason),
+    });
+    return;
+  }
   // Spectrum's three physical setup upgrades remain in play even facedown.
   // Player elimination removes them through its ordinary whole-seat cleanup.
   if (
@@ -1225,9 +1448,11 @@ function movePieceFromPlay(
     else if (!owner || owner.eliminated) s.removed.push(resetPiece(stored));
     else seatView(s, owner).player.discard.push(resetPiece(stored));
   }
-  for (const a of [...allInPlay(s), ...s.attachments].filter(
-    (a) => a.attachedTo === id,
-  ))
+  for (const a of [
+    ...allInPlay(s),
+    ...s.attachments,
+    ...(sabretooth.sabretoothKelly(s) ? [sabretooth.sabretoothKelly(s)!] : []),
+  ].filter((a) => a.attachedTo === id))
     discardPiece(s, a.id);
   if (p.code === "drone") {
     if (p.droneCard) {
@@ -1237,7 +1462,9 @@ function movePieceFromPlay(
       else s.removed.push(p.droneCard);
     }
   } else if (card(p).faction_code === "encounter")
-    s.encounter.discard.push(resetPiece(p));
+    (victory ? (s.victoryDisplay ||= []) : s.encounter.discard).push(
+      resetPiece(p),
+    );
   else {
     const owner =
       s.players.find((x) => x.id === p!.ownerId) ||
@@ -1291,12 +1518,28 @@ function movePieceFromPlay(
   }
 }
 function endGame(s: GameState, won: boolean, reason: string) {
-  s.encounter.discard.push(
-    ...(s.attack?.pendingBoosts || []),
-    ...(s.scheming?.pendingBoosts || []),
-  );
-  if (s.attack) s.attack.pendingBoosts = [];
-  if (s.scheming) s.scheming.pendingBoosts = [];
+  // A saved Mystique callback owns the outer activation's real facedown
+  // cards until that activation resumes. Terminal loss clears those callbacks.
+  const pending = new Map<string, Piece>();
+  const collect = (activation: GameState["attack"] | GameState["scheming"]) => {
+    if (!activation) return;
+    for (const p of activation.pendingBoosts || []) pending.set(p.id, p);
+    activation.pendingBoosts = [];
+    const callback = activation.activationAfter;
+    if (callback?.type === "mystique-native:activation-finish") {
+      collect(callback.outerAttack);
+      collect(callback.outerScheme);
+    }
+  };
+  collect(s.attack);
+  collect(s.scheming);
+  for (const callback of s.queue.filter(
+    (e) => e.type === "mystique-native:activation-finish",
+  )) {
+    collect(callback.outerAttack);
+    collect(callback.outerScheme);
+  }
+  s.encounter.discard.push(...pending.values());
   for (const p of [...s.resolving]) finishResolution(s, p.id);
   s.phase = won ? "won" : "lost";
   s.result = reason;
@@ -1339,6 +1582,13 @@ function syncValkyrieConvertedCards(s: GameState) {
     }
     delete p.treatedAsMinion;
     if (card(p.code).type_code !== "ally") continue;
+    if (p.id === s.sabretooth?.kellyId) {
+      s.minions.splice(s.minions.indexOf(p), 1);
+      delete p.engagedWith;
+      s.sabretooth.kelly = p;
+      sabretooth.sabretoothFirstPlayerChanged(s);
+      continue;
+    }
     const savedController = valkyrie.valkyrieBeguiledController(s, p.id);
     const attachment = s.attachments.some(
       (a) => a.code === "25031" && a.attachedTo === p.id,
@@ -1368,6 +1618,16 @@ function syncValkyrieConvertedCards(s: GameState) {
     p.engagedWith = seat.id;
     p.treatedAsMinion = true;
     s.minions.push(p);
+  }
+  const npc = s.sabretooth?.kelly;
+  if (npc && valkyrie.valkyrieBeguiledEnemy(s, npc)) {
+    const controlling = controller(s, npc.id);
+    if (controlling && !controlling.eliminated) {
+      delete s.sabretooth!.kelly;
+      npc.engagedWith = controlling.id;
+      npc.treatedAsMinion = true;
+      s.minions.push(npc);
+    }
   }
   for (const seat of s.players)
     for (const p of [
@@ -1435,6 +1695,7 @@ function check(s: GameState) {
   for (const p of [
     ...s.minions,
     ...allInPlay(s).filter((x) => card(x).type_code === "ally"),
+    ...(s.sabretooth?.kelly ? [s.sabretooth.kelly] : []),
   ]) {
     if (find(s, p.id) && p.damage >= pieceHP(s, p))
       defeatCharacter(s, p, String(s.flags.spectrumBatchDefeatSource || ""));
@@ -1544,7 +1805,15 @@ function check(s: GameState) {
       endGame(s, false, "Every hero has been defeated. The villain wins.");
       return;
     }
-    if (s.firstPlayerId === seat.id) s.firstPlayerId = next.id;
+    if (s.firstPlayerId === seat.id) {
+      s.firstPlayerId = next.id;
+      sabretooth.sabretoothFirstPlayerChanged(s);
+    }
+    const remainingNPC = sabretooth.sabretoothKelly(s);
+    if (remainingNPC && controller(s, remainingNPC.id)?.id === seat.id) {
+      movePieceFromPlay(s, remainingNPC.id, false);
+      if (s.phase === "lost") return;
+    }
     for (const m of s.minions)
       if (m.engagedWith === seat.id) {
         m.engagedWith = next.id;
@@ -1583,6 +1852,8 @@ function check(s: GameState) {
   }
 }
 export function schemeLimit(s: GameState) {
+  const sabretoothLimit = sabretooth.sabretoothMainThreatLimit(s);
+  if (sabretoothLimit === 0) return 0;
   const value = riskySchemeValues(s) || mutagenSchemeValues(s);
   const surveillance =
     allInPlay(s).filter(
@@ -1633,9 +1904,19 @@ function choosePlayer(
     ),
   );
 }
-function heal(s: GameState, target: string, n: number): number {
+function heal(
+  s: GameState,
+  target: string,
+  n: number,
+  origin: "player" | "encounter" = "player",
+): number {
+  if (
+    target === sabretooth.sabretoothKelly(s)?.id &&
+    !sabretooth.sabretoothKellyCanHeal(s, origin)
+  )
+    return 0;
   if (target?.startsWith("hero:"))
-    return heal(seatView(s, target.slice(5)), "hero", n);
+    return heal(seatView(s, target.slice(5)), "hero", n, origin);
   if (target === "hero") {
     const amount = Math.min(n, maxHP(s) - s.player.hp);
     s.player.hp += amount;
@@ -1650,6 +1931,53 @@ function heal(s: GameState, target: string, n: number): number {
     if (p) p.damage = Math.max(0, p.damage - n);
   }
   return n;
+}
+function playerHealingTarget(s: GameState, target: string): boolean {
+  if (
+    target === sabretooth.sabretoothKelly(s)?.id &&
+    !sabretooth.sabretoothKellyCanHeal(s, "player")
+  )
+    return false;
+  if (target === "hero") return s.player.hp < maxHP(s);
+  if (target.startsWith("hero:")) {
+    const view = seatView(s, target.slice(5));
+    return view.player.hp < maxHP(view);
+  }
+  if (target === s.villain.id) return s.villain.hp < s.villain.maxHp;
+  return (find(s, target)?.damage || 0) > 0;
+}
+function playerAttachmentTarget(s: GameState, source: Piece, target: string) {
+  return (
+    target !== sabretooth.sabretoothKelly(s)?.id ||
+    sabretooth.sabretoothKellyCanAttach(s, card(source))
+  );
+}
+/** Kelly's prohibitions are checked while the actual card is still in hand. */
+function npcPlayerPlayRestriction(s: GameState, p: Piece): string | null {
+  if (!sabretooth.sabretoothKelly(s)) return null;
+  if (
+    rulesCode(p) === "01086" &&
+    !targets(s, "character").some((t) => playerHealingTarget(s, t.id))
+  )
+    return "There is no eligible character to heal. Robert Kelly cannot be healed by player card effects.";
+  const script = cardScript(p);
+  const selector =
+    script?.implementation === "script"
+      ? script.constraints.attachTo
+      : rulesCode(p) === "01074"
+        ? "ally"
+        : undefined;
+  if (
+    selector &&
+    !targets(s, selector === "controlled-ally" ? "ally" : selector).some(
+      (t) =>
+        playerAttachmentTarget(s, p, t.id) &&
+        (selector !== "controlled-ally" ||
+          controller(s, t.id)?.id === s.activePlayerId),
+    )
+  )
+    return "There is no eligible attachment target. Robert Kelly cannot have player cards or upgrades attached.";
+  return null;
 }
 interface DamageTraits {
   /** Original dealt amount, before damage-taken prevention. */
@@ -1706,8 +2034,9 @@ function damageProhibition(s: GameState, target: string, panther: boolean) {
         : undefined;
   if (
     identityId &&
-    s.attack?.defender === "hero" &&
-    (s.attack.targetPlayerId || s.activePlayerId) === identityId &&
+    ((s.attack?.defender === "hero" &&
+      (s.attack.targetPlayerId || s.activePlayerId) === identityId) ||
+      mystiqueNativeOuterDefending(s, identityId)) &&
     shadowcat.shadowcatPreventsDamage(
       seatView(s, identityId),
       true,
@@ -2434,8 +2763,25 @@ function defeatCharacter(
   const name = card(m).name;
   const textWasBlank = isTextBlank(s, m);
   const allyController = controller(s, m.id)?.id;
+  const sabretoothDefeat = (m as SabretoothAttackDefeatPiece)
+    .sabretoothAttackDefeatReceipt;
   if (!minion) recordMilesEnemyAttackDefeat(s, source, enemyAttack);
   discardPiece(s, m.id);
+  if (!minion && enemyAttack && sabretoothDefeat?.attackerId === source) {
+    delete (m as SabretoothAttackDefeatPiece).sabretoothAttackDefeatReceipt;
+    add(
+      s,
+      ...sabretoothDefeat.sourceIds.flatMap((sourceId) =>
+        sabretooth
+          .sabretoothBoostAllyDefeated(s, {
+            attackId: sabretoothDefeat.attackId,
+            sourceId,
+            allyId: m.id,
+          })
+          .map((effect) => ({ ...effect, actorId: sabretoothDefeat.playerId })),
+      ),
+    );
+  }
   if (!minion && allyController)
     add(
       s,
@@ -2697,8 +3043,11 @@ function threat(
     s.scheme.threat += n;
     track(s, "threatPlaced", n);
     log(s, `+${n} threat on ${card(s.scheme.code).name}.`, "bad");
-    if (s.scheme.threat >= schemeLimit(s)) {
-      const mutagen = riskyMainCompleted(s) ?? mutagenMainCompleted(s);
+    if (schemeLimit(s) > 0 && s.scheme.threat >= schemeLimit(s)) {
+      const mutagen =
+        sabretooth.sabretoothMainCompleted(s) ??
+        riskyMainCompleted(s) ??
+        mutagenMainCompleted(s);
       if (mutagen !== null) {
         if (!s.pendingMainCompletion) {
           s.pendingMainCompletion = true;
@@ -2823,7 +3172,44 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
       shadowcatPorts,
     ),
   );
-  discardPiece(s, p.id);
+  const nativeDefeat = sabretooth.sabretoothSideSchemeDefeated(
+    s,
+    p,
+    s.activePlayerId,
+  );
+  const mystiqueDefeat = mystique.mystiqueSideSchemeDefeated(
+    s,
+    p,
+    s.activePlayerId,
+  );
+  const victory = p.code === "32071" && !isTextBlank(s, p);
+  const retainFind = p.code === "32065a" && !isTextBlank(s, p);
+  if (!victory && !retainFind) discardPiece(s, p.id);
+  const responses = [
+    ...(nativeDefeat?.length
+      ? [{ id: `${p.id}:defeated`, title: card(p).name, effects: nativeDefeat }]
+      : []),
+    ...(mystiqueDefeat.length
+      ? [
+          {
+            id: `${p.id}:mystique-defeated`,
+            title: card(p).name,
+            effects: mystiqueDefeat,
+          },
+        ]
+      : []),
+    ...(victory
+      ? [
+          {
+            id: `${p.id}:victory`,
+            title: "Victory 1",
+            effects: [E("encounterVictory", { id: p.id })],
+          },
+        ]
+      : []),
+  ];
+  if (responses.length)
+    add(s, E("forcedResponses", { responses, actorId: s.firstPlayerId }));
   if (s.villain.hp <= 0) advanceVillain(s);
 }
 export function targets(
@@ -2854,7 +3240,13 @@ export function targets(
           label: card(p).name,
           code: p.code,
         })),
-      ].filter((t) => !attack || valkyrie.valkyrieCanAttackTarget(s, t.id));
+      ].filter(
+        (t) =>
+          !attack ||
+          (valkyrie.valkyrieCanAttackTarget(s, t.id) &&
+            (t.id !== s.villain.id ||
+              !mystique.mystiqueVillainAttackProhibited(s, mystiquePorts))),
+      );
     case "minion":
       return s.minions.map((p) => ({
         id: p.id,
@@ -2904,7 +3296,10 @@ export function targets(
           .map((p) => ({ id: p.id, label: card(p).name, code: p.code })),
       ];
     case "ally":
-      return allInPlay(s)
+      return [
+        ...allInPlay(s),
+        ...playerOrder(s).flatMap((seat) => controlledNPCs(s, seat.id)),
+      ]
         .filter((p) => card(p).type_code === "ally")
         .map((p) => ({
           id: p.id,
@@ -2953,7 +3348,7 @@ function scriptContext(
       ).filter(
         (entry) =>
           selector !== "controlled-ally" ||
-          s.player.inPlay.some((p) => p.id === entry.id),
+          controller(s, entry.id)?.id === s.activePlayerId,
       ),
     canAffect: (node, id) => {
       const target =
@@ -2971,11 +3366,14 @@ function scriptContext(
             canReadyIdentity(id === "hero" ? s : seatView(s, id.slice(5))))
         );
       if (node.op === "heal")
-        return id?.startsWith("hero")
-          ? !!target &&
+        return id === sabretooth.sabretoothKelly(s)?.id &&
+          !sabretooth.sabretoothKellyCanHeal(s, "player")
+          ? false
+          : id?.startsWith("hero")
+            ? !!target &&
               (target as GameState["player"]).hp <
                 maxHP(id === "hero" ? s : seatView(s, id.slice(5)))
-          : !!target && (target as Piece).damage > 0;
+            : !!target && (target as Piece).damage > 0;
       if (node.op === "thwart")
         return id === "main"
           ? s.scheme.threat > 0
@@ -3142,7 +3540,13 @@ function targetPrompt(s: GameState, e: Effect) {
     (t) =>
       (!e.exclude || t.id !== e.exclude) &&
       (!e.scriptSelector?.controller ||
-        s.player.inPlay.some((p) => p.id === t.id)) &&
+        controller(s, t.id)?.id === s.activePlayerId) &&
+      (e.action.type !== "heal" ||
+        !sabretooth.sabretoothKelly(s) ||
+        playerHealingTarget(s, t.id)) &&
+      (e.action.type !== "attachPlayer" ||
+        !find(s, e.action.id) ||
+        playerAttachmentTarget(s, find(s, e.action.id)!, t.id)) &&
       (e.action.type !== "allyAction" ||
         e.action.kind !== "attack" ||
         !character ||
@@ -3277,6 +3681,12 @@ function attackAction(
 ) {
   const p = source === "hero" ? s.player : find(s, source);
   if (!p) return;
+  if (
+    !traits.initiated &&
+    target === s.villain.id &&
+    mystique.mystiqueVillainAttackProhibited(s, mystiquePorts)
+  )
+    return;
   if (
     source === "hero" &&
     (!valkyrie.valkyrieCanAttackTarget(s, target) ||
@@ -4386,6 +4796,8 @@ export function newGame(config: {
   villainId: string;
   difficulty?: "standard" | "expert";
   module?: string;
+  modules?: string[];
+  senatorDamage?: number;
   seed?: number;
   heroes?: {
     heroId: string;
@@ -4439,8 +4851,20 @@ export function newGame(config: {
     "This scenario’s complete rules are not implemented yet.",
   );
   const v = foundScenario!;
+  const moduleCount = v.moduleCount || 1;
+  const primary = config.module || v.module;
+  const selectedModules = config.modules
+    ? [...config.modules]
+    : moduleCount === 2
+      ? [primary, v.defaultModules!.find((id) => id !== primary) || "mystique"]
+      : [primary];
   need(
-    MODULES.some((m) => m.id === (config.module || v.module)),
+    selectedModules.length === moduleCount &&
+      new Set(selectedModules).size === selectedModules.length,
+    `Choose ${moduleCount} distinct modular encounter set${moduleCount === 1 ? "" : "s"}.`,
+  );
+  need(
+    selectedModules.every((id) => MODULES.some((m) => m.id === id)),
     "This modular set’s complete rules are not implemented yet.",
   );
   const scenarioPack = card(v.codes[0]).pack_code;
@@ -4477,7 +4901,8 @@ export function newGame(config: {
     aspect: team[0].aspect,
     villainId: v.id,
     difficulty,
-    module: config.module || v.module,
+    module: selectedModules[0],
+    modules: selectedModules,
     phase: "mulligan",
     round: 1,
     players,
@@ -4512,6 +4937,7 @@ export function newGame(config: {
     sideSchemes: [],
     attachments: [],
     environments: [],
+    victoryDisplay: [],
     encounter: { deck: [], discard: [], dealt: [], acceleration: 0 },
     removed: [],
     resolving: [],
@@ -4558,31 +4984,34 @@ export function newGame(config: {
     CATALOG_CARDS.filter(
       (c) =>
         c.faction_code === "encounter" &&
-        ((((c.set_code === s.module &&
+        ((((selectedModules.includes(c.set_code || "") &&
           c.pack_code ===
-            (s.module === "ironspider_sinister"
-              ? "spdr"
-              : s.module === "inheritors"
-                ? "spiderham"
-                : s.module === "zzzax"
-                  ? "ironheart"
-                  : s.module === "armadillo"
-                    ? "nova"
-                    : [
-                          "goblin_gimmicks",
-                          "a_mess_of_things",
-                          "power_drain",
-                          "running_interference",
-                        ].includes(s.module)
-                      ? "gob"
-                      : "core")) ||
+            (["brotherhood", "mystique"].includes(c.set_code || "")
+              ? "mut_gen"
+              : c.set_code === "ironspider_sinister"
+                ? "spdr"
+                : c.set_code === "inheritors"
+                  ? "spiderham"
+                  : c.set_code === "zzzax"
+                    ? "ironheart"
+                    : c.set_code === "armadillo"
+                      ? "nova"
+                      : [
+                            "goblin_gimmicks",
+                            "a_mess_of_things",
+                            "power_drain",
+                            "running_interference",
+                          ].includes(c.set_code || "")
+                        ? "gob"
+                        : "core")) ||
           (c.set_code === v.id && c.pack_code === scenarioPack) ||
           (c.set_code === "standard" && c.pack_code === "core") ||
           (difficulty === "expert" &&
             c.set_code === "expert" &&
             c.pack_code === "core")) &&
           !["villain", "main_scheme"].includes(c.type_code) &&
-          (c.type_code !== "environment" || c.set_code === s.module)) ||
+          (c.type_code !== "environment" ||
+            selectedModules.includes(c.set_code || ""))) ||
           (team.some(
             (h) =>
               h.heroId === c.set_code &&
@@ -4595,7 +5024,25 @@ export function newGame(config: {
       Array.from({ length: c.quantity }, () => makePiece(s, c.code)),
     ),
   );
-  if (v.id === "mutagen_formula") {
+  if (v.id === "sabretooth") {
+    const find = s.encounter.deck.find((p) => p.code === "32065a");
+    const kelly = s.encounter.deck.find((p) => p.code === "32066");
+    need(
+      find && kelly,
+      "Sabretooth requires its original physical setup cards.",
+    );
+    s.encounter.deck = s.encounter.deck.filter(
+      (p) => p.id !== find!.id && p.id !== kelly!.id,
+    );
+    sabretooth.sabretoothSetup(
+      s,
+      find!,
+      kelly!,
+      sabretoothPorts,
+      config.senatorDamage,
+    );
+    openingHands(s);
+  } else if (v.id === "mutagen_formula") {
     add(s, ...mutagenSetup(), E("openingHands", { actorId: s.firstPlayerId }));
     run(s);
   } else if (v.id === "risky_business") {
@@ -4697,6 +5144,8 @@ const reactionCards = [
 ];
 export function playable(s: GameState, p: Piece): string | null {
   const c = card(p);
+  const npcRestriction = npcPlayerPlayRestriction(s, p);
+  if (npcRestriction) return npcRestriction;
   if (
     s.attack &&
     /\([^)]*\bdefense\b/i.test(c.text || "") &&
@@ -4876,7 +5325,9 @@ export function playable(s: GameState, p: Piece): string | null {
     return "A minion must be in play.";
   if (
     ["01069", "01074"].includes(rulesCode(p)) &&
-    !allInPlay(s).some((p) => card(p).type_code === "ally")
+    !targets(s, "ally").some(
+      (t) => rulesCode(p) !== "01074" || playerAttachmentTarget(s, p, t.id),
+    )
   )
     return "You need an ally in play.";
   if (rulesCode(p) === "01053" && !s.minions.length && !s.player.stunned)
@@ -4942,6 +5393,8 @@ export function playable(s: GameState, p: Piece): string | null {
   return null;
 }
 function requestPlay(s: GameState, p: Piece, discountHandled = false) {
+  const npcRestriction = npcPlayerPlayRestriction(s, p);
+  need(!npcRestriction, npcRestriction || "This card has no eligible target.");
   const strikeCost = mgPack.mutantGenesisPlayerPackBeforeEvent(s, p, [
     E("playRequest", { piece: p, discountHandled }),
   ]);
@@ -5884,7 +6337,7 @@ function event(
       break;
     case "01025":
       flip(s, false);
-      draw(s, Math.max(0, heroCard(s).hand_size! - s.player.hand.length));
+      mystiqueNativeDrawToHandSize(s, E("mystique-native:draw-to-hand-size"));
       break;
     case "01031": {
       const aCards = mill(s, 5);
@@ -6136,6 +6589,7 @@ export function abilityOptions(
   s: GameState,
   p: Piece,
 ): { id: string; label: string; disabled?: string }[] {
+  if (p.id === sabretooth.sabretoothKelly(s)?.id) return [];
   const c = card(p);
   if (
     Object.values(spectrum.SPECTRUM_FORM_CODES).some((code) => code === p.code)
@@ -6355,6 +6809,25 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   );
 }
 function ability(s: GameState, id: string, action = "special") {
+  need(
+    id !== sabretooth.sabretoothKelly(s)?.id ||
+      !["attack", "thwart"].includes(action),
+    "Robert Kelly has no basic ATK or THW power.",
+  );
+  const sabretoothAttachment = s.attachments.find(
+    (p) => p.id === id && ["32067", "32068"].includes(p.code),
+  );
+  if (sabretoothAttachment) {
+    const options = sabretooth.sabretoothActionOptions(s, id, sabretoothPorts);
+    const selected =
+      action === "special" ? options[0] : options.find((o) => o.id === action);
+    need(
+      selected,
+      "This Sabretooth Hero Action requires energy, mental and physical resources.",
+    );
+    add(s, ...selected!.effects);
+    return;
+  }
   if (
     mgPack.mutantGenesisPlayerPackAbility(
       s,
@@ -7004,6 +7477,11 @@ function ability(s: GameState, id: string, action = "special") {
     case "01056":
     case "01064":
     case "01080": {
+      if (rulesCode(x) === "01080" && sabretooth.sabretoothKelly(s))
+        need(
+          targets(s, "friendly").some((t) => playerHealingTarget(s, t.id)),
+          "There is no eligible friendly character to heal.",
+        );
       const group =
         rulesCode(x) === "01056"
           ? "enemy"
@@ -7524,6 +8002,11 @@ function visionPackNativeDamageOptions(
   return [...options, ...sinisterNativeDamageOptions(s, packet, after)];
 }
 function allyUpgradeTargets(s: GameState, p: Piece) {
+  return rawAllyUpgradeTargets(s, p).filter((t) =>
+    playerAttachmentTarget(s, p, t.id),
+  );
+}
+function rawAllyUpgradeTargets(s: GameState, p: Piece) {
   const mutantTargets = mgPack.mutantGenesisPlayerPackAttachmentTargets(
     s,
     p,
@@ -7579,7 +8062,7 @@ function allyUpgradeTargets(s: GameState, p: Piece) {
   return targets(s, "ally").filter(
     (x) =>
       attach !== "controlled-ally" ||
-      s.player.inPlay.some((p) => p.id === x.id),
+      controller(s, x.id)?.id === s.activePlayerId,
   );
 }
 function maximumAllyUpgradeDiscount(s: GameState, p: Piece) {
@@ -8441,8 +8924,12 @@ const draxPackPorts: draxPack.DraxPackPorts = {
   },
   canGiveTough: (s, target) => dsPorts.canAddStatus(s, target, "tough"),
   returnAllyToHand: (s, id) => {
-    const p = allInPlay(s).find((p) => p.id === id);
+    const p = find(s, id);
     need(p, "The defeated ally is no longer in play.");
+    if (p!.id === sabretooth.sabretoothKelly(s)?.id) {
+      movePieceFromPlay(s, id, false);
+      return;
+    }
     const owner =
       s.players.find((seat) => seat.id === p!.ownerId) || controller(s, id)!;
     discardPiece(s, id);
@@ -9384,6 +9871,7 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...(id === "identity" ? nova.novaHeroAbilityOptions(s, novaPorts) : []),
     ...nova.novaAbilityOptions(s, id, novaPorts),
     ...colossus.colossusAbilityOptions(s, id, colossusPorts),
+    ...sabretooth.sabretoothActionOptions(s, id, sabretoothPorts),
     ...(find(s, id)
       ? ironspider.ironspiderSinisterActions(s, find(s, id)!, ironspiderPorts)
       : []),
@@ -9564,6 +10052,10 @@ const msPorts: MsMarvelPorts = {
   returnAlly: (s, id) => {
     const p = find(s, id);
     need(p, "The ally is no longer in play.");
+    if (p!.id === sabretooth.sabretoothKelly(s)?.id) {
+      movePieceFromPlay(s, id, false);
+      return;
+    }
     const owner = s.players.find((seat) => seat.id === p!.ownerId);
     need(
       owner && !owner.eliminated,
@@ -10217,6 +10709,452 @@ function spiderHamNativePhysicsOptions(
     spiderHamPorts,
   );
 }
+/** Saved native callbacks preserve physical source cards across immediate
+ * deck resets and finish their native windows before the authored continuation. */
+function resolveBrotherhoodNativeEffect(s: GameState, e: Effect): boolean {
+  if (!e.type.startsWith("brotherhood-native:")) return false;
+  switch (e.type) {
+    case "brotherhood-native:after":
+      add(s, ...e.after);
+      break;
+    case "brotherhood-native:discard-player-top": {
+      const previous = s.activePlayerId;
+      activateSeat(s, e.playerId);
+      const before = new Set(s.queue);
+      const result = discardNativePlayerTop(s);
+      const generated = s.queue.filter((effect) => !before.has(effect));
+      s.queue = s.queue.filter((effect) => before.has(effect));
+      activateSeat(s, previous);
+      add(
+        s,
+        ...generated,
+        ...e.after.map((effect: Effect) => ({
+          ...effect,
+          actorId: e.playerId,
+          discardedPiece: result.piece,
+          deckEmptied: result.emptied,
+        })),
+      );
+      break;
+    }
+    case "brotherhood-native:random-hand": {
+      const previous = s.activePlayerId;
+      activateSeat(s, e.playerId);
+      const before = new Set(s.queue);
+      if (s.player.hand.length) revealHidden(s);
+      randomDiscard(s);
+      const generated = s.queue.filter((effect) => !before.has(effect));
+      s.queue = s.queue.filter((effect) => before.has(effect));
+      activateSeat(s, previous);
+      add(s, ...generated, ...e.after);
+      break;
+    }
+    case "brotherhood-native:scheme-result": {
+      const entered = !!s.brotherhoodEntered?.[e.id];
+      if (s.brotherhoodEntered) delete s.brotherhoodEntered[e.id];
+      revealHidden(s);
+      mutagenPorts.shuffleEncounter(s);
+      add(s, ...e.after.map((effect: Effect) => ({ ...effect, entered })));
+      break;
+    }
+    case "brotherhood-native:discard-until": {
+      const before = new Set(s.queue);
+      const result = mutagenPorts.discardTop(s);
+      const generated = s.queue.filter((effect) => !before.has(effect));
+      s.queue = s.queue.filter((effect) => before.has(effect));
+      const found =
+        result.piece &&
+        card(result.piece).type_code === "minion" &&
+        !!card(result.piece).traits?.includes(e.trait);
+      // RRG 1.8 p17: the discard effect stops at the first empty boundary,
+      // even though native recycling has already moved the physical card.
+      if (found || !result.piece || result.emptied)
+        add(
+          s,
+          ...generated,
+          ...e.after.map((effect: Effect) => ({
+            ...effect,
+            discardedPiece: found ? result.piece : undefined,
+            deckEmptied: result.emptied,
+          })),
+        );
+      else add(s, ...generated, e);
+      break;
+    }
+    default:
+      throw Error(`Unknown Brotherhood native callback: ${e.type}`);
+  }
+  return true;
+}
+const brotherhoodPorts: brotherhood.BrotherhoodPorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  hasTrait: captainPackHasTrait,
+  controlledCharacters: ironspiderPorts.controlledCharacters,
+  canExhaustCharacter: (s, id) => {
+    const p = id.startsWith("hero:")
+      ? seatView(s, id.slice(5)).player
+      : find(s, id);
+    return !!p && !p.exhausted;
+  },
+  exhaustCharacter: (s, id) => {
+    const p = id.startsWith("hero:")
+      ? seatView(s, id.slice(5)).player
+      : find(s, id);
+    need(
+      p && !p.exhausted,
+      "The selected controlled character is unavailable.",
+    );
+    p!.exhausted = true;
+  },
+  statusEligible: dsPorts.canAddStatus,
+  addStatus: (s, id, status) => add(s, E("status", { target: id, status })),
+  discardPlayerTop: (s, playerId, after) =>
+    add(
+      s,
+      E("brotherhood-native:discard-player-top", {
+        playerId,
+        after,
+        actorId: playerId,
+      }),
+    ),
+  discardRandomHand: (s, playerId, after) =>
+    add(
+      s,
+      E("brotherhood-native:random-hand", {
+        playerId,
+        after,
+        actorId: playerId,
+      }),
+    ),
+  indirectDamage: (s, playerId, amount, sourceId, after) =>
+    ironspiderPorts.indirect(s, {
+      playerId,
+      amount,
+      sourceId,
+      sourceTitle: "Pyro",
+      after: E("brotherhood-native:after", { after, actorId: playerId }),
+    }),
+  attachMinion: (s, id, minionId, boost) => {
+    const p = sinisterNativePiece(s, id);
+    need(
+      p?.code === "32077" && s.minions.some((m) => m.id === minionId),
+      "Homo Superior requires its actual physical card and a live minion.",
+    );
+    if (boost) {
+      const activation = s.scheming || s.attack;
+      need(activation, "The actual boost activation is unavailable.");
+      if (!activation!.retainedBoostIds?.includes(id))
+        (activation!.retainedBoostIds ||= []).push(id);
+    }
+    // This removes zones only, preserving boostIds/boostCodes/value receipts.
+    // countActivationBoost subsequently finds this same live attachment.
+    removeEncounterInstance(s, id);
+    p!.attachedTo = minionId;
+    s.attachments.push(p!);
+  },
+  searchAndRevealSideScheme: (s, code, after) => {
+    let found: Piece | undefined;
+    let fromEncounterDeck = false;
+    for (const zone of [s.encounter.deck, s.encounter.discard]) {
+      const index = zone.findIndex((p) => p.code === code);
+      if (index >= 0) {
+        fromEncounterDeck = zone === s.encounter.deck;
+        found = zone.splice(index, 1)[0];
+        break;
+      }
+    }
+    if (found) {
+      delete (s.brotherhoodEntered ||= {})[found.id];
+      beginResolution(s, found);
+      add(
+        s,
+        E("reveal", { piece: found, fromEncounterDeck }),
+        E("brotherhood-native:scheme-result", { id: found.id, after }),
+      );
+    } else add(s, E("brotherhood-native:scheme-result", { after }));
+  },
+  discardUntilMinion: (s, trait, after) =>
+    add(s, E("brotherhood-native:discard-until", { trait, after })),
+  revealDiscardedMinion: (s, piece, playerId, after) => {
+    const actual = sinisterNativePiece(s, piece.id);
+    need(
+      actual && card(actual).type_code === "minion",
+      "The actual discarded Brotherhood minion is unavailable.",
+    );
+    removeEncounterInstance(s, actual!.id);
+    beginResolution(s, actual!);
+    add(s, E("reveal", { piece: actual!, actorId: playerId }), ...after);
+  },
+};
+const sabretoothPorts: sabretooth.SabretoothPorts = {
+  queue: add,
+  choose,
+  putSetupSideScheme: (s, p, threat) => {
+    mutagenPorts.putSideScheme(s, p);
+    p.counters = threat;
+  },
+  advanceMain: (s, frontCode, after) => {
+    discardMainAttachments(s);
+    s.scheme.index = 1;
+    s.scheme.code = frontCode;
+    s.scheme.threat = 0;
+    s.pendingMainCompletion = false;
+    log(s, `The main scheme advances: ${card(frontCode).name}.`, "bad");
+    add(
+      s,
+      ...sabretooth.sabretoothMainRevealed(s, frontCode),
+      E("sabretooth-native:main-back", { after, actorId: s.firstPlayerId }),
+    );
+  },
+  flipFind: (s, p) => {
+    const index = s.sideSchemes.findIndex((source) => source.id === p.id);
+    need(
+      index >= 0 && p.code === "32065a",
+      "The actual Find the Senator source is unavailable.",
+    );
+    for (const attached of [...allInPlay(s), ...s.attachments].filter(
+      (source) => source.attachedTo === p.id,
+    ))
+      discardPiece(s, attached.id);
+    s.sideSchemes.splice(index, 1);
+    p.code = "32065b";
+    p.counters = 0;
+    delete p.pendingDefeat;
+    (s.environments ||= []).push(p);
+    log(s, "Find the Senator flips to Protect the Senator.", "good");
+  },
+  attach: (s, p, target) => {
+    const activation = s.scheming || s.attack;
+    if (activation?.boostIds?.includes(p.id)) {
+      const retained = (activation.retainedBoostIds ||= []);
+      if (!retained.includes(p.id)) retained.push(p.id);
+    }
+    mutagenPorts.attach(s, p, target);
+  },
+  discardPiece,
+  discardTop: mutagenPorts.discardTop,
+  damage: (s, target, amount, source) =>
+    add(s, E("damage", { target, amount, source, origin: "encounter" })),
+  heal: (s, target, amount, source) =>
+    add(s, E("heal", { target, amount, source, origin: "encounter" })),
+  defeatKelly: (s, id, source) =>
+    add(s, E("sabretooth-native:defeat-kelly", { id, source })),
+  lose: (s, reason) => endGame(s, false, reason),
+  dealEncounter,
+  canExhaustHero: (s) => s.player.form === "hero" && !s.player.exhausted,
+  exhaustHero: (s) => {
+    need(
+      s.player.form === "hero" && !s.player.exhausted,
+      "Sabretooth Strikes requires a ready hero.",
+    );
+    s.player.exhausted = true;
+  },
+  canReadyHero: (s) => s.player.exhausted && canReadyIdentity(s),
+  readyHero: (s) => {
+    readyIdentity(s);
+  },
+  canPay,
+  pay: (s, title, cost, requirements, after, sourceId) => {
+    const source = find(s, sourceId);
+    need(source, "The actual Sabretooth ability source is unavailable.");
+    add(
+      s,
+      E("payRequest", {
+        title,
+        cost,
+        requirements,
+        after,
+        piece: source,
+        abilityCost: true,
+        cancelable: true,
+        cancellationQueue: [...s.queue],
+      }),
+    );
+  },
+  registerAllyDefeatBoost: (s, sourceId, attackId) => {
+    const attack = s.attack;
+    if (!attack || attack.id !== attackId) return;
+    const sources = (attack.sabretoothAllyDefeatBoostIds ||= []);
+    if (!sources.includes(sourceId)) sources.push(sourceId);
+  },
+};
+function resolveSabretoothNativeEffect(s: GameState, e: Effect): boolean {
+  if (!e.type.startsWith("sabretooth-native:")) return false;
+  switch (e.type) {
+    case "sabretooth-native:main-back":
+      need(
+        s.scheme.code === "32064a",
+        "The Injured Senator front must resolve before its back.",
+      );
+      s.scheme.code = "32064b";
+      s.scheme.threat = (card(s.scheme.code).base_threat || 0) * s.playerCount;
+      add(s, ...(e.after || []));
+      break;
+    case "sabretooth-native:defeat-kelly": {
+      const kelly = sabretooth.sabretoothKelly(s);
+      if (kelly && kelly.id === e.id) defeatCharacter(s, kelly, e.source);
+      break;
+    }
+    default:
+      throw Error(`Unknown native Sabretooth effect: ${e.type}`);
+  }
+  return true;
+}
+
+function mystiqueNativePhysicalZones(s: GameState): Piece[][] {
+  return [
+    s.encounter.deck,
+    s.encounter.discard,
+    s.encounter.dealt,
+    s.resolving,
+    ...s.players.flatMap((seat) => {
+      const p = seatView(s, seat).player;
+      return [p.deck, p.hand, p.discard, p.inPlay, p.setAside || []];
+    }),
+  ];
+}
+function mystiqueNativeTake(s: GameState, id: string): Piece {
+  const zones = mystiqueNativePhysicalZones(s);
+  need(
+    zones.flatMap((z) => z.filter((p) => p.id === id)).length === 1,
+    "Mystique requires one actual physical card in its source zone.",
+  );
+  const zone = zones.find((z) => z.some((p) => p.id === id))!;
+  return zone.splice(
+    zone.findIndex((p) => p.id === id),
+    1,
+  )[0];
+}
+/** Outer defense persists while a nested explicit Mystique activation runs. */
+function mystiqueNativeOuterDefending(s: GameState, playerId: string): boolean {
+  const callbacks = [
+    s.attack?.activationAfter,
+    s.scheming?.activationAfter,
+    ...s.queue.filter((e) => e.type === "mystique-native:activation-finish"),
+  ];
+  const defending = (e: Effect | undefined): boolean => {
+    const a = e?.outerAttack as GameState["attack"] | undefined;
+    return (
+      !!a &&
+      ((a.defender === "hero" &&
+        (a.targetPlayerId || a.originalPlayerId) === playerId) ||
+        a.defender === `hero:${playerId}` ||
+        defending(a.activationAfter))
+    );
+  };
+  return callbacks.some(defending);
+}
+function resolveMystiqueNativeEffect(s: GameState, e: Effect): boolean {
+  if (!e.type.startsWith("mystique-native:")) return false;
+  switch (e.type) {
+    case "mystique-native:draw-to-hand-size":
+      mystiqueNativeDrawToHandSize(s, { ...e });
+      break;
+    case "mystique-native:return-actor":
+      if (s.players.some((p) => p.id === e.playerId && !p.eliminated))
+        activateSeat(s, e.playerId);
+      break;
+    case "mystique-native:activate": {
+      if (!s.minions.some((p) => p.id === e.enemyId)) {
+        add(s, ...(e.after || []));
+        break;
+      }
+      const outerAttack = s.attack,
+        outerScheme = s.scheming;
+      const after = E("mystique-native:activation-finish", {
+        outerAttack,
+        outerScheme,
+        after: e.after || [],
+        actorId: e.playerId,
+        eventId: undefined,
+        attackProgramId: undefined,
+        responseGroup: undefined,
+      });
+      s.attack = null;
+      delete s.scheming;
+      const request: MutagenActivation = {
+        playerId: e.playerId,
+        enemyId: e.enemyId,
+        kind: s.player.form === "hero" ? "attack" : "scheme",
+        modifier: 0,
+        after,
+      };
+      if (request.kind === "attack")
+        enemyAttack(s, e.enemyId, undefined, request);
+      else enemyScheme(s, e.enemyId, undefined, request);
+      break;
+    }
+    case "mystique-native:activation-finish":
+      s.attack = e.outerAttack || null;
+      if (e.outerScheme) s.scheming = e.outerScheme;
+      else delete s.scheming;
+      add(s, ...(e.after || []));
+      break;
+    default:
+      throw Error(`Unknown Mystique native callback: ${e.type}`);
+  }
+  return true;
+}
+const mystiquePorts: mystique.MystiquePorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  villainStats: (s) => enemyStats(s, s.villain),
+  controlledPieces: (s) => [...s.player.inPlay, ...controlledNPCs(s)],
+  canDiscardControlled: (s, p) =>
+    [...s.player.inPlay, ...controlledNPCs(s)].some((a) => a.id === p.id) &&
+    !isPermanent(card(p)) &&
+    valkyrie.valkyrieCanDiscardAttachment(s, p),
+  discardControlled: (s, id, after) => {
+    const before = s.queue.length;
+    discardPiece(s, id);
+    const generated = s.queue.splice(0, s.queue.length - before);
+    add(s, ...generated, ...after);
+  },
+  shuffleIntoPlayerDeck: (s, ids, playerId, after) => {
+    need(
+      new Set(ids).size === ids.length,
+      "Shuffle each physical Shapeshifter once.",
+    );
+    const pieces = ids.map((id) => mystiqueNativeTake(s, id));
+    const view = seatView(s, playerId);
+    view.player.deck.push(...pieces);
+    view.player.deck = shuffle(s, view.player.deck);
+    view.flags.warlockDeckEmptyObserved = false;
+    add(s, ...after);
+  },
+  activateMystique: (s, enemyId, playerId, after) =>
+    add(
+      s,
+      E("mystique-native:activate", {
+        enemyId,
+        playerId,
+        after,
+        actorId: playerId,
+        eventId: undefined,
+        attackProgramId: undefined,
+        responseGroup: undefined,
+      }),
+    ),
+  revealSearchedMystique: (s, id, playerId, after) => {
+    const fromEncounterDeck = s.encounter.deck.some((p) => p.id === id);
+    const p = mystiqueNativeTake(s, id);
+    const before = s.queue.length;
+    if (fromEncounterDeck) recycleEncounter(s);
+    const exhaustion = s.queue.splice(0, s.queue.length - before);
+    add(
+      s,
+      ...exhaustion,
+      E("reveal", { piece: p, actorId: playerId, fromEncounterDeck }),
+      ...after,
+    );
+  },
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  revealHidden,
+};
+
 const inheritorsPorts: inheritors.InheritorsPorts = {
   queue: add,
   choose,
@@ -11044,7 +11982,12 @@ function niAllyTargets(s: GameState, p: Piece, kind: "attack" | "thwart") {
             !engaged(s).some((m) => keyword(m, "Patrol", s))),
     );
   }
-  if (kind === "attack") return targets(s, "enemy", false);
+  if (kind === "attack")
+    return targets(s, "enemy", false).filter(
+      (t) =>
+        t.id !== s.villain.id ||
+        !mystique.mystiqueVillainAttackProhibited(s, mystiquePorts),
+    );
   const schemes = targets(s, "scheme", false, false);
   if (
     !schemes.some((t) => t.id === "main") &&
@@ -12750,7 +13693,14 @@ function enemyAttack(
     add(s, ...forced);
   }
 }
+function enemyDashPower(p: Piece, power: "attack" | "scheme") {
+  return power === "attack"
+    ? card(p).attack === null && !card(p).attack_star
+    : (card(p).scheme === null && !card(p).scheme_star) ||
+        (p.treatedAsMinion && card(p.code).thwart === null);
+}
 function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
+  if (enemyDashPower(p, "attack")) return 0;
   if (riskyBlankPower(s, "attack", p.id)) return 0;
   const bonus =
     (p.bonusAtk || 0) +
@@ -12771,7 +13721,9 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
         ? pieceHP(s, p)
         : rulesCode(p) === "01162"
           ? pieceHP(s, p) - p.damage
-          : (card(p).attack || 0) +
+          : (mystique.mystiqueStats(s, p, mystiquePorts)?.attack ??
+              card(p).attack ??
+              0) +
             (rulesCode(s.villain) === "01136" &&
             card(p).traits?.includes("Drone.")
               ? 1
@@ -12960,6 +13912,18 @@ function declareDefense(s: GameState) {
   );
 }
 function boostEffects(s: GameState, p: Piece) {
+  const mutantScenarioBoost =
+    sabretooth.sabretoothBoost(s, p) ??
+    brotherhood.brotherhoodBoost(s, p) ??
+    mystique.mystiqueBoost(s, p);
+  if (mutantScenarioBoost !== null) {
+    if (["32067", "32068"].includes(p.code)) {
+      const activation = s.scheming || s.attack;
+      if (activation) (activation.retainedBoostIds ||= []).push(p.id);
+    }
+    add(s, ...mutantScenarioBoost);
+    return;
+  }
   if (p.code === "32058") {
     const activation = s.scheming || s.attack;
     if (activation) (activation.retainedBoostIds ||= []).push(p.id);
@@ -13225,6 +14189,7 @@ function enemyScheme(
     if (boost) pendingBoosts.push(boost);
   }
   s.scheming = {
+    id: `scheme${s.nextId++}`,
     attacker: id,
     boostCodes: [],
     boostIds: [],
@@ -13235,26 +14200,78 @@ function enemyScheme(
   };
   add(s, E(pendingBoosts.length ? "revealSchemeBoost" : "finishScheme"));
 }
+function enemySCH(s: GameState, p: Piece, playerId: string): number {
+  if (enemyDashPower(p, "scheme")) return 0;
+  if (riskyBlankPower(s, "scheme", p.id)) return 0;
+  return (
+    (mystique.mystiqueStats(s, p, mystiquePorts)?.scheme ??
+      vision.visionDroneStats(s, p)?.scheme ??
+      card(p).scheme ??
+      0) +
+    blackWidowEnemyModifier(s, p, playerId) +
+    ironheart.ironheartEnemyStats(s, p, { isTextBlank }).scheme +
+    enemyAttachmentModifier(s, p.id, "scheme")
+  );
+}
+export function enemyStats(
+  s: GameState,
+  p: Piece,
+  playerId = p.engagedWith || s.activePlayerId,
+) {
+  let attack = enemyATK(s, p, playerId);
+  if (p.id === s.villain.id && rulesCode(p) === "01135") {
+    const liveUltron = (a: GameState["attack"]) =>
+      a?.attacker === p.id &&
+      (!a.attackerSnapshot || rulesCode(a.attackerSnapshot) === "01135")
+        ? a
+        : undefined;
+    const seen = new Set<Effect>();
+    const savedUltron = (e?: Effect): GameState["attack"] | undefined => {
+      if (!e || e.type !== "mystique-native:activation-finish" || seen.has(e))
+        return undefined;
+      seen.add(e);
+      return (
+        liveUltron(e.outerAttack) ||
+        savedUltron(e.outerAttack?.activationAfter) ||
+        savedUltron(e.outerScheme?.activationAfter)
+      );
+    };
+    const current =
+      liveUltron(s.attack) ||
+      savedUltron(s.attack?.activationAfter) ||
+      savedUltron(s.scheming?.activationAfter) ||
+      s.queue.map(savedUltron).find((a) => !!a);
+    const drones = (id: string) =>
+      engaged(s, id).filter((m) => card(m).traits?.includes("Drone.")).length;
+    // The private attack calculator includes Ultron II's prospective interrupt
+    // bonus. Current statistics include that grant only during his real attack,
+    // including an outer attack suspended by a native Mystique activation.
+    attack -= drones(playerId);
+    if (current)
+      attack += drones(
+        current.originalPlayerId || current.targetPlayerId || playerId,
+      );
+  }
+  return { attack, scheme: enemySCH(s, p, playerId) };
+}
 function finishScheme(s: GameState) {
   const activation = s.scheming;
   if (!activation) return;
   const { attacker: id, extra } = activation;
   const p = find(s, id);
   if (!p) return;
-  const amount =
-    (riskyBlankPower(s, "scheme", p.id)
-      ? 0
-      : (vision.visionDroneStats(s, p)?.scheme ?? card(p).scheme ?? 0) +
-        (activation.modifier || 0) +
-        (activation.extraBoostIcons || 0) +
-        blackWidowEnemyModifier(s, p, s.activePlayerId) +
-        ironheart.ironheartEnemyStats(s, p, { isTextBlank }).scheme +
-        enemyAttachmentModifier(s, id, "scheme")) +
-    activation.boostCodes.reduce(
-      (n, code, index) =>
-        n + activationBoostValue(s, activation.boostIds[index], code),
-      0,
-    );
+  const amount = enemyDashPower(p, "scheme")
+    ? 0
+    : (riskyBlankPower(s, "scheme", p.id)
+        ? 0
+        : enemySCH(s, p, s.activePlayerId) +
+          (activation.modifier || 0) +
+          (activation.extraBoostIcons || 0)) +
+      activation.boostCodes.reduce(
+        (n, code, index) =>
+          n + activationBoostValue(s, activation.boostIds[index], code),
+        0,
+      );
   log(s, `${card(p).name} schemes for ${amount} threat.`, "bad");
   activation.threatBefore = s.stats?.threatPlaced || 0;
   const after = [
@@ -13268,6 +14285,14 @@ function finishScheme(s: GameState) {
           .filter((p) => rulesCode(p) === "01180")
           .map((p) => E("threat", { target: p.id, amount: 2 }))
       : []),
+    ...sabretooth.sabretoothAfterActivation(s, {
+      token: (activation.id ||= `scheme${s.nextId++}`),
+      enemyId: id,
+      enemyCode: p.code,
+      playerId: s.activePlayerId,
+      kind: "scheme",
+      performed: true,
+    }),
     ...antMan.antManEnemyActivated(s, id),
     ...armadillo.armadilloActivationResponses(s, id).flatMap((r) => r.effects),
     ...spectrum.spectrumEnemyActivated(s, p, s.activePlayerId, spectrumPorts),
@@ -13284,19 +14309,20 @@ function calculateAttack(s: GameState) {
   if (!a) return;
   const attacker = nebulaNativeAttacker(s, a.attacker);
   if (attacker)
-    a.base =
-      nebulaNativeAttackStrength(
-        s,
-        attacker,
-        a.originalPlayerId || a.targetPlayerId || s.activePlayerId,
-      ) +
-      (a.modifier || 0) +
-      (a.extraBoostIcons || 0) +
-      a.boostCodes.reduce(
-        (n, code, index) =>
-          n + activationBoostValue(s, a.boostIds?.[index] || "", code),
-        0,
-      );
+    a.base = enemyDashPower(attacker, "attack")
+      ? 0
+      : nebulaNativeAttackStrength(
+          s,
+          attacker,
+          a.originalPlayerId || a.targetPlayerId || s.activePlayerId,
+        ) +
+        (a.modifier || 0) +
+        (a.extraBoostIcons || 0) +
+        a.boostCodes.reduce(
+          (n, code, index) =>
+            n + activationBoostValue(s, a.boostIds?.[index] || "", code),
+          0,
+        );
   if (
     a.defender &&
     !["none", "hero"].includes(a.defender) &&
@@ -13361,6 +14387,30 @@ function schemeWindow(
     ]);
   else add(s, ...follow);
 }
+function enemyAttackDamageTarget(
+  s: GameState,
+  a: NonNullable<GameState["attack"]>,
+) {
+  const target =
+    a.defender && a.defender !== "none"
+      ? a.defender
+      : a.originalTarget || "hero";
+  return (
+    sabretooth.sabretoothUndefendedTarget(s, {
+      playerId: a.targetPlayerId || s.activePlayerId,
+      undefended: !a.defender || a.defender === "none",
+      target,
+    }) || target
+  );
+}
+type SabretoothAttackDefeatPiece = Piece & {
+  sabretoothAttackDefeatReceipt?: {
+    attackId: string;
+    attackerId: string;
+    playerId: string;
+    sourceIds: string[];
+  };
+};
 function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
   const a = s.attack!;
   if (!a) return;
@@ -13398,10 +14448,7 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
     a.identityDamage = 0;
     return;
   }
-  const target =
-    a.defender && a.defender !== "none"
-      ? a.defender
-      : a.originalTarget || "hero";
+  const target = enemyAttackDamageTarget(s, a);
   const visualAttacker = combatCharacter(s, a.attacker);
   const visualTarget = combatCharacter(s, target);
   const damage =
@@ -13461,6 +14508,21 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
       Number(s.enemyAttackCounts[a.attacker] || 0) + 1;
     a.completionRecorded = true;
   }
+  a.primaryTargetControllerId =
+    target === "hero" ? recipientId : controller(s, target)?.id;
+  if (
+    receiving &&
+    "code" in receiving &&
+    card(receiving).type_code === "ally" &&
+    a.sabretoothAllyDefeatBoostIds?.length &&
+    damage > 0
+  )
+    (receiving as SabretoothAttackDefeatPiece).sabretoothAttackDefeatReceipt = {
+      attackId: a.id!,
+      attackerId: a.attacker,
+      playerId: recipientId,
+      sourceIds: [...a.sabretoothAllyDefeatBoostIds],
+    };
   const beforeDamageQueue = new Set(s.queue);
   const result = dealDamage(
     s,
@@ -13477,8 +14539,13 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
     },
   );
   a.damage = result.actualDamage;
+  if (receiving && "code" in receiving && !receiving.pendingDefeat)
+    delete (receiving as SabretoothAttackDefeatPiece)
+      .sabretoothAttackDefeatReceipt;
   if (
     (a.overkill || !!sourceKeyword(s, a.attacker, "Overkill")) &&
+    !!a.defender &&
+    a.defender !== "none" &&
     target !== "hero" &&
     damage > before &&
     !wasTough
@@ -13553,6 +14620,26 @@ function finishAttackAfterDamage(
   // already established continuation still uses the retained activation.
   if (!a) return;
   const p = nebulaNativeAttacker(s, a.attacker) || a.attackerSnapshot;
+
+  const brotherhoodAfter = brotherhood.brotherhoodAfterAttack(s, {
+    token: a.id!,
+    attackerId: a.attacker,
+    attackerCode: a.attackerSnapshot?.code || p?.code || "",
+    playerId: recipientId,
+    performed: !!a.completionRecorded,
+    textBlank: !p || isTextBlank(s, p),
+    targetId: target === "hero" ? `hero:${recipientId}` : target,
+    damageTaken: a.damage,
+    targetControllerId: a.primaryTargetControllerId,
+  });
+  const sabretoothAfter = sabretooth.sabretoothAfterActivation(s, {
+    token: a.id!,
+    enemyId: a.attacker,
+    enemyCode: a.attackerSnapshot?.code || p?.code || "",
+    playerId: recipientId,
+    kind: "attack",
+    performed: !!a.completionRecorded,
+  });
 
   if (s.phase === "lost" || s.phase === "won") return;
   const retaliation =
@@ -13632,6 +14719,26 @@ function finishAttackAfterDamage(
       : []),
     E("forcedResponses", {
       responses: [
+        ...(brotherhoodAfter.length
+          ? [
+              {
+                id: `${a.id}:brotherhood-after`,
+                sourceId: a.attacker,
+                title: card(a.attackerSnapshot || p!).name,
+                effects: brotherhoodAfter,
+              },
+            ]
+          : []),
+        ...(sabretoothAfter.length
+          ? [
+              {
+                id: `${a.id}:sabretooth-after`,
+                sourceId: a.attacker,
+                title: "Sabretooth · Regeneration",
+                effects: sabretoothAfter,
+              },
+            ]
+          : []),
         ...(p &&
         spectrum.spectrumEnemyActivated(s, p, recipientId, spectrumPorts).length
           ? [
@@ -13759,6 +14866,8 @@ function finishAttackAfterDamage(
       defended: target === "hero" && a.defender !== "none",
       attacker: a.attacker,
       snapshot: {
+        attackId: a.id,
+        enemyCode: a.attackerSnapshot?.code || p?.code,
         attacker: a.attacker,
         attackerCode: a.attackerSnapshot?.code || p?.code,
         attackerStage: a.isVillain
@@ -14087,6 +15196,7 @@ function reveal(
       p.counters =
         (c.base_threat || 0) * (c.base_threat_fixed ? 1 : s.playerCount);
       s.sideSchemes.push(p);
+      if (p.code === "32079") (s.brotherhoodEntered ||= {})[p.id] = true;
     } else if (c.type_code === "attachment") {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       s.attachments.push(p);
@@ -14115,11 +15225,26 @@ function reveal(
     dealEncounter(s);
     return;
   }
+  // Ordinary attachment instructions are not a printed
+  // When Revealed ability. Keep this same source resolving until it attaches.
+  if (!repeat && ["32067", "32068", "32077"].includes(p.code)) {
+    add(
+      s,
+      ...((sabretooth.sabretoothReveal(s, p) ??
+        brotherhood.brotherhoodReveal(s, p, { isTextBlank })) ||
+        []),
+      E("finishResolution", { id: p.id }),
+    );
+    return;
+  }
   if (
     !repeat &&
-    (ironspider.IRONSPIDER_SINISTER_SCRIPT_CODES.some(
-      (code) => code === p.code,
-    ) ||
+    (sabretooth.SABRETOOTH_SCRIPT_CODES.some((code) => code === p.code) ||
+      brotherhood.BROTHERHOOD_SCRIPT_CODES.some((code) => code === p.code) ||
+      mystique.MYSTIQUE_SCRIPT_CODES.some((code) => code === p.code) ||
+      ironspider.IRONSPIDER_SINISTER_SCRIPT_CODES.some(
+        (code) => code === p.code,
+      ) ||
       moduleSurge)
   ) {
     if (c.type_code === "minion") {
@@ -14131,6 +15256,7 @@ function reveal(
       p.counters =
         (c.base_threat || 0) * (c.base_threat_fixed ? 1 : s.playerCount);
       s.sideSchemes.push(p);
+      if (p.code === "32079") (s.brotherhoodEntered ||= {})[p.id] = true;
     } else if (c.type_code === "environment") visionPorts.putEnvironment(s, p);
     add(
       s,
@@ -14283,6 +15409,9 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    sabretooth.sabretoothReveal(s, p) ??
+    brotherhood.brotherhoodReveal(s, p, { isTextBlank }) ??
+    mystique.mystiqueReveal(s, p) ??
     armadillo.armadilloReveal(s, p) ??
     zzzax.zzzaxReveal(s, p) ??
     inheritors.inheritorsReveal(s, p) ??
@@ -14324,7 +15453,11 @@ function reveal(
     rise !== null &&
     ["obligation", "treachery", "attachment"].includes(c.type_code)
   ) {
-    if (c.type_code === "attachment" && !repeat && p.code !== "30027") {
+    if (
+      c.type_code === "attachment" &&
+      !repeat &&
+      !["30027", "32077"].includes(p.code)
+    ) {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       s.attachments.push(p);
     }
@@ -15009,6 +16142,12 @@ function refreshInheritorsRetaliate(
     : undefined;
 }
 function resolve(s: GameState, e: Effect) {
+  if (resolveSabretoothNativeEffect(s, e)) return;
+  if (sabretooth.resolveSabretoothEffect(s, e, sabretoothPorts)) return;
+  if (resolveBrotherhoodNativeEffect(s, e)) return;
+  if (brotherhood.resolveBrotherhoodEffect(s, e, brotherhoodPorts)) return;
+  if (resolveMystiqueNativeEffect(s, e)) return;
+  if (mystique.resolveMystiqueEffect(s, e, mystiquePorts)) return;
   if (e.spdrThwartCostPaid && !s.flags.spdrGiantThwartCostPaid) {
     const previous = s.flags.spdrGiantThwartCostPaid;
     s.flags.spdrGiantThwartCostPaid = true;
@@ -15113,6 +16252,9 @@ function resolve(s: GameState, e: Effect) {
         const previous = state.currentRevealWindowId;
         state.currentRevealWindowId = windowId;
         const effects =
+          sabretooth.sabretoothReveal(state, piece) ??
+          brotherhood.brotherhoodReveal(state, piece, { isTextBlank }) ??
+          mystique.mystiqueReveal(state, piece) ??
           ironspider.ironspiderSinisterReveal(state, piece) ??
           armadillo.armadilloReveal(state, piece) ??
           zzzax.zzzaxReveal(state, piece) ??
@@ -17132,6 +18274,9 @@ function resolve(s: GameState, e: Effect) {
         );
       break;
     }
+    case "encounterVictory":
+      movePieceFromPlay(s, e.id, false, undefined, true);
+      break;
     case "defeatScheme": {
       const p = s.sideSchemes.find((x) => x.id === e.id);
       const interrupts =
@@ -17219,7 +18364,7 @@ function resolve(s: GameState, e: Effect) {
       if (p)
         add(
           s,
-          ...(keyword(p, "Quickstrike") && s.player.form === "hero"
+          ...(keyword(p, "Quickstrike", s) && s.player.form === "hero"
             ? [E("enemyAttack", { id: p.id })]
             : []),
           E("minionResponses", { id: p.id }),
@@ -17961,7 +19106,7 @@ function resolve(s: GameState, e: Effect) {
       }
       break;
     case "heal":
-      heal(s, e.target, e.amount);
+      heal(s, e.target, e.amount, e.origin || "player");
       break;
     case "zzzaxIndirectCommit": {
       const owner = seatView(s, e.playerId);
@@ -18605,6 +19750,10 @@ function resolve(s: GameState, e: Effect) {
     case "attachPlayer": {
       const p = find(s, e.id);
       if (p) {
+        need(
+          playerAttachmentTarget(s, p, e.target),
+          "Robert Kelly cannot have player cards or upgrades attached.",
+        );
         const duplicate = allInPlay(s).some(
           (x) =>
             x.id !== p.id &&
@@ -18813,6 +19962,10 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "allyAction": {
+      need(
+        e.id !== sabretooth.sabretoothKelly(s)?.id,
+        "Robert Kelly has no basic ATK or THW power.",
+      );
       if (
         e.kind === "thwart" &&
         !e.spdrThwartCostPaid &&
@@ -20462,10 +21615,10 @@ function resolve(s: GameState, e: Effect) {
         add(s, E("finishAttack"));
         break;
       }
-      const damageTarget =
-        a.defender && a.defender !== "none"
-          ? a.defender
-          : a.originalTarget || "hero";
+      const damageTarget = enemyAttackDamageTarget(s, a);
+      const kellyReplacement =
+        damageTarget === sabretooth.sabretoothKelly(s)?.id &&
+        (!a.defender || a.defender === "none");
       const heroTarget = damageTarget === "hero";
       if (damageProhibition(s, damageTarget, false)) {
         a.preventAllDamage = true;
@@ -20550,6 +21703,7 @@ function resolve(s: GameState, e: Effect) {
       if (
         !heroTarget &&
         !a.originalTarget &&
+        !kellyReplacement &&
         (a.overkill || !!sourceKeyword(s, a.attacker, "Overkill")) &&
         !a.nebulaOverkillHandled
       ) {
@@ -20585,6 +21739,7 @@ function resolve(s: GameState, e: Effect) {
       if (
         !heroTarget &&
         !a.originalTarget &&
+        !kellyReplacement &&
         (a.overkill || !!sourceKeyword(s, a.attacker, "Overkill")) &&
         !a.grootOverkillHandled
       ) {
@@ -20623,7 +21778,10 @@ function resolve(s: GameState, e: Effect) {
           add(s, ...forced);
           break;
         }
-      } else if (a.overkill || sourceKeyword(s, a.attacker, "Overkill")) {
+      } else if (
+        !kellyReplacement &&
+        (a.overkill || sourceKeyword(s, a.attacker, "Overkill"))
+      ) {
         const ally = find(s, damageTarget);
         const amount =
           ally && !ally.tough
@@ -20699,6 +21857,7 @@ function resolve(s: GameState, e: Effect) {
       if (
         !heroTarget &&
         !receiving?.tough &&
+        !kellyReplacement &&
         (a.overkill || sourceKeyword(s, a.attacker, "Overkill"))
       ) {
         const ally = find(s, damageTarget);
@@ -20897,6 +22056,7 @@ function resolve(s: GameState, e: Effect) {
         );
       if (
         !heroTarget &&
+        !kellyReplacement &&
         (a.overkill || !!sourceKeyword(s, a.attacker, "Overkill"))
       ) {
         const ally = find(s, damageTarget);
@@ -21336,6 +22496,19 @@ function resolve(s: GameState, e: Effect) {
       const milesOptions = e.milesBasicReceipt
         ? miles.milesBasicPowerOptions(s, e.milesBasicReceipt, [e], milesPorts)
         : [];
+      const sabretoothOptions = e.snapshot?.attackId
+        ? sabretooth.sabretoothHeroDefended(
+            s,
+            {
+              attackId: e.snapshot.attackId,
+              enemyId: e.snapshot.attacker,
+              enemyCode: e.snapshot.enemyCode || e.snapshot.attackerCode || "",
+              playerId: e.snapshot.playerId,
+              heroDefended: !!e.snapshot.heroDefended,
+            },
+            sabretoothPorts,
+          )
+        : [];
       if (
         !e.defended &&
         !packOptions.length &&
@@ -21343,6 +22516,7 @@ function resolve(s: GameState, e: Effect) {
         !gamoraOptions.length &&
         !draxOptions.length &&
         !milesOptions.length &&
+        !sabretoothOptions.length &&
         !ghostOptions.length
       )
         break;
@@ -21363,6 +22537,10 @@ function resolve(s: GameState, e: Effect) {
         ...draxOptions,
         ...milesOptions,
         ...ghostOptions,
+        ...sabretoothOptions.map((o) => ({
+          ...o,
+          effects: [...o.effects, { ...e }],
+        })),
         ...packOptions.map((o) => ({
           ...o,
           effects: [
@@ -21923,19 +23101,20 @@ function resolve(s: GameState, e: Effect) {
       add(s, ...eachPlayer(s, E("refill")));
       break;
     case "refill":
-      doctorStrangePhaseEnded(s);
-      msMarvelPhaseEnded(s);
-      captainPhaseEnded(s);
-      captainPackPhaseEnded(s);
+      if (!e.mystiqueRefillResuming) {
+        doctorStrangePhaseEnded(s);
+        msMarvelPhaseEnded(s);
+        captainPhaseEnded(s);
+        captainPackPhaseEnded(s);
+      }
       // Encounter cards dealt by deck exhaustion can increase Star-Lord's
       // Helmet hand size during this refill. Recheck after each actual draw.
-      while (s.player.hand.length < handSize(s)) {
-        const before = s.player.hand.length;
-        draw(s, 1);
-        if (s.player.hand.length === before) break;
-      }
+      if (
+        mystiqueNativeDrawToHandSize(s, { ...e, mystiqueRefillResuming: true })
+      )
+        break;
       antPack.antManPackPhaseEnded(s);
-      for (const p of s.player.inPlay) {
+      for (const p of [...s.player.inPlay, ...controlledNPCs(s)]) {
         if (nova.novaCanReadyPiece(s, p, { isTextBlank })) p.exhausted = false;
         p.bonusAtk = 0;
         p.bonusThw = 0;
@@ -22062,6 +23241,7 @@ function resolve(s: GameState, e: Effect) {
         ...(rulesCode(s.scheme) === "01138b"
           ? eachPlayer(s, E("ultronChoice", { amount: 2 }))
           : []),
+        ...sabretooth.sabretoothVillainPhaseStepOne(s),
       );
       break;
     case "villainActivate": {
@@ -22299,6 +23479,7 @@ function resolve(s: GameState, e: Effect) {
       activateSeat(s, prev);
       const order = playerOrder(s);
       s.firstPlayerId = (order[1] || order[0]).id;
+      sabretooth.sabretoothFirstPlayerChanged(s);
       s.round++;
       s.phase = "player";
       s.villainStep = "newRound";
@@ -22448,6 +23629,7 @@ function run(s: GameState) {
     !["won", "lost"].includes(s.phase)
   ) {
     need(n++ < 600, "Effect loop exceeded its limit.");
+    mystiqueNativeQueueHandEntries(s, mystiqueNativeObserveHands(s));
     const e = s.queue.shift()!;
     const actor = s.players.find(
       (p) => p.id === (e.actorId || s.activePlayerId),
@@ -22469,6 +23651,7 @@ function run(s: GameState) {
         "finishResolution",
         "defeatScheme",
         "defeatSchemes",
+        "encounterVictory",
         "spiderHamBatchReceipt",
         "spiderHamSchemeThwartInterrupts",
         "spider-ham-pack:odds-after",
@@ -22492,7 +23675,11 @@ function run(s: GameState) {
         "mutagen:loss",
         "goblin-module:power-drain-each",
         "goblin-module:interference-each",
-      ].includes(e.type) || e.type.startsWith("sw:hydra");
+      ].includes(e.type) ||
+      e.type.startsWith("sw:hydra") ||
+      e.type.startsWith("sabretooth:") ||
+      e.type.startsWith("sabretooth-native:") ||
+      e.type === "mystique-native:activation-finish";
     if (actor?.eliminated && !global) continue;
     activateSeat(
       s,
@@ -22515,7 +23702,9 @@ function run(s: GameState) {
     s.currentRevealWindowId = e.revealWindowId;
     syncNebulaIdentityStatuses(s);
     syncMutantGenesisStatuses(s);
+    const mystiqueMovement = mystiqueNativeBeginMovement(s);
     resolve(s, e);
+    mystiqueNativeFinishMovement(s, mystiqueMovement);
     syncValkyrieConvertedCards(s);
     syncNebulaIdentityStatuses(s);
     syncMutantGenesisStatuses(s);
@@ -22568,6 +23757,7 @@ function run(s: GameState) {
 }
 export function dispatch(state: GameState, command: Command): GameState {
   const s = upgradeSave(structuredClone(state));
+  const mystiqueCommandMovement = mystiqueNativeBeginMovement(s);
   for (const seat of s.players)
     warMachine.warMachineInitializeNemesis(seatView(s, seat), {
       makePiece: (_view, code) => makePiece(s, code),
@@ -22610,6 +23800,7 @@ export function dispatch(state: GameState, command: Command): GameState {
         "Unknown tempo.",
       );
       s.pacing = command.pacing;
+      mystiqueNativeFinishMovement(s, mystiqueCommandMovement);
       syncSeat(s);
       return s;
     }
@@ -22618,6 +23809,7 @@ export function dispatch(state: GameState, command: Command): GameState {
       need(s.review, "There is no action to acknowledge.");
       s.review = null;
       run(s);
+      mystiqueNativeFinishMovement(s, mystiqueCommandMovement);
       syncSeat(s);
       return s;
     }
@@ -22770,6 +23962,7 @@ export function dispatch(state: GameState, command: Command): GameState {
           if (s.attachments.some((p) => p.id === command.id)) {
             const p = find(s, command.id)!;
             const custom = [
+              ...sabretooth.sabretoothActionOptions(s, p.id, sabretoothPorts),
               ...zzzax.zzzaxActions(s, p, zzzaxPorts),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
               ...goblinModuleAttachmentActions(s, p),
@@ -22866,6 +24059,7 @@ export function dispatch(state: GameState, command: Command): GameState {
         }
       }
     }
+    mystiqueNativeFinishMovement(s, mystiqueCommandMovement);
     check(s);
     spdr.spdrSyncIdentity(s);
     syncSeat(s);

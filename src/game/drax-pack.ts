@@ -1,6 +1,7 @@
 import { eventPlaySources } from "./card-text.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
+import { sabretoothKelly } from "./sabretooth.js";
 import { isTextBlank } from "./card-text.js";
 import { printedCardMetadata } from "./printed-card-metadata.js";
 import { expansionErrata } from "./expansion-errata.js";
@@ -289,7 +290,8 @@ export function draxPackRegroupOptions(
   if (
     !snapshot.attack ||
     !snapshot.enemySource ||
-    !allInPlay(s).some((p) => p.id === ally.id)
+    (!allInPlay(s).some((p) => p.id === ally.id) &&
+      (sabretoothKelly(s)?.id !== ally.id || ally.treatedAsMinion))
   )
     return [];
   return allInPlay(s)
@@ -603,9 +605,15 @@ export function resolveDraxPackEffect(
     }
     case "drax-pack:regroup": {
       const p = own(s, e.id, "19032"),
-        ally = allInPlay(s).find((p) => p.id === e.allyId);
+        ally =
+          allInPlay(s).find((p) => p.id === e.allyId) ||
+          (sabretoothKelly(s)?.id === e.allyId
+            ? sabretoothKelly(s)
+            : undefined);
       need(p && ally, "Regroup or the defeated ally is unavailable.");
+      const npc = ally!.id === sabretoothKelly(s)?.id;
       ports.returnAllyToHand(s, ally!.id);
+      if (npc && s.phase === "lost") break;
       ports.queue(s, ...(e.after || []));
       break;
     }

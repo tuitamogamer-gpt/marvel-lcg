@@ -134,6 +134,7 @@ describe("guest mission history", () => {
     game.phase = "lost";
     const record = missionRecord(game);
     delete record.module;
+    delete record.modules;
     record.heroes = record.heroes.map(({ heroId, aspect }) => ({
       heroId,
       aspect,
