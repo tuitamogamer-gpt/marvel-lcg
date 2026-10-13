@@ -474,6 +474,49 @@ describe("Mutant Genesis native player pool", () => {
     s.player.hp -= 1;
     expect(abilityOptions(s, mansion)).toEqual([]);
   });
+  it("Gatekeeper's effective Patrol blocks original Colossus Bait and Switch before any payment", () => {
+    const s = base("colossus", "shadowcat"),
+      enemy = minion(s, "01103"),
+      gate = put(s, "32044", "p2");
+    const source = seatView(s, "p2").player.inPlay;
+    source.splice(source.indexOf(gate), 1);
+    s.player.inPlay.push(gate);
+    gate.attachedTo = enemy.id;
+    const [event, energy] = hand(s, "32015", "32022");
+    const before = s.player.hand.map((p) => p.id);
+    expect(playable(s, event)).toMatch(/Patrol/);
+    const failed = dispatch(reload(s), { type: "PLAY", id: event.id });
+    expect(failed.error).toMatch(/Patrol/);
+    expect(failed.prompt).toBeNull();
+    expect(failed.player.hand.map((p) => p.id)).toEqual(before);
+    expect(failed.player.discard.some((p) => p.id === energy.id)).toBe(false);
+    expect(
+      failed.player.hand.some((p) => p.id === event.id && p.code === "32015"),
+    ).toBe(true);
+    expect(actual(failed, gate.id).ownerId).toBe("p2");
+  });
+  it("printed Patrol blocks Solid but permits actual Phased Shadowcat Bait and Switch", () => {
+    let s = base();
+    minion(s, "16119");
+    const [event, energy] = hand(s, "32015", "32052");
+    expect(playable(s, event)).toMatch(/Patrol/);
+    const failed = dispatch(reload(s), { type: "PLAY", id: event.id });
+    expect(failed.error).toMatch(/Patrol/);
+    expect(failed.player.hand.some((p) => p.id === energy.id)).toBe(true);
+    s.player.form = "alter";
+    s = finish(
+      command(s, { type: "ABILITY", id: "identity", action: "phase-control" }),
+    );
+    s = finish(command(s, { type: "FLIP" }));
+    expect(s.player.inPlay.some((p) => p.code === "32031b")).toBe(true);
+    expect(playable(s, event)).toBeNull();
+    s = finish(play(s, event, [energy]));
+    expect(s.scheme.threat).toBe(8);
+    expect(
+      s.player.discard.some((p) => p.id === event.id && p.code === "32015"),
+    ).toBe(true);
+    expect(s.player.discard.some((p) => p.id === energy.id)).toBe(true);
+  });
   it("source Bait and Switch printing attacks before removing threat", () => {
     let s = base("colossus");
     const [event, r] = hand(s, "32015", "32022");

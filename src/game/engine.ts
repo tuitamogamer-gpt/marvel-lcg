@@ -8267,6 +8267,9 @@ const scarletPackPorts: scarletPack.ScarletWitchPackPorts = {
       : ignoreCrisis
         ? hawkeyePorts.schemeTargets(s, true)
         : targets(s, "scheme", false, true),
+  patrolBlocksMain: (s) =>
+    !shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts) &&
+    engaged(s).some((p) => keyword(p, "Patrol", s)),
   cardCost: antPackPorts.cardCost,
   canPay: (s, cost, exclude, code, requirements = []) =>
     canPay(s, cost, requirements, exclude, code),
