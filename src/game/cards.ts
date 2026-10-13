@@ -60,6 +60,11 @@ import { spiderHamStats, spiderHamTraits } from "./spider-ham.js";
 import { spiderHamPackCharacterModifiers } from "./spider-ham-pack.js";
 import { spdrPackCharacterModifiers } from "./spdr-pack.js";
 import { ironspiderSinisterHealthBonus } from "./ironspider-sinister.js";
+import { colossusStats } from "./colossus.js";
+import {
+  mutantGenesisPlayerPackCharacterModifiers,
+  mutantGenesisPlayerPackMinionModifiers,
+} from "./mutant-genesis-player-pack.js";
 import { allInPlay, seatView } from "./team.js";
 import { msMarvelStats } from "./ms-marvel.js";
 import { identityMatch, uniqueMatches } from "./unique.js";
@@ -142,12 +147,22 @@ export const plain = (text = "") =>
     .replace(/\[per_hero\]/g, "per player");
 const missingArtwork = `data:image/svg+xml;charset=utf-8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="419" viewBox="0 0 300 419"><rect width="300" height="419" rx="8" fill="#e8ece9"/><rect x="12" y="12" width="276" height="395" rx="6" fill="none" stroke="#a9b8be"/><text x="150" y="201" text-anchor="middle" font-family="sans-serif" font-size="15" fill="#173657">Artwork unavailable</text><text x="150" y="225" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#45596b">Open card details to read the card</text></svg>')}`;
 const coreImageCodes = new Set(CARDS.map((c) => c.code));
+// These scans label the physical alter-ego side A and hero side B, while the
+// pinned catalog gives the hero an "a" code. Retain the original scans/data.
+const identityImageCodes: Readonly<Record<string, string>> = {
+  "32001a": "32001b",
+  "32001b": "32001a",
+  "32030a": "32030b",
+  "32030b": "32030a",
+};
 export const imageFor = (code: string) =>
   code === "drone"
     ? "/art/player-back.svg"
     : coreImageCodes.has(code)
       ? `/cards/${code}.png`
-      : (catalogImages as Record<string, string>)[code] || missingArtwork;
+      : (catalogImages as Record<string, string>)[
+          identityImageCodes[code] || code
+        ] || missingArtwork;
 export const CORE_HEROES = [
   {
     id: "spider_man",
@@ -642,6 +657,34 @@ export const HEROES = [
     style: "Interface resources · Protection",
     complexity: 3,
   },
+  {
+    id: "colossus",
+    code: "32001a",
+    alter: "32001b",
+    name: "Colossus",
+    identity: "Piotr Rasputin",
+    aspect: "protection" as Aspect,
+    color: "#a17f46",
+    tag: "Strength forged in steel.",
+    description:
+      "Turn Tough status cards into strength, survive heavy attacks, and rebuild your defenses with Organic Steel.",
+    style: "Tough status cards · Protection",
+    complexity: 2,
+  },
+  {
+    id: "shadowcat",
+    code: "32030a",
+    alter: "32030b",
+    name: "Shadowcat",
+    identity: "Kitty Pryde",
+    aspect: "aggression" as Aspect,
+    color: "#8b79bd",
+    tag: "Nothing stands in your way.",
+    description:
+      "Change between Solid and Phased mass forms, bypass enemy restrictions, and defend while attacks pass through you.",
+    style: "Mass forms · Aggression",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -851,6 +894,8 @@ export function deckCodes(
       (hero === "ironheart" && aspect === "leadership") ||
       (hero === "spiderham" && aspect === "justice") ||
       (hero === "spdr" && aspect === "protection") ||
+      (hero === "colossus" && aspect === "protection") ||
+      (hero === "shadowcat" && aspect === "aggression") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
@@ -873,6 +918,7 @@ export function deckCodes(
         !["hero", "alter_ego"].includes(c.type_code) &&
         (!c.permanent ||
           hero === "spectrum" ||
+          (hero === "shadowcat" && c.code === "32031a") ||
           (hero === "vision" && c.code === "26002")),
     )
     .flatMap((c) => Array(c.quantity).fill(c.code)) as string[];
@@ -1047,6 +1093,7 @@ export function heroStats(s: GameState) {
       spiderHamStats(s, { isTextBlank }).attack +
       spiderHamPackCharacterModifiers(s, "hero").attack +
       spdrPackCharacterModifiers(s, "hero").attack +
+      colossusStats(s, { isTextBlank }).attack +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
@@ -1075,6 +1122,7 @@ export function heroStats(s: GameState) {
       novaIronheartCharacterModifiers(s, "hero").thwart +
       spiderHamStats(s, { isTextBlank }).thwart +
       spdrPackCharacterModifiers(s, "hero").thwart +
+      colossusStats(s, { isTextBlank }).thwart +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
@@ -1180,6 +1228,8 @@ export function pieceHP(s: GameState, p: Piece) {
     ironheartEnemyStats(s, p, { isTextBlank }).health +
     zzzaxEnemyStats(s, p).health +
     ironspiderSinisterHealthBonus(s, p) +
+    mutantGenesisPlayerPackCharacterModifiers(s, p.id, { isTextBlank }).health +
+    mutantGenesisPlayerPackMinionModifiers(s, p, { isTextBlank }).health +
     gamoraPackAllyHP(s, p) +
     nebulaPackModifiers(s, p.id).health +
     novaIronheartCharacterModifiers(s, p.id).health +

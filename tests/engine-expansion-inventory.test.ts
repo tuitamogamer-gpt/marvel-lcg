@@ -47,6 +47,7 @@ describe("complete expansion rules inventory", () => {
       "19029",
       "22030",
       "29001a",
+      "32048",
     ]);
     for (const [code, boost] of [
       ["19025", 2],
@@ -89,6 +90,14 @@ describe("complete expansion rules inventory", () => {
     ).toMatchObject({
       url: "https://hallofheroeslcg.com/wp-content/uploads/2022/05/i0d.jpg",
       changes: [{ field: "is_unique", imported: false, runtime: true }],
+    });
+    expect(
+      corrections.find((entry: { code: string }) => entry.code === "32048"),
+    ).toMatchObject({
+      url: "https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/32048.jpg",
+      changes: [
+        { field: "subname", imported: null, runtime: "Piotr Rasputin" },
+      ],
     });
     expect(
       corrections.some((entry: { code: string }) =>
@@ -236,10 +245,37 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(1408);
-    expect(coverage.unsupportedFaces).toBe(3143);
-    expect(coverage.dedicatedFaces).toBe(935);
-    expect(coverage.registeredHeroIds).toHaveLength(35);
+    expect(coverage.executableFaces).toBe(1463);
+    expect(coverage.unsupportedFaces).toBe(3088);
+    expect(coverage.dedicatedFaces).toBe(991);
+    expect(coverage.registeredHeroIds).toHaveLength(37);
+    const mutant = coverage.products.find(
+      (pack: { code: string }) => pack.code === "mut_gen",
+    );
+    expect(mutant).toMatchObject({
+      faceCount: 224,
+      executableFaces: 62,
+      installedCardClosure: false,
+    });
+    expect(mutant.unsupportedFaceCodes).toEqual(
+      cards
+        .filter(
+          (entry: { pack_code: string; position: number }) =>
+            entry.pack_code === "mut_gen" && entry.position > 59,
+        )
+        .map((entry: { code: string }) => entry.code)
+        .sort(),
+    );
+    for (const id of ["colossus", "shadowcat"])
+      expect(
+        inventory.heroes.find(
+          (hero: { id: string }) => hero.id === `mut_gen:${id}`,
+        ),
+      ).toMatchObject({
+        registeredHeroIds: [id],
+        installedCardClosure: true,
+        installedUnsupportedDependencies: [],
+      });
     for (const id of ["hawkeye", "spider_woman"]) {
       expect(
         coverage.registeredHeroes.some(
@@ -377,7 +413,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(87);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(90);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
@@ -427,6 +463,19 @@ describe("complete expansion rules inventory", () => {
     expect(normalizeRules((byCode.get("22011") as { text: string }).text)).toBe(
       eros.importedText,
     );
+    const steelFist = inventory.runtimeRuleCorrections.find(
+      (entry: { code: string }) => entry.code === "32008",
+    );
+    expect(steelFist).toMatchObject({
+      code: "32008",
+      reference: "FFG Rules Reference 1.8, p. 67",
+    });
+    expect(steelFist.url).toContain("#page=67");
+    expect(steelFist.importedText).not.toContain("(attack)");
+    expect(steelFist.runtimeText).toContain("Hero Action (attack):");
+    expect(normalizeRules(runtime.get("32008")?.text)).toBe(
+      steelFist.runtimeText,
+    );
     for (const file of [
       "src/game/black-widow.ts",
       "src/game/doctor-strange.ts",
@@ -466,6 +515,9 @@ describe("complete expansion rules inventory", () => {
       "src/game/spdr.ts",
       "src/game/spdr-pack.ts",
       "src/game/ironspider-sinister.ts",
+      "src/game/colossus.ts",
+      "src/game/shadowcat.ts",
+      "src/game/mutant-genesis-player-pack.ts",
       "src/game/printed-card-metadata.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",

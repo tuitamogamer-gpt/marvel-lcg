@@ -1,3 +1,4 @@
+import { rulesCode } from "./rules-code.js";
 import { eventPlaySources } from "./card-text.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, engaged, seatView } from "./team.js";
@@ -126,7 +127,7 @@ export function scarletWitchPackPlayRestriction(
   )
     return "This attack requires an eligible villain target.";
   if (
-    p.code === "15030" &&
+    rulesCode(p) === "15030" &&
     !s.player.confused &&
     engaged(s).some((p) => {
       const definition = cards.get(p.code);
@@ -142,7 +143,7 @@ export function scarletWitchPackEvent(
   p: Piece,
   paid: Resource[] = [],
 ): Effect[] | null {
-  switch (p.code) {
+  switch (rulesCode(p)) {
     case "15012":
       return [
         E("thwart", {

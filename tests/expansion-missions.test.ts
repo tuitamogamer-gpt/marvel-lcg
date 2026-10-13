@@ -68,6 +68,8 @@ const heroIds = [
   "ironheart",
   "spiderham",
   "spdr",
+  "colossus",
+  "shadowcat",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -352,8 +354,8 @@ describe("published expansion starters across every supported mission setting", 
     );
     expect(VILLAINS).toHaveLength(5);
     expect(MODULES).toHaveLength(13);
-    expect(heroIds).toHaveLength(30);
-    expect(missions).toHaveLength(3900);
+    expect(heroIds).toHaveLength(32);
+    expect(missions).toHaveLength(4160);
   });
   for (const mission of missions)
     it(

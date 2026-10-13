@@ -42,6 +42,9 @@ import { SPIDER_HAM_PACK_SCRIPT_CODES } from "./spider-ham-pack.js";
 import { SPDR_SCRIPT_CODES } from "./spdr.js";
 import { SPDR_PACK_SCRIPT_CODES } from "./spdr-pack.js";
 import { IRONSPIDER_SINISTER_SCRIPT_CODES } from "./ironspider-sinister.js";
+import { COLOSSUS_SCRIPT_CODES } from "./colossus.js";
+import { SHADOWCAT_SCRIPT_CODES } from "./shadowcat.js";
+import { MUTANT_GENESIS_PLAYER_PACK_SCRIPT_CODES } from "./mutant-genesis-player-pack.js";
 import { GOBLIN_MODULE_SCRIPT_CODES } from "./goblin-modules.js";
 import { BLACK_WIDOW_SCRIPT_CODES } from "./black-widow.js";
 import { DOCTOR_STRANGE_SCRIPT_CODES } from "./doctor-strange.js";
@@ -93,8 +96,13 @@ export const SCRIPTED_HERO_IDS = new Set([
   "ironheart",
   "spiderham",
   "spdr",
+  "colossus",
+  "shadowcat",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
+  ...COLOSSUS_SCRIPT_CODES,
+  ...SHADOWCAT_SCRIPT_CODES,
+  ...MUTANT_GENESIS_PLAYER_PACK_SCRIPT_CODES,
   ...ANT_MAN_SCRIPT_CODES,
   ...ANT_MAN_PACK_SCRIPT_CODES,
   ...WASP_SCRIPT_CODES,

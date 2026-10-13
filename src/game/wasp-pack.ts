@@ -1,3 +1,4 @@
+import { rulesCode } from "./rules-code.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, seatView } from "./team.js";
 import { isTextBlank } from "./card-text.js";
@@ -187,7 +188,7 @@ export function waspPackPlayRestriction(
   p: Piece,
   ports: WaspPackPorts,
 ): string | null {
-  if (["13014", "13033"].includes(p.code))
+  if (["13014", "13033"].includes(rulesCode(p)))
     return "Available after you change to a hero form.";
   if (p.code === "13025" && !ports.hasTrait(s, "hero", "Avenger"))
     return "Your identity must have the Avenger trait.";
@@ -218,7 +219,7 @@ export function waspPackEvent(
   p: Piece,
   paid: Resource[] = [],
 ): Effect[] | null {
-  switch (p.code) {
+  switch (rulesCode(p)) {
     case "13013":
       return [
         E("target", {
@@ -284,12 +285,13 @@ function formResponseCards(
   return s.player.form === "hero"
     ? s.player.hand.filter(
         (p) =>
-          ["13014", "13033"].includes(p.code) &&
+          ["13014", "13033"].includes(rulesCode(p)) &&
           !used.includes(p.id) &&
           (p.code !== "13014" ||
             s.player.stunned ||
             ports.enemyTargets(s).length) &&
-          (p.code !== "13033" || ports.canGiveStatus(s, "hero", "tough")) &&
+          (rulesCode(p) !== "13033" ||
+            ports.canGiveStatus(s, "hero", "tough")) &&
           ports.canPay(s, ports.cardCost(s, p), p.id, p.code),
       )
     : [];
@@ -558,7 +560,7 @@ export function resolveWaspPackEffect(
     }
     case "wasp-pack:form-paid": {
       const p = s.player.hand.find(
-        (p) => p.id === e.id && ["13014", "13033"].includes(p.code),
+        (p) => p.id === e.id && ["13014", "13033"].includes(rulesCode(p)),
       );
       need(p, "The response card is no longer in hand.");
       ports.queue(

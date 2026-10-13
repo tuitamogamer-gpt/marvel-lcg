@@ -428,6 +428,8 @@ const plumbing = new Set([
   "defensePrompt",
   "enemyAttack",
   "enemyAttackInitiationWindow",
+  "mutantGenesisInitiatedWindow",
+  "mutantGenesisAttacksWindow",
   "drax-pack:subdue-pay",
   "drax-pack:resume-subdue",
   "declareDefense",

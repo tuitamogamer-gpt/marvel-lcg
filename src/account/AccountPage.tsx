@@ -475,7 +475,9 @@ export function DeckEditor({
           {setupCount > 0 &&
             (heroId === "vision"
               ? " Your mass form is one Permanent card and does not count toward the 40–50 card deck. It enters play Intangible after your mulligan."
-              : ` Your ${setupCount} Permanent energy forms start in play and do not count toward the 40–50 card deck.`)}
+              : heroId === "shadowcat"
+                ? " Your Solid / Phased mass form is one reversible Permanent card and does not count toward the 40–50 card deck. It enters play Solid after your mulligan."
+                : ` Your ${setupCount} Permanent energy forms start in play and do not count toward the 40–50 card deck.`)}
         </p>
         {crossAspectEvents && (
           <p className="account-hint">
