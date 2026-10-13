@@ -570,7 +570,12 @@ async function choice(id) {
       option.id === id || option.id === `${state.activePlayerId}:${id}`,
   );
   assert.ok(index >= 0, `${state.prompt.title}: missing native choice ${id}`);
-  await page.locator(".decision-option").nth(index).click();
+  const target = page.locator(".decision-option").nth(index);
+  // A previous click may leave the pointer on this modal button's hover edge.
+  // Move away before scrolling so its one-pixel hover translation stays stable.
+  await page.mouse.move(4, 4);
+  await target.scrollIntoViewIfNeeded();
+  await target.click();
   return settle();
 }
 const passOption = (state) =>
