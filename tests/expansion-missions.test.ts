@@ -352,10 +352,10 @@ describe("published expansion starters across every supported mission setting", 
     expect(missions).toHaveLength(
       heroIds.length * VILLAINS.length * 2 * MODULES.length,
     );
-    expect(VILLAINS).toHaveLength(5);
-    expect(MODULES).toHaveLength(13);
+    expect(VILLAINS).toHaveLength(6);
+    expect(MODULES).toHaveLength(15);
     expect(heroIds).toHaveLength(32);
-    expect(missions).toHaveLength(4160);
+    expect(missions).toHaveLength(5760);
   });
   for (const mission of missions)
     it(

@@ -52,11 +52,22 @@ export function allInPlay(s: GameState): Piece[] {
     p.id === s.activePlayerId ? s.player.inPlay : p.player.inPlay,
   );
 }
+/** Scenario allies retain their one physical NPC zone while control changes. */
+export function controlledNPCs(
+  s: GameState,
+  playerId = s.activePlayerId,
+): Piece[] {
+  const scenario = s.sabretooth;
+  return scenario?.kelly && scenario.controllerId === playerId
+    ? [scenario.kelly]
+    : [];
+}
 export function controller(s: GameState, id: string) {
   return s.players.find((p) =>
-    (p.id === s.activePlayerId ? s.player : p.player).inPlay.some(
-      (x) => x.id === id,
-    ),
+    [
+      ...(p.id === s.activePlayerId ? s.player : p.player).inPlay,
+      ...controlledNPCs(s, p.id),
+    ].some((x) => x.id === id),
   );
 }
 export function upgradeSave(s: GameState): GameState {

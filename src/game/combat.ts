@@ -7,7 +7,12 @@ export function combatCharacter(s: GameState, id: string) {
     const c = heroCard(s);
     return { code: c.code, name: c.name, hp: s.player.hp };
   }
-  const p = [s.villain, ...s.minions, ...allInPlay(s)].find((p) => p.id === id);
+  const p = [
+    s.villain,
+    ...s.minions,
+    ...allInPlay(s),
+    ...(s.sabretooth?.kelly ? [s.sabretooth.kelly] : []),
+  ].find((p) => p.id === id);
   if (!p) return undefined;
   return {
     code: p.code,

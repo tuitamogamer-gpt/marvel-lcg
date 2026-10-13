@@ -16,6 +16,8 @@ export type GuestRecord = {
   villainId: string;
   /** Older history entries did not record the modular set or deck composition. */
   module?: string;
+  modules?: string[];
+  senatorDamage?: number;
   difficulty: "standard" | "expert";
   heroic: number;
   round: number;
@@ -34,6 +36,17 @@ function validRecord(value: unknown): value is GuestRecord {
     VILLAINS.some((v) => v.id === record.villainId) &&
     (record.module === undefined ||
       MODULES.some((m) => m.id === record.module)) &&
+    (record.modules === undefined ||
+      (Array.isArray(record.modules) &&
+        record.modules.length ===
+          (VILLAINS.find((v) => v.id === record.villainId)?.moduleCount || 1) &&
+        new Set(record.modules).size === record.modules.length &&
+        (record.module === undefined || record.module === record.modules[0]) &&
+        record.modules.every((id) => MODULES.some((m) => m.id === id)))) &&
+    (record.senatorDamage === undefined ||
+      (Number.isInteger(record.senatorDamage) &&
+        record.senatorDamage >= 0 &&
+        record.senatorDamage <= 8)) &&
     ["standard", "expert"].includes(record.difficulty) &&
     [0, 1, 2, 3].includes(record.heroic) &&
     Number.isInteger(record.round) &&
@@ -96,6 +109,8 @@ export function missionRecord(game: GameState): GuestRecord {
     })),
     villainId: game.villainId,
     module: game.module,
+    modules: game.modules ? [...game.modules] : undefined,
+    senatorDamage: game.sabretooth?.startingDamage,
     difficulty: game.difficulty,
     heroic: game.heroic || 0,
     round: game.round,
@@ -113,7 +128,11 @@ export function replaySetup(record: GuestRecord) {
     })),
     villainId: record.villainId,
     module:
-      record.module || VILLAINS.find((v) => v.id === record.villainId)!.module,
+      record.modules?.[0] ||
+      record.module ||
+      VILLAINS.find((v) => v.id === record.villainId)!.module,
+    modules: record.modules ? [...record.modules] : undefined,
+    senatorDamage: record.senatorDamage,
     difficulty: record.difficulty,
     heroic: record.heroic,
     seed: record.seed || undefined,

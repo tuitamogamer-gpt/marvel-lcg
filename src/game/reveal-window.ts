@@ -2,7 +2,7 @@ import type { Card, Effect, GameState, Option, Piece } from "./types.js";
 import { keywordDeclarations, printedKeyword } from "./keywords.js";
 import { playerOrder } from "./team.js";
 
-export type RevealAbilityId = "text" | "incite" | "surge";
+export type RevealAbilityId = "text" | "incite" | "hinder" | "surge";
 export interface RevealWindow {
   piece: Piece;
   /** Original revealer, even when a text activation changes the defending player. */
@@ -10,6 +10,7 @@ export interface RevealWindow {
   /** One ordinary resolution plus additional Media Coverage resolutions. */
   copies: number;
   incite: number;
+  hinder?: number;
   pending: RevealAbilityId[];
   resolved: RevealAbilityId[];
 }
@@ -68,6 +69,13 @@ export function beginRevealWindow(
     ? declaration.value * (declaration.perPlayer ? s.playerCount : 1)
     : 0;
   const pending: RevealAbilityId[] = [];
+  const hinderDeclaration = keywordDeclarations(card).find(
+    (keyword) => keyword.name === "Hinder",
+  );
+  const hinder = hinderDeclaration
+    ? hinderDeclaration.value *
+      (hinderDeclaration.perPlayer ? s.playerCount : 1)
+    : 0;
   if (
     /<b>When Revealed(?:\s*\([^)]*\))?\s*(?::\s*<\/b>|<\/b>\s*:)/i.test(
       card.text || "",
@@ -76,12 +84,14 @@ export function beginRevealWindow(
   )
     pending.push("text");
   if (incite) pending.push("incite");
+  if (hinder) pending.push("hinder");
   if (printedKeyword(card, "Surge")) pending.push("surge");
   windows(s)[piece.id] = {
     piece,
     playerId,
     copies,
     incite,
+    hinder,
     pending,
     resolved: [],
   };
@@ -144,7 +154,9 @@ export function resolveRevealWindowEffect(
                 ? "Resolve When Revealed text"
                 : id === "incite"
                   ? `Resolve Incite ${window.incite}`
-                  : "Resolve Surge",
+                  : id === "hinder"
+                    ? `Resolve Hinder ${window.hinder}`
+                    : "Resolve Surge",
             effects: effects(id),
             image: window.piece.code,
           })),
@@ -164,13 +176,13 @@ export function resolveRevealWindowEffect(
           ),
           next(),
         );
-      else if (e.abilityId === "incite")
+      else if (e.abilityId === "incite" || e.abilityId === "hinder")
         ports.queue(
           s,
           ...Array.from({ length: window.copies }, () =>
             E("threat", {
-              target: "main",
-              amount: window.incite,
+              target: e.abilityId === "hinder" ? window.piece.id : "main",
+              amount: e.abilityId === "hinder" ? window.hinder : window.incite,
               actorId: window.playerId,
               revealWindowId: e.windowId,
             }),

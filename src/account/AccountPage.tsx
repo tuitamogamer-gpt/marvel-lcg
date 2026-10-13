@@ -15,6 +15,7 @@ import {
 import {
   ASPECTS,
   HEROES,
+  MODULES,
   VILLAINS,
   card,
   deckCodes,
@@ -941,6 +942,18 @@ export function AccountPage({
                     </h3>
                     <p>
                       Round {m.round} · {m.difficulty} · {date(m.updatedAt)}
+                    </p>
+                    <p>
+                      {(m.modules || [m.module])
+                        .map(
+                          (id) =>
+                            MODULES.find((set) => set.id === id)?.name || id,
+                        )
+                        .join(" + ")}
+                      {m.villainId === "sabretooth" &&
+                      m.senatorDamage !== undefined
+                        ? ` · Kelly starts with ${m.senatorDamage} damage`
+                        : ""}
                     </p>
                     {m.result && <p>{m.result}</p>}
                   </div>
