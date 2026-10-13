@@ -33,6 +33,8 @@ jobs:
         include:
           - group: general
             scripts: test:flow test:onboarding test:catalog test:expansion test:engine-continuation test:hero-packs
+          - group: experience
+            scripts: test:experience
           - group: ant-man-wasp
             scripts: test:ant-man test:wasp
           - group: quicksilver-scarlet-witch

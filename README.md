@@ -25,6 +25,7 @@ npm run test:production-entry # native Node account API import and unconfigured-
 npm run preview  # serve the production bundle
 npm run sync:cards
 npm run test:ui   # with the dev server running at localhost:5174
+npm run test:experience # searchable roster, responsive setup, exact replay, storage recovery
 npm run test:design # desktop layouts, keyboard behavior, and axe audits
 npm run test:tabletop # crowded physical table, exhaustion, piles, and responsive layouts
 npm run test:flow     # action flow, payments, defense, attachments and dialog containment
@@ -58,6 +59,11 @@ Run `npm run test:production-entry` before publishing. It imports the transpiled
 Run the same browser checks against a deployment with `BASE_URL=https://your-project.vercel.app npm run test:ui`.
 
 ## Included
+
+- **Find your next hero faster:** mission setup has a compact, scrollable roster with search by hero, alter ego, team or product, plus Easy to learn and Core Set filters. The selected hero stays visible in the summary when filters change. Mission controls remain separate on tablet and mobile layouts.
+- **Search the library:** card codes, punctuation-insensitive names and multiple search terms work together with product, aspect, type and rules-support filters. Each result distinguishes implemented rules from catalog-only content. The hero catalog can also show only heroes ready for missions.
+- **Replay the actual setup:** new guest results retain each hero’s original deck composition and order, chosen aspects, modular encounter, difficulty, Heroic level and seed. Older results remain readable and explain their fallback to starter decks and the scenario’s recommended module. Invalid local history entries are ignored.
+- **Recover a failed save:** blocked storage no longer interrupts startup or sound controls. An unsaved mission shows a persistent notice and Retry save action, and warns before leaving the page until saving succeeds.
 
 - Player registration/sign-in with a username and password, a one-time recovery code, private account sessions, and sign-out.
 - A player profile with up to 30 saved supported decks, editing and deck validation, direct use at mission setup, up to 5 resumable missions, and the last 100 completed results with win statistics.

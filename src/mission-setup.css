@@ -1,0 +1,165 @@
+.hero-picker {
+  padding: 16px;
+  border: 1.5px solid var(--ink);
+  border-radius: var(--radius-panel);
+  background: var(--paper);
+  box-shadow: 3px 4px 0 #15243d18;
+}
+.hero-search {
+  width: 100%;
+  min-height: 46px;
+  background: #fff;
+}
+.hero-search input {
+  min-width: 0;
+  width: 100%;
+  font-size: 15px;
+}
+.hero-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.hero-picker-toolbar,
+.hero-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 13px;
+}
+.hero-picker-toolbar {
+  padding-block: 12px;
+}
+.hero-quick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hero-quick-filters button {
+  min-height: 36px;
+  padding: 6px 11px;
+  border: 1px solid #9da7b1;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 700;
+}
+.hero-quick-filters button[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: #fff;
+}
+.hero-match-count {
+  color: #4c596a;
+  font-variant-numeric: tabular-nums;
+}
+.hero-roster-window {
+  max-height: 470px;
+  overflow: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-color: #78899b #e7e8e7;
+  scrollbar-gutter: stable;
+  padding: 6px 8px 8px 3px;
+  border-block: 1px solid #d7d9db;
+}
+.hero-picker .hero-roster {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.hero-picker .portrait {
+  height: 118px;
+}
+.hero-picker .portrait img {
+  height: auto;
+}
+.hero-picker .hero-tile-copy {
+  min-height: 68px;
+  padding: 8px 7px 10px;
+}
+.hero-picker .hero-tile-copy strong {
+  font-size: clamp(12px, 1.2vw, 17px);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.hero-picker .hero-tile-copy small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.25;
+  margin-top: 5px;
+}
+.hero-picker-footer {
+  padding-top: 12px;
+  color: #4c596a;
+}
+.hero-picker-footer b {
+  color: var(--ink);
+}
+.hero-search-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 26px 12px;
+  text-align: center;
+  color: #4c596a;
+  border-block: 1px solid #d7d9db;
+}
+.hero-search-empty b {
+  color: var(--ink);
+}
+.hero-search-empty .secondary-button {
+  margin-top: 6px;
+}
+.storage-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: #fff1c2;
+  color: #594209;
+  border-bottom: 1px solid #b99029;
+  font-size: 14px;
+}
+.storage-notice button {
+  padding: 6px 12px;
+  border: 1px solid currentColor;
+  font-weight: 700;
+}
+.mission-panel .setting-help {
+  margin: 7px 0 14px;
+  line-height: 1.5;
+}
+@media (max-width: 1100px) {
+  .hero-picker .hero-roster {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .hero-picker .hero-tile-copy strong {
+    font-size: 14px;
+  }
+}
+@media (max-width: 980px) {
+  .lobby .mission-panel {
+    display: flex;
+    flex-direction: column;
+  }
+}
+@media (max-width: 600px) {
+  .hero-picker {
+    padding: 12px;
+  }
+  .hero-picker .hero-roster {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .hero-roster-window {
+    max-height: 380px;
+  }
+  .hero-picker .portrait {
+    height: 92px;
+  }
+  .hero-picker .hero-tile-copy strong {
+    font-size: 12px;
+  }
+  .hero-picker .hero-tile-copy small {
+    font-size: 10px;
+  }
+}

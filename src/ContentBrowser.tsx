@@ -15,6 +15,8 @@ import {
 } from "@phosphor-icons/react";
 import { ASPECTS, CATALOG_CARDS, card, imageFor, plain } from "./game/cards";
 import { deckErrors } from "./game/decks";
+import { hasExecutableScript } from "./game/script-registry";
+import { matchesSearch, searchTerms, searchText } from "./search";
 import { heroStarterAspects, heroSetupCards } from "./game/hero-runtime";
 import {
   CATALOG_HEROES,
@@ -49,6 +51,27 @@ const cardFactions = [
 const cardTypes = [
   ...new Set(CATALOG_CARDS.map((c) => c.type_code).filter(Boolean)),
 ].sort();
+const heroSearchIndex = new Map(
+  CATALOG_HEROES.map((hero) => [
+    hero.code,
+    searchText(
+      `${hero.name} ${hero.identity} ${hero.product.name} ${card(hero.code)?.traits || ""}`,
+    ),
+  ]),
+);
+// Build the larger text index only when the card library is first opened.
+let cardSearchIndex:
+  | { card: (typeof CATALOG_CARDS)[number]; text: string; supported: boolean }[]
+  | undefined;
+function indexedCards() {
+  return (cardSearchIndex ??= CATALOG_CARDS.map((card) => ({
+    card,
+    text: searchText(
+      `${card.code} ${card.name} ${card.subname || ""} ${card.traits || ""} ${plain(card.text)} ${cardProducts.get(card.code)?.name || ""}`,
+    ),
+    supported: hasExecutableScript(card),
+  })));
+}
 const HERO_PAGE_SIZE = 14;
 const CARD_PAGE_SIZE = 36;
 
@@ -286,25 +309,24 @@ export function ContentBrowser({
   const [query, setQuery] = useState("");
   const [productType, setProductType] = useState("all");
   const [productCode, setProductCode] = useState("all");
+  const [availability, setAvailability] = useState("all");
   const [page, setPage] = useState(0);
   const [heroCode, setHeroCode] = useState(initialHeroCode);
   const [deckId, setDeckId] = useState("");
   const [form, setForm] = useState<"hero" | "alter">("hero");
   const [identityCode, setIdentityCode] = useState("");
   const detailRef = useRef<HTMLElement>(null);
-  const filtered = useMemo(
-    () =>
-      CATALOG_HEROES.filter(
-        (hero) =>
-          (!query ||
-            `${hero.name} ${hero.identity} ${hero.product.name}`
-              .toLowerCase()
-              .includes(query.trim().toLowerCase())) &&
-          (productType === "all" || hero.product.typeLabel === productType) &&
-          (productCode === "all" || hero.packCode === productCode),
-      ),
-    [query, productType, productCode],
-  );
+  const filtered = useMemo(() => {
+    const terms = searchTerms(query);
+    return CATALOG_HEROES.filter(
+      (hero) =>
+        matchesSearch(heroSearchIndex.get(hero.code) || "", terms) &&
+        (productType === "all" || hero.product.typeLabel === productType) &&
+        (productCode === "all" || hero.packCode === productCode) &&
+        (availability === "all" ||
+          hero.automated === (availability === "ready")),
+    );
+  }, [query, productType, productCode, availability]);
   const hero =
     CATALOG_HEROES.find((h) => h.code === heroCode) || CATALOG_HEROES[0];
   const deck = hero.decks.find((d) => d.id === deckId) || hero.decks[0];
@@ -389,6 +411,7 @@ export function ContentBrowser({
     setQuery("");
     setProductType("all");
     setProductCode("all");
+    setAvailability("all");
     setPage(0);
   };
   return (
@@ -455,6 +478,24 @@ export function ContentBrowser({
               ))}
             </select>
           </div>
+          <label className="catalog-availability-filter">
+            Mission availability
+            <select
+              aria-label="Filter hero availability"
+              value={availability}
+              onChange={(event) => {
+                setAvailability(event.target.value);
+                setPage(0);
+              }}
+            >
+              <option value="all">All imported heroes</option>
+              <option value="ready">
+                Ready for missions (
+                {CATALOG_HEROES.filter((hero) => hero.automated).length})
+              </option>
+              <option value="catalog">Catalog only</option>
+            </select>
+          </label>
           <span className="catalog-result-count" aria-live="polite">
             {filtered.length} heroes
           </span>
@@ -735,26 +776,28 @@ export function Collection({
   const [faction, setFaction] = useState("all");
   const [type, setType] = useState("all");
   const [product, setProduct] = useState("all");
+  const [support, setSupport] = useState("all");
   const [page, setPage] = useState(0);
-  const cards = useMemo(
-    () =>
-      CATALOG_CARDS.filter(
-        (c) =>
-          (!query ||
-            `${c.name} ${c.subname || ""} ${c.traits || ""} ${plain(c.text)} ${cardProducts.get(c.code)?.name || ""}`
-              .toLowerCase()
-              .includes(query.trim().toLowerCase())) &&
+  const [index] = useState(indexedCards);
+  const cards = useMemo(() => {
+    const terms = searchTerms(query);
+    return index
+      .filter(
+        ({ card: c, text, supported }) =>
           (faction === "all" || c.faction_code === faction) &&
           (type === "all" || c.type_code === type) &&
-          (product === "all" || cardProducts.get(c.code)?.code === product),
-      ),
-    [query, faction, type, product],
-  );
+          (product === "all" || cardProducts.get(c.code)?.code === product) &&
+          (support === "all" || supported === (support === "supported")) &&
+          matchesSearch(text, terms),
+      )
+      .map(({ card }) => card);
+  }, [index, query, faction, type, product, support]);
   const reset = () => {
     setQuery("");
     setFaction("all");
     setType("all");
     setProduct("all");
+    setSupport("all");
     setPage(0);
   };
   const changePage = (next: number) => {
@@ -783,7 +826,7 @@ export function Collection({
         <label className="search-box">
           <MagnifyingGlass size={19} />
           <input
-            placeholder="Search name, trait, card text or product…"
+            placeholder="Search name, card code, trait or rules…"
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -849,13 +892,27 @@ export function Collection({
             </option>
           ))}
         </select>
+        <select
+          value={support}
+          onChange={(event) => {
+            setSupport(event.target.value);
+            setPage(0);
+          }}
+          aria-label="Filter rules support"
+        >
+          <option value="all">All rules support</option>
+          <option value="supported">Rules supported</option>
+          <option value="catalog">Catalog only</option>
+        </select>
         <span aria-live="polite">
-          {cards.length.toLocaleString()} card faces
+          {cards.length.toLocaleString()} card{" "}
+          {cards.length === 1 ? "face" : "faces"}
         </span>
         {(query ||
           faction !== "all" ||
           type !== "all" ||
-          product !== "all") && (
+          product !== "all" ||
+          support !== "all") && (
           <button className="text-button" onClick={reset}>
             Clear filters <X size={14} />
           </button>
@@ -864,9 +921,10 @@ export function Collection({
       <div className="collection-catalog-note">
         <BookOpen size={17} />
         <span>
-          Every card retains its source product. Imported expansion cards are
-          available to read. Supported heroes and cards can be used in automated
-          missions; additional rules are still being implemented.
+          Rules supported means this card’s effects are implemented. Your hero,
+          aspect and deckbuilding rules still determine which cards you can use.
+          Catalog-only cards are available to read while their rules are being
+          added.
         </span>
       </div>
       {cards.length ? (
@@ -895,6 +953,18 @@ export function Collection({
                   </span>
                   <small className="collection-product">
                     {cardProducts.get(c.code)?.name || "Product not listed"}
+                  </small>
+                  <small
+                    className={`collection-support ${hasExecutableScript(c) ? "supported" : ""}`}
+                  >
+                    {hasExecutableScript(c) ? (
+                      <CheckCircle size={14} aria-hidden="true" />
+                    ) : (
+                      <BookOpen size={14} aria-hidden="true" />
+                    )}
+                    {hasExecutableScript(c)
+                      ? "Rules supported"
+                      : "Catalog only"}
                   </small>
                 </button>
               ))}
