@@ -4070,7 +4070,7 @@ function AttachedCards({
             {[
               ...mutagenAttachmentActions(game, p),
               ...goblinModuleAttachmentActions(game, p),
-              ...(["25032", "29038", "32059"].includes(p.code)
+              ...(["25032", "29038", "32059", "32067", "32068"].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
             ].map((a) => (

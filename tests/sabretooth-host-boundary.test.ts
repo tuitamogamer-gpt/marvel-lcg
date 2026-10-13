@@ -2,6 +2,7 @@
  * and the fixtures retain every original player/encounter/setup instance. */
 import { describe, expect, it } from "vitest";
 import { card } from "../src/game/cards.js";
+import { catalogDeckCodes, STARTER_DECKS } from "../src/game/catalog.js";
 import { isTextBlank } from "../src/game/card-text.js";
 import { boardSnapshot } from "../src/game/review.js";
 import {
@@ -101,7 +102,12 @@ function create(
 ) {
   return newGame({
     heroId,
-    aspect: heroId === "shadowcat" ? "aggression" : "justice",
+    aspect:
+      heroId === "shadowcat"
+        ? "aggression"
+        : heroId === "doctor_strange"
+          ? "protection"
+          : "justice",
     villainId: "sabretooth",
     seed: 320660,
     pacing: "expert",
@@ -112,7 +118,23 @@ function create(
             { heroId: otherHeroId, aspect: "protection" as const },
           ],
         }
-      : {}),
+      : heroId === "doctor_strange"
+        ? {
+            heroes: [
+              {
+                heroId,
+                aspect: "protection" as const,
+                deckCards: catalogDeckCodes(
+                  STARTER_DECKS.find(
+                    (deck) =>
+                      deck.heroCode === "09001a" &&
+                      deck.sourceType === "source-preconstructed",
+                  )!,
+                ),
+              },
+            ],
+          }
+        : {}),
   }) as SourceState;
 }
 function base(
@@ -568,6 +590,58 @@ describe("Sabretooth independent native host boundaries", () => {
       conserved(result);
     },
   );
+
+  it("Doctor Strange's actual Med Team is disabled when only Kelly is damaged", () => {
+    let s = rescue(base("doctor_strange"));
+    const team = put(s, "09018");
+    expect(s.hostSourceIds).toContain(team.id);
+    team.counters = 3;
+    kelly(s).damage = 3;
+    expect(abilityOptions(reload(s), team)).toContainEqual({
+      id: "special",
+      label: "Heal 2 damage",
+      disabled: "There is no eligible friendly character to heal.",
+    });
+    const rejected = dispatch(reload(s), {
+      type: "ABILITY",
+      id: team.id,
+      action: "special",
+    });
+    expect(rejected.error).toBe(
+      "There is no eligible friendly character to heal.",
+    );
+    expect(rejected.player.inPlay.find((p) => p.id === team.id)).toMatchObject({
+      exhausted: false,
+      counters: 3,
+    });
+    expect(kelly(rejected).damage).toBe(3);
+    conserved(rejected);
+
+    s.player.hp -= 1;
+    const injuredHp = s.player.hp;
+    expect(abilityOptions(reload(s), team)).toContainEqual({
+      id: "special",
+      label: "Heal 2 damage",
+      disabled: undefined,
+    });
+    const [firstAid] = hand(s, "01086", "09025");
+    expect(playable(s, firstAid)).toBeNull();
+    s = command(s, {
+      type: "ABILITY",
+      id: team.id,
+      action: "special",
+    }) as SourceState;
+    expect(s.prompt).toBeNull();
+    s = settle(s);
+    expect(s.player.hp).toBe(injuredHp + 1);
+    expect(s.player.inPlay.find((p) => p.id === team.id)).toMatchObject({
+      exhausted: true,
+      counters: 2,
+    });
+    expect(kelly(s).damage).toBe(3);
+    expect(playable(s, firstAid)).toMatch(/eligible|Robert Kelly/i);
+    conserved(s);
+  });
 
   it("Medical Emergency heals Kelly as an encounter effect and preserves its physical Victory card", () => {
     let s = base();

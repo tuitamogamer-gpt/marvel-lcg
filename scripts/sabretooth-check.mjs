@@ -163,7 +163,7 @@ export function fixture(kind){
  }else if(kind==='mystique-block'){
   phased();const p=minion('32080');p.tough=true;const a=encounter('32067');a.attachedTo=s.villain.id;s.attachments.push(a);ids={...ids,mystiqueId:p.id,clawsId:a.id,resourceIds:hand(['32052','32053','32054']).map(p=>p.id)};
  }else if(kind==='infiltration-reveal'){
-  order(['32068']);ids.infiltrationId=reveal('32082').id;
+  ids.surgeId=order(['32068'])[0].id;ids.infiltrationId=reveal('32082').id;
  }else if(kind==='infiltration-draw'||kind==='surprise-search'||kind==='surprise-existing'){
   player().form='alter';phased();ids.roomId=put('32033').id;
   if(kind==='infiltration-draw'){ids.allyId=put('32032').id;ids.supportId=ids.roomId;}
@@ -1287,6 +1287,12 @@ async function runCase(kind, width) {
   } else if (kind === "medical-emergency") {
     await basic("thwart");
     await target(f.emergencyId);
+    await findChoice(
+      (o) => o.id === `${f.emergencyId}:defeated`,
+      "Actual first-player ordering of Emergency healing and Victory",
+    );
+    await window(`${kind}-actual-when-defeated-victory-order`, width, f);
+    await choice(`${f.emergencyId}:defeated`);
     state = await finishChoices();
     assert.equal(
       state.sabretooth.kelly.damage,
@@ -1354,9 +1360,10 @@ async function runCase(kind, width) {
       false,
       "Actual resolving Shapeshifter preserves itself inside the player deck",
     );
-    assert.ok(
-      state.attachments.some((p) => p.code === "32068"),
-      "Printed Surge reveals the next actual original encounter",
+    assert.deepEqual(
+      state.encounter.dealt.map((p) => ({ id: p.id, dealtTo: p.dealtTo })),
+      [{ id: f.surgeId, dealtTo: "p1" }],
+      "Printed Surge deals the next actual original card facedown under RRG1.8",
     );
   } else if (kind === "infiltration-draw") {
     await sourceAction("32033", "Room");

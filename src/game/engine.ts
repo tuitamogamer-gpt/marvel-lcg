@@ -6725,7 +6725,11 @@ export function abilityOptions(
       ? "Alter-ego form required"
       : heroOnly && !hero
         ? "Hero form required"
-        : undefined;
+        : rulesCode(p) === "01080" &&
+            sabretooth.sabretoothKelly(s) &&
+            !targets(s, "friendly").some((t) => playerHealingTarget(s, t.id))
+          ? "There is no eligible friendly character to heal."
+          : undefined;
   return [
     { id: "special", label: labels[rulesCode(p)], disabled },
     ...(rulesCode(p) === "01018"
