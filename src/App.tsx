@@ -1,4 +1,9 @@
 import { visionCanAttack } from "./game/vision";
+import {
+  shadowcatCanAttack,
+  shadowcatCanDefend,
+  shadowcatMassForm,
+} from "./game/shadowcat";
 import { ironheartProgress, ironheartVersion } from "./game/ironheart";
 import { spdrSuit, spdrPilot } from "./game/spdr";
 import { spiderHamToonCounters } from "./game/spider-ham";
@@ -1699,7 +1704,7 @@ export default function App() {
                   ? "Adam Warlock uses all four aspects with equal card totals and only one copy of each non-signature card."
                   : ASPECTS.find((a) => a.id === aspect)!.description}{" "}
                 {setupCardCount > 0 &&
-                  (hero.id === "vision"
+                  (["vision", "shadowcat"].includes(hero.id)
                     ? `One Permanent mass card stays outside the ${setupDeckSize}-card deck and enters play after you keep your opening hand. `
                     : `${setupCardCount} Permanent energy forms start in play outside the ${setupDeckSize}-card deck. `)}
                 <span>
@@ -2342,7 +2347,9 @@ export default function App() {
             <p className="modal-intro">
               {hero.id === "vision"
                 ? "One reversible Intangible / Dense mass card stays outside the 40-card deck and enters play after you keep your opening hand."
-                : `${setupCardCount} Permanent energy forms start in play and stay outside the deck count.`}
+                : hero.id === "shadowcat"
+                  ? "One reversible Solid / Phased mass card stays outside the 40-card deck and enters play Solid after you keep your opening hand."
+                  : `${setupCardCount} Permanent energy forms start in play and stay outside the deck count.`}
             </p>
           )}
           <DeckProvenance
@@ -3038,6 +3045,12 @@ function Decision({
             <button
               key={o.id}
               className="decision-option"
+              disabled={o.effects.some(
+                (e) =>
+                  ((e.type === "defender" && e.id === "hero") ||
+                    e.type === "shadowcat:quick-shift-play") &&
+                  !shadowcatCanDefend(e.actorId ? seatView(s, e.actorId) : s),
+              )}
               onClick={() => send({ type: "CHOOSE", id: o.id })}
             >
               {o.image && (
@@ -3962,7 +3975,7 @@ function AttachedCards({
             {[
               ...mutagenAttachmentActions(game, p),
               ...goblinModuleAttachmentActions(game, p),
-              ...(["25032", "29038"].includes(p.code)
+              ...(["25032", "29038", "32059"].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
             ].map((a) => (
@@ -4106,6 +4119,14 @@ function Tabletop({
         undefined,
         visibleInvocation.code,
       ));
+  const shadowcatPhaseControl =
+    s.heroId === "shadowcat" && s.player.form === "alter";
+  const phaseControlUnavailable =
+    shadowcatPhaseControl && importedIdentityAbility?.id !== "phase-control";
+  const massFormPiece =
+    s.heroId === "shadowcat"
+      ? s.player.inPlay.find((p) => ["32031a", "32031b"].includes(p.code))
+      : undefined;
   const abilityActive =
     !!importedIdentityAbility ||
     captainAbilityOptions(s, "identity").length > 0 ||
@@ -4808,36 +4829,66 @@ function Tabletop({
                       </span>
                     </div>
                   )}
+                  {massFormPiece && (
+                    <div
+                      className="identity-stats stat-row"
+                      role="group"
+                      aria-label="Shadowcat physical mass form"
+                      data-mass-id={massFormPiece.id}
+                      data-mass-form={shadowcatMassForm(s)}
+                    >
+                      <span>{card(massFormPiece).name} mass form</span>
+                      <span
+                        className={`readiness-label ${massFormPiece.exhausted ? "spent" : ""}`}
+                      >
+                        {massFormPiece.exhausted ? "EXHAUSTED" : "READY"}
+                      </span>
+                    </div>
+                  )}
                   <p className="identity-power">{plain(heroCard(s).text)}</p>
-                  {abilityActive && (
+                  {(abilityActive || shadowcatPhaseControl) && (
                     <button
                       className="ability-button"
                       title={
-                        spellUnavailable
-                          ? "Not enough resources to pay this Invocation's printed cost."
-                          : undefined
+                        phaseControlUnavailable
+                          ? s.flags.shadowcatPhaseControlRound === s.round
+                            ? "Phase Control has been used this round."
+                            : "Kitty Pryde cannot change mass form right now."
+                          : spellUnavailable
+                            ? "Not enough resources to pay this Invocation's printed cost."
+                            : undefined
                       }
-                      disabled={!canUseAction || spellUnavailable}
+                      disabled={
+                        !canUseAction ||
+                        spellUnavailable ||
+                        phaseControlUnavailable
+                      }
                       onClick={() =>
                         sendAction({
                           type: "ABILITY",
                           id: "identity",
-                          action: importedIdentityAbility?.id,
+                          action: shadowcatPhaseControl
+                            ? "phase-control"
+                            : importedIdentityAbility?.id,
                         })
                       }
                     >
                       <Sparkle size={13} />
-                      {importedIdentityAbility
-                        ? importedIdentityAbility.label
-                        : s.heroId === "iron_man"
-                          ? "Use Futurist"
-                          : s.heroId === "hulk"
-                            ? "Experimental Research"
-                            : s.heroId === "captain_america"
-                              ? "I Can Do This All Day!"
-                              : s.player.form === "hero"
-                                ? "Use Rechannel"
-                                : "Use Commander"}
+                      {shadowcatPhaseControl
+                        ? s.flags.shadowcatPhaseControlRound === s.round
+                          ? "Phase Control · used this round"
+                          : "Phase Control · flip mass form"
+                        : importedIdentityAbility
+                          ? importedIdentityAbility.label
+                          : s.heroId === "iron_man"
+                            ? "Use Futurist"
+                            : s.heroId === "hulk"
+                              ? "Experimental Research"
+                              : s.heroId === "captain_america"
+                                ? "I Can Do This All Day!"
+                                : s.player.form === "hero"
+                                  ? "Use Rechannel"
+                                  : "Use Commander"}
                     </button>
                   )}
                   <button
@@ -4975,6 +5026,8 @@ function Tabletop({
                           <div
                             className={`in-play-card ${p.exhausted ? "exhausted" : ""}`}
                             key={p.id}
+                            data-piece-id={p.id}
+                            data-card-code={p.code}
                           >
                             <button
                               className="in-play-image"
@@ -5466,13 +5519,16 @@ function Tabletop({
                           ? "Seduced prevents basic attacks."
                           : !visionCanAttack(s)
                             ? "Intangible prevents attack abilities."
-                            : "Attack an enemy. Exhaust your identity."
+                            : !shadowcatCanAttack(s)
+                              ? "Permanently Phased prevents attack abilities."
+                              : "Attack an enemy. Exhaust your identity."
                       }
                       disabled={
                         !acting ||
                         s.player.exhausted ||
                         valkyrieCannotBasicAttack(s) ||
-                        !visionCanAttack(s)
+                        !visionCanAttack(s) ||
+                        !shadowcatCanAttack(s)
                       }
                       onClick={() => send({ type: "BASIC", action: "attack" })}
                     >

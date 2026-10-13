@@ -28,6 +28,9 @@ const printedMetadata: Readonly<Record<string, PrintedMetadata>> = {
   // The Wasp-pack ally's printed secondary title is RIRI WILLIAMS.
   // https://hallofheroeslcg.com/wp-content/uploads/2020/12/a8.jpg
   "13018": { subname: "Riri Williams" },
+  // Original Mutant Genesis ally has the printed secondary title PIOTR RASPUTIN.
+  // public/cards/catalog/32048.webp; the downloaded text omitted this title.
+  "32048": { subname: "Piotr Rasputin" },
 };
 
 /** Return a playable face with verified printing fields, without mutating its

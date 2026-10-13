@@ -32,6 +32,9 @@ import * as spdrPack from "./spdr-pack.js";
 import * as spiderHam from "./spider-ham.js";
 import * as spiderHamPack from "./spider-ham-pack.js";
 import * as niPack from "./nova-ironheart-pack.js";
+import * as colossus from "./colossus.js";
+import * as shadowcat from "./shadowcat.js";
+import * as mgPack from "./mutant-genesis-player-pack.js";
 import * as nebula from "./nebula.js";
 import { isPermanent } from "./hero-runtime.js";
 import * as venomPack from "./venom-pack.js";
@@ -321,8 +324,6 @@ import {
   scaledKeyword,
   giveStatus,
   consumeStatus,
-  consumeTough,
-  discardToughForPiercing,
   syncStatuses,
   statusCards,
 } from "./keywords.js";
@@ -482,7 +483,17 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
     s && typeof p !== "string"
       ? inheritors.inheritorsModifiers(s, p)
       : undefined;
-  return printed || !!inherited?.[name.toLowerCase() as keyof typeof inherited];
+  return (
+    printed ||
+    !!inherited?.[name.toLowerCase() as keyof typeof inherited] ||
+    !!(
+      s &&
+      typeof p !== "string" &&
+      name === "Patrol" &&
+      mgPack.mutantGenesisPlayerPackMinionModifiers(s, p, { isTextBlank })
+        .patrol
+    )
+  );
 }
 function nativeStatusModifiers(s: GameState, p: StatusState) {
   if (!("code" in p)) return {};
@@ -515,6 +526,7 @@ function giveCharacterStatus(
             !!printedKeyword(heroCard(identity), "Stalwart") ||
             nebula.nebulaAttackKeywords(identity).stalwart ||
             vision.visionStalwart(identity),
+          toughLimit: colossus.colossusToughLimit(identity, colossusPorts),
           steady: spdrPack.spdrPackCharacterSteady(identity, "hero", {
             isTextBlank,
           }),
@@ -612,6 +624,11 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           warMachine.warMachineEnemyKeywords(s, p).piercing ||
           miles.milesEnemyAttackKeywords(s, p, { isTextBlank }).piercing ||
           allyTraits.piercing ||
+          mgPack.mutantGenesisPlayerPackPiercing(
+            controller(s, p.id) ? seatView(s, controller(s, p.id)!) : s,
+            p,
+            { isTextBlank },
+          ) ||
           nebulaPack.nebulaPackModifiers(s, p.id, nebulaPackPorts).piercing ||
           (s.attack?.attacker === p.id && s.attack?.piercing))
       ),
@@ -774,17 +791,20 @@ function choose(
   options: Option[],
   cancelable = false,
 ) {
-  // A defense ability is illegal for unblanked Intangible Vision during an
-  // actual attack. Other identities and nonattack prevention retain their
-  // ordinary timing windows.
+  // Every labeled defense ability, including attack/defense interrupts, must
+  // respect the identity's defense restrictions during an actual attack.
   if (s.attack)
     options = options.filter((o) => {
       const c = o.image ? card(o.image) : undefined;
       const actorId =
         o.effects.find((e) => e.actorId)?.actorId || s.activePlayerId;
       return (
-        (!c?.text?.includes("(defense)") ||
-          vision.visionCanDefend(seatView(s, actorId))) &&
+        (!/\([^)]*\bdefense\b/i.test(c?.text || "") ||
+          (vision.visionCanDefend(seatView(s, actorId)) &&
+            shadowcat.shadowcatCanDefend(
+              seatView(s, actorId),
+              shadowcatPorts,
+            ))) &&
         (!/\([^)]*\bdefense\b/i.test(c?.text || "") ||
           !armadillo.armadilloDefenseBlocked(s, s.attack!.attacker))
       );
@@ -1118,6 +1138,7 @@ function movePieceFromPlay(
       return;
     }
   }
+  if (removedSource) mgPack.mutantGenesisPlayerPackCardLeft(s, id);
   const leaveReceipt =
     removedSource && controlling && card(removedSource).type_code === "ally"
       ? {
@@ -1644,6 +1665,7 @@ interface DamageTraits {
   excessBonus?: number;
   grootHandled?: boolean;
   aftermathChooser?: string;
+  mutantGenesisBonusApplied?: boolean;
 }
 interface DamageTakenResult {
   actualDamage: number;
@@ -1676,6 +1698,23 @@ function damageProhibition(s: GameState, target: string, panther: boolean) {
     s.minions.some((p) => card(p).traits?.includes("Drone."))
   )
     return "Ultron is protected by his drones.";
+  const identityId =
+    target === "hero"
+      ? s.activePlayerId
+      : target.startsWith("hero:")
+        ? target.slice(5)
+        : undefined;
+  if (
+    identityId &&
+    s.attack?.defender === "hero" &&
+    (s.attack.targetPlayerId || s.activePlayerId) === identityId &&
+    shadowcat.shadowcatPreventsDamage(
+      seatView(s, identityId),
+      true,
+      shadowcatPorts,
+    )
+  )
+    return "Phased prevents damage while defending.";
   const p = find(s, target);
   if (p && rulesCode(p) === "01157" && panther)
     return "Killmonger is immune to Black Panther upgrades.";
@@ -1693,8 +1732,17 @@ function attackExcess(s: GameState, packet: Effect): number {
   const source = packet.source || "hero";
   let amount =
     Number(packet.amount || 0) +
-    Number(s.flags[`niHoned:${s.currentEventId}`] || 0);
-  if (["hero", `hero:${s.activePlayerId}`].includes(source))
+    (packet.mutantGenesisBonusApplied
+      ? 0
+      : Number(s.flags[`niHoned:${s.currentEventId}`] || 0) +
+        mgPack.mutantGenesisPlayerPackAttackEventBonus(
+          s,
+          s.currentEventId || "",
+        ));
+  if (
+    !packet.mutantGenesisBonusApplied &&
+    ["hero", `hero:${s.activePlayerId}`].includes(source)
+  )
     amount += msMarvelEventAmountModifier(s, s.currentEventId, "damage");
   const resistance = s.attachments.filter(
     (p) =>
@@ -1746,6 +1794,7 @@ function dealDamage(
 ): DamageResult {
   if (
     attack &&
+    !traits.mutantGenesisBonusApplied &&
     n > 0 &&
     (source === "hero" || source === `hero:${s.activePlayerId}`) &&
     target !== "hero" &&
@@ -1753,7 +1802,8 @@ function dealDamage(
   )
     n +=
       msMarvelEventAmountModifier(s, s.currentEventId, "damage") +
-      Number(s.flags[`niHoned:${s.currentEventId}`] || 0);
+      Number(s.flags[`niHoned:${s.currentEventId}`] || 0) +
+      mgPack.mutantGenesisPlayerPackAttackEventBonus(s, s.currentEventId || "");
   const original = find(s, target);
   const dealt = Math.max(0, traits.damageDealt ?? n);
   const code = original?.code;
@@ -1781,14 +1831,6 @@ function dealDamage(
       replaced = { actualDamage: 0, excessDamage: 0, damageDealt: 0 };
     }
   }
-  // Piercing discards Tough only if the attack would deal damage to the
-  // attacked character; Armor replaces that damage entirely (RRG1.8 p32).
-  if (!replaced && targetPiece && attack)
-    discardToughForPiercing(
-      targetPiece,
-      n,
-      traits.piercing ?? !!sourceKeyword(s, source, "Piercing"),
-    );
   // Constant reductions precede Tough (RRG1.8 FAQ). Multiple packets of the
   // same attack share one Vibration Resistance allowance.
   if (!replaced && damageFromAttack && n > 0 && original) {
@@ -1808,6 +1850,18 @@ function dealDamage(
         log(s, `Vibration Resistance prevents ${reduced} attack damage.`);
     }
   }
+  if (
+    !replaced &&
+    targetPiece &&
+    attack &&
+    n > 0 &&
+    (traits.piercing ?? !!sourceKeyword(s, source, "Piercing"))
+  )
+    colossusNativeDiscardTough(
+      s,
+      [{ targetId: target, amount: statusCards(targetPiece, "tough") }],
+      [],
+    );
   const previousQueue = new Set(s.queue);
   const taken =
     replaced ??
@@ -1817,6 +1871,9 @@ function dealDamage(
     damageDealt:
       taken.damageDealt ?? (traits.overkillDamage ? taken.actualDamage : dealt),
   };
+  if (s.currentEventId && attack)
+    s.flags[`shadowcatDealt:${s.currentEventId}:${target}`] =
+      result.damageDealt > 0 || (!replaced && dealt === 0);
   if (target === "hero" && !["won", "lost"].includes(s.phase)) {
     const responses = spiderHam.spiderHamAfterDamage(
       s,
@@ -2082,7 +2139,12 @@ function applyDamage(
   const p = target === "hero" ? s.player : find(s, target);
   if (!p) return none;
   if (p.tough && !s.flags.ignoreToughPacket) {
-    consumeTough(p);
+    colossusNativeDiscardTough(
+      s,
+      [{ targetId: target, amount: 1 }],
+      [],
+      !!traits.enemyAttack,
+    );
     log(s, "Tough prevents the damage.");
     return none;
   }
@@ -2308,6 +2370,40 @@ function defeatCharacter(
     return false;
   }
   const minion = s.minions.some((x) => x.id === m.id);
+  if (minion && !s.flags[`mutantGenesisGatekeeperHandled:${m.id}`]) {
+    const token = `mutant-defeat:${s.nextId++}`;
+    const exists = playerOrder(s).some(
+      (seat) =>
+        mgPack.mutantGenesisPlayerPackMinionDefeatOptions(
+          seatView(s, seat),
+          m.id,
+          token,
+          [],
+          { isTextBlank },
+        ).length > 0,
+    );
+    if (exists) {
+      m.pendingDefeat = true;
+      add(
+        s,
+        E("mutant-genesis-player:gatekeeper-window", {
+          minionId: m.id,
+          token,
+          originalActorId: s.activePlayerId,
+          after: [
+            E("finishDefeat", {
+              id: m.id,
+              source,
+              attack,
+              enemyAttack,
+              valkyrieReceipts,
+            }),
+          ],
+        }),
+      );
+      return true;
+    }
+  }
   const receipts =
     valkyrieReceipts ??
     (minion
@@ -2718,6 +2814,15 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
   );
   add(s, ...spectrum.spectrumSideSchemeDefeated(s, p, spectrumPorts));
   add(s, ...warMachine.warMachineSchemeDefeated(s, p));
+  add(
+    s,
+    ...shadowcat.shadowcatSideSchemeDefeated(
+      s,
+      p,
+      s.activePlayerId,
+      shadowcatPorts,
+    ),
+  );
   discardPiece(s, p.id);
   if (s.villain.hp <= 0) advanceVillain(s);
 }
@@ -2734,6 +2839,7 @@ export function targets(
       return [
         ...(!attack ||
         nebula.nebulaIgnoresRestrictions(s).guard ||
+        shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts) ||
         !engaged(s).some((p) => keyword(p, "Guard", s))
           ? [
               {
@@ -2758,10 +2864,12 @@ export function targets(
     case "scheme":
       return [
         ...((!s.sideSchemes.some((p) => card(p).scheme_crisis) ||
-          nebula.nebulaIgnoresRestrictions(s).crisis) &&
+          nebula.nebulaIgnoresRestrictions(s).crisis ||
+          shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts)) &&
         !(
           thwarting &&
           !nebula.nebulaIgnoresRestrictions(s).patrol &&
+          !shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts) &&
           engaged(s).some((p) => keyword(p, "Patrol", s))
         ) &&
         rulesCode(s.scheme) !== "01139b" &&
@@ -2881,7 +2989,24 @@ function scriptContext(
           { ...target },
           definition,
           node.status,
-          nativeStatusModifiers(s, target),
+          id?.startsWith("hero")
+            ? {
+                toughLimit: colossus.colossusToughLimit(
+                  id === "hero" ? s : seatView(s, id.slice(5)),
+                  colossusPorts,
+                ),
+                stalwart: !!sourceKeyword(
+                  id === "hero" ? s : seatView(s, id.slice(5)),
+                  "hero",
+                  "Stalwart",
+                ),
+                steady: spdrPack.spdrPackCharacterSteady(
+                  id === "hero" ? s : seatView(s, id.slice(5)),
+                  "hero",
+                  { isTextBlank },
+                ),
+              }
+            : nativeStatusModifiers(s, target),
         );
       }
       return true;
@@ -2920,6 +3045,11 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
         s,
         physical || ({ code: c.code } as Piece),
         spiderHamPackPorts,
+      ) -
+      mgPack.mutantGenesisPlayerPackCostReduction(
+        s,
+        physical || ({ code: c.code } as Piece),
+        mutantGenesisPackPorts,
       ) -
       gmwPack.gmwPlayerPackCardCostReduction(s, c) -
       thorAllyDiscount(s, c) -
@@ -3031,6 +3161,102 @@ function targetPrompt(s: GameState, e: Effect) {
     ),
   );
 }
+function shadowcatNativeIgnoreReceipts(
+  s: GameState,
+  kind: "attack" | "thwart",
+  target: string,
+  source = "hero",
+): shadowcat.ShadowcatIgnoreReceipt[] {
+  if (
+    source !== "hero" ||
+    !shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts)
+  )
+    return [];
+  const receipts: shadowcat.ShadowcatIgnoreReceipt[] = [];
+  const capture = (
+    keywordKind: shadowcat.ShadowcatIgnoreReceipt["kind"],
+    sourceIds: string[],
+  ) => {
+    if (sourceIds.length)
+      receipts.push({
+        token: `ignore:${s.nextId++}`,
+        playerId: s.activePlayerId,
+        kind: keywordKind,
+        sourceIds,
+        performed: true,
+      });
+  };
+  if (kind === "attack" && target === s.villain.id)
+    capture(
+      "guard",
+      engaged(s)
+        .filter((p) => keyword(p, "Guard", s))
+        .map((p) => p.id),
+    );
+  if (kind === "thwart" && target === "main") {
+    capture(
+      "patrol",
+      engaged(s)
+        .filter((p) => keyword(p, "Patrol", s))
+        .map((p) => p.id),
+    );
+    capture(
+      "crisis",
+      s.sideSchemes.filter((p) => card(p).scheme_crisis).map((p) => p.id),
+    );
+  }
+  return receipts;
+}
+function shadowcatNativeIgnoreWindow(
+  s: GameState,
+  e: Effect,
+  kind: "attack" | "thwart",
+): boolean {
+  if (
+    e.shadowcatIgnoreHandled ||
+    (e.source || "hero") !== "hero" ||
+    !shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts)
+  )
+    return false;
+  if (
+    kind === "attack" &&
+    (!shadowcat.shadowcatCanAttack(s) ||
+      (!e.attackInitiated && s.player.stunned) ||
+      !targets(s, "enemy", true).some((t) => t.id === e.target))
+  )
+    return false;
+  if (
+    kind === "thwart" &&
+    ((!e.thwartStatusChecked && s.player.confused) ||
+      captainThwartBlocked(s) ||
+      !targets(s, "scheme", false, true).some((t) => t.id === e.target))
+  )
+    return false;
+  const receipts = shadowcatNativeIgnoreReceipts(
+    s,
+    kind,
+    e.target,
+    e.source || "hero",
+  );
+  if (
+    !receipts.some(
+      (r) =>
+        shadowcat.shadowcatIgnoredKeywordOptions(s, r, [], shadowcatPorts)
+          .length,
+    )
+  )
+    return false;
+  const continuation: Effect = { ...e, shadowcatIgnoreHandled: true };
+  if (kind === "attack") continuation.attackInitiated = true;
+  else {
+    continuation.thwartInitiated = true;
+    continuation.thwartStatusChecked = true;
+    continuation.ignoreCrisis = true;
+    continuation.ignorePatrol = true;
+  }
+  add(s, E("shadowcat:ignored-window", { receipts, after: [continuation] }));
+  return true;
+}
 function attackAction(
   s: GameState,
   target: string,
@@ -3046,13 +3272,16 @@ function attackAction(
     excessToMain?: boolean;
     excessBonus?: number;
     aftermathChooser?: string;
+    mutantGenesisBonusApplied?: boolean;
   } = {},
 ) {
   const p = source === "hero" ? s.player : find(s, source);
   if (!p) return;
   if (
     source === "hero" &&
-    (!valkyrie.valkyrieCanAttackTarget(s, target) || !vision.visionCanAttack(s))
+    (!valkyrie.valkyrieCanAttackTarget(s, target) ||
+      !vision.visionCanAttack(s) ||
+      !shadowcat.shadowcatCanAttack(s))
   )
     return;
   if (p.stunned && !traits.initiated) {
@@ -3064,8 +3293,7 @@ function attackAction(
   if (
     !traits.initiated &&
     !(
-      source !== "hero" &&
-      niPack.novaIronheartPackWaspIgnores(s, p as Piece, niPackPorts)
+      source !== "hero"
         ? niAllyTargets(s, p as Piece, "attack")
         : targets(s, "enemy", true)
     ).some((t) => t.id === target)
@@ -3086,6 +3314,26 @@ function attackAction(
     panther,
     traits,
   );
+  if (source === "hero" && s.currentEventId && result)
+    s.flags[`shadowcatAttackPerformed:${s.currentEventId}`] = true;
+  if (
+    source === "hero" &&
+    result &&
+    !s.currentEventId &&
+    !traits.basic &&
+    s.currentAttackProgramId
+  )
+    s.flags[`shadowcatProgramPerformed:${s.currentAttackProgramId}`] = true;
+  if (
+    source === "hero" &&
+    result &&
+    !s.currentEventId &&
+    !s.currentAttackProgramId &&
+    !traits.basic
+  )
+    for (const e of s.queue)
+      if (!previousEffects.has(e) && e.type === "heroAttackResponses")
+        e.shadowcatAbilityAttack = true;
   if (source === "hero" && traits.basic)
     for (const e of s.queue)
       if (!previousEffects.has(e) && e.type === "heroAttackResponses")
@@ -3127,15 +3375,22 @@ function thwartAction(
   }
   if (
     source !== "hero" &&
-    niPack.novaIronheartPackWaspIgnores(s, p as Piece, niPackPorts)
+    (niPack.novaIronheartPackWaspIgnores(s, p as Piece, niPackPorts) ||
+      colossus.colossusAllyModifiers(s, p as Piece, colossusPorts).ignoreCrisis)
+  ) {
+    ignorePatrol = true;
+    ignoreCrisis = true;
+  }
+  if (
+    source === "hero" &&
+    shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts)
   ) {
     ignorePatrol = true;
     ignoreCrisis = true;
   }
   if (
     !(
-      source !== "hero" &&
-      niPack.novaIronheartPackWaspIgnores(s, p as Piece, niPackPorts)
+      source !== "hero"
         ? niAllyTargets(s, p as Piece, "thwart")
         : ignorePatrol
           ? visionPorts.schemeTargets(s, true, ignoreCrisis, true)
@@ -3454,7 +3709,15 @@ function requestPayment(
         spentResponseCards,
         s.activePlayerId,
         niPackPorts,
-      ).length
+      ).length ||
+      mgPack.mutantGenesisPlayerPackPaymentInterrupts(s, spentResponseCards, {
+        token: "zero-payment-probe",
+        playerId: s.activePlayerId,
+        eventId: piece?.id || "",
+        eventCode: piece?.code || "",
+        playing: !!piece && !abilityCost,
+        resourceIds: spentResponseCards.map((p) => p.id),
+      }).length
     ) {
       choose(
         s,
@@ -3572,6 +3835,13 @@ function pay(
   );
   const selected = ids.map((id) => sources.find((x) => x.id === id));
   need(selected.every(Boolean), "A selected resource is unavailable.");
+  if (p.card && !p.abilityCost)
+    mgPack.mutantGenesisPlayerPackPaymentPreflight(
+      s,
+      p.card,
+      mutantGenesisPackPorts,
+      selected.map((source) => source!.localId || source!.id),
+    );
   const {
     printed,
     missing,
@@ -3935,10 +4205,28 @@ function pay(
         ];
       } else if (spdr.spdrResourceSpent(s, id)) {
         // Sync Ratio exhausts the actual selected Interface card.
+      } else if (colossus.colossusResourceSpent(s, id, { isTextBlank })) {
+        // Exhaust the actual ready Titanium Muscles, retaining current Tough.
+      } else if (
+        shadowcat.shadowcatResourceSpent(s, id, p.paymentTarget, {
+          isTextBlank,
+        })
+      ) {
+        // The physical Solid mass-form upgrade pays its own exhaust cost.
       } else if (spiderHam.spiderHamResourceSpent(s, id, spiderHamPorts)) {
         // Counter resources are validated together and spent individually.
       } else if (s.player.hand.some((x) => x.id === id)) {
         const spent = discardHand(s, id);
+        spentResponses.push(
+          ...mgPack.mutantGenesisPlayerPackPaymentInterrupts(s, [spent], {
+            token: `mutant-payment:${s.nextId++}`,
+            playerId: contributor,
+            eventId: p.card?.id || "",
+            eventCode: p.card?.code || p.paymentTarget || "",
+            playing: !!p.card && !p.abilityCost,
+            resourceIds: [spent.id],
+          }),
+        );
         spentResponses.push(
           ...antMan.antManResourceSpent(s, spent, antManPorts),
         );
@@ -4241,6 +4529,7 @@ export function newGame(config: {
     );
     valkyrie.valkyrieSetup(s);
     vision.visionInitializeMass(s, { makePiece });
+    shadowcat.shadowcatInitializeMass(s, { makePiece });
     s.player.deck = shuffle(s, s.player.deck);
     doctorStrangeSetup(s, dsPorts);
     venom.venomInitializeNemesis(s, { makePiece });
@@ -4248,6 +4537,7 @@ export function newGame(config: {
     warMachine.warMachineInitializeNemesis(s, { makePiece });
     valkyrie.valkyrieInitializeNemesis(s, { makePiece });
     vision.visionInitializeNemesis(s, { makePiece });
+    shadowcat.shadowcatInitializeNemesis(s, { makePiece });
     miles.milesInitializeNemesis(s, { makePiece });
     ghostSpider.ghostSpiderInitializeNemesis(s, { makePiece });
     nova.novaInitializeNemesis(s, { makePiece });
@@ -4255,6 +4545,7 @@ export function newGame(config: {
     spdr.spdrInitializeNemesis(s, { makePiece });
     spiderHam.spiderHamInitializeIdentity(s, { makePiece });
     spiderHam.spiderHamInitializeNemesis(s, { makePiece });
+    colossus.colossusInitializeNemesis(s, { makePiece });
     ironheart.ironheartInitialize(s, { makePiece });
     // Extract the SAME three source-composition IDs before drawing an opening
     // hand. The ordinary40-card deck never contains the setup upgrades.
@@ -4336,6 +4627,13 @@ function initialSetup(s: GameState) {
       ...vision
         .visionSetup(seatView(s, seat), { makePiece })
         .map((e) => ({ ...e, actorId: seat.id })),
+      ...shadowcat
+        .shadowcatSetup(seatView(s, seat), { makePiece })
+        .map((e) => ({ ...e, actorId: seat.id })),
+      ...colossus.colossusSetup(seatView(s, seat)).map((e) => ({
+        ...e,
+        actorId: seat.id,
+      })),
       ...captainSetup(seatView(s, seat)).map((e) => ({
         ...e,
         actorId: seat.id,
@@ -4377,6 +4675,11 @@ function initialSetup(s: GameState) {
   );
 }
 const reactionCards = [
+  "32014",
+  "32017",
+  "32021",
+  "32050",
+  "32040",
   "27014",
   "26012",
   "23034",
@@ -4417,9 +4720,10 @@ export function playable(s: GameState, p: Piece): string | null {
     c.type_code === "event" &&
     c.text?.includes("(attack)") &&
     vision.visionEventAction(s, p) !== "thwart" &&
-    !vision.visionCanAttack(s)
+    (!vision.visionCanAttack(s) ||
+      !shadowcat.shadowcatCanAttack(s, shadowcatPorts))
   )
-    return "Vision cannot attack in Intangible mass form.";
+    return "This identity cannot attack in its current form.";
   if (
     c.type_code === "event" &&
     c.text?.includes("(defense)") &&
@@ -4474,6 +4778,13 @@ export function playable(s: GameState, p: Piece): string | null {
     starLord.starLordPlayRestriction(s, p) ||
     gamora.gamoraPlayRestriction(s, p, gamoraPorts) ||
     drax.draxPlayRestriction(s, p, draxPorts) ||
+    colossus.colossusPlayRestriction(s, p, colossusPorts) ||
+    shadowcat.shadowcatPlayRestriction(s, p, shadowcatPorts) ||
+    mgPack.mutantGenesisPlayerPackPlayRestriction(
+      s,
+      p,
+      mutantGenesisPackPorts,
+    ) ||
     venom.venomPlayRestriction(s, p) ||
     warlock.warlockPlayRestriction(s, p) ||
     warMachine.warMachinePlayRestriction(s, p, warMachinePorts) ||
@@ -4631,6 +4942,13 @@ export function playable(s: GameState, p: Piece): string | null {
   return null;
 }
 function requestPlay(s: GameState, p: Piece, discountHandled = false) {
+  const strikeCost = mgPack.mutantGenesisPlayerPackBeforeEvent(s, p, [
+    E("playRequest", { piece: p, discountHandled }),
+  ]);
+  if (strikeCost) {
+    add(s, ...strikeCost);
+    return;
+  }
   const after = [E("playRequest", { piece: p, discountHandled: true })];
   const discounts = !discountHandled
     ? starLord.starLordHandPlayOptions(s, p, after, starLordPorts)
@@ -4779,6 +5097,7 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
     canPay(s, cost, requirements, p!.id, p!.code, false),
     `You cannot pay ${cost} for ${card(p!).name} right now.`,
   );
+  const additionalCommit = mgPack.mutantGenesisPlayerPackPaymentCommit(s, p);
   requestPayment(
     s,
     card(p!).name,
@@ -4788,10 +5107,15 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
     p,
     true,
     undefined,
-    ["12011", "13012"].includes(p!.code),
-    [],
+    ["12011", "13012"].includes(p!.code) || additionalCommit.length > 0,
+    additionalCommit,
     true,
   );
+  if (p.code === "32045" && s.prompt?.cancelable)
+    s.prompt.cancellationQueue = [
+      E("mutant-genesis-player:strike-cancel", { id: p.id }),
+      ...(s.prompt.cancellationQueue || s.queue),
+    ];
 }
 function nativeCardPlayCommitted(s: GameState, p: Piece) {
   const playToken = `play:${s.nextId++}`;
@@ -5006,6 +5330,7 @@ function play(
     );
     add(
       s,
+      ...colossus.colossusCardEntered(s, p),
       ...antMan.antManCardEntered(s, p, antManPorts),
       ...antPack.antManPackCardEntered(s, p),
       ...quicksilverPack.quicksilverPackCardEntered(s, p),
@@ -5021,6 +5346,7 @@ function play(
       ...visionPack.visionPackCardEntered(s, p),
       ...niPack.novaIronheartPackCardEntered(s, p),
       ...spdrPack.spdrPackCardEntered(s, p),
+      ...mgPack.mutantGenesisPlayerPackCardEntered(s, p),
       ...spiderHamPack.spiderHamPackCardEntered(s, p),
       ...sinisterPlayerPack.sinisterPlayerPackCardEntered(s, p),
       ...valkyrie.valkyrieCardEntered(s, p),
@@ -5153,6 +5479,26 @@ function allyEnter(
   syncPaid = 0,
 ) {
   if (isTextBlank(s, p)) return;
+  if (p.code === "32032") {
+    add(s, ...shadowcat.shadowcatCardEntered(s, p, shadowcatPorts));
+    return;
+  }
+  if (p.code === "32002") return;
+  const mutantAlly = mgPack.mutantGenesisPlayerPackAllyEntered(
+    s,
+    p,
+    fromHand,
+    mutantGenesisPackPorts,
+  );
+  if (
+    mutantAlly !== null ||
+    (
+      mgPack.MUTANT_GENESIS_PLAYER_PACK_SCRIPT_CODES as readonly string[]
+    ).includes(p.code)
+  ) {
+    add(s, ...(mutantAlly || []));
+    return;
+  }
   const spdrAlly =
     spdr.spdrAllyEntered(s, p, { syncPaid }) ??
     spdrPack.spdrPackAllyEntered(s, p, fromHand, spdrPackPorts);
@@ -5368,6 +5714,9 @@ function event(
   syncPaid = 0,
 ) {
   const ant =
+    colossus.colossusEvent(s, p) ??
+    shadowcat.shadowcatEvent(s, p) ??
+    mgPack.mutantGenesisPlayerPackEvent(s, p) ??
     antMan.antManEvent(s, p.code === "13020" ? { ...p, code: "12020" } : p) ??
     antPack.antManPackEvent(s, p, paid) ??
     wasp.waspEvent(s, p) ??
@@ -5767,6 +6116,7 @@ function flip(
     add(s, E("mtsPackFormResponses"));
   add(s, ...spectrum.spectrumChangedForm(s, spectrumPorts));
   add(s, ...warMachineResponses);
+  add(s, ...colossus.colossusFormChanged(s, colossusPorts));
   log(
     s,
     `Change form to ${heroCard(s).name}${["ant", "wsp"].includes(s.heroId) && s.player.form === "hero" ? ` (${s.player.heroForm})` : ""}.`,
@@ -5962,6 +6312,11 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
     vision.visionAllyStats(s, p)[kind] +
     niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)[kind] +
     (kind === "attack"
+      ? mgPack.mutantGenesisPlayerPackCharacterModifiers(s, p.id, {
+          isTextBlank,
+        }).attack
+      : 0) +
+    (kind === "attack"
       ? spiderHamPack.spiderHamPackCharacterModifiers(s, p.id).attack
       : 0) +
     scriptedModifier(s, kind, p) +
@@ -6000,6 +6355,15 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   );
 }
 function ability(s: GameState, id: string, action = "special") {
+  if (
+    mgPack.mutantGenesisPlayerPackAbility(
+      s,
+      id,
+      mutantGenesisPackPorts,
+      action === "special" ? undefined : action,
+    )
+  )
+    return;
   const moduleSource = find(s, id);
   if (moduleSource) {
     const effects = ironspider.ironspiderSinisterActionEffects(
@@ -6038,6 +6402,16 @@ function ability(s: GameState, id: string, action = "special") {
   if (ghostSpider.ghostSpiderAbility(s, id, ghostSpiderPorts, action)) return;
   if (id === "identity" && nova.novaHeroAbility(s, novaPorts, action)) return;
   if (nova.novaAbility(s, id, novaPorts, action)) return;
+  const colossusAbility = colossus.colossusAbility(
+    s,
+    id,
+    colossusPorts,
+    action === "special" ? undefined : action,
+  );
+  if (colossusAbility !== null) {
+    add(s, ...colossusAbility);
+    return;
+  }
   const spdrAbility = spdr.spdrAbility(
     s,
     id,
@@ -6106,6 +6480,15 @@ function ability(s: GameState, id: string, action = "special") {
   )
     return;
   const visionAbilitySource = find(s, id);
+  if (
+    shadowcat.shadowcatAbility(
+      s,
+      id,
+      shadowcatPorts,
+      action === "special" ? undefined : action,
+    )
+  )
+    return;
   if (
     visionAbilitySource &&
     ["upgrade", "support"].includes(card(visionAbilitySource).type_code) &&
@@ -7141,6 +7524,18 @@ function visionPackNativeDamageOptions(
   return [...options, ...sinisterNativeDamageOptions(s, packet, after)];
 }
 function allyUpgradeTargets(s: GameState, p: Piece) {
+  const mutantTargets = mgPack.mutantGenesisPlayerPackAttachmentTargets(
+    s,
+    p,
+    mutantGenesisPackPorts,
+  );
+  if (mutantTargets !== null) return mutantTargets;
+  const shadowcatTargets = shadowcat.shadowcatAttachmentTargets(
+    s,
+    p,
+    shadowcatPorts,
+  );
+  if (shadowcatTargets !== null) return shadowcatTargets;
   if (p.code === "26034")
     return visionPack.visionPackAttachmentTargets(s, p) || [];
   if (p.code === "23035")
@@ -7269,12 +7664,11 @@ const dsPorts: DoctorStrangePorts = {
         ? v.player
         : find(s, target);
     need(piece, "The selected character is unavailable.");
-    const key =
-      status === "tough"
-        ? "toughCards"
-        : status === "stunned"
-          ? "stunCards"
-          : "confuseCards";
+    if (status === "tough") {
+      colossusNativeDiscardTough(s, [{ targetId: target, amount: 1 }], []);
+      return;
+    }
+    const key = status === "stunned" ? "stunCards" : "confuseCards";
     piece![key] = Math.max(
       0,
       Number(piece![key] ?? Number(piece![status])) - 1,
@@ -7302,7 +7696,13 @@ const dsPorts: DoctorStrangePorts = {
           : card(find(s, target)!),
         status,
         target === "hero" || target.startsWith("hero:")
-          ? { stalwart: !!sourceKeyword(v, "hero", "Stalwart") }
+          ? {
+              stalwart: !!sourceKeyword(v, "hero", "Stalwart"),
+              toughLimit: colossus.colossusToughLimit(v, colossusPorts),
+              steady: spdrPack.spdrPackCharacterSteady(v, "hero", {
+                isTextBlank,
+              }),
+            }
           : nativeStatusModifiers(s, piece),
       )
     );
@@ -7866,6 +8266,9 @@ const scarletPackPorts: scarletPack.ScarletWitchPackPorts = {
       : ignoreCrisis
         ? hawkeyePorts.schemeTargets(s, true)
         : targets(s, "scheme", false, true),
+  patrolBlocksMain: (s) =>
+    !shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts) &&
+    engaged(s).some((p) => keyword(p, "Patrol", s)),
   cardCost: antPackPorts.cardCost,
   canPay: (s, cost, exclude, code, requirements = []) =>
     canPay(s, cost, requirements, exclude, code),
@@ -8239,6 +8642,7 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
     add(s, ...ghostSpider.ghostSpiderCardEntered(s, p));
     add(
       s,
+      ...colossus.colossusCardEntered(s, p),
       ...antMan.antManCardEntered(s, p, antManPorts),
       ...antPack.antManPackCardEntered(s, p),
       ...quicksilverPack.quicksilverPackCardEntered(s, p),
@@ -8621,6 +9025,14 @@ const warlockPorts: warlock.WarlockPorts = {
   removeIdentityStatusCard: (s, status) => {
     const count = statusCards(s.player, status);
     if (!count) return false;
+    if (status === "tough") {
+      colossusNativeDiscardTough(
+        s,
+        [{ targetId: `hero:${s.activePlayerId}`, amount: 1 }],
+        [],
+      );
+      return true;
+    }
     const key =
       status === "stunned"
         ? "stunCards"
@@ -8966,14 +9378,21 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...warMachine.warMachineAbilityOptions(s, id, warMachinePorts),
     ...valkyrie.valkyrieAbilityOptions(s, id, valkyriePorts),
     ...vision.visionAbilityOptions(s, id, visionPorts),
+    ...shadowcat.shadowcatAbilityOptions(s, id, shadowcatPorts),
     ...miles.milesAbilityOptions(s, id, milesPorts),
     ...ghostSpider.ghostSpiderAbilityOptions(s, id, ghostSpiderPorts),
     ...(id === "identity" ? nova.novaHeroAbilityOptions(s, novaPorts) : []),
     ...nova.novaAbilityOptions(s, id, novaPorts),
+    ...colossus.colossusAbilityOptions(s, id, colossusPorts),
     ...(find(s, id)
       ? ironspider.ironspiderSinisterActions(s, find(s, id)!, ironspiderPorts)
       : []),
     ...spdr.spdrAbilityOptions(s, id, spdrPorts),
+    ...mgPack.mutantGenesisPlayerPackAbilityOptions(
+      s,
+      id,
+      mutantGenesisPackPorts,
+    ),
     ...spiderHam.spiderHamAbilityOptions(s, id, spiderHamPorts),
     ...spiderHamPack.spiderHamPackAbilityOptions(s, id, spiderHamPackPorts),
     ...ironheart.ironheartAbilityOptions(
@@ -10600,13 +11019,31 @@ function niNativeAchievement(
   );
 }
 function niAllyTargets(s: GameState, p: Piece, kind: "attack" | "thwart") {
-  if (!niPack.novaIronheartPackWaspIgnores(s, p, niPackPorts))
-    return targets(
+  const kitty = colossus.colossusAllyModifiers(s, p, colossusPorts);
+  if (
+    !niPack.novaIronheartPackWaspIgnores(s, p, niPackPorts) &&
+    !kitty.ignoreGuard &&
+    !kitty.ignorePatrol &&
+    !kitty.ignoreCrisis
+  ) {
+    const ordinary = targets(
       s,
       kind === "attack" ? "enemy" : "scheme",
       kind === "attack",
       kind === "thwart",
     );
+    if (!shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts))
+      return ordinary;
+    // The identity's permission does not extend to an ordinary ally's action.
+    return ordinary.filter((t) =>
+      kind === "attack"
+        ? t.id !== s.villain.id ||
+          !engaged(s).some((m) => keyword(m, "Guard", s))
+        : t.id !== "main" ||
+          (!s.sideSchemes.some((ss) => card(ss).scheme_crisis) &&
+            !engaged(s).some((m) => keyword(m, "Patrol", s))),
+    );
+  }
   if (kind === "attack") return targets(s, "enemy", false);
   const schemes = targets(s, "scheme", false, false);
   if (
@@ -11338,6 +11775,7 @@ const nebulaPorts: nebula.NebulaPorts = {
       s.player.inPlay.push(p);
       add(
         s,
+        ...colossus.colossusCardEntered(s, p),
         ...antMan.antManCardEntered(s, p, antManPorts),
         ...antPack.antManPackCardEntered(s, p),
         ...quicksilverPack.quicksilverPackCardEntered(s, p),
@@ -11379,13 +11817,752 @@ const nebulaPorts: nebula.NebulaPorts = {
   },
 };
 
+function colossusNativeDiscardTough(
+  s: GameState,
+  targets: { targetId: string; amount: number }[],
+  after: Effect[],
+  deferToAttack = false,
+) {
+  const receipts: colossus.ColossusToughDiscardReceipt[] = [];
+  for (const item of targets) {
+    const targetId =
+      item.targetId === "hero" ? `hero:${s.activePlayerId}` : item.targetId;
+    const seatId = targetId.startsWith("hero:")
+      ? targetId.slice(5)
+      : controller(s, targetId)?.id || s.activePlayerId;
+    const view = seatView(s, seatId);
+    const subject = targetId.startsWith("hero:")
+      ? view.player
+      : find(s, targetId);
+    if (!subject) continue;
+    const count = Math.min(
+      statusCards(subject, "tough"),
+      Math.max(0, item.amount),
+    );
+    if (!count) continue;
+    subject.toughCards = statusCards(subject, "tough") - count;
+    subject.tough = subject.toughCards > 0;
+    receipts.push({
+      token: `tough-discard:${s.nextId++}`,
+      playerId: seatId,
+      targetId,
+      count,
+      wasHero: view.player.form === "hero",
+    });
+  }
+  // Piercing is part of the native incoming damage occurrence. Its responses
+  // open after damage/defeat, so newly generated Tough is kept for later damage.
+  if (deferToAttack && s.attack) {
+    const attack = s.attack as NonNullable<GameState["attack"]> & {
+      colossusToughDiscardReceipts?: colossus.ColossusToughDiscardReceipt[];
+    };
+    (attack.colossusToughDiscardReceipts ||= []).push(...receipts);
+    add(s, ...after);
+    return;
+  }
+  // Do not insert a response between two mutations from the same effect.
+  add(
+    s,
+    ...receipts.flatMap((receipt) =>
+      colossus.colossusToughDiscarded(
+        seatView(s, receipt.playerId),
+        receipt,
+        colossusPorts,
+      ),
+    ),
+    ...after,
+  );
+}
+
+const colossusPorts: colossus.ColossusPorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  isIdentityTextBlank: (s) =>
+    isTextBlank(s, { code: heroCard(s).code, id: `hero:${s.activePlayerId}` }),
+  canDraw: (s) => s.player.deck.length + s.player.discard.length > 0,
+  canReadyIdentity: (s, id) => canReadyIdentity(seatView(s, id)),
+  canChangeForm: canChangeIdentityForm,
+  flip: (s, counts, target) =>
+    flip(s, counts, target === "hero" ? undefined : target),
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  canPay,
+  canGiveStatus: quicksilverPorts.canGiveStatus,
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  friendlyTargets: (s) =>
+    playerOrder(s).flatMap((seat) => {
+      const view = seatView(s, seat);
+      return [
+        { id: `hero:${seat.id}`, label: heroCard(view).name },
+        ...view.player.inPlay
+          .filter((p) => card(p).type_code === "ally")
+          .map((p) => ({ id: p.id, code: p.code, label: card(p).name })),
+      ];
+    }),
+  attackProgram: niAttackProgram,
+  shufflePlayerDeck: warMachinePortsShufflePlayer,
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  makePiece,
+  revealEncounter: (s, p) => add(s, E("reveal", { piece: p })),
+  attach: (s, p, target) => {
+    removeEncounterInstance(s, p.id);
+    mutagenPorts.attach(s, p, target);
+  },
+  discardPiece,
+  discardTough: colossusNativeDiscardTough,
+  discardUntilColossus: (s, after) => {
+    const before = s.queue.length;
+    const originalCount = s.player.deck.length;
+    let found: Piece | undefined;
+    for (let index = 0; index < originalCount; index++) {
+      const emptied = s.player.deck.length <= 1;
+      const p = mill(s, 1)[0];
+      if (!p) break;
+      if (card(p).set_code === "colossus" && card(p).faction_code === "hero")
+        found = p;
+      if (found || emptied) break;
+    }
+    const exhaustion = s.queue.splice(0, s.queue.length - before);
+    add(
+      s,
+      ...exhaustion,
+      E("colossusNativeStudioFound", { id: found?.id, after }),
+    );
+  },
+  reactionEvents: eventPlaySources,
+  canPlayReaction: (s, p) =>
+    !ghostSpider.ghostSpiderCannotPlayEvents(s) && !isTextBlank(s, p),
+  playReaction: (s, id, context, after) => {
+    const p = eventPlaySources(s).find((p) => p.id === id);
+    need(p, "The actual owned Colossus interrupt event is unavailable.");
+    const cancellation =
+      context.kind === "basic-attack"
+        ? [{ ...context.packet, colossusRageHandled: true }, ...after]
+        : after;
+    requestPayment(
+      s,
+      card(p!).name,
+      cardCost(s, card(p!), p),
+      [
+        E("resolveHandEvent", {
+          id,
+          after: colossus.colossusReaction(s, p!, context),
+          continuation: after,
+        }),
+      ],
+      sinisterPlayRequirements(p!),
+      p,
+      true,
+    );
+    if (s.prompt?.cancelable)
+      s.prompt.cancellationQueue = [...cancellation, ...s.queue];
+  },
+  activationAvailable: (s, receipt) =>
+    !!seatView(s, receipt.playerId).flags[
+      `colossusActivation:${receipt.token}`
+    ] &&
+    receipt.isVillain &&
+    receipt.enemyId === s.villain.id,
+  resumeBasicAttack: (s, packet, after) => {
+    const next = effectContext(s, {
+      ...packet,
+      eventId: packet.eventId,
+      attackProgramId: packet.attackProgramId,
+    });
+    const boundary = s.queue.findIndex(
+      (e) => e.type === "finishResolution" && e.id === s.currentEventId,
+    );
+    if (boundary < 0) add(s, next, ...after);
+    else
+      s.queue.splice(
+        boundary + 1,
+        0,
+        next,
+        ...after.map((e) => effectContext(s, e)),
+      );
+  },
+};
+
+const shadowcatPorts: shadowcat.ShadowcatPorts = {
+  ...antManPorts,
+  attackProgram: niAttackProgram,
+  makePiece,
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  maxHeroHP: maxHP,
+  isIdentityTextBlank: (s) => isTextBlank(s, heroCard(s)),
+  canChangeMassForm: canChangeIdentityForm,
+  massFormChanged: (s, from, to) => {
+    log(s, `Change mass form from ${from} to ${to}.`);
+    spectrumPorts.refreshDefense(s);
+    syncNebulaIdentityStatuses(s);
+  },
+  formResponseOptions: spectrumPorts.formResponseOptions,
+  enemyTargets: (s, attacking, ignoreGuard = false) => {
+    const ordinary = targets(s, "enemy", attacking);
+    if (
+      ignoreGuard &&
+      attacking &&
+      !ordinary.some((t) => t.id === s.villain.id) &&
+      valkyrie.valkyrieCanAttackTarget(s, s.villain.id)
+    )
+      ordinary.unshift({
+        id: s.villain.id,
+        label: card(s.villain).name,
+        code: s.villain.code,
+      });
+    return ordinary;
+  },
+  schemeTargets: (s, thwarting, ignoreCrisis, ignorePatrol) =>
+    thwarting
+      ? visionPorts.schemeTargets(s, thwarting, ignoreCrisis, ignorePatrol)
+      : antManPorts.schemeTargets(s, false),
+  canDiscardAttachment: visionPorts.canDiscardAttachment,
+  defenseEventSources: (s) =>
+    visionPack.visionPackDefenseEvents(s, visionPackPorts),
+  canPlayDefenseEvent: (s, p) => {
+    const a = s.attack;
+    return (
+      !!a &&
+      s.player.form === "hero" &&
+      shadowcat.shadowcatCanDefend(s) &&
+      vision.visionCanDefend(s) &&
+      !attackTargetsEnemy(s, a) &&
+      !armadillo.armadilloDefenseBlocked(s, a.attacker) &&
+      !(
+        rulesCode(find(s, a.attacker) || a.attackerSnapshot!) === "01132" &&
+        friends(s).some((p) => !p.exhausted)
+      ) &&
+      (!a.defender ||
+        a.defender === "none" ||
+        (a.defender === "hero" &&
+          (a.targetPlayerId || s.activePlayerId) === s.activePlayerId))
+    );
+  },
+  playDefenseEvent: (s, id, after) => {
+    const p = visionPack
+      .visionPackDefenseEvents(s, visionPackPorts)
+      .find((p) => p.id === id);
+    need(
+      p && shadowcatPorts.canPlayDefenseEvent!(s, p),
+      "Quick Shift's actual source or defense window is unavailable.",
+    );
+    add(
+      s,
+      E("payRequest", {
+        title: card(p!).name,
+        cost: cardCost(s, card(p!), p),
+        piece: p,
+        cancelable: true,
+        after: [
+          E("resolveHandEvent", {
+            id,
+            after: shadowcat.shadowcatDefenseEvent(s, p!) || [],
+            continuation: after,
+          }),
+        ],
+        cancellationQueue: after,
+      }),
+    );
+  },
+  declareDefense: (s, _eventId) => {
+    const a = s.attack;
+    need(
+      a &&
+        s.player.form === "hero" &&
+        shadowcat.shadowcatCanDefend(s) &&
+        vision.visionCanDefend(s),
+      "This identity cannot defend.",
+    );
+    need(
+      !a!.defender ||
+        a!.defender === "none" ||
+        (a!.defender === "hero" &&
+          (a!.targetPlayerId || s.activePlayerId) === s.activePlayerId),
+      "Another character already defends this attack.",
+    );
+    const basic =
+      a!.defender === "hero" &&
+      (a!.targetPlayerId || s.activePlayerId) === s.activePlayerId &&
+      a!.basicDefense;
+    a!.defender = "hero";
+    a!.targetPlayerId = s.activePlayerId;
+    a!.basicDefense = !!basic;
+    if (!basic) a!.defense = 0;
+    // Event defense retains its defender without adding basic DEF or exhaustion.
+    a!.eventDefense = true;
+  },
+  giveObligation: spectrumPorts.giveObligation,
+  putMinion: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    Object.assign(p, resetPiece(p, true));
+    mutagenPorts.putMinion(s, p, playerId);
+  },
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  giveStatus: (s, target, status) => {
+    const view = target.startsWith("hero:") ? seatView(s, target.slice(5)) : s;
+    if (target === "hero" || target.startsWith("hero:"))
+      giveCharacterStatus(view, view.player, status);
+    else {
+      const p = find(s, target);
+      if (p) giveCharacterStatus(s, p, status);
+    }
+  },
+  // Retain the native DamageResult.damageDealt before the printed
+  // Phased Strike continuation, with false for wholly redirected/replaced
+  // damage and true for damage dealt to the original enemy but prevented.
+  wasDamageDealtTo: (s, abilitySource, target) =>
+    s.flags[`shadowcatDealt:${abilitySource}:${target}`] !== false,
+};
+
+const mutantGenesisPackPorts: mgPack.MutantGenesisPlayerPackPorts = {
+  queue: add,
+  attackEventTotalBonus: (s, eventId) =>
+    mgPack.mutantGenesisPlayerPackAttackEventBonus(s, eventId) +
+    Number(s.flags[`niHoned:${eventId}`] || 0) +
+    msMarvelEventAmountModifier(s, eventId, "damage"),
+  choose,
+  isTextBlank,
+  identityHasTrait: (s, trait) => sinisterNativeHasTrait(s, "hero", trait),
+  identityHeroName: (s) =>
+    card(HEROES.find((h) => h.id === s.heroId)!.code).name,
+  hasTrait: (s, target, trait) => {
+    if (target === "hero" || target.startsWith("hero:"))
+      return sinisterNativeHasTrait(s, target, trait);
+    const p = sinisterNativePiece(s, target);
+    return (
+      !!p &&
+      (card(p).traits || "").split(/\.\s*/).filter(Boolean).includes(trait)
+    );
+  },
+  friendlyTargets: (s) =>
+    playerOrder(s).flatMap((seat) => {
+      const view = seatView(s, seat);
+      return [
+        {
+          id: `hero:${seat.id}`,
+          label: heroCard(view).name,
+          code: heroCard(view).code,
+        },
+        ...view.player.inPlay
+          .filter((p) => card(p).type_code === "ally")
+          .map((p) => ({ id: p.id, label: card(p).name, code: p.code })),
+      ];
+    }),
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  canReady: (s, target) => {
+    const id =
+      target === "hero"
+        ? s.activePlayerId
+        : target.startsWith("hero:")
+          ? target.slice(5)
+          : undefined;
+    return id
+      ? seatView(s, id).player.exhausted && canReadyIdentity(seatView(s, id))
+      : !!find(s, target)?.exhausted && warMachinePackPorts.canReady(s, target);
+  },
+  canHeal: (s, target) => {
+    const id =
+      target === "hero"
+        ? s.activePlayerId
+        : target.startsWith("hero:")
+          ? target.slice(5)
+          : undefined;
+    return id
+      ? seatView(s, id).player.hp < maxHP(seatView(s, id))
+      : Number(find(s, target)?.damage || 0) > 0;
+  },
+  canGiveStatus: dsPorts.canAddStatus,
+  canExhaustIdentity: (s) => s.player.form === "hero" && !s.player.exhausted,
+  exhaustCards: sinisterPlayerPackPorts.exhaustCards,
+  heroAttack: (s) => heroStats(s).attack,
+  allyAttack: (s, p) => allyStat(s, p, "attack"),
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  canPay,
+  handPlayableCards: eventPlaySources,
+  canPutAlly: (s, p) =>
+    card(p).type_code === "ally" && !uniqueConflict(s, card(p)),
+  putAlly: (s, id, after) => {
+    const before = new Set(s.queue);
+    putAllyFromHand(s, id);
+    const generated = s.queue.filter((q) => !before.has(q));
+    s.queue = s.queue.filter((q) => before.has(q));
+    add(s, ...generated, ...after);
+  },
+  canDeclareAllyDefender: (s, r, id) => {
+    const p = allInPlay(s).find((p) => p.id === id),
+      seat = controller(s, id);
+    return (
+      !!s.attack &&
+      s.attack.attacker === r.attackerId &&
+      s.attack.id === r.token &&
+      !!p &&
+      !!seat &&
+      !seat.eliminated &&
+      !p.exhausted &&
+      card(p).type_code === "ally" &&
+      !armadillo.armadilloDefenseBlocked(s, r.attackerId)
+    );
+  },
+  declareAllyDefender: (s, r, id) => {
+    need(
+      mutantGenesisPackPorts.canDeclareAllyDefender(s, r, id),
+      "The actual put ally cannot defend this attack.",
+    );
+    const p = allInPlay(s).find((p) => p.id === id)!,
+      seat = controller(s, id)!;
+    p.exhausted = true;
+    s.attack!.defender = p.id;
+    s.attack!.targetPlayerId = seat.id;
+    s.attack!.basicDefense = false;
+    s.attack!.defense = 0;
+    // Retain this actual event-created defender through declareDefense.
+    s.attack!.eventDefense = true;
+    s.attack!.mutantProtectorsDefender = { allyId: p.id, playerId: seat.id };
+    add(
+      s,
+      ...(
+        sinisterPlayerPack.sinisterPlayerPackAllyDefenseInterrupt(
+          seatView(s, seat),
+          p.id,
+          r.attackerId,
+          sinisterPlayerPackPorts,
+        ) || []
+      ).map((e) => ({ ...e, actorId: seat.id })),
+    );
+  },
+  returnAllyToHand: (s, id, after) => {
+    const p = allInPlay(s).find((p) => p.id === id),
+      seat = controller(s, id);
+    need(p && seat, "Returning Nightcrawler requires the same physical ally.");
+    const before = new Set(s.queue);
+    // RETURN is not a discard. Avoid Pinpoint's discard-only replacement;
+    // generic leave effects and attached-card cleanup still run natively.
+    s.flags[`niLeaveCommitted:${id}`] = true;
+    s.flags[`spiderHamReturnHand:${id}`] = p!.ownerId || seat!.id;
+    if (s.attack?.defender === id) s.attack.gmwReturnedDefender = id;
+    movePieceFromPlay(s, id, false);
+    delete s.flags[`niLeaveCommitted:${id}`];
+    const generated = s.queue.filter((q) => !before.has(q));
+    s.queue = s.queue.filter((q) => before.has(q));
+    add(s, ...generated, ...after);
+  },
+  shuffleMinionIntoEncounter: (s, id, after) => {
+    const p = s.minions.find((p) => p.id === id);
+    need(p, "The actual Magik minion is unavailable.");
+    const before = new Set(s.queue);
+    const ownedCard =
+      p!.droneCard || (card(p!).faction_code !== "encounter" ? p! : undefined);
+    if (ownedCard) s.flags[`niLeaveCommitted:${id}`] = true;
+    // Leave without defeat, retaining this physical minion and discarding its
+    // actual attached player/encounter cards through their ordinary cleanup.
+    movePieceFromPlay(s, id, false);
+    delete s.flags[`niLeaveCommitted:${id}`];
+    if (ownedCard) {
+      // Official Magik ruling #175 and RRG1.8 Ownership and Control: a player
+      // card treated as a minion goes to its owner's equivalent player deck.
+      const owner = s.players.find(
+        (seat) => seat.id === ownedCard.ownerId && !seat.eliminated,
+      );
+      if (owner) {
+        const view = seatView(s, owner);
+        for (const zone of [
+          view.player.hand,
+          view.player.deck,
+          view.player.discard,
+          s.removed,
+        ]) {
+          const index = zone.findIndex((card) => card.id === ownedCard.id);
+          if (index >= 0) zone.splice(index, 1);
+        }
+        view.player.deck.push(resetPiece(ownedCard, true));
+        const originalActor = s.activePlayerId;
+        activateSeat(s, owner.id);
+        s.player.deck = shuffle(s, s.player.deck);
+        activateSeat(s, originalActor);
+      }
+    } else {
+      removeEncounterInstance(s, id);
+      s.encounter.deck.push(resetPiece(p!, true));
+      mutagenPorts.shuffleEncounter(s);
+    }
+    const generated = s.queue.filter((q) => !before.has(q));
+    s.queue = s.queue.filter((q) => before.has(q));
+    add(s, ...generated, ...after);
+  },
+  attach: (s, id, target) => {
+    const p = allInPlay(s).find((p) => p.id === id);
+    need(p, "This actual player upgrade must remain in play.");
+    p!.attachedTo = target;
+    // Training and Gatekeeper remain under the playing player's control.
+  },
+  attackAvailable: (s, r) =>
+    !!s.attack &&
+    s.attack.attacker === r.attackerId &&
+    s.attack.id === r.token &&
+    !!nebulaNativeAttacker(s, r.attackerId),
+  playEvent: (s, id, effects, r, after) => {
+    const p = eventPlaySources(s).find((p) => p.id === id);
+    need(p, "The actual attack-interrupt event is unavailable.");
+    add(
+      s,
+      E("payRequest", {
+        title: card(p!).name,
+        cost: cardCost(s, card(p!), p),
+        piece: p,
+        requirements: sinisterPlayRequirements(p!),
+        cancelable: true,
+        commit: [
+          E("mutant-genesis-player:attack-paid", {
+            id,
+            code: p!.code,
+            receipt: r,
+          }),
+        ],
+        after: [
+          E("resolveHandEvent", { id, after: effects, continuation: after }),
+        ],
+        cancellationQueue: after,
+      }),
+    );
+  },
+  claimDefense: (s, r) => {
+    need(
+      mutantGenesisPackPorts.attackAvailable(s, r) &&
+        !armadillo.armadilloDefenseBlocked(s, r.attackerId),
+      "This pending attack cannot be defended.",
+    );
+    const a = s.attack!;
+    if (!a.defender || a.defender === "none") {
+      a.defender = "hero";
+      a.basicDefense = false;
+      a.defense = 0;
+      a.targetPlayerId = s.activePlayerId;
+      a.eventDefense = true;
+      add(s, E("quicksilverLateDefense"));
+    }
+  },
+  preventAttack: (s, r) => {
+    if (mutantGenesisPackPorts.attackAvailable(s, r))
+      s.attack!.preventAllDamage = true;
+  },
+  damageAvailable: (s, packet) => {
+    const a = s.attack;
+    return (
+      !!a &&
+      packet.damageWindowId === a.id &&
+      packet.amount > 0 &&
+      (packet.attacker === undefined || packet.attacker === a.attacker) &&
+      !a.preventAllDamage &&
+      !!nebulaNativeAttacker(s, a.attacker)
+    );
+  },
+  preventDamage: (s, packet, amount) => {
+    if (packet.kind === "overkill")
+      s.attack!.identityPrevented =
+        Number(s.attack!.identityPrevented || 0) + amount;
+    else if (s.attack) s.attack.prevented += amount;
+  },
+  simultaneousAttack: (s, allocations, after) =>
+    niAttackProgram(
+      s,
+      [
+        E("waspDistributedAttack", {
+          packets: allocations,
+          basic: false,
+          chooserId: s.firstPlayerId,
+          mutantGenesisBonusApplied: true,
+        }),
+      ],
+      after,
+    ),
+};
+
+function shadowcatNativeCompletion(
+  s: GameState,
+  kind: "attack" | "defense",
+  performed: boolean,
+  token = `mass-completion:${s.nextId++}`,
+): Effect[] {
+  if (s.heroId !== "shadowcat" || !performed) return [];
+  const mass = s.player.inPlay.find((p) =>
+    ["32031a", "32031b"].includes(p.code),
+  );
+  const receipt: shadowcat.ShadowcatCompletionReceipt = {
+    token,
+    playerId: s.activePlayerId,
+    kind,
+    performed,
+    massId: mass?.id,
+    massForm: shadowcat.shadowcatMassForm(s),
+    massTextBlank: shadowcat.shadowcatMassTextBlank(s, shadowcatPorts),
+  };
+  return [
+    E("shadowcatNativeCompletionWindow", {
+      receipt,
+      actorId: s.activePlayerId,
+    }),
+  ];
+}
+function mutantGenesisAttackOptions(
+  s: GameState,
+  stage: "initiated" | "attacks",
+  after: Effect[],
+): Option[] {
+  const a = s.attack;
+  if (!a || !nebulaNativeAttacker(s, a.attacker) || attackTargetsEnemy(s, a))
+    return [];
+  const receipt: mgPack.MutantGenesisAttackReceipt = {
+    token: a.id!,
+    playerId: a.originalPlayerId || s.activePlayerId,
+    attackerId: a.attacker,
+    stage,
+  };
+  return playerOrder(s).flatMap((seat) => {
+    const view = seatView(s, seat);
+    const opts = mgPack.mutantGenesisPlayerPackAttackOptions(
+      view,
+      receipt,
+      after,
+      mutantGenesisPackPorts,
+    );
+    if (stage === "attacks")
+      opts.push(
+        ...shadowcat.shadowcatDefenseOptions(view, [], after, shadowcatPorts),
+      );
+    return opts.map((o) => ({
+      ...o,
+      id: `${seat.id}:${o.id}`,
+      effects: o.effects.map((e) => ({ ...e, actorId: seat.id })),
+    }));
+  });
+}
+function mutantGenesisDamageOptions(
+  s: GameState,
+  target: string,
+  amount: number,
+  after: Effect[],
+): Option[] {
+  const a = s.attack;
+  if (!a || amount <= 0) return [];
+  const packet = {
+    type: "attackDamage",
+    kind: "attack",
+    target: target === "hero" ? `hero:${s.activePlayerId}` : target,
+    amount,
+    attack: true,
+    attacker: a.attacker,
+    damageWindowId: a.id,
+  };
+  return playerOrder(s).flatMap((seat) =>
+    mgPack
+      .mutantGenesisPlayerPackDamageOptions(
+        seatView(s, seat),
+        packet,
+        after,
+        mutantGenesisPackPorts,
+      )
+      .map((o) => ({
+        ...o,
+        id: `${seat.id}:${o.id}`,
+        effects: o.effects.map((e) => ({ ...e, actorId: seat.id })),
+      })),
+  );
+}
+function mutantGenesisIncomingPiercing(
+  s: GameState,
+  target: string,
+  amount: number,
+) {
+  const a = s.attack;
+  const targetId = target === "hero" ? `hero:${s.activePlayerId}` : target;
+  if (
+    !a ||
+    amount <= 0 ||
+    a.piercingTargets?.includes(targetId) ||
+    !(a.piercing || sourceKeyword(s, a.attacker, "Piercing"))
+  )
+    return;
+  (a.piercingTargets ||= []).push(targetId);
+  const p = target === "hero" ? s.player : find(s, target);
+  if (
+    p &&
+    amount > 0 &&
+    (a.piercing || sourceKeyword(s, a.attacker, "Piercing"))
+  )
+    colossusNativeDiscardTough(
+      s,
+      [{ targetId: target, amount: statusCards(p, "tough") }],
+      [],
+      true,
+    );
+}
+
+/** Armor Up interrupts this retained activation, before attack/scheme-specific
+ * abilities. Explicit extra activations retain their printed activation kind. */
+function colossusNativeActivationWindow(
+  s: GameState,
+  enemyId: string,
+  kind: "attack" | "scheme",
+  continuation: Effect,
+): boolean {
+  if (enemyId !== s.villain.id) return false;
+  const receipt: colossus.ColossusActivationReceipt = {
+    token: `colossus-activation:${s.nextId++}`,
+    enemyId,
+    playerId: s.activePlayerId,
+    kind,
+    isVillain: true,
+  };
+  s.flags[`colossusActivation:${receipt.token}`] = true;
+  const next = {
+    ...continuation,
+    colossusActivationHandled: true,
+    colossusActivationReceipt: receipt,
+    actorId: receipt.playerId,
+  };
+  const choices = playerOrder(s).flatMap((seat) =>
+    colossus
+      .colossusActivationOptions(
+        seatView(s, seat),
+        receipt,
+        [next],
+        colossusPorts,
+      )
+      .map((choice) => ({
+        ...choice,
+        id: `${seat.id}:${choice.id}`,
+        effects: choice.effects.map((effect) => ({
+          ...effect,
+          actorId: seat.id,
+        })),
+      })),
+  );
+  if (!choices.length) {
+    delete s.flags[`colossusActivation:${receipt.token}`];
+    return false;
+  }
+  choose(
+    s,
+    "Villain would activate",
+    "Play Armor Up before the villain activates?",
+    [...choices, option("continue", "Continue activation", [next])],
+  );
+  return true;
+}
+
 function enemyAttack(
   s: GameState,
   id: string,
   extra?: string,
   activation?: MutagenActivation,
   originalTarget?: string,
+  colossusActivationHandled = false,
+  colossusActivationReceipt?: colossus.ColossusActivationReceipt,
 ) {
+  if (colossusActivationReceipt)
+    delete seatView(s, colossusActivationReceipt.playerId).flags[
+      `colossusActivation:${colossusActivationReceipt.token}`
+    ];
   if (
     !activation?.after?.nebulaGamoraSource &&
     find(s, id) &&
@@ -11393,7 +12570,13 @@ function enemyAttack(
       s,
       id,
       "attack",
-      E("ghostNativeEnemyAttack", { id, extra, activation, originalTarget }),
+      E("ghostNativeEnemyAttack", {
+        id,
+        extra,
+        activation,
+        originalTarget,
+        colossusActivationHandled,
+      }),
     )
   )
     return;
@@ -11432,6 +12615,17 @@ function enemyAttack(
     canceled();
     return;
   }
+  if (
+    !friendlySource &&
+    !colossusActivationHandled &&
+    colossusNativeActivationWindow(
+      s,
+      id,
+      "attack",
+      E("ghostNativeEnemyAttack", { id, extra, activation, originalTarget }),
+    )
+  )
+    return;
   const web = allInPlay(s).find(
     (a) => rulesCode(a) === "01009" && a.attachedTo === id,
   );
@@ -11443,6 +12637,16 @@ function enemyAttack(
       `Webbed Up prevents ${card(p).name}'s attack and stuns them.`,
       "good",
     );
+    canceled();
+    return;
+  }
+  const shadowcatReplacement = shadowcat.shadowcatEnemyAttackReplacement(
+    s,
+    id,
+    shadowcatPorts,
+  );
+  if (shadowcatReplacement) {
+    add(s, ...shadowcatReplacement);
     canceled();
     return;
   }
@@ -11477,6 +12681,7 @@ function enemyAttack(
   );
   s.flags.attacksPerformed = Number(s.flags.attacksPerformed || 0) + 1;
   s.attack = {
+    id: `enemy-attack:${s.nextId++}`,
     targetPlayerId: s.activePlayerId,
     originalPlayerId: s.activePlayerId,
     originalTarget,
@@ -11512,7 +12717,12 @@ function enemyAttack(
           E("enemyAttack", { id, extra: "whirlwind", actorId: seat.id }),
         ),
     );
-  add(s, E("prepareAttackBoosts"), E("declareDefense"));
+  add(
+    s,
+    E("prepareAttackBoosts"),
+    E("mutantGenesisAttacksWindow"),
+    E("declareDefense"),
+  );
   add(
     s,
     E("enemyAttackInitiationWindow", {
@@ -11523,6 +12733,7 @@ function enemyAttack(
       usedIds: [],
     }),
   );
+  add(s, ...colossus.colossusEnemyAttackStarted(s, id, colossusPorts));
   // Forced entry and its responses precede every optional initiation interrupt.
   if (isVillain && rulesCode(s.villain) === "01135") add(s, E("drone"));
   if (!friendlySource)
@@ -11613,6 +12824,12 @@ function abortAttack(s: GameState) {
         ]
       : []),
   );
+  if (a.defender === "hero") {
+    const previous = s.activePlayerId;
+    activateSeat(s, a.targetPlayerId || previous);
+    add(s, ...shadowcatNativeCompletion(s, "defense", true));
+    activateSeat(s, previous);
+  }
   s.attack = null;
 }
 function prepareAttackBoosts(s: GameState) {
@@ -11676,7 +12893,7 @@ function declareDefense(s: GameState) {
     add(s, E("boostAttack"));
     return;
   }
-  if (a.valkyrieDefense) {
+  if (a.valkyrieDefense || a.eventDefense) {
     add(s, E("boostAttack", { actorId: a.targetPlayerId }));
     return;
   }
@@ -11698,7 +12915,8 @@ function declareDefense(s: GameState) {
     if (
       view.player.form === "hero" &&
       !view.player.exhausted &&
-      vision.visionCanDefend(view)
+      vision.visionCanDefend(view) &&
+      shadowcat.shadowcatCanDefend(view)
     )
       opts.push(
         option(
@@ -11742,6 +12960,19 @@ function declareDefense(s: GameState) {
   );
 }
 function boostEffects(s: GameState, p: Piece) {
+  if (p.code === "32058") {
+    const activation = s.scheming || s.attack;
+    if (activation) (activation.retainedBoostIds ||= []).push(p.id);
+  }
+  const colossusBoost = colossus.colossusBoost(s, p);
+  if (colossusBoost !== null) {
+    if (p.code === "32029" && colossusBoost.length) {
+      const activation = s.scheming || s.attack;
+      if (activation) (activation.retainedBoostIds ||= []).push(p.id);
+    }
+    add(s, ...colossusBoost);
+    return;
+  }
   const moduleBoost = ironspider.ironspiderSinisterBoost(
     s,
     p,
@@ -11766,6 +12997,7 @@ function boostEffects(s: GameState, p: Piece) {
   }
   const rise =
     starLord.starLordBoost(s, p) ??
+    shadowcat.shadowcatBoost(s, p) ??
     gamora.gamoraBoost(s, p) ??
     drax.draxBoost(s, p) ??
     venom.venomBoost(s, p) ??
@@ -11913,7 +13145,13 @@ function enemyScheme(
   id: string,
   extra?: string,
   request?: MutagenActivation,
+  colossusActivationHandled = false,
+  colossusActivationReceipt?: colossus.ColossusActivationReceipt,
 ) {
+  if (colossusActivationReceipt)
+    delete seatView(s, colossusActivationReceipt.playerId).flags[
+      `colossusActivation:${colossusActivationReceipt.token}`
+    ];
   const p = find(s, id);
   if (!p) return;
   if (
@@ -11921,7 +13159,12 @@ function enemyScheme(
       s,
       id,
       "scheme",
-      E("ghostNativeEnemyScheme", { id, extra, request }),
+      E("ghostNativeEnemyScheme", {
+        id,
+        extra,
+        request,
+        colossusActivationHandled,
+      }),
     )
   )
     return;
@@ -11937,6 +13180,16 @@ function enemyScheme(
       });
     return;
   }
+  if (
+    !colossusActivationHandled &&
+    colossusNativeActivationWindow(
+      s,
+      id,
+      "scheme",
+      E("ghostNativeEnemyScheme", { id, extra, request }),
+    )
+  )
+    return;
   const replacement = riskyActivationReplacement(s, "scheme", id);
   if (replacement) {
     add(
@@ -12049,8 +13302,12 @@ function calculateAttack(s: GameState) {
     !["none", "hero"].includes(a.defender) &&
     !find(s, a.defender)
   ) {
-    a.defender = "none";
+    a.defender =
+      a.mutantProtectorsDefender?.allyId === a.defender ? "hero" : "none";
+    if (a.defender === "hero")
+      a.targetPlayerId = a.mutantProtectorsDefender!.playerId;
     a.basicDefense = false;
+    a.defense = 0;
     log(
       s,
       `The ally defender left play. ${heroCard(s).name} is now the attack target.`,
@@ -12169,12 +13426,8 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
     }
   }
   const receiving = target === "hero" ? s.player : find(s, target);
-  if (receiving)
-    discardToughForPiercing(
-      receiving,
-      damage,
-      !!sourceKeyword(s, a.attacker, "Piercing"),
-    );
+  const prohibited = damageProhibition(s, target, false);
+  mutantGenesisIncomingPiercing(s, target, prohibited ? 0 : damage);
   const wasTough = receiving?.tough;
   if (receiving && target !== "hero" && !effect.gmwStarhawkHandled) {
     const continuation = { ...effect, gmwStarhawkHandled: true };
@@ -12263,6 +13516,27 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
       s,
       ...generated,
       E("spiderHamAttackDamageComplete", { target, before, recipientId }),
+    );
+    return;
+  }
+  const receipts = a.colossusToughDiscardReceipts || [];
+  a.colossusToughDiscardReceipts = [];
+  if (receipts.length) {
+    add(
+      s,
+      ...receipts.flatMap((r) =>
+        colossus.colossusToughDiscarded(
+          seatView(s, r.playerId),
+          r,
+          colossusPorts,
+        ),
+      ),
+      E("mutantGenesisAttackDamageComplete", {
+        target,
+        before,
+        recipientId,
+        snapshot: a,
+      }),
     );
     return;
   }
@@ -12918,6 +14192,7 @@ function reveal(
       ...vision.VISION_SCRIPT_CODES,
       ...spdr.SPDR_SCRIPT_CODES,
       ...spiderHam.SPIDER_HAM_SCRIPT_CODES,
+      ...colossus.COLOSSUS_SCRIPT_CODES,
     ].some((code) => code === p.code) ||
       CARDS.some(
         (core) => core.code === rulesCode(p) && core.type_code === "treachery",
@@ -12949,6 +14224,7 @@ function reveal(
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
+      "32028",
     ].some((code) => code === p.code)
   ) {
     const window = beginRevealWindow(
@@ -12963,6 +14239,7 @@ function reveal(
       mutagenEncounterReveal(s, p) ??
       armadillo.armadilloReveal(s, p) ??
       zzzax.zzzaxReveal(s, p) ??
+      colossus.colossusEncounterReveal(s, p) ??
       spiderHam.spiderHamEncounterReveal(s, p);
     need(entry !== null, "No native encounter attachment entry handler.");
     add(s, ...entry!.map((e) => ({ ...e, revealWindowId: p.id })), ...window);
@@ -13018,9 +14295,11 @@ function reveal(
     warMachine.warMachineEncounterReveal(s, p) ??
     valkyrie.valkyrieEncounterReveal(s, p) ??
     vision.visionEncounterReveal(s, p) ??
+    shadowcat.shadowcatEncounterReveal(s, p) ??
     miles.milesEncounterReveal(s, p) ??
     ghostSpider.ghostSpiderEncounterReveal(s, p) ??
     nova.novaEncounterReveal(s, p) ??
+    colossus.colossusEncounterReveal(s, p) ??
     spdr.spdrEncounterReveal(s, p) ??
     spiderHam.spiderHamEncounterReveal(s, p) ??
     ironheart.ironheartEncounterReveal(s, p) ??
@@ -13256,6 +14535,11 @@ function reveal(
   if (keyword(p, "Surge")) add(s, E("surge", { sourceCode: p.code }));
 }
 function obligation(s: GameState, p: Piece) {
+  const colossusObligation = colossus.colossusEncounterReveal(s, p);
+  if (colossusObligation !== null && p.code === "32025") {
+    add(s, ...colossusObligation);
+    return;
+  }
   const owner = s.players.find(
     (seat) => seat.heroId === card(p).set_code && !seat.eliminated,
   );
@@ -13313,6 +14597,16 @@ function obligation(s: GameState, p: Piece) {
   );
 }
 function treachery(s: GameState, p: Piece) {
+  const shadowcatReveal = shadowcat.shadowcatEncounterReveal(s, p);
+  if (shadowcatReveal !== null) {
+    add(s, ...shadowcatReveal);
+    return;
+  }
+  const colossusTreachery = colossus.colossusEncounterReveal(s, p);
+  if (colossusTreachery !== null) {
+    add(s, ...colossusTreachery);
+    return;
+  }
   const hulk = hulkEncounterReveal(s, p);
   if (hulk !== null) {
     add(s, ...hulk);
@@ -13573,6 +14867,11 @@ function treachery(s: GameState, p: Piece) {
       else surge();
       break;
     case "01190": {
+      const colossusNemesis = colossus.colossusShadowOfPast(s);
+      if (colossusNemesis !== null) {
+        add(s, ...colossusNemesis);
+        break;
+      }
       const spdrNemesis = spdr.spdrShadowOfPast(s);
       if (spdrNemesis !== null) {
         add(s, ...spdrNemesis);
@@ -13599,6 +14898,11 @@ function treachery(s: GameState, p: Piece) {
         break;
       }
       const visionNemesis = vision.visionShadowOfPast(s);
+      const shadowcatNemesis = shadowcat.shadowcatShadowOfPast(s);
+      if (shadowcatNemesis !== null) {
+        add(s, ...shadowcatNemesis);
+        break;
+      }
       if (visionNemesis !== null) {
         add(s, ...visionNemesis);
         break;
@@ -13716,6 +15020,10 @@ function resolve(s: GameState, e: Effect) {
     }
     return;
   }
+  if (colossus.resolveColossusEffect(s, e, colossusPorts)) return;
+  if (shadowcat.resolveShadowcatEffect(s, e, shadowcatPorts)) return;
+  if (mgPack.resolveMutantGenesisPlayerPackEffect(s, e, mutantGenesisPackPorts))
+    return;
   if (ironspider.resolveIronspiderSinisterEffect(s, e, ironspiderPorts)) return;
   if (spdr.resolveSpdrEffect(s, e, spdrPorts)) return;
   if (spdrPack.resolveSpdrPackEffect(s, e, spdrPackPorts)) return;
@@ -13823,9 +15131,11 @@ function resolve(s: GameState, e: Effect) {
           warMachine.warMachineEncounterReveal(state, piece) ??
           valkyrie.valkyrieEncounterReveal(state, piece) ??
           vision.visionEncounterReveal(state, piece) ??
+          shadowcat.shadowcatEncounterReveal(state, piece) ??
           miles.milesEncounterReveal(state, piece) ??
           ghostSpider.ghostSpiderEncounterReveal(state, piece) ??
           nova.novaEncounterReveal(state, piece) ??
+          colossus.colossusEncounterReveal(state, piece) ??
           spdr.spdrEncounterReveal(state, piece) ??
           spiderHam.spiderHamEncounterReveal(state, piece) ??
           ironheart.ironheartEncounterReveal(state, piece) ??
@@ -14190,7 +15500,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "removeEncounter":
-      if (["21026", "26028"].includes(e.piece.code))
+      if (["21026", "26028", "32055"].includes(e.piece.code))
         for (const seat of s.players)
           seatView(s, seat).player.inPlay = seatView(
             s,
@@ -14206,6 +15516,18 @@ function resolve(s: GameState, e: Effect) {
       s.prompt = e.prompt;
       break;
     case "attackProgramEnd":
+      if (!e.eventId && s.flags[`shadowcatProgramPerformed:${e.id}`]) {
+        delete s.flags[`shadowcatProgramPerformed:${e.id}`];
+        add(
+          s,
+          ...shadowcatNativeCompletion(
+            s,
+            "attack",
+            true,
+            `program-complete:${e.id}`,
+          ),
+        );
+      }
       for (const key of Object.keys(s.flags))
         if (key.startsWith(`qsvVibration:${e.id}:`)) delete s.flags[key];
       break;
@@ -14250,6 +15572,13 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "eventResolve": {
+      if (!e.colossusCostHandled && e.piece?.code === "32009") {
+        add(s, ...colossus.colossusAdditionalCost(s, e.piece), {
+          ...e,
+          colossusCostHandled: true,
+        });
+        break;
+      }
       if (
         e.piece.code === "31017" &&
         s.flags[`spdrThwipPaymentCostPaid:${e.piece.id}`]
@@ -14444,6 +15773,7 @@ function resolve(s: GameState, e: Effect) {
         s.player.stunned
       ) {
         consumeStatus(s.player, "stunned");
+        s.flags[`ghostCancelled:${p.id}`] = true;
         break;
       }
       if (
@@ -14454,12 +15784,121 @@ function resolve(s: GameState, e: Effect) {
         s.player.confused
       ) {
         consumeStatus(s.player, "confused");
+        s.flags[`ghostCancelled:${p.id}`] = true;
         break;
       }
       add(
         s,
         ...doctorStrangeBeforeEvent(s, p, [{ ...e, type: "nativeEvent" }]),
       );
+      break;
+    }
+    case "mutantGenesisAttackDamageComplete":
+      finishAttackAfterDamage(s, e.target, e.before, e.recipientId, e.snapshot);
+      break;
+    case "shadowcatNativeOptionalAttackWindow": {
+      const queued = s.queue.filter(
+        (effect) =>
+          effect.responseGroup === e.responseGroup &&
+          effect.afterAttack &&
+          effect.mandatory === false &&
+          effect.type !== "shadowcatNativeOptionalAttackWindow",
+      );
+      s.queue = s.queue.filter((effect) => !queued.includes(effect));
+      const responses: Effect[] = [...(e.responses || []), ...queued];
+      const after: Effect[] = e.after || [];
+      const resume = (remaining: Effect[]): Effect => ({
+        ...e,
+        responses: remaining,
+        afterAttack: false,
+      });
+      const solid = shadowcat.shadowcatAttackDefenseOptions(
+        s,
+        e.receipt,
+        [resume(responses)],
+        shadowcatPorts,
+      );
+      if (!solid.length) {
+        add(s, ...responses, ...after);
+        break;
+      }
+      choose(
+        s,
+        "After attacking",
+        "Resolve a response to this attack, or continue.",
+        [
+          ...solid,
+          ...responses.map((effect, index) =>
+            option(
+              `attack-response:${index}`,
+              effect.title || "Other responses after attacking",
+              [effect, resume(responses.filter((_, other) => other !== index))],
+            ),
+          ),
+          option("continue", "Continue", [...responses, ...after]),
+        ],
+      );
+      break;
+    }
+    case "shadowcatNativeCompletionWindow": {
+      const after = e.after || [];
+      if (!e.forcedHandled) {
+        add(
+          s,
+          ...shadowcat.shadowcatAttackDefenseCompletion(
+            s,
+            e.receipt,
+            shadowcatPorts,
+          ),
+          { ...e, forcedHandled: true },
+        );
+        break;
+      }
+      const opts = shadowcat.shadowcatAttackDefenseOptions(
+        s,
+        e.receipt,
+        after,
+        shadowcatPorts,
+      );
+      if (opts.length)
+        choose(
+          s,
+          "Mass form",
+          "Resolve this completed attack or defense response?",
+          [...opts, option("continue", "Continue", after)],
+        );
+      else add(s, ...after);
+      break;
+    }
+    case "mutantGenesisInitiatedWindow":
+    case "mutantGenesisAttacksWindow": {
+      const after = e.after || [];
+      const again = { ...e };
+      const opts = mutantGenesisAttackOptions(
+        s,
+        e.type === "mutantGenesisInitiatedWindow" ? "initiated" : "attacks",
+        [again],
+      );
+      if (opts.length)
+        choose(
+          s,
+          "Attack interrupts",
+          "Play an interrupt for this actual enemy attack?",
+          [...opts, option("continue", "Continue", after)],
+        );
+      else add(s, ...after);
+      break;
+    }
+    case "colossusNativeStudioFound": {
+      if (e.id)
+        for (const zone of [s.player.discard, s.player.deck]) {
+          const i = zone.findIndex((p) => p.id === e.id);
+          if (i >= 0) {
+            s.player.hand.push(zone.splice(i, 1)[0]);
+            break;
+          }
+        }
+      add(s, ...(e.after || []));
       break;
     }
     case "nativeEvent": {
@@ -14590,6 +16029,19 @@ function resolve(s: GameState, e: Effect) {
       for (const e of doctorStrangeCardPlayed(s, card(p)))
         discardPiece(s, e.id);
       if (statusCanceled) s.flags[`ghostCancelled:${p.id}`] = true;
+      const eventDefenseDeclared = !!(
+        !statusCanceled &&
+        labels.some((label) => label.includes("defense")) &&
+        s.attack &&
+        (!s.attack.defender || s.attack.defender === "none")
+      );
+      if (eventDefenseDeclared && s.attack) {
+        s.attack.defender = "hero";
+        s.attack.targetPlayerId = s.activePlayerId;
+        s.attack.basicDefense = false;
+        s.attack.defense = 0;
+        s.attack.eventDefense = true;
+      }
       const eventEffects: Effect[] = e.after ?? [
         E("nativeEvent", {
           piece: p,
@@ -14608,7 +16060,12 @@ function resolve(s: GameState, e: Effect) {
             : doctorStrangeBeforeEvent(
                 s,
                 p,
-                eventEffects.map((x: Effect) => ({
+                [
+                  ...(eventDefenseDeclared
+                    ? [E("quicksilverLateDefense")]
+                    : []),
+                  ...eventEffects,
+                ].map((x: Effect) => ({
                   ...x,
                   paid: x.paid ?? e.paid ?? [],
                   paidForCard: x.paidForCard ?? e.paidForCard,
@@ -15128,6 +16585,7 @@ function resolve(s: GameState, e: Effect) {
               attack: true,
               source: "hero",
               piercing: e.piercing,
+              mutantGenesisBonusApplied: e.mutantGenesisBonusApplied,
               batch: e,
               index,
             }),
@@ -15166,6 +16624,7 @@ function resolve(s: GameState, e: Effect) {
                 packet as wasp.WaspPacket & { excessBonus?: number }
               ).excessBonus,
               aftermathChooser: e.chooserId,
+              mutantGenesisBonusApplied: !!e.mutantGenesisBonusApplied,
             },
           );
           damageDealt += Number(result?.damageDealt || 0);
@@ -15249,6 +16708,16 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "heroAttackResponses":
+      if (
+        (e.draxBasicAttack || e.shadowcatAbilityAttack) &&
+        !e.shadowcatCompletionHandled
+      ) {
+        add(s, ...shadowcatNativeCompletion(s, "attack", true), {
+          ...e,
+          shadowcatCompletionHandled: true,
+        });
+        break;
+      }
       if (!e.niPowerHandled) {
         add(
           s,
@@ -15284,6 +16753,66 @@ function resolve(s: GameState, e: Effect) {
       );
       break;
     case "attackAftermathOrder": {
+      const heroResponses = s.queue.filter(
+        (x) =>
+          x.responseGroup === e.responseGroup &&
+          x.type === "heroAttackResponses",
+      );
+      const response = heroResponses.find(
+        (x) =>
+          seatView(s, x.actorId || s.activePlayerId).heroId === "shadowcat",
+      );
+      if (response && !response.shadowcatCompletionHandled) {
+        const previous = s.activePlayerId;
+        activateSeat(s, response.actorId || previous);
+        const performed = !!(
+          response.draxBasicAttack ||
+          response.shadowcatAbilityAttack ||
+          s.flags[`shadowcatAttackPerformed:${response.eventId}`] ||
+          s.flags[`shadowcatProgramPerformed:${response.attackProgramId}`]
+        );
+        if (performed) {
+          const windows = shadowcatNativeCompletion(
+            s,
+            "attack",
+            true,
+            `attack-complete:${e.responseGroup}`,
+          );
+          delete s.flags[`shadowcatAttackPerformed:${response.eventId}`];
+          delete s.flags[
+            `shadowcatProgramPerformed:${response.attackProgramId}`
+          ];
+          for (const window of windows) {
+            const forced = shadowcat.shadowcatAttackDefenseCompletion(
+              s,
+              window.receipt,
+              shadowcatPorts,
+            );
+            const additions = forced.length
+              ? forced.map((effect) => ({
+                  ...effect,
+                  title: "Phased · flip to Solid",
+                  mandatory: true,
+                  afterAttack: true,
+                  responseGroup: e.responseGroup,
+                }))
+              : [
+                  {
+                    ...window,
+                    type: "shadowcatNativeOptionalAttackWindow",
+                    mandatory: false,
+                    afterAttack: true,
+                    responseGroup: e.responseGroup,
+                  },
+                ];
+            s.queue.unshift(
+              ...additions.map((effect) => effectContext(s, effect)),
+            );
+          }
+          for (const x of heroResponses) x.shadowcatCompletionHandled = true;
+        }
+        activateSeat(s, previous);
+      }
       const queued = s.queue.filter(
         (x) =>
           x.responseGroup === e.responseGroup && x.afterAttack && x.mandatory,
@@ -15326,6 +16855,7 @@ function resolve(s: GameState, e: Effect) {
         const previous = s.activePlayerId;
         if (e.actorId || p.ownerId) activateSeat(s, e.actorId || p.ownerId);
         mtsPlayerPack.mtsPlayerPackEventFinished(s, p);
+        mgPack.mutantGenesisPlayerPackEventFinished(s, p.id);
         const pendingFlow = s.queue.find(
           (effect) =>
             effect.type === "visionPackFlowPlayed" && effect.piece?.id === p.id,
@@ -15358,6 +16888,21 @@ function resolve(s: GameState, e: Effect) {
             gamoraPorts,
           ),
         );
+        if (
+          s.flags[`shadowcatAttackPerformed:${p.id}`] &&
+          !s.flags[`ghostCancelled:${p.id}`]
+        ) {
+          add(
+            s,
+            ...shadowcatNativeCompletion(
+              s,
+              "attack",
+              true,
+              `event-complete:${p.id}`,
+            ),
+          );
+          delete s.flags[`shadowcatAttackPerformed:${p.id}`];
+        }
         activateSeat(s, previous);
       }
       break;
@@ -15956,6 +17501,23 @@ function resolve(s: GameState, e: Effect) {
       add(s, { ...e, type: "damage", attack: true });
       break;
     case "damage":
+      if (e.attack && shadowcatNativeIgnoreWindow(s, e, "attack")) break;
+      if (e.basic && !e.colossusRageHandled) {
+        const next = { ...e, colossusRageHandled: true };
+        const opts = colossus.colossusBasicAttackOptions(
+          s,
+          e,
+          [],
+          colossusPorts,
+        );
+        if (opts.length) {
+          choose(s, "Made of Rage", "Enhance this actual basic attack?", [
+            ...opts,
+            option("continue", "Continue", [next]),
+          ]);
+          break;
+        }
+      }
       if (e.target === "hero" || e.target === `hero:${s.activePlayerId}`) {
         const forced = spdrPack.spdrPackForcedDamage(s, e, spdrPackPorts);
         if (forced) {
@@ -16047,11 +17609,16 @@ function resolve(s: GameState, e: Effect) {
       if (e.target === "hero" && e.damageDealt === undefined)
         e.damageDealt = e.amount;
       if (e.target === "hero" && !e.grootDamageHandled) {
-        if (e.attack)
-          discardToughForPiercing(
-            s.player,
-            e.amount,
-            e.piercing ?? !!sourceKeyword(s, e.source || "hero", "Piercing"),
+        if (
+          e.attack &&
+          e.amount > 0 &&
+          !damageProhibition(s, "hero", false) &&
+          (e.piercing ?? !!sourceKeyword(s, e.source || "hero", "Piercing"))
+        )
+          colossusNativeDiscardTough(
+            s,
+            [{ targetId: "hero", amount: statusCards(s.player, "tough") }],
+            [],
           );
         const prevented = groot.grootPreventDamage(s, "hero", e.amount);
         e.amount = Math.max(0, e.amount - prevented);
@@ -16312,8 +17879,12 @@ function resolve(s: GameState, e: Effect) {
             excessToMain: e.excessToMain,
             excessBonus: e.excessBonus,
             initiated: e.attackInitiated || e.attackAlreadyInitiated,
+            mutantGenesisBonusApplied: e.mutantGenesisBonusApplied,
           },
         );
+        if (e.abilitySource && result)
+          s.flags[`shadowcatDealt:${e.abilitySource}:${e.target}`] =
+            result.damageDealt > 0;
         niQueuePacketReceipt(s, e, result, receiptSnapshot);
         if (e.basic && result)
           add(
@@ -16558,6 +18129,7 @@ function resolve(s: GameState, e: Effect) {
       }
       break;
     case "thwart": {
+      if (e.action && shadowcatNativeIgnoreWindow(s, e, "thwart")) break;
       if (
         (e.action || e.basic) &&
         !e.spdrThwartCostPaid &&
@@ -18064,7 +19636,15 @@ function resolve(s: GameState, e: Effect) {
     case "ghostNativeEnemyAttack":
       s.flags.ghostActivationResuming = true;
       try {
-        enemyAttack(s, e.id, e.extra, e.activation, e.originalTarget);
+        enemyAttack(
+          s,
+          e.id,
+          e.extra,
+          e.activation,
+          e.originalTarget,
+          !!e.colossusActivationHandled,
+          e.colossusActivationReceipt,
+        );
       } finally {
         delete s.flags.ghostActivationResuming;
       }
@@ -18072,13 +19652,28 @@ function resolve(s: GameState, e: Effect) {
     case "ghostNativeEnemyScheme":
       s.flags.ghostActivationResuming = true;
       try {
-        enemyScheme(s, e.id, e.extra, e.request);
+        enemyScheme(
+          s,
+          e.id,
+          e.extra,
+          e.request,
+          !!e.colossusActivationHandled,
+          e.colossusActivationReceipt,
+        );
       } finally {
         delete s.flags.ghostActivationResuming;
       }
       break;
     case "enemyAttack":
-      enemyAttack(s, e.id, e.extra, e.activation, e.originalTarget);
+      enemyAttack(
+        s,
+        e.id,
+        e.extra,
+        e.activation,
+        e.originalTarget,
+        !!e.colossusActivationHandled,
+        e.colossusActivationReceipt,
+      );
       break;
     case "sinisterNativePlayed":
       add(
@@ -18379,6 +19974,15 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "enemyAttackInitiationWindow": {
+      if (!e.mutantGenesisInitiationHandled) {
+        add(
+          s,
+          E("mutantGenesisInitiatedWindow", {
+            after: [{ ...e, mutantGenesisInitiationHandled: true }],
+          }),
+        );
+        break;
+      }
       const a = s.attack;
       if (!a || a.attacker !== e.attacker) break;
       const attacker = nebulaNativeAttacker(s, a.attacker);
@@ -18530,7 +20134,14 @@ function resolve(s: GameState, e: Effect) {
       if (s.attack && e.keyword === "piercing") s.attack.piercing = true;
       break;
     case "enemyScheme":
-      enemyScheme(s, e.id, e.extra, e.activation);
+      enemyScheme(
+        s,
+        e.id,
+        e.extra,
+        e.activation,
+        !!e.colossusActivationHandled,
+        e.colossusActivationReceipt,
+      );
       break;
     case "defensePrompt":
       choose(
@@ -18856,6 +20467,11 @@ function resolve(s: GameState, e: Effect) {
           ? a.defender
           : a.originalTarget || "hero";
       const heroTarget = damageTarget === "hero";
+      if (damageProhibition(s, damageTarget, false)) {
+        a.preventAllDamage = true;
+        add(s, E("finishAttack"));
+        break;
+      }
       const attackingPiece = nebulaNativeAttacker(s, a.attacker);
       if (attackingPiece) {
         const before =
@@ -18920,12 +20536,7 @@ function resolve(s: GameState, e: Effect) {
       const incoming = a.preventAllDamage
         ? 0
         : Math.max(0, a.base - a.defense - a.prevented);
-      if (receiving)
-        discardToughForPiercing(
-          receiving,
-          incoming,
-          !!sourceKeyword(s, a.attacker, "Piercing"),
-        );
+      mutantGenesisIncomingPiercing(s, damageTarget, incoming);
       if (heroTarget && !a.grootDamageHandled) {
         const prevented = groot.grootPreventDamage(s, "hero", incoming);
         a.prevented += prevented;
@@ -19076,6 +20687,58 @@ function resolve(s: GameState, e: Effect) {
             [E("damageWindow")],
           ),
         );
+      if (!receiving?.tough)
+        opts.unshift(
+          ...mutantGenesisDamageOptions(
+            s,
+            damageTarget,
+            Math.max(0, a.base - a.defense - a.prevented),
+            [E("damageWindow", { actorId: a.targetPlayerId })],
+          ),
+        );
+      if (
+        !heroTarget &&
+        !receiving?.tough &&
+        (a.overkill || sourceKeyword(s, a.attacker, "Overkill"))
+      ) {
+        const ally = find(s, damageTarget);
+        const excess = ally
+          ? Math.max(
+              0,
+              a.base -
+                a.defense -
+                a.prevented -
+                (pieceHP(s, ally) - ally.damage) -
+                Number(a.identityPrevented || 0),
+            )
+          : 0;
+        const packet = {
+          type: "attackDamage",
+          kind: "overkill",
+          target: `hero:${s.activePlayerId}`,
+          amount: excess,
+          attack: true,
+          attacker: a.attacker,
+          damageWindowId: a.id,
+        };
+        if (excess > 0)
+          opts.unshift(
+            ...playerOrder(s).flatMap((seat) =>
+              mgPack
+                .mutantGenesisPlayerPackDamageOptions(
+                  seatView(s, seat),
+                  packet,
+                  [E("damageWindow", { actorId: a.targetPlayerId })],
+                  mutantGenesisPackPorts,
+                )
+                .map((o) => ({
+                  ...o,
+                  id: `${seat.id}:${o.id}`,
+                  effects: o.effects.map((e) => ({ ...e, actorId: seat.id })),
+                })),
+            ),
+          );
+      }
       const shieldTarget = damageTarget;
       if (!(heroTarget ? s.player.tough : find(s, shieldTarget)?.tough))
         opts.unshift(
@@ -19530,6 +21193,21 @@ function resolve(s: GameState, e: Effect) {
     }
     case "defenseResponses": {
       s.attack = null;
+      if (!e.shadowcatCompletionHandled && e.snapshot?.heroDefended) {
+        const completion = shadowcatNativeCompletion(s, "defense", true);
+        const receipt = completion[0]?.receipt as
+          shadowcat.ShadowcatCompletionReceipt | undefined;
+        if (receipt?.massForm === "solid") {
+          e.shadowcatCompletionHandled = true;
+          e.shadowcatSolidCompletionReceipt = receipt;
+        } else {
+          add(s, ...completion, {
+            ...e,
+            shadowcatCompletionHandled: true,
+          });
+          break;
+        }
+      }
       if (e.snapshot?.defender && !e.spdrDefendedHandled) {
         const ally = find(s, e.snapshot.defender);
         if (ally)
@@ -19672,6 +21350,14 @@ function resolve(s: GameState, e: Effect) {
       const counter = eventPlaySources(s).find((p) => rulesCode(p) === "01077");
       const opts = [
         option("pass", "Continue", []),
+        ...(e.shadowcatSolidCompletionReceipt
+          ? shadowcat.shadowcatAttackDefenseOptions(
+              s,
+              e.shadowcatSolidCompletionReceipt,
+              [{ ...e }],
+              shadowcatPorts,
+            )
+          : []),
         ...bwOptions,
         ...gamoraOptions,
         ...draxOptions,
@@ -20199,6 +21885,7 @@ function resolve(s: GameState, e: Effect) {
         villainSetup(s);
       break;
     case "beginTurn":
+      add(s, ...mgPack.mutantGenesisPlayerPackTurnBegan(s, { isTextBlank }));
       add(s, ...niPack.novaIronheartPackTurnBegan(s, s.activePlayerId));
       s.turnPlayerId = s.activePlayerId;
       log(s, `${heroCard(s).name} takes their turn.`, "phase");
@@ -20377,16 +22064,37 @@ function resolve(s: GameState, e: Effect) {
           : []),
       );
       break;
-    case "villainActivate":
+    case "villainActivate": {
       s.villainStep = "activation";
+      if (!e.colossusActivationHandled) {
+        const kind = s.player.form === "hero" ? "attack" : "scheme";
+        const replaced =
+          kind === "attack" ? s.villain.stunned : s.villain.confused;
+        if (
+          !replaced &&
+          colossusNativeActivationWindow(s, s.villain.id, kind, {
+            ...e,
+            type: "villainActivate",
+          })
+        )
+          break;
+      } else if (e.colossusActivationReceipt) {
+        const receipt =
+          e.colossusActivationReceipt as colossus.ColossusActivationReceipt;
+        delete seatView(s, receipt.playerId).flags[
+          `colossusActivation:${receipt.token}`
+        ];
+      }
       add(
         s,
         E(s.player.form === "hero" ? "enemyAttack" : "enemyScheme", {
           id: s.villain.id,
+          colossusActivationHandled: true,
         }),
         E("minionActivations"),
       );
       break;
+    }
     case "minionActivations": {
       const remaining =
         (e.remaining as string[] | undefined) || engaged(s).map((p) => p.id);
@@ -20481,6 +22189,13 @@ function resolve(s: GameState, e: Effect) {
       spiderHam.spiderHamPhaseEnded(s);
       spiderHamPack.spiderHamPackPhaseEnded(s);
       niPack.novaIronheartPackRoundEnded(s);
+      if (!e.mutantGenesisRoundEnded) {
+        const ending = mgPack.mutantGenesisPlayerPackRoundEnded(s);
+        if (ending.length) {
+          add(s, ...ending, { ...e, mutantGenesisRoundEnded: true });
+          break;
+        }
+      }
       syncValkyrieConvertedCards(s);
       syncVillainTextHealth(s);
       warMachine.warMachinePhaseEnded(s);
@@ -20712,6 +22427,16 @@ function resolve(s: GameState, e: Effect) {
       throw Error(`Unimplemented effect: ${e.type}`);
   }
 }
+function syncMutantGenesisStatuses(s: GameState) {
+  const previous = s.activePlayerId;
+  for (const seat of playerOrder(s)) {
+    if (seat.eliminated) continue;
+    activateSeat(s, seat.id);
+    shadowcat.shadowcatRefreshContinuousStatuses(s, shadowcatPorts);
+    colossus.colossusEnforceToughLimit(s, colossusPorts);
+  }
+  activateSeat(s, previous);
+}
 function run(s: GameState) {
   let pending = s.review;
   s.review = null;
@@ -20789,9 +22514,11 @@ function run(s: GameState) {
     s.currentResponseMandatory = e.mandatory;
     s.currentRevealWindowId = e.revealWindowId;
     syncNebulaIdentityStatuses(s);
+    syncMutantGenesisStatuses(s);
     resolve(s, e);
     syncValkyrieConvertedCards(s);
     syncNebulaIdentityStatuses(s);
+    syncMutantGenesisStatuses(s);
     delete s.currentEventId;
     delete s.currentAttackProgramId;
     delete s.currentResponseGroup;
@@ -20847,6 +22574,7 @@ export function dispatch(state: GameState, command: Command): GameState {
     });
   syncValkyrieConvertedCards(s);
   syncNebulaIdentityStatuses(s);
+  syncMutantGenesisStatuses(s);
   s.combatEvents = [];
   delete s.error;
   try {

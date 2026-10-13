@@ -1,3 +1,4 @@
+import { rulesCode } from "./rules-code.js";
 import { eventPlaySources } from "./card-text.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, engaged, seatView } from "./team.js";
@@ -80,6 +81,8 @@ export interface ScarletWitchPackPorts {
   enemyTargets(s: GameState, attack?: boolean): ScarletWitchPackTarget[];
   /** Ignoring Crisis does not ignore Patrol, threat locks, or an empty scheme. */
   schemeTargets(s: GameState, ignoreCrisis?: boolean): ScarletWitchPackTarget[];
+  /** Native effective Patrol and identity-specific permission for this thwart. */
+  patrolBlocksMain?(s: GameState): boolean;
   cardCost(s: GameState, p: Piece): number;
   canPay(
     s: GameState,
@@ -126,12 +129,13 @@ export function scarletWitchPackPlayRestriction(
   )
     return "This attack requires an eligible villain target.";
   if (
-    p.code === "15030" &&
+    rulesCode(p) === "15030" &&
     !s.player.confused &&
-    engaged(s).some((p) => {
-      const definition = cards.get(p.code);
-      return definition && printedKeyword(definition, "Patrol") > 0;
-    })
+    (ports.patrolBlocksMain?.(s) ??
+      engaged(s).some((p) => {
+        const definition = cards.get(p.code);
+        return !!definition && printedKeyword(definition, "Patrol") > 0;
+      }))
   )
     return "Patrol prevents thwarting the main scheme.";
   return null;
@@ -142,7 +146,7 @@ export function scarletWitchPackEvent(
   p: Piece,
   paid: Resource[] = [],
 ): Effect[] | null {
-  switch (p.code) {
+  switch (rulesCode(p)) {
     case "15012":
       return [
         E("thwart", {

@@ -47,6 +47,7 @@ export function deckOptions(
   return CATALOG_CARDS.filter(
     (c) =>
       c.code !== "26002b" &&
+      c.code !== "32031b" &&
       !identityCodes.has(c.code) &&
       !identityMatch(heroId, c) &&
       (hasExecutableScript(c) ||
@@ -106,6 +107,8 @@ export function deckErrors(
       "nova",
       "ironheart",
       "spdr",
+      "colossus",
+      "shadowcat",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

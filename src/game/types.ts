@@ -141,6 +141,14 @@ export interface Prompt {
   selectAction?: Effect;
 }
 export interface Attack {
+  /** Stable identity of this native enemy attack across saved interrupts. */
+  id?: string;
+  /** A played Defense event has already declared the current hero/ally defender. */
+  eventDefense?: boolean;
+  /** Each actual attacked character receives Piercing once during this attack. */
+  piercingTargets?: string[];
+  mutantProtectorsDefender?: { allyId: string; playerId: string };
+  colossusToughDiscardReceipts?: import("./colossus.js").ColossusToughDiscardReceipt[];
   /** This activation reached its actual attack damage step. */
   completionRecorded?: boolean;
   /** Flora Colossus applies once to each incoming identity damage packet. */

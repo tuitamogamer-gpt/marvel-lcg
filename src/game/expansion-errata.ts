@@ -5,6 +5,15 @@ const url =
 /** Keep imported printing text intact. Apply published rules corrections in the
  * playable database and card inspector, independently of module registration. */
 export function expansionErrata(c: Card): Card {
+  if (c.code === "32008")
+    return {
+      ...c,
+      text: "<b>Hero Action</b> <i>(attack)</i>: Deal 5 damage to an enemy. You may discard a tough status card from your hero to stun and confuse that enemy.",
+      errata: {
+        reference: "FFG Rules Reference 1.8, p. 67",
+        url: url.replace("#page=66", "#page=67"),
+      },
+    };
   if (c.code === "31027")
     return {
       ...c,

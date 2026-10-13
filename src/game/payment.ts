@@ -1,3 +1,6 @@
+import { colossusResourceSources } from "./colossus.js";
+import { shadowcatResourceSources } from "./shadowcat.js";
+import { mutantGenesisPlayerPackResourceSources } from "./mutant-genesis-player-pack.js";
 import { thorResourceSources } from "./thor.js";
 import { zzzaxHandResources } from "./zzzax.js";
 import { waspPackResourceSources } from "./wasp-pack.js";
@@ -153,6 +156,8 @@ function localPaymentSources(
       canTakeDamageCost: venomPaymentDamageCostAvailable,
     }),
   );
+  sources.push(...colossusResourceSources(s, { isTextBlank }));
+  sources.push(...shadowcatResourceSources(s, targetCode, { isTextBlank }));
   sources.push(...spectrumResourceSources(s, { isTextBlank }));
   sources.push(...warlockResourceSources(s, { isTextBlank }));
   sources.push(...warMachineResourceSources(s, targetCode, { isTextBlank }));
@@ -291,6 +296,21 @@ export function paymentSources(
           name: `${heroCard(view).name} · ${source.name}`,
         })),
     );
+  }
+  if (!handOnly) {
+    const jets = mutantGenesisPlayerPackResourceSources(s, s.activePlayerId, {
+      isTextBlank,
+      identityHasTrait: (state, trait) =>
+        (heroCard(state).traits || "").split(/\.\s*/).includes(trait),
+    });
+    for (const jet of jets) {
+      const source =
+        jet.playerId === s.activePlayerId
+          ? jet
+          : { ...jet, id: `alliance:${jet.playerId}:${jet.id}` };
+      if (!sources.some((existing) => existing.id === source.id))
+        sources.push(source);
+    }
   }
   return sources;
 }

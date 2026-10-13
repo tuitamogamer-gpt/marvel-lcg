@@ -13,7 +13,13 @@ const fingerprints = new Map(
 const aliases = new Map<string, string>();
 // Exact non-Core reprints share an installed native handler while their
 // physical cards retain the actual printing code.
-const nativeAliases = new Map<string, string>([["31018", "05017"]]);
+const nativeAliases = new Map<string, string>([
+  ["31018", "05017"],
+  ["32015", "15030"],
+  ["32016", "13033"],
+  ["32046", "10015"],
+  ["32051", "21022"],
+]);
 for (const card of catalog as Card[]) {
   const canonical = fingerprints.get(fingerprint(card));
   if (canonical && !originalCodes.has(card.code))

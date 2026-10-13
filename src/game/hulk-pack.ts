@@ -1,3 +1,4 @@
+import { rulesCode } from "./rules-code.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { captainPackHasTrait } from "./captain-pack.js";
@@ -146,7 +147,7 @@ export function hulkPackPlayRestriction(s: GameState, p: Piece): string | null {
   return null;
 }
 export function hulkPackEvent(s: GameState, p: Piece): Effect[] | null {
-  if (p.code === "10015")
+  if (rulesCode(p) === "10015")
     return [
       E("target", {
         group: "enemy",

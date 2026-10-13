@@ -1,3 +1,4 @@
+import { rulesCode } from "./rules-code.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { controller, playerOrder, seatView } from "./team.js";
 import { defenseEventSources, isTextBlank } from "./card-text.js";
@@ -30,7 +31,10 @@ const need = (value: unknown, message: string) => {
 };
 const own = (s: GameState, id: string, code?: string) =>
   s.player.inPlay.find(
-    (p) => p.id === id && (!code || p.code === code) && !isTextBlank(s, p),
+    (p) =>
+      p.id === id &&
+      (!code || rulesCode(p) === rulesCode(code)) &&
+      !isTextBlank(s, p),
   );
 const trait = (c: Card | undefined, name: string) =>
   (c?.traits || "").split(/\.\s*/).includes(name);
@@ -225,7 +229,7 @@ function rumbleSeats(s: GameState, id?: string) {
   return playerOrder(s).filter(
     (seat) =>
       !seatView(s, seat).player.inPlay.some(
-        (p) => p.id !== id && p.code === "21022",
+        (p) => p.id !== id && rulesCode(p) === "21022",
       ),
   );
 }
@@ -258,7 +262,7 @@ export function mtsPlayerPackPlayRestriction(
     return "Your identity must have the Mystic trait.";
   if (p.code === "21015" && !teamSeats(s).length)
     return "Each player already controls a Team card.";
-  if (p.code === "21022" && !rumbleSeats(s).length)
+  if (rulesCode(p) === "21022" && !rumbleSeats(s).length)
     return "Ready to Rumble is limited to 1 per player.";
   if (p.code === "21016" && !massGroups(s, ports).length)
     return "Mass Attack requires three ready allies sharing a trait with your hero.";
@@ -287,7 +291,7 @@ export function mtsPlayerPackCardEntered(s: GameState, p: Piece): Effect[] {
     for (const seat of s.players)
       delete seatView(s, seat).flags["mtsPackChi:" + p.id];
   }
-  return ["21015", "21022"].includes(p.code)
+  return ["21015", "21022"].includes(rulesCode(p))
     ? [P("control", { id: p.id })]
     : [];
 }
@@ -480,7 +484,7 @@ export function mtsPlayerPackFormResponseOptions(
       ),
     ...(ports.canReady(s, "hero")
       ? s.player.inPlay
-          .filter((p) => p.code === "21022" && !isTextBlank(s, p))
+          .filter((p) => rulesCode(p) === "21022" && !isTextBlank(s, p))
           .map((p) =>
             O(
               p.id,
