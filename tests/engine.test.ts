@@ -19,6 +19,7 @@ import {
   paymentSources,
   playable,
   targets,
+  canChangeIdentityForm,
 } from "../src/game/engine";
 import type { GameState, Resource, Piece } from "../src/game/types";
 import { deckSizeFor } from "../src/game/decks";
@@ -644,6 +645,9 @@ describe("complete seeded missions", () => {
             ...(s.player.setAside || []).filter(
               (p) => card(p).faction_code !== "encounter",
             ),
+            ...s.sideSchemes
+              .flatMap((p) => p.captured || [])
+              .filter((p) => p.ownerId === s.activePlayerId),
           ].map((p) => p.id),
         );
         if (h.id === "vision") expect(originalIds.size).toBe(41);
@@ -666,7 +670,8 @@ describe("complete seeded missions", () => {
               (h.id === "iron_man" && !s.flags.futurist)
             )
               command({ type: "ABILITY", id: "identity" });
-            if (!s.player.flipped) command({ type: "FLIP" });
+            if (!s.player.flipped && canChangeIdentityForm(s))
+              command({ type: "FLIP" });
           }
           for (let count = 0; count < 5 && s.phase === "player"; count++) {
             const p = s.player.hand
@@ -720,7 +725,8 @@ describe("complete seeded missions", () => {
               });
           }
           if (s.phase !== "player") break;
-          if (s.player.hp <= 3 && !s.player.flipped) command({ type: "FLIP" });
+          if (s.player.hp <= 3 && !s.player.flipped && canChangeIdentityForm(s))
+            command({ type: "FLIP" });
           if (s.phase !== "player") break;
           command({
             type: "END_TURN",
