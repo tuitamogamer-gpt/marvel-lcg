@@ -884,25 +884,33 @@ export async function generateAudit(
         code: imported.code,
         importedText: normalizeRules(imported.text),
         runtimeText: normalizeRules(runtime.text),
-        reference: runtime.errata?.reference,
-        url: runtime.errata?.url,
+        reference: runtime.errata?.reference ?? "Original English card scan",
+        url:
+          runtime.errata?.url ??
+          `https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/${imported.code}.jpg`,
       },
     ];
   });
   audit.runtimeMetadataCorrections = cards.flatMap((imported) => {
     const corrected = printedCardMetadata(imported);
     if (corrected === imported) return [];
-    const changes = ["attack", "boost", "is_unique", "subname"].flatMap(
-      (field) =>
-        corrected[field] !== imported[field]
-          ? [
-              {
-                field,
-                imported: imported[field] ?? null,
-                runtime: corrected[field],
-              },
-            ]
-          : [],
+    const changes = [
+      "attack",
+      "boost",
+      "health",
+      "is_unique",
+      "subname",
+      "text",
+    ].flatMap((field) =>
+      corrected[field] !== imported[field]
+        ? [
+            {
+              field,
+              imported: imported[field] ?? null,
+              runtime: corrected[field],
+            },
+          ]
+        : [],
     );
     return changes.length
       ? [
@@ -1103,6 +1111,9 @@ export async function generateAudit(
     "src/game/sabretooth.ts",
     "src/game/brotherhood.ts",
     "src/game/mystique.ts",
+    "src/game/project-wideawake.ts",
+    "src/game/zero-tolerance.ts",
+    "src/game/sentinels.ts",
     "src/game/printed-card-metadata.ts",
     "src/game/card-text.ts",
     "src/game/expansion-errata.ts",

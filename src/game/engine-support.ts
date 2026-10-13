@@ -48,6 +48,9 @@ import { MUTANT_GENESIS_PLAYER_PACK_SCRIPT_CODES } from "./mutant-genesis-player
 import { SABRETOOTH_SCRIPT_CODES } from "./sabretooth.js";
 import { BROTHERHOOD_SCRIPT_CODES } from "./brotherhood.js";
 import { MYSTIQUE_SCRIPT_CODES } from "./mystique.js";
+import { PROJECT_WIDEAWAKE_SCRIPT_CODES } from "./project-wideawake.js";
+import { ZERO_TOLERANCE_SCRIPT_CODES } from "./zero-tolerance.js";
+import { SENTINELS_SCRIPT_CODES } from "./sentinels.js";
 import { GOBLIN_MODULE_SCRIPT_CODES } from "./goblin-modules.js";
 import { BLACK_WIDOW_SCRIPT_CODES } from "./black-widow.js";
 import { DOCTOR_STRANGE_SCRIPT_CODES } from "./doctor-strange.js";
@@ -103,6 +106,9 @@ export const SCRIPTED_HERO_IDS = new Set([
   "shadowcat",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
+  ...PROJECT_WIDEAWAKE_SCRIPT_CODES,
+  ...ZERO_TOLERANCE_SCRIPT_CODES,
+  ...SENTINELS_SCRIPT_CODES,
   ...COLOSSUS_SCRIPT_CODES,
   ...SHADOWCAT_SCRIPT_CODES,
   ...MUTANT_GENESIS_PLAYER_PACK_SCRIPT_CODES,

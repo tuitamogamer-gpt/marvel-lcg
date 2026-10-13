@@ -48,7 +48,8 @@
     "test:spider-ham": "node scripts/spider-ham-check.mjs",
     "test:spdr": "node scripts/spdr-check.mjs",
     "test:mutant-genesis": "node scripts/mutant-genesis-check.mjs",
-    "test:sabretooth": "node scripts/sabretooth-check.mjs"
+    "test:sabretooth": "node scripts/sabretooth-check.mjs",
+    "test:project-wideawake": "node scripts/project-wideawake-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

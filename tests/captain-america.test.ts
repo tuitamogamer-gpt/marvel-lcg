@@ -43,6 +43,7 @@ function fixture() {
     queue: (s, ...effects) => {
       s.queue.unshift(...effects);
     },
+    canChangeForm: () => true,
     choose: (s, title, text, options) => {
       s.prompt = { kind: "choice", title, text, options };
     },

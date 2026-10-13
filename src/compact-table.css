@@ -546,6 +546,24 @@
     width: calc(var(--table-card-width) + 50px);
     flex-basis: calc(var(--table-card-width) + 50px);
   }
+  .app .physical-table .opposition:has(> .villain-area .attached-cards) {
+    grid-template-columns:
+      calc(var(--table-card-width) + 200px) minmax(145px, 1fr)
+      130px;
+  }
+  .app
+    .physical-table
+    .opposition:has(> .villain-area .attached-cards):has(.encounter-field) {
+    grid-template-columns:
+      calc(var(--table-card-width) + 200px) minmax(145px, 1fr)
+      minmax(140px, 0.9fr) 130px;
+  }
+  .app .physical-table .villain-area:has(.attached-cards) > .villain-info {
+    min-width: 0;
+  }
+  .app .physical-table .villain-area:has(.attached-cards) > .villain-info h2 {
+    overflow-wrap: anywhere;
+  }
   .app .physical-table .host-card-stack > .villain-card {
     flex: 0 0 var(--table-card-width);
   }

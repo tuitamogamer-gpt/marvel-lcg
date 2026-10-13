@@ -11,6 +11,7 @@ import {
   card,
   heroStats,
   maxHP,
+  scenarioModules,
 } from "../src/game/cards";
 import { CATALOG_HEROES, catalogDeckCodes } from "../src/game/catalog";
 import { deckErrors } from "../src/game/decks";
@@ -74,7 +75,7 @@ const heroIds = [
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
     (["standard", "expert"] as const).flatMap((difficulty, di) =>
-      MODULES.map((module, mi) => ({
+      scenarioModules(scenario.id).map((module, mi) => ({
         heroId,
         villainId: scenario.id,
         difficulty,
@@ -162,6 +163,9 @@ function runMission(config: (typeof missions)[number]) {
       (p) => isPermanent(card(p)) && codes.includes(p.code),
     ),
     ...(s.player.setAside || []).filter((p) => codes.includes(p.code)),
+    ...s.sideSchemes
+      .flatMap((p) => p.captured || [])
+      .filter((p) => p.ownerId === s.activePlayerId && codes.includes(p.code)),
   ];
   expect(initial.map((p) => p.code).sort()).toEqual([...codes].sort());
   const supplementary = [
@@ -350,12 +354,17 @@ function runMission(config: (typeof missions)[number]) {
 describe("published expansion starters across every supported mission setting", () => {
   it("covers every imported expansion hero, scenario, difficulty and supported encounter module", () => {
     expect(missions).toHaveLength(
-      heroIds.length * VILLAINS.length * 2 * MODULES.length,
+      heroIds.length *
+        2 *
+        VILLAINS.reduce(
+          (n, scenario) => n + scenarioModules(scenario.id).length,
+          0,
+        ),
     );
-    expect(VILLAINS).toHaveLength(6);
-    expect(MODULES).toHaveLength(15);
+    expect(VILLAINS).toHaveLength(7);
+    expect(MODULES).toHaveLength(17);
     expect(heroIds).toHaveLength(32);
-    expect(missions).toHaveLength(5760);
+    expect(missions).toHaveLength(7552);
   });
   for (const mission of missions)
     it(

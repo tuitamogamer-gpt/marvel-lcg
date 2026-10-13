@@ -6,7 +6,13 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { ASPECTS, HEROES, MODULES, VILLAINS, card } from "../src/game/cards.js";
+import {
+  ASPECTS,
+  HEROES,
+  VILLAINS,
+  card,
+  scenarioModules,
+} from "../src/game/cards.js";
 import { deckErrors } from "../src/game/decks.js";
 import { heroDeckAspects } from "../src/game/hero-runtime.js";
 import type { GameState } from "../src/game/types";
@@ -259,7 +265,7 @@ export function validateGame(value: unknown): asserts value is GameState {
   );
   requireValue(
     VILLAINS.some((v) => v.id === s.villainId) &&
-      MODULES.some((m) => m.id === s.module) &&
+      scenarioModules(s.villainId).some((m) => m.id === s.module) &&
       ["standard", "expert"].includes(s.difficulty),
     "Invalid mission setup.",
   );
@@ -270,7 +276,9 @@ export function validateGame(value: unknown): asserts value is GameState {
           (VILLAINS.find((v) => v.id === s.villainId)?.moduleCount || 1) &&
         new Set(s.modules).size === s.modules.length &&
         s.modules[0] === s.module &&
-        s.modules.every((id) => MODULES.some((m) => m.id === id))),
+        s.modules.every((id) =>
+          scenarioModules(s.villainId).some((m) => m.id === id),
+        )),
     "Invalid modular encounter setup.",
   );
   requireValue(
@@ -281,6 +289,19 @@ export function validateGame(value: unknown): asserts value is GameState {
         s.sabretooth.startingDamage >= 0 &&
         s.sabretooth.startingDamage <= 8),
     "Invalid Robert Kelly starting damage.",
+  );
+  requireValue(
+    s.projectWideawake === undefined ||
+      (s.projectWideawake !== null &&
+        typeof s.projectWideawake === "object" &&
+        Array.isArray(s.projectWideawake.captureAllocation) &&
+        s.projectWideawake.captureAllocation.length === s.players?.length &&
+        s.projectWideawake.captureAllocation.every(
+          (n) => Number.isInteger(n) && n >= 0,
+        ) &&
+        s.projectWideawake.captureAllocation.reduce((sum, n) => sum + n, 0) <=
+          s.playerCount + 2),
+    "Invalid starting capture allocation.",
   );
   requireValue(
     ["mulligan", "player", "villain", "won", "lost"].includes(s.phase) &&
@@ -686,6 +707,9 @@ export function createAccountHandler(providedStore?: Store) {
             module: s.module,
             modules: s.modules ? [...s.modules] : undefined,
             senatorDamage: s.sabretooth?.startingDamage,
+            captureAllocation: s.projectWideawake?.captureAllocation
+              ? [...s.projectWideawake.captureAllocation]
+              : undefined,
             round: s.round,
             outcome,
             ...(typeof s.result === "string"

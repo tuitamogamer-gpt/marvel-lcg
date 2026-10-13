@@ -131,17 +131,12 @@ describe("Sabretooth original retail source contract", () => {
       expect(EXPLICIT_CARD_SCRIPTS.has(code), code).toBe(true);
     }
     for (const c of catalog.filter(
-      (c) => c.pack_code === "mut_gen" && c.position > 83,
+      (c) => c.pack_code === "mut_gen" && c.position > 108,
     ))
       expect(hasExecutableScript(c.code), c.code).toBe(false);
     expect(
       VILLAINS.filter((v) =>
-        [
-          "project_wideawake",
-          "master_mold",
-          "mansion_attack",
-          "magneto_villain",
-        ].includes(v.id),
+        ["master_mold", "mansion_attack", "magneto_villain"].includes(v.id),
       ),
     ).toEqual([]);
   });

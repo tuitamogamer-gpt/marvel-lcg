@@ -719,11 +719,26 @@ describe("SP//dr printed signatures and physical paid receipts", () => {
     },
   );
 
-  it("does not offer Ejection Protocol through a form lock", () => {
+  it("offers Ejection Protocol's independent HP and Tough effects through a form lock", () => {
     const f = fixture();
     f.form("hero");
     const protocol = f.put("31008");
     f.s.flags.formLocked = true;
+    expect(
+      spdrAbilityOptions(f.s, protocol.id, f.ports).map((o) => o.id),
+    ).toEqual(["ejection-protocol"]);
+  });
+
+  it("does not offer Ejection Protocol when the flip is locked and its other effects cannot change their targets", () => {
+    const f = fixture();
+    f.form("hero");
+    const protocol = f.put("31008"),
+      link = f.put("31011");
+    f.s.flags.formLocked = true;
+    f.s.player.hp = 6;
+    f.s.player.tough = true;
+    link.exhausted = true;
+    spdrPilot(f.s)!.exhausted = true;
     expect(spdrAbilityOptions(f.s, protocol.id, f.ports)).toEqual([]);
   });
 

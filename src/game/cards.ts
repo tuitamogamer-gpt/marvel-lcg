@@ -768,6 +768,20 @@ export const VILLAINS = [
     description:
       "Find Senator Robert Kelly, then defend him while Sabretooth relentlessly heals and attacks.",
   },
+  {
+    id: "project_wideawake",
+    name: "Project Wideawake",
+    codes: ["32084", "32085", "32086"],
+    schemes: ["32087b"],
+    module: "sentinels",
+    fixedSets: ["zero_tolerance"],
+    difficulty: 3,
+    title: "Night of the Sentinels",
+    location: "New York City",
+    color: "#8c709b",
+    description:
+      "Rescue captive mutants while the Sentinels seize allies and player cards under Operation Zero Tolerance.",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -789,7 +803,14 @@ export const MODULES = [
   },
   { id: "brotherhood", name: "Brotherhood", difficulty: 3 },
   { id: "mystique", name: "Mystique", difficulty: 3 },
+  { id: "zero_tolerance", name: "Zero Tolerance", difficulty: 3 },
+  { id: "sentinels", name: "Sentinels", difficulty: 3 },
 ];
+/** Required encounter sets are separate from this scenario's modular slot. */
+export function scenarioModules(villainId: string) {
+  const fixed = VILLAINS.find((v) => v.id === villainId)?.fixedSets || [];
+  return MODULES.filter((module) => !fixed.includes(module.id));
+}
 export const ASPECTS: {
   id: Aspect;
   name: string;

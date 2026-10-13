@@ -38,6 +38,9 @@ import * as shadowcat from "./shadowcat.js";
 import * as mgPack from "./mutant-genesis-player-pack.js";
 import * as sabretooth from "./sabretooth.js";
 import * as mystique from "./mystique.js";
+import * as sentinels from "./sentinels.js";
+import * as wideawake from "./project-wideawake.js";
+import * as zeroTolerance from "./zero-tolerance.js";
 import * as nebula from "./nebula.js";
 import { isPermanent } from "./hero-runtime.js";
 import * as venomPack from "./venom-pack.js";
@@ -629,6 +632,9 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     );
   const p = find(s, source);
   if (!p) return 0;
+  const wideawakeKeywords = wideawake.projectWideawakeModifiers(s, p, {
+    isTextBlank,
+  });
   if (name === "Overkill" && ironspider.ironspiderSinisterOverkill(s, p))
     return 1;
   const granted = hawkeyeEnemyAttackTraits(s, p);
@@ -657,6 +663,9 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           nebula.nebulaNamedCharacterModifiers(s, card(p).name).piercing ||
           warMachine.warMachineEnemyKeywords(s, p).piercing ||
           sabretooth.sabretoothModifiers(s, p.id).piercing ||
+          wideawakeKeywords.piercing ||
+          wideawake.projectWideawakeAllyAttackModifiers(s, p, { isTextBlank })
+            .piercing ||
           miles.milesEnemyAttackKeywords(s, p, { isTextBlank }).piercing ||
           allyTraits.piercing ||
           mgPack.mutantGenesisPlayerPackPiercing(
@@ -672,6 +681,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
       !!(
         name === "Ranged" &&
         (granted.ranged ||
+          wideawakeKeywords.ranged ||
           allyTraits.ranged ||
           packTraits.ranged ||
           warmPack.warMachinePackAllyModifiers(s, p, warMachinePackPorts)
@@ -690,7 +700,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     name === "Retaliate"
       ? niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
           .retaliate +
-          ironheart.ironheartEnemyKeywords(s, p, { isTextBlank }).retaliate
+          ironheart.ironheartEnemyKeywords(s, p, { isTextBlank }).retaliate +
+          wideawakeKeywords.retaliate
       : 0,
   );
   const inherited = inheritors.inheritorsModifiers(s, p);
@@ -905,6 +916,9 @@ export function allyCount(s: GameState) {
   return friends(s).filter(
     (p) =>
       !antPack.antManPackAllyExcluded(s, p) &&
+      wideawake.projectWideawakeJubileeCountsAgainstAllyLimit(s, p, {
+        isTextBlank,
+      }) &&
       (p.id !== sabretooth.sabretoothKelly(s)?.id ||
         sabretooth.sabretoothKellyCountsAgainstAllyLimit(s)),
   ).length;
@@ -1277,6 +1291,10 @@ function movePieceFromPlay(
   const viewBefore = controlling ? seatView(s, controlling) : s;
   const healthBefore = maxHP(viewBefore);
   const removedSource = find(s, id);
+  need(
+    !removedSource || !zeroTolerance.zeroToleranceIsPermanent(s, removedSource),
+    "Permanent cards cannot leave play.",
+  );
   if (removedSource && removedSource.id === sabretooth.sabretoothKelly(s)?.id) {
     delete s.spiderHamConsequentialReceipts?.[id];
     const minionIndex = s.minions.findIndex((p) => p.id === id);
@@ -1392,6 +1410,7 @@ function movePieceFromPlay(
     }
   }
   if (!p) return;
+  wideawake.projectWideawakeEnemyLeftPlay(s, id);
   if (
     rulesCode(p) === "01127" &&
     ((p as ImmortalKlawScheme).immortalKlawHealthActive ?? !blankBefore)
@@ -1434,6 +1453,14 @@ function movePieceFromPlay(
     s.villain.maxHp -= 4;
     s.villain.hp -= 4;
   }
+  if (
+    p.code === "32096" &&
+    p.attachedTo === s.villain.id &&
+    (p as AdaptiveArmorAttachment).wideawakeArmorHealthActive
+  ) {
+    s.villain.maxHp -= 8;
+    s.villain.hp -= 8;
+  }
   for (const before of teamHealthBefore) {
     const view = seatView(s, before.id);
     view.player.hp += maxHP(view) - before.hp;
@@ -1443,7 +1470,11 @@ function movePieceFromPlay(
   );
   for (const stored of [...(p.storedCards || []), ...(p.captured || [])]) {
     const owner = s.players.find((seat) => seat.id === stored.ownerId);
-    if (card(stored).faction_code === "encounter")
+    if (stored.code === "32088b") s.removed.push(resetPiece(stored));
+    else if (
+      card(stored).faction_code === "encounter" &&
+      !(wideawakeCaptive(stored) && stored.ownerId)
+    )
       s.encounter.discard.push(resetPiece(stored));
     else if (!owner || owner.eliminated) s.removed.push(resetPiece(stored));
     else seatView(s, owner).player.discard.push(resetPiece(stored));
@@ -1461,7 +1492,11 @@ function movePieceFromPlay(
         seatView(s, owner).player.discard.push(p.droneCard);
       else s.removed.push(p.droneCard);
     }
-  } else if (card(p).faction_code === "encounter")
+  } else if (p.code === "32088b" && !victory) s.removed.push(resetPiece(p));
+  else if (
+    card(p).faction_code === "encounter" &&
+    !(wideawakeCaptive(p) && p.ownerId)
+  )
     (victory ? (s.victoryDisplay ||= []) : s.encounter.discard).push(
       resetPiece(p),
     );
@@ -1640,8 +1675,21 @@ function syncValkyrieConvertedCards(s: GameState) {
 }
 type ImmortalKlawScheme = Piece & { immortalKlawHealthActive?: boolean };
 type BeetleArmorAttachment = Piece & { beetleArmorHealthActive?: boolean };
+type AdaptiveArmorAttachment = Piece & { wideawakeArmorHealthActive?: boolean };
 function syncVillainTextHealth(s: GameState) {
   let decreased = false;
+  for (const p of s.attachments.filter(
+    (p) => p.code === "32096" && p.attachedTo === s.villain.id,
+  ) as AdaptiveArmorAttachment[]) {
+    const previous = p.wideawakeArmorHealthActive ?? false;
+    const active = !isTextBlank(s, p);
+    p.wideawakeArmorHealthActive = active;
+    if (active === previous) continue;
+    const change = active ? 8 : -8;
+    s.villain.maxHp += change;
+    s.villain.hp += change;
+    decreased ||= change < 0;
+  }
   for (const p of s.sideSchemes.filter(
     (piece) => rulesCode(piece) === "01127",
   ) as ImmortalKlawScheme[]) {
@@ -1674,6 +1722,8 @@ function syncVillainTextHealth(s: GameState) {
 function check(s: GameState) {
   syncValkyrieConvertedCards(s);
   syncVillainTextHealth(s);
+  wideawake.projectWideawakeFirstPlayerChanged(s, wideawakePorts);
+  if (zeroTolerance.zeroToleranceCheckLoss(s, zeroTolerancePorts)) return;
   // Simultaneous Spectrum batches place every prepared packet before checking
   // hero elimination. This flag exists only during the synchronous commit.
   if (
@@ -1808,6 +1858,7 @@ function check(s: GameState) {
     if (s.firstPlayerId === seat.id) {
       s.firstPlayerId = next.id;
       sabretooth.sabretoothFirstPlayerChanged(s);
+      wideawake.projectWideawakeFirstPlayerChanged(s, wideawakePorts);
     }
     const remainingNPC = sabretooth.sabretoothKelly(s);
     if (remainingNPC && controller(s, remainingNPC.id)?.id === seat.id) {
@@ -1852,6 +1903,8 @@ function check(s: GameState) {
   }
 }
 export function schemeLimit(s: GameState) {
+  const wideawakeLimit = wideawake.projectWideawakeMainThreatLimit(s);
+  if (wideawakeLimit !== undefined) return wideawakeLimit;
   const sabretoothLimit = sabretooth.sabretoothMainThreatLimit(s);
   if (sabretoothLimit === 0) return 0;
   const value = riskySchemeValues(s) || mutagenSchemeValues(s);
@@ -2014,6 +2067,40 @@ function recordMilesEnemyAttackDefeat(
     seatView(s, after.actorId || s.activePlayerId).flags[
       `milesAttackDefeat:${after.milesAttackToken}`
     ] = true;
+}
+function recordZeroToleranceAllyDefeat(
+  s: GameState,
+  p: Piece,
+  source: string,
+  enemyAttack: boolean,
+  controllerId?: string,
+) {
+  const attack = s.attack;
+  if (
+    !zeroToleranceNativePresent(s) ||
+    !enemyAttack ||
+    !attack ||
+    attack.attacker !== source ||
+    p.treatedAsMinion ||
+    card(p).type_code !== "ally"
+  )
+    return;
+  const receipts = ((s.zeroToleranceDefeats ||= {})[attack.id!] ||= []);
+  if (!receipts.some((r) => r.id === p.id))
+    receipts.push({
+      id: p.id,
+      code: p.code,
+      ownerId: p.ownerId,
+      controllerId: controllerId || controller(s, p.id)?.id,
+      actualAlly: true,
+    });
+}
+function zeroToleranceNativePresent(s: GameState) {
+  return (
+    s.villainId === "project_wideawake" ||
+    (s.modules || [s.module]).includes("zero_tolerance") ||
+    s.sideSchemes.some((p) => p.code === "32104")
+  );
 }
 function damageProhibition(s: GameState, target: string, panther: boolean) {
   if (niPack.novaIronheartPackCannotTakeDamage(s, target, niPackPorts))
@@ -2315,6 +2402,8 @@ function dealDamage(
             original.id,
             niPackPorts,
           ).retaliate +
+          wideawake.projectWideawakeModifiers(s, original, { isTextBlank })
+            .retaliate +
           (target === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -2614,7 +2703,9 @@ function allyDefeatInterruptOptions(
             })),
           }))
       : []),
-    ...(enemyAttack && card(m).type_code === "ally"
+    ...(enemyAttack &&
+    card(m).type_code === "ally" &&
+    !(m.code === "32088b" && !isTextBlank(s, m))
       ? draxPack.draxPackRegroupOptions(
           s,
           m,
@@ -2622,6 +2713,8 @@ function allyDefeatInterruptOptions(
           [
             E("dvRegroupDefeatAfter", {
               piece: { ...m },
+              enemySource: source,
+              enemyAttackId: s.attack?.id,
               playerId: owner?.id,
               actorId: originalActorId,
             }),
@@ -2766,7 +2859,11 @@ function defeatCharacter(
   const sabretoothDefeat = (m as SabretoothAttackDefeatPiece)
     .sabretoothAttackDefeatReceipt;
   if (!minion) recordMilesEnemyAttackDefeat(s, source, enemyAttack);
-  discardPiece(s, m.id);
+  if (!minion)
+    recordZeroToleranceAllyDefeat(s, m, source, enemyAttack, allyController);
+  if (!minion && m.code === "32088b" && !textWasBlank)
+    movePieceFromPlay(s, m.id, false, undefined, true);
+  else discardPiece(s, m.id);
   if (!minion && enemyAttack && sabretoothDefeat?.attackerId === source) {
     delete (m as SabretoothAttackDefeatPiece).sabretoothAttackDefeatReceipt;
     add(
@@ -2793,6 +2890,8 @@ function defeatCharacter(
     );
   log(s, `${name} is defeated.`, "good");
   if (minion) {
+    if (attack && source && find(s, source)?.code === "32091")
+      s.flags[`wideawakeMinionDefeat:${source}`] = true;
     const excess = Number(s.flags[`ironspiderExcess:${m.id}`] || 0);
     delete s.flags[`ironspiderExcess:${m.id}`];
     if (!textWasBlank)
@@ -2922,12 +3021,14 @@ function advanceVillain(
     return;
   }
   const config = VILLAINS.find((v) => v.id === s.villainId)!;
+  wideawake.projectWideawakeEnemyLeftPlay(s, s.villain.id);
   s.villain.stage++;
   s.villain.code =
     riskyNextVillainFace(s, config.codes[s.villain.stage - 1]) ||
     config.codes[s.villain.stage - 1];
   s.villain.maxHp =
     card(s.villain).health! * s.playerCount +
+    wideawake.projectWideawakeModifiers(s, s.villain, { isTextBlank }).health +
     wasp.waspEnemyHP(s, s.villain) +
     s.sideSchemes.filter((p) => rulesCode(p) === "01127" && !isTextBlank(s, p))
       .length *
@@ -2957,6 +3058,10 @@ function advanceVillain(
   villainSetup(s);
 }
 function villainSetup(s: GameState) {
+  add(
+    s,
+    ...(wideawake.projectWideawakeReveal(s, s.villain, { isTextBlank }) || []),
+  );
   add(s, ...riskyVillainRevealed(s), ...mutagenVillainRevealed(s));
   if (rulesCode(s.villain) === "01095")
     add(s, E("searchEncounter", { code: "01107", reveal: true }));
@@ -3043,6 +3148,20 @@ function threat(
     s.scheme.threat += n;
     track(s, "threatPlaced", n);
     log(s, `+${n} threat on ${card(s.scheme.code).name}.`, "bad");
+    if (s.villainId === "project_wideawake")
+      add(
+        s,
+        ...wideawake.projectWideawakeAfterMainThreatPlaced(
+          s,
+          {
+            token: `main-threat:${s.nextId++}`,
+            schemeCode: s.scheme.code,
+            actualAmount: n,
+            threatAfter: s.scheme.threat,
+          },
+          { isTextBlank },
+        ),
+      );
     if (schemeLimit(s) > 0 && s.scheme.threat >= schemeLimit(s)) {
       const mutagen =
         sabretooth.sabretoothMainCompleted(s) ??
@@ -3134,7 +3253,7 @@ function thwart(
     log(s, `Remove ${removed} threat from ${card(p).name}.`, "good");
     if (removed > 0 && !p.counters)
       niNativeAchievement(s, source, "last-threat", p.id);
-    if (!p.counters) {
+    if (!p.counters && !zeroTolerance.zeroToleranceIsPermanent(s, p)) {
       add(
         s,
         ...(goblinModuleDefeated(s, p) || []),
@@ -3148,6 +3267,7 @@ function thwart(
 }
 function defeatScheme(s: GameState, p: Piece, source = "hero") {
   if (p.counters || !s.sideSchemes.some((x) => x.id === p.id)) return;
+  if (zeroTolerance.zeroToleranceIsPermanent(s, p)) return;
   log(s, `${card(p).name} is defeated.`, "good");
   if (rulesCode(p) === "01166" && p.captured && !isTextBlank(s, p))
     for (const x of p.captured.splice(0)) {
@@ -3182,10 +3302,26 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
     p,
     s.activePlayerId,
   );
-  const victory = p.code === "32071" && !isTextBlank(s, p);
-  const retainFind = p.code === "32065a" && !isTextBlank(s, p);
+  const wideawakeDefeat = wideawake.projectWideawakeSideSchemeDefeated(
+    s,
+    p,
+    s.activePlayerId,
+    { isTextBlank },
+  );
+  const victory = ["32071", "32100"].includes(p.code) && !isTextBlank(s, p);
+  const retainFind =
+    ["32065a", "32088a"].includes(p.code) && !isTextBlank(s, p);
   if (!victory && !retainFind) discardPiece(s, p.id);
   const responses = [
+    ...(wideawakeDefeat?.length
+      ? [
+          {
+            id: `${p.id}:wideawake-defeated`,
+            title: card(p).name,
+            effects: wideawakeDefeat,
+          },
+        ]
+      : []),
     ...(nativeDefeat?.length
       ? [{ id: `${p.id}:defeated`, title: card(p).name, effects: nativeDefeat }]
       : []),
@@ -3202,7 +3338,7 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
       ? [
           {
             id: `${p.id}:victory`,
-            title: "Victory 1",
+            title: p.code === "32100" ? "Victory 2" : "Victory 1",
             effects: [E("encounterVictory", { id: p.id })],
           },
         ]
@@ -3291,7 +3427,14 @@ export function targets(
               !hulkThreatLocked(s, p.id) &&
               gamora.gamoraCanRemoveThreat(s, p.id) &&
               !venom.venomSchemeLocked(s, p.id) &&
-              !warlock.warlockSchemeLocked(s, p.id),
+              !warlock.warlockSchemeLocked(s, p.id) &&
+              (!thwarting ||
+                sentinels.sentinelsCanThwart(
+                  s,
+                  p.id,
+                  s.activePlayerId,
+                  sentinelsPorts,
+                )),
           )
           .map((p) => ({ id: p.id, label: card(p).name, code: p.code })),
       ];
@@ -3774,6 +3917,10 @@ function thwartAction(
 ) {
   const p = source === "hero" ? s.player : find(s, source);
   if (!p) return;
+  if (
+    !sentinels.sentinelsCanThwart(s, target, s.activePlayerId, sentinelsPorts)
+  )
+    return;
   if (!initiated && source === "hero" && captainThwartBlocked(s)) {
     log(s, "Baron Zemo prevents this identity from thwarting.");
     return;
@@ -4798,6 +4945,7 @@ export function newGame(config: {
   module?: string;
   modules?: string[];
   senatorDamage?: number;
+  captureAllocation?: number[];
   seed?: number;
   heroes?: {
     heroId: string;
@@ -4864,10 +5012,21 @@ export function newGame(config: {
     `Choose ${moduleCount} distinct modular encounter set${moduleCount === 1 ? "" : "s"}.`,
   );
   need(
-    selectedModules.every((id) => MODULES.some((m) => m.id === id)),
+    selectedModules.every(
+      (id) => MODULES.some((m) => m.id === id) && !v.fixedSets?.includes(id),
+    ),
     "This modular set’s complete rules are not implemented yet.",
   );
   const scenarioPack = card(v.codes[0]).pack_code;
+  if (v.id === "project_wideawake" && config.captureAllocation !== undefined)
+    need(
+      Array.isArray(config.captureAllocation) &&
+        config.captureAllocation.length === team.length &&
+        config.captureAllocation.every((n) => Number.isInteger(n) && n >= 0) &&
+        config.captureAllocation.reduce((n, value) => n + value, 0) <=
+          team.length + 2,
+      "Choose one nonnegative setup capture count per player, below Operation Zero Tolerance's loss threshold.",
+    );
   const difficulty = config.difficulty || "standard",
     stage = difficulty === "expert" ? 2 : 1;
   const players = team.map((h, i) => ({
@@ -4986,7 +5145,12 @@ export function newGame(config: {
         c.faction_code === "encounter" &&
         ((((selectedModules.includes(c.set_code || "") &&
           c.pack_code ===
-            (["brotherhood", "mystique"].includes(c.set_code || "")
+            ([
+              "brotherhood",
+              "mystique",
+              "zero_tolerance",
+              "sentinels",
+            ].includes(c.set_code || "")
               ? "mut_gen"
               : c.set_code === "ironspider_sinister"
                 ? "spdr"
@@ -5005,11 +5169,14 @@ export function newGame(config: {
                         ? "gob"
                         : "core")) ||
           (c.set_code === v.id && c.pack_code === scenarioPack) ||
+          (v.fixedSets?.includes(c.set_code || "") &&
+            c.pack_code === scenarioPack) ||
           (c.set_code === "standard" && c.pack_code === "core") ||
           (difficulty === "expert" &&
             c.set_code === "expert" &&
             c.pack_code === "core")) &&
           !["villain", "main_scheme"].includes(c.type_code) &&
+          c.code !== "32088b" &&
           (c.type_code !== "environment" ||
             selectedModules.includes(c.set_code || ""))) ||
           (team.some(
@@ -5024,7 +5191,41 @@ export function newGame(config: {
       Array.from({ length: c.quantity }, () => makePiece(s, c.code)),
     ),
   );
-  if (v.id === "sabretooth") {
+  if (v.id === "project_wideawake") {
+    const captives = s.encounter.deck.filter((p) =>
+      ["32089", "32090", "32091", "32092"].includes(p.code),
+    );
+    const mall = s.encounter.deck.find((p) => p.code === "32088a");
+    const operation = s.encounter.deck.find((p) => p.code === "32104");
+    need(
+      mall && operation,
+      "Project Wideawake requires its original physical setup schemes.",
+    );
+    const setupIds = new Set([
+      ...captives.map((p) => p.id),
+      mall!.id,
+      operation!.id,
+    ]);
+    s.encounter.deck = s.encounter.deck.filter((p) => !setupIds.has(p.id));
+    s.scheme.threat = s.playerCount;
+    wideawake.projectWideawakeSetup(
+      s,
+      { captives, mall: mall!, operation: operation! },
+      wideawakePorts,
+      config.captureAllocation,
+    );
+    s.queue.push(
+      effectContext(
+        s,
+        E("wideawake-native:setup-stage", { actorId: s.firstPlayerId }),
+      ),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "sabretooth") {
     const find = s.encounter.deck.find((p) => p.code === "32065a");
     const kelly = s.encounter.deck.find((p) => p.code === "32066");
     need(
@@ -6467,8 +6668,30 @@ function event(
       throw Error(`No player event script for ${p.code}.`);
   }
 }
-export function canChangeIdentityForm(s: GameState) {
-  return !goblinIdentityLocked(s) && !s.flags.antManCannotChangeUntilTurnEnd;
+export function canChangeIdentityForm(
+  s: GameState,
+  target?: "alter" | "hero" | "tiny" | "giant",
+) {
+  const to = target
+    ? target === "alter"
+      ? "alter"
+      : "hero"
+    : s.player.form === "alter"
+      ? "hero"
+      : ["ant", "wsp"].includes(s.heroId)
+        ? "hero"
+        : "alter";
+  return (
+    !goblinIdentityLocked(s) &&
+    !s.flags.antManCannotChangeUntilTurnEnd &&
+    sentinels.sentinelsCanChangeForm(
+      s,
+      s.activePlayerId,
+      s.player.form,
+      to,
+      sentinelsPorts,
+    )
+  );
 }
 function flip(
   s: GameState,
@@ -6476,12 +6699,14 @@ function flip(
   target?: "alter" | "tiny" | "giant",
 ) {
   const previousForm = s.player.form;
-  if (!canChangeIdentityForm(s)) {
+  if (!canChangeIdentityForm(s, target)) {
     need(
       !counts,
       goblinIdentityLocked(s)
         ? "All Tied Up prevents changing form."
-        : "Care for Cassie prevents changing form.",
+        : s.flags.antManCannotChangeUntilTurnEnd
+          ? "Care for Cassie prevents changing form."
+          : "Targeted for Elimination prevents changing to alter-ego form.",
     );
     return;
   }
@@ -6497,7 +6722,7 @@ function flip(
         "Change form",
         `Choose ${profile.name}'s next form.`,
         (["alter", "tiny", "giant"] as const)
-          .filter((form) => form !== current)
+          .filter((form) => form !== current && canChangeIdentityForm(s, form))
           .map((form) =>
             option(
               form,
@@ -6518,6 +6743,7 @@ function flip(
       return;
     }
     target ||= s.player.form === "hero" ? "alter" : "tiny";
+    if (!canChangeIdentityForm(s, target)) return;
     need(current !== target, "Choose a different form.");
     s.player.form = target === "alter" ? "alter" : "hero";
     if (target !== "alter") s.player.heroForm = target;
@@ -6615,6 +6841,10 @@ export function abilityOptions(
   if (hulkPackOptions.length)
     return hulkPackOptions.map(({ id, label }) => ({ id, label }));
   const attachmentOptions = [
+    ...(c.type_code !== "ally"
+      ? wideawake.projectWideawakeActionOptions(s, p.id, wideawakePorts)
+      : []),
+    ...sentinels.sentinelsAbilityOptions(s, p.id, sentinelsPorts),
     ...zzzax.zzzaxActions(s, p, zzzaxPorts),
     ...goblinModuleAttachmentActions(s, p),
     ...mutagenAttachmentActions(s, p),
@@ -6665,9 +6895,18 @@ export function abilityOptions(
       {
         id: "thwart",
         label: `Thwart ${allyStat(s, p, "thwart")}`,
-        disabled: p.exhausted ? "Exhausted" : undefined,
+        disabled: p.exhausted
+          ? "Exhausted"
+          : !p.confused &&
+              s.sideSchemes.some((p) => p.code === "32108") &&
+              !niAllyTargets(s, p, "thwart").length
+            ? "There are no eligible schemes to thwart."
+            : undefined,
       },
       ...scriptedOptions,
+      ...wideawake
+        .projectWideawakeActionOptions(s, p.id, wideawakePorts)
+        .map(({ id, label }) => ({ id, label })),
       ...riseOptions,
       ...dsOptions.map(({ id, label }) => ({ id, label })),
       ...(["01020", "01030", "01068"].includes(rulesCode(p))
@@ -6813,6 +7052,19 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   );
 }
 function ability(s: GameState, id: string, action = "special") {
+  if (!["attack", "thwart"].includes(action)) {
+    const native = wideawake.projectWideawakeActionOptions(
+      s,
+      id,
+      wideawakePorts,
+    );
+    const selected =
+      action === "special" ? native[0] : native.find((o) => o.id === action);
+    if (selected) {
+      add(s, ...selected.effects);
+      return;
+    }
+  }
   need(
     id !== sabretooth.sabretoothKelly(s)?.id ||
       !["attack", "thwart"].includes(action),
@@ -7587,6 +7839,8 @@ const hulkPackPorts = {
     const old = controller(s, id),
       target = s.players.find((p) => p.id === playerId && !p.eliminated);
     need(old && target, "Upgrade recipient is unavailable.");
+    const actual = find(s, id);
+    if (actual && wideawakeCaptive(actual)) actual.ownerId = playerId;
     const zone = seatView(s, old!).player.inPlay,
       index = zone.findIndex((p) => p.id === id);
     const [p] = zone.splice(index, 1);
@@ -7796,7 +8050,12 @@ function activationBoostValue(s: GameState, id: string, code?: string): number {
   );
 }
 function countActivationBoost(s: GameState, id: string, after: Effect[]): void {
-  const p = s.resolving.find((piece) => piece.id === id) || find(s, id);
+  const p =
+    s.resolving.find((piece) => piece.id === id) ||
+    find(s, id) ||
+    s.encounter.dealt.find(
+      (piece) => piece.id === id && piece.code === "32106",
+    );
   if (!p) {
     add(s, ...after);
     return;
@@ -8930,7 +9189,7 @@ const draxPackPorts: draxPack.DraxPackPorts = {
   returnAllyToHand: (s, id) => {
     const p = find(s, id);
     need(p, "The defeated ally is no longer in play.");
-    if (p!.id === sabretooth.sabretoothKelly(s)?.id) {
+    if (p!.id === sabretooth.sabretoothKelly(s)?.id || p!.code === "32088b") {
       movePieceFromPlay(s, id, false);
       return;
     }
@@ -9691,7 +9950,7 @@ const spectrumPorts: spectrum.SpectrumPorts = {
   makePiece,
   isTextBlank,
   identityTextBlank: (s) => isTextBlank(s, heroCard(s).code),
-  canChangeForm: canChangeIdentityForm,
+  canChangeForm: (s) => canChangeIdentityForm(s, "hero"),
   canReadyIdentity: (s, id) => canReadyIdentity(seatView(s, id)),
   canPay,
   cardCost: (s, p) => cardCost(s, card(p), p),
@@ -9809,6 +10068,10 @@ const gmwPorts: gmwPack.GmwPlayerPackPorts = {
   returnAllyToHand: (s, id) => {
     const p = allInPlay(s).find((p) => p.id === id);
     need(p, "The ally is no longer in play.");
+    if (p!.code === "32088b") {
+      discardPiece(s, id);
+      return;
+    }
     const owner =
       s.players.find((seat) => seat.id === p!.ownerId) || controller(s, id)!;
     if (s.attack?.defender === id) s.attack.gmwReturnedDefender = id;
@@ -9979,6 +10242,7 @@ const resourcePairs: Resource[][] = [
 const msPorts: MsMarvelPorts = {
   queue: add,
   choose,
+  canChangeForm: (s) => canChangeIdentityForm(s, "alter"),
   select,
   discardPiece,
   discardTop: (s, playerId, n) => {
@@ -10056,7 +10320,7 @@ const msPorts: MsMarvelPorts = {
   returnAlly: (s, id) => {
     const p = find(s, id);
     need(p, "The ally is no longer in play.");
-    if (p!.id === sabretooth.sabretoothKelly(s)?.id) {
+    if (p!.id === sabretooth.sabretoothKelly(s)?.id || p!.code === "32088b") {
       movePieceFromPlay(s, id, false);
       return;
     }
@@ -10240,7 +10504,7 @@ const spdrPorts: spdr.SpdrPorts = {
   enemyTargets: (s, attack) => targets(s, "enemy", attack),
   schemeTargets: (s, thwart) => targets(s, "scheme", false, thwart),
   canChangeForm: (s) =>
-    !goblinIdentityLocked(s) && antMan.antManCanChangeForm(s),
+    canChangeIdentityForm(s) && antMan.antManCanChangeForm(s),
   canReadyIdentity: (s, id) => canReadyIdentity(seatView(s, id)),
   discardControlledCost: (s, id, after) =>
     zzzaxPorts.discardControlledCost(s, id, E("spdrContinue", { after })),
@@ -10892,6 +11156,489 @@ const brotherhoodPorts: brotherhood.BrotherhoodPorts = {
     add(s, E("reveal", { piece: actual!, actorId: playerId }), ...after);
   },
 };
+const wideawakeCaptive = (p: Piece) =>
+  ["32089", "32090", "32091", "32092"].includes(p.code);
+function wideawakePhysicalZones(s: GameState): Piece[][] {
+  const zones = [
+    ...s.players.flatMap((seat) => {
+      const p = seatView(s, seat).player;
+      return [p.inPlay, p.hand, p.deck, p.discard, p.setAside || []];
+    }),
+    s.encounter.deck,
+    s.encounter.discard,
+    s.encounter.dealt,
+    s.resolving,
+    s.removed,
+    s.victoryDisplay || [],
+    s.minions,
+    s.sideSchemes,
+    s.attachments,
+    s.environments || [],
+    s.projectWideawake?.setAsideCaptives || [],
+    s.attack?.pendingBoosts || [],
+    s.scheming?.pendingBoosts || [],
+  ];
+  const nested = (pieces: Piece[]) => {
+    for (const p of pieces)
+      for (const children of [p.storedCards || [], p.captured || []]) {
+        zones.push(children);
+        nested(children);
+      }
+  };
+  for (const pieces of [...zones]) nested(pieces);
+  return zones;
+}
+function wideawakePhysicalPiece(s: GameState, id: string): Piece | undefined {
+  return wideawakePhysicalZones(s)
+    .flat()
+    .find((p) => p.id === id);
+}
+function takeWideawakePiece(s: GameState, id: string): Piece | undefined {
+  for (const zone of wideawakePhysicalZones(s)) {
+    const index = zone.findIndex((p) => p.id === id);
+    if (index >= 0) return zone.splice(index, 1)[0];
+  }
+}
+function wideawakeSearch(
+  s: GameState,
+  code: string | undefined,
+  trait: string | undefined,
+  playerId: string,
+  after: Effect[],
+) {
+  const matches = [...s.encounter.deck, ...s.encounter.discard].filter((p) =>
+    code
+      ? p.code === code
+      : card(p).type_code === "minion" && captainPackHasTrait(s, p.id, trait!),
+  );
+  // Traits of out-of-play candidates come from their actual printed source.
+  const candidates = trait
+    ? [...s.encounter.deck, ...s.encounter.discard].filter(
+        (p) =>
+          card(p).type_code === "minion" &&
+          (card(p).traits || "")
+            .split(/\.\s*/)
+            .some((t) => t.toLowerCase() === trait.toLowerCase()),
+      )
+    : matches;
+  if (!candidates.length) {
+    mutagenPorts.shuffleEncounter(s);
+    add(s, ...after);
+    return;
+  }
+  const effects = (id: string) => [
+    E("wideawake-native:reveal-searched", {
+      id,
+      playerId,
+      after,
+      actorId: playerId,
+    }),
+  ];
+  if (
+    candidates.length === 1 ||
+    (code && candidates.every((p) => p.code === code))
+  )
+    add(s, ...effects(candidates[0].id));
+  else
+    choose(
+      s,
+      "Search encounter cards",
+      "Choose an actual card to reveal.",
+      candidates.map((p) =>
+        option(p.id, card(p).name, effects(p.id), undefined, p.code),
+      ),
+    );
+}
+function wideawakeCapture(
+  s: GameState,
+  schemeId: string,
+  id: string,
+  after: Effect[],
+) {
+  const operation = s.sideSchemes.find(
+    (p) => p.id === schemeId && p.code === "32104",
+  );
+  const piece =
+    operation && !s.removed.some((p) => p.id === id)
+      ? takeWideawakePiece(s, id)
+      : undefined;
+  if (operation && piece) {
+    (operation.captured ||= []).push(piece);
+    log(s, "Place one card facedown under Operation Zero Tolerance.", "bad");
+    zeroTolerance.zeroToleranceCheckLoss(s, {
+      lose: (state, reason) => endGame(state, false, reason),
+    });
+  }
+  if (!["lost", "won"].includes(s.phase))
+    add(s, ...after.map((e) => ({ ...e, captured: !!piece })));
+}
+const sentinelsPorts: sentinels.SentinelsPorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  hasTrait: captainPackHasTrait,
+  isEngagedWith: (s, p, playerId) =>
+    !p.engagedWith || p.engagedWith === playerId,
+  canExhaustIdentity: (s, playerId) => !seatView(s, playerId).player.exhausted,
+  exhaustIdentity: (s, playerId) => {
+    need(
+      !seatView(s, playerId).player.exhausted,
+      "Your identity is exhausted.",
+    );
+    seatView(s, playerId).player.exhausted = true;
+  },
+  attachIdentity: (s, id, playerId) => {
+    const p = wideawakePhysicalPiece(s, id);
+    need(p, "The actual Targeted for Elimination source is unavailable.");
+    mutagenPorts.attach(s, p!, `hero:${playerId}`);
+  },
+  discardPiece,
+  searchAndRevealTargeted: (s, playerId, after) =>
+    wideawakeSearch(s, "32107", undefined, playerId, after),
+  startAttack: (s, id, playerId, after) =>
+    add(
+      s,
+      E("enemyAttack", {
+        id,
+        actorId: playerId,
+        activation: {
+          enemyId: id,
+          playerId,
+          kind: "attack",
+          after: E("dvEnemyAttackComplete", { after, actorId: playerId }),
+        },
+      }),
+    ),
+  dealBoostFacedown: (s, id, playerId) => {
+    const p = wideawakePhysicalPiece(s, id);
+    need(p, "The actual Sentinel boost card is unavailable.");
+    const activation = s.scheming || s.attack;
+    if (activation) (activation.retainedBoostIds ||= []).push(id);
+    removeEncounterInstance(s, id);
+    p!.dealtTo = playerId;
+    s.encounter.dealt.push(p!);
+  },
+};
+const zeroTolerancePorts: zeroTolerance.ZeroTolerancePorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  hasTrait: captainPackHasTrait,
+  hasStatus: (s, target, status) =>
+    !!(
+      target === "hero"
+        ? s.player
+        : target.startsWith("hero:")
+          ? seatView(s, target.slice(5)).player
+          : find(s, target)
+    )?.[status],
+  addStatus: (s, target, status) => add(s, E("status", { target, status })),
+  damage: (s, target, amount, source, after) =>
+    add(s, E("damage", { target, amount, source, afterResolved: after })),
+  attachBarrier: (s, id, minionId, after) => {
+    const p = wideawakePhysicalPiece(s, id);
+    if (p && s.minions.some((m) => m.id === minionId))
+      mutagenPorts.attach(s, p, minionId);
+    add(s, ...after);
+  },
+  revealSearchedSideScheme: (s, id, playerId, after) =>
+    add(
+      s,
+      E("wideawake-native:reveal-searched", {
+        id,
+        playerId,
+        after,
+        actorId: playerId,
+        shuffled: true,
+      }),
+    ),
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  revealHidden,
+  captureDefeatedAlly: (s, schemeId, ally, after) =>
+    wideawakeCapture(s, schemeId, ally.id, after),
+  lose: (s, reason) => endGame(s, false, reason),
+};
+const wideawakePorts: wideawake.ProjectWideawakePorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  findPiece: wideawakePhysicalPiece,
+  findAlly: (s, id) => {
+    const seat = controller(s, id),
+      piece = find(s, id);
+    return seat &&
+      piece &&
+      card(piece).type_code === "ally" &&
+      !piece.treatedAsMinion
+      ? { piece, playerId: seat.id }
+      : undefined;
+  },
+  revealSetupSideScheme: (s, p, after) =>
+    add(s, E("reveal", { piece: p, actorId: s.firstPlayerId }), ...after),
+  searchAndRevealSideScheme: (s, code, playerId, after) =>
+    wideawakeSearch(s, code, undefined, playerId, after),
+  searchAndRevealMinion: (s, trait, playerId, after) =>
+    wideawakeSearch(s, undefined, trait, playerId, after),
+  flipMallToJubilee: (s, p, playerId) => {
+    takeWideawakePiece(s, p.id);
+    p.code = "32088b";
+    Object.assign(p, resetPiece(p, true));
+    if (uniqueConflict(s, card(p))) {
+      s.removed.push(p);
+      return;
+    }
+    seatView(s, playerId).player.inPlay.push(p);
+    add(
+      s,
+      E("allyLimit", { actorId: playerId }),
+      E("allyEnter", { id: p.id, actorId: playerId, fromHand: false }),
+    );
+  },
+  discardOtherJubilees: (s, exceptId) => {
+    for (const p of allInPlay(s).filter(
+      (p) =>
+        p.id !== exceptId &&
+        card(p).type_code === "ally" &&
+        card(p).name === "Jubilee",
+    ))
+      discardPiece(s, p.id);
+  },
+  transferAllyControl: (s, id, playerId) =>
+    hulkPackPorts.transferControl(s, id, playerId),
+  putAlly: (s, p, playerId) => {
+    Object.assign(p, resetPiece(p, true));
+    p.ownerId = playerId;
+    if (uniqueConflict(s, card(p))) {
+      seatView(s, playerId).player.discard.push(p);
+      return;
+    }
+    seatView(s, playerId).player.inPlay.push(p);
+    add(
+      s,
+      E("allyLimit", { actorId: playerId }),
+      E("allyEnter", { id: p.id, actorId: playerId, fromHand: false }),
+    );
+  },
+  randomIndex: (s, length) => Math.floor(random(s) * length),
+  canCapturePlayerTop: (s, playerId) =>
+    !!s.sideSchemes.find((p) => p.code === "32104") &&
+    seatView(s, playerId).player.deck.length +
+      seatView(s, playerId).player.discard.length >
+      0,
+  capturePlayerTop: (s, playerId, sourceId, after) =>
+    add(
+      s,
+      E("wideawake-native:capture-top", {
+        playerId,
+        sourceId,
+        after,
+        actorId: playerId,
+      }),
+    ),
+  captureCard: (s, p, playerId, after) =>
+    add(
+      s,
+      E("wideawake-native:capture-card", {
+        id: p.id,
+        playerId,
+        after,
+        actorId: playerId,
+      }),
+    ),
+  removeMainThreat: (s, amount, source) =>
+    thwart(s, "main", amount, true, source),
+  dealEncounter,
+  enemyAttack: (s, id, playerId) =>
+    sentinelsPorts.startAttack(s, id, playerId, []),
+  damageBatch: (s, targets, source, playerId) =>
+    add(
+      s,
+      E("wideawake-native:damage-batch", {
+        targets,
+        source,
+        playerId,
+        actorId:
+          s.players.find((p) => p.id === playerId && !p.eliminated)?.id ||
+          s.firstPlayerId,
+      }),
+    ),
+  enemyTargets: (s) => targets(s, "enemy", false),
+  canExhaust: (s, id) =>
+    id === "hero"
+      ? !s.player.exhausted
+      : !!find(s, id) && !find(s, id)!.exhausted,
+  exhaust: (s, id) => {
+    need(wideawakePorts.canExhaust(s, id), "This character is exhausted.");
+    if (id === "hero") s.player.exhausted = true;
+    else find(s, id)!.exhausted = true;
+  },
+  canPay,
+  pay: (s, title, cost, requirements, after, sourceId, commit = []) => {
+    const piece = find(s, sourceId);
+    need(piece, "The actual Wideawake ability source is unavailable.");
+    add(
+      s,
+      E("payRequest", {
+        title,
+        cost,
+        requirements,
+        after,
+        piece,
+        paymentCommit: commit,
+        abilityCost: true,
+        cancelable: true,
+        cancellationQueue: [...s.queue],
+      }),
+    );
+  },
+  attach: (s, p, target, boost) => {
+    if (boost) {
+      const activation = s.scheming || s.attack;
+      if (activation) (activation.retainedBoostIds ||= []).push(p.id);
+    }
+    mutagenPorts.attach(s, p, target);
+    syncVillainTextHealth(s);
+  },
+  putBoostMinion: mutagenPorts.putMinion,
+  discardPiece,
+  clearVillainStatuses: (s) => {
+    colossusNativeDiscardTough(
+      s,
+      [
+        {
+          targetId: s.villain.id,
+          amount: s.villain.toughCards ?? Number(s.villain.tough),
+        },
+      ],
+      [],
+    );
+    s.villain.stunned = s.villain.confused = false;
+    s.villain.stunCards = s.villain.confuseCards = 0;
+  },
+  giveVillainTough: (s) => giveCharacterStatus(s, s.villain, "tough"),
+  healVillain: (s, amount, source) =>
+    add(
+      s,
+      E("heal", { target: s.villain.id, amount, source, origin: "encounter" }),
+    ),
+};
+function resolveWideawakeNativeEffect(s: GameState, e: Effect): boolean {
+  if (!e.type.startsWith("wideawake-native:")) return false;
+  switch (e.type) {
+    case "wideawake-native:setup-stage":
+      villainSetup(s);
+      break;
+    case "wideawake-native:damage-batch":
+      resolve(
+        s,
+        E("quicksilverDamageDistribution", {
+          packets: e.targets.map((t: { id: string; amount: number }) => ({
+            target: t.id,
+            amount: t.amount,
+          })),
+          source: e.source,
+        }),
+      );
+      break;
+    case "wideawake-native:ally-response": {
+      const options = wideawake.projectWideawakeAllyAttackResponseOptions(
+        s,
+        e.receipt,
+        wideawakePorts,
+      );
+      if (options.length)
+        choose(
+          s,
+          "After this ally attacks",
+          "Use the ally's printed response?",
+          [...options, option("continue", "Continue", [])],
+        );
+      break;
+    }
+    case "wideawake-native:attack-forced": {
+      const receipt = e.receipt as zeroTolerance.ZeroToleranceAttackReceipt;
+      receipt.defeatedAllies = s.zeroToleranceDefeats?.[receipt.token] || [];
+      if (s.zeroToleranceDefeats) delete s.zeroToleranceDefeats[receipt.token];
+      const effects = zeroTolerance.zeroToleranceAfterAttack(
+        s,
+        receipt,
+        zeroTolerancePorts,
+      );
+      const responses = effects.map((effect, index) => ({
+        id: `${receipt.token}:zero-tolerance:${index}`,
+        title: effect.schemeId ? "Operation Zero Tolerance" : "Energy Barrier",
+        effects: [effect],
+      }));
+      add(
+        s,
+        E("forcedResponses", {
+          responses: [...responses, ...e.responses],
+          actorId: s.firstPlayerId,
+        }),
+      );
+      break;
+    }
+    case "wideawake-native:reveal-searched": {
+      const inDeck = s.encounter.deck.some((p) => p.id === e.id);
+      const p = [...s.encounter.deck, ...s.encounter.discard].find(
+        (p) => p.id === e.id,
+      );
+      if (p) removeEncounterInstance(s, p.id);
+      if (!e.shuffled) mutagenPorts.shuffleEncounter(s);
+      add(
+        s,
+        ...(p
+          ? [
+              E("reveal", {
+                piece: p,
+                actorId: e.playerId,
+                fromEncounterDeck: inDeck,
+              }),
+            ]
+          : []),
+        ...e.after,
+      );
+      break;
+    }
+    case "wideawake-native:capture-top": {
+      const before = new Set(s.queue);
+      recyclePlayer(s);
+      const operation = s.sideSchemes.find((p) => p.code === "32104");
+      const piece = operation ? s.player.deck.shift() : undefined;
+      if (piece && operation) {
+        (operation.captured ||= []).push(piece);
+        log(
+          s,
+          "Place one deck card facedown under Operation Zero Tolerance.",
+          "bad",
+        );
+      }
+      recyclePlayer(s);
+      const generated = s.queue.filter((q) => !before.has(q));
+      s.queue = s.queue.filter((q) => before.has(q));
+      zeroTolerance.zeroToleranceCheckLoss(s, zeroTolerancePorts);
+      if (!["won", "lost"].includes(s.phase))
+        add(
+          s,
+          ...generated,
+          ...e.after.map((effect: Effect) => ({
+            ...effect,
+            captured: !!piece,
+          })),
+        );
+      break;
+    }
+    case "wideawake-native:capture-card": {
+      const operation = s.sideSchemes.find((p) => p.code === "32104");
+      if (operation) wideawakeCapture(s, operation.id, e.id, e.after);
+      else add(s, ...e.after);
+      break;
+    }
+    default:
+      throw Error(`Unknown Wideawake native effect: ${e.type}`);
+  }
+  return true;
+}
 const sabretoothPorts: sabretooth.SabretoothPorts = {
   queue: add,
   choose,
@@ -12007,7 +12754,14 @@ function niAllyTargets(s: GameState, p: Piece, kind: "attack" | "thwart") {
       code: s.scheme.code,
       label: card(s.scheme.code).name,
     });
-  return schemes;
+  return schemes.filter((scheme) =>
+    sentinels.sentinelsCanThwart(
+      s,
+      scheme.id,
+      s.activePlayerId,
+      sentinelsPorts,
+    ),
+  );
 }
 function niAttackProgram(s: GameState, effects: Effect[], after: Effect[]) {
   if (s.player.stunned) {
@@ -13917,6 +14671,9 @@ function declareDefense(s: GameState) {
 }
 function boostEffects(s: GameState, p: Piece) {
   const mutantScenarioBoost =
+    wideawake.projectWideawakeBoost(s, p) ??
+    zeroTolerance.zeroToleranceBoost(s, p) ??
+    sentinels.sentinelsBoost(s, p) ??
     sabretooth.sabretoothBoost(s, p) ??
     brotherhood.brotherhoodBoost(s, p) ??
     mystique.mystiqueBoost(s, p);
@@ -14644,6 +15401,26 @@ function finishAttackAfterDamage(
     kind: "attack",
     performed: !!a.completionRecorded,
   });
+  const zeroReceipt: zeroTolerance.ZeroToleranceAttackReceipt = {
+    token: a.id!,
+    attackerId: a.attacker,
+    attackerCode: a.attackerSnapshot?.code || p?.code || "",
+    playerId: recipientId,
+    performed: !!a.completionRecorded,
+    enemyAttack:
+      !a.activationAfter?.nebulaGamoraSource ||
+      a.activationAfter.nebulaGamoraSource.kind === "enemy",
+    defeatedAllies: [],
+    barrierSources: zeroTolerance.zeroToleranceBarrierSources(
+      s,
+      a.attacker,
+      zeroTolerancePorts,
+    ),
+    schemeSources: zeroTolerance.zeroToleranceSchemeSources(
+      s,
+      zeroTolerancePorts,
+    ),
+  };
 
   if (s.phase === "lost" || s.phase === "won") return;
   const retaliation =
@@ -14721,134 +15498,143 @@ function finishAttackAfterDamage(
           }),
         ]
       : []),
-    E("forcedResponses", {
-      responses: [
-        ...(brotherhoodAfter.length
-          ? [
-              {
-                id: `${a.id}:brotherhood-after`,
-                sourceId: a.attacker,
-                title: card(a.attackerSnapshot || p!).name,
-                effects: brotherhoodAfter,
-              },
-            ]
-          : []),
-        ...(sabretoothAfter.length
-          ? [
-              {
-                id: `${a.id}:sabretooth-after`,
-                sourceId: a.attacker,
-                title: "Sabretooth · Regeneration",
-                effects: sabretoothAfter,
-              },
-            ]
-          : []),
-        ...(p &&
-        spectrum.spectrumEnemyActivated(s, p, recipientId, spectrumPorts).length
-          ? [
-              {
-                id: `${p.id}:spectrum-activation`,
-                sourceId: p.id,
-                title: "Radioactive Man",
-                effects: spectrum.spectrumEnemyActivated(
-                  s,
-                  p,
-                  recipientId,
-                  spectrumPorts,
-                ),
-              },
-            ]
-          : []),
-        ...(p &&
-        nebula.nebulaGamoraAttackEnded(
-          s,
-          p,
-          recipientId,
-          a.identityDamage || 0,
-          nebulaPorts,
-        ).length
-          ? [
-              {
-                id: `${p.id}:nebula-gamora`,
-                sourceId: p.id,
-                title: "Gamora",
-                effects: nebula.nebulaGamoraAttackEnded(
-                  s,
-                  p,
-                  recipientId,
-                  a.identityDamage || 0,
-                  nebulaPorts,
-                ),
-              },
-            ]
-          : []),
-        ...ironspider.ironspiderSinisterActivationResponses(s, a.attacker),
-        ...armadillo.armadilloActivationResponses(s, a.attacker),
-        ...goblinModuleAttackResponses(s, {
-          attacker: a.attackerSnapshot || p!,
-          playerId: recipientId,
-          performed: true,
-          identityDamage: a.identityDamage || 0,
-          damaged: [
-            ...(target !== "hero" && a.damage > 0
-              ? [
-                  {
-                    target,
-                    playerId: recipientId,
-                    amount: Math.min(a.damage, before),
-                  },
-                ]
-              : []),
-            ...(a.identityDamage
-              ? [
-                  {
-                    target: `hero:${recipientId}`,
-                    playerId: recipientId,
-                    amount: a.identityDamage,
-                  },
-                ]
-              : []),
-          ],
-        }),
-        ...mutagenAttackResponses(s, {
-          attacker: a.attackerSnapshot || p!,
-          playerId: s.activePlayerId,
-          performed: true,
-          identityDamage: a.identityDamage || 0,
-        }),
-        ...(retaliation
-          ? [
-              {
-                id: "retaliate",
-                sourceId: target === "hero" ? undefined : target,
-                title: "Retaliate",
-                effects: [
-                  E("retaliateAfterAttack", {
-                    target: a.attacker,
-                    sourceTarget: target,
-                    amount: retaliation,
-                    actorId: s.activePlayerId,
-                  }),
-                ],
-              },
-            ]
-          : []),
-        ...(p && hulkAfterEnemyAttack(s, p).length
-          ? [
-              {
-                id: "hulk-forced",
-                sourceId: p.id,
-                title: card(p).name,
-                effects: hulkAfterEnemyAttack(s, p),
-              },
-            ]
-          : []),
-      ].map((r) => ({
-        ...r,
-        effects: r.effects.map((e) => ({ actorId: s.activePlayerId, ...e })),
-      })),
-      actorId: s.firstPlayerId,
-    }),
+    E(
+      zeroToleranceNativePresent(s) ||
+        zeroReceipt.barrierSources!.length ||
+        zeroReceipt.schemeSources!.length
+        ? "wideawake-native:attack-forced"
+        : "forcedResponses",
+      {
+        receipt: zeroReceipt,
+        responses: [
+          ...(brotherhoodAfter.length
+            ? [
+                {
+                  id: `${a.id}:brotherhood-after`,
+                  sourceId: a.attacker,
+                  title: card(a.attackerSnapshot || p!).name,
+                  effects: brotherhoodAfter,
+                },
+              ]
+            : []),
+          ...(sabretoothAfter.length
+            ? [
+                {
+                  id: `${a.id}:sabretooth-after`,
+                  sourceId: a.attacker,
+                  title: "Sabretooth · Regeneration",
+                  effects: sabretoothAfter,
+                },
+              ]
+            : []),
+          ...(p &&
+          spectrum.spectrumEnemyActivated(s, p, recipientId, spectrumPorts)
+            .length
+            ? [
+                {
+                  id: `${p.id}:spectrum-activation`,
+                  sourceId: p.id,
+                  title: "Radioactive Man",
+                  effects: spectrum.spectrumEnemyActivated(
+                    s,
+                    p,
+                    recipientId,
+                    spectrumPorts,
+                  ),
+                },
+              ]
+            : []),
+          ...(p &&
+          nebula.nebulaGamoraAttackEnded(
+            s,
+            p,
+            recipientId,
+            a.identityDamage || 0,
+            nebulaPorts,
+          ).length
+            ? [
+                {
+                  id: `${p.id}:nebula-gamora`,
+                  sourceId: p.id,
+                  title: "Gamora",
+                  effects: nebula.nebulaGamoraAttackEnded(
+                    s,
+                    p,
+                    recipientId,
+                    a.identityDamage || 0,
+                    nebulaPorts,
+                  ),
+                },
+              ]
+            : []),
+          ...ironspider.ironspiderSinisterActivationResponses(s, a.attacker),
+          ...armadillo.armadilloActivationResponses(s, a.attacker),
+          ...goblinModuleAttackResponses(s, {
+            attacker: a.attackerSnapshot || p!,
+            playerId: recipientId,
+            performed: true,
+            identityDamage: a.identityDamage || 0,
+            damaged: [
+              ...(target !== "hero" && a.damage > 0
+                ? [
+                    {
+                      target,
+                      playerId: recipientId,
+                      amount: Math.min(a.damage, before),
+                    },
+                  ]
+                : []),
+              ...(a.identityDamage
+                ? [
+                    {
+                      target: `hero:${recipientId}`,
+                      playerId: recipientId,
+                      amount: a.identityDamage,
+                    },
+                  ]
+                : []),
+            ],
+          }),
+          ...mutagenAttackResponses(s, {
+            attacker: a.attackerSnapshot || p!,
+            playerId: s.activePlayerId,
+            performed: true,
+            identityDamage: a.identityDamage || 0,
+          }),
+          ...(retaliation
+            ? [
+                {
+                  id: "retaliate",
+                  sourceId: target === "hero" ? undefined : target,
+                  title: "Retaliate",
+                  effects: [
+                    E("retaliateAfterAttack", {
+                      target: a.attacker,
+                      sourceTarget: target,
+                      amount: retaliation,
+                      actorId: s.activePlayerId,
+                    }),
+                  ],
+                },
+              ]
+            : []),
+          ...(p && hulkAfterEnemyAttack(s, p).length
+            ? [
+                {
+                  id: "hulk-forced",
+                  sourceId: p.id,
+                  title: card(p).name,
+                  effects: hulkAfterEnemyAttack(s, p),
+                },
+              ]
+            : []),
+        ].map((r) => ({
+          ...r,
+          effects: r.effects.map((e) => ({ actorId: s.activePlayerId, ...e })),
+        })),
+        actorId: s.firstPlayerId,
+      },
+    ),
     ...a.boostEffects,
     ...(a.boostIds || []).map((id) => E("finishResolution", { id })),
     E("scarletEnemyActivated", {
@@ -15231,10 +16017,25 @@ function reveal(
   }
   // Ordinary attachment instructions are not a printed
   // When Revealed ability. Keep this same source resolving until it attaches.
-  if (!repeat && ["32067", "32068", "32077"].includes(p.code)) {
+  if (
+    !repeat &&
+    [
+      "32067",
+      "32068",
+      "32077",
+      "32094",
+      "32095",
+      "32096",
+      "32103",
+      "32107",
+    ].includes(p.code)
+  ) {
     add(
       s,
-      ...((sabretooth.sabretoothReveal(s, p) ??
+      ...((wideawake.projectWideawakeReveal(s, p, { isTextBlank }) ??
+        zeroTolerance.zeroToleranceReveal(s, p, zeroTolerancePorts) ??
+        sentinels.sentinelsReveal(s, p, sentinelsPorts) ??
+        sabretooth.sabretoothReveal(s, p) ??
         brotherhood.brotherhoodReveal(s, p, { isTextBlank })) ||
         []),
       E("finishResolution", { id: p.id }),
@@ -15243,7 +16044,12 @@ function reveal(
   }
   if (
     !repeat &&
-    (sabretooth.SABRETOOTH_SCRIPT_CODES.some((code) => code === p.code) ||
+    (wideawake.PROJECT_WIDEAWAKE_SCRIPT_CODES.some((code) => code === p.code) ||
+      zeroTolerance.ZERO_TOLERANCE_SCRIPT_CODES.some(
+        (code) => code === p.code,
+      ) ||
+      sentinels.SENTINELS_SCRIPT_CODES.some((code) => code === p.code) ||
+      sabretooth.SABRETOOTH_SCRIPT_CODES.some((code) => code === p.code) ||
       brotherhood.BROTHERHOOD_SCRIPT_CODES.some((code) => code === p.code) ||
       mystique.MYSTIQUE_SCRIPT_CODES.some((code) => code === p.code) ||
       ironspider.IRONSPIDER_SINISTER_SCRIPT_CODES.some(
@@ -15262,6 +16068,10 @@ function reveal(
       s.sideSchemes.push(p);
       if (p.code === "32079") (s.brotherhoodEntered ||= {})[p.id] = true;
     } else if (c.type_code === "environment") visionPorts.putEnvironment(s, p);
+    if (c.type_code === "obligation" && p.code === "32099") {
+      s.resolving = s.resolving.filter((x) => x.id !== p.id);
+      if (!s.player.inPlay.some((x) => x.id === p.id)) s.player.inPlay.push(p);
+    }
     add(
       s,
       ...beginRevealWindow(
@@ -15413,6 +16223,9 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    wideawake.projectWideawakeReveal(s, p, { isTextBlank }) ??
+    zeroTolerance.zeroToleranceReveal(s, p, zeroTolerancePorts) ??
+    sentinels.sentinelsReveal(s, p, sentinelsPorts) ??
     sabretooth.sabretoothReveal(s, p) ??
     brotherhood.brotherhoodReveal(s, p, { isTextBlank }) ??
     mystique.mystiqueReveal(s, p) ??
@@ -15716,7 +16529,7 @@ function obligation(s: GameState, p: Piece) {
   ];
   if (
     !s.player.exhausted &&
-    (s.player.form === "alter" || !goblinIdentityLocked(s))
+    (s.player.form === "alter" || canChangeIdentityForm(s, "alter"))
   )
     opts.unshift(
       option(
@@ -16256,6 +17069,9 @@ function resolve(s: GameState, e: Effect) {
         const previous = state.currentRevealWindowId;
         state.currentRevealWindowId = windowId;
         const effects =
+          wideawake.projectWideawakeReveal(state, piece, { isTextBlank }) ??
+          zeroTolerance.zeroToleranceReveal(state, piece, zeroTolerancePorts) ??
+          sentinels.sentinelsReveal(state, piece, sentinelsPorts) ??
           sabretooth.sabretoothReveal(state, piece) ??
           brotherhood.brotherhoodReveal(state, piece, { isTextBlank }) ??
           mystique.mystiqueReveal(state, piece) ??
@@ -16330,6 +17146,11 @@ function resolve(s: GameState, e: Effect) {
   if (zzzax.resolveZzzaxEffect(s, e, zzzaxPorts)) return;
   if (inheritors.resolveInheritorsEffect(s, e, inheritorsPorts)) return;
   if (resolveGoblinModuleEffect(s, e, goblinPorts)) return;
+  if (resolveWideawakeNativeEffect(s, e)) return;
+  if (wideawake.resolveProjectWideawakeEffect(s, e, wideawakePorts)) return;
+  if (zeroTolerance.resolveZeroToleranceEffect(s, e, zeroTolerancePorts))
+    return;
+  if (sentinels.resolveSentinelsEffect(s, e, sentinelsPorts)) return;
   if (resolveThorEffect(s, e, thorPorts)) return;
   if (resolveMsMarvelEffect(s, e, msPorts)) return;
   if (["risky:advance-main", "mutagen:advance-main"].includes(e.type))
@@ -16385,6 +17206,7 @@ function resolve(s: GameState, e: Effect) {
     resolveCaptainEffect(s, e, {
       queue: add,
       choose,
+      canChangeForm: (s) => canChangeIdentityForm(s, "alter"),
       select,
       shuffle,
       discardHand,
@@ -18283,6 +19105,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     case "defeatScheme": {
       const p = s.sideSchemes.find((x) => x.id === e.id);
+      if (p && zeroTolerance.zeroToleranceIsPermanent(s, p)) break;
       const interrupts =
         p && !e.visionPackChanceChecked
           ? visionPack.visionPackSchemeDefeating(s, p, visionPackPorts)
@@ -20245,6 +21068,8 @@ function resolve(s: GameState, e: Effect) {
           }
         : undefined;
       const queuedBefore = s.queue.length;
+      if (attack && p.code === "32091")
+        delete s.flags[`wideawakeMinionDefeat:${p.id}`];
       const bonus = attack
         ? scarletPack.scarletWitchPackAllyAttackBonus(s, p)
         : 0;
@@ -20368,6 +21193,8 @@ function resolve(s: GameState, e: Effect) {
         ),
         E("allyResponse", {
           id: p.id,
+          wideawakeTargetId: e.target,
+          wideawakeTargetCode: attackedEnemySnapshot?.code || "",
           attack,
           sinisterPowerToken:
             e.sinisterPowerToken || `ally-basic:${s.nextId++}`,
@@ -20377,6 +21204,8 @@ function resolve(s: GameState, e: Effect) {
         }),
         E("allyConsequence", {
           id: p.id,
+          wideawakeTargetId: e.target,
+          wideawakeTargetCode: attackedEnemySnapshot?.code || "",
           attack,
           defeatKey,
           nebulaPackCosmoHandled: e.nebulaPackCosmoHandled,
@@ -20465,13 +21294,29 @@ function resolve(s: GameState, e: Effect) {
         );
       if (rulesCode(p) === "01050" && e.attack)
         add(s, E("hulk", { source: p.id }));
+      if (e.attack && ["32089", "32090"].includes(p.code))
+        add(
+          s,
+          E("wideawake-native:ally-response", {
+            receipt: {
+              token: e.sinisterPowerToken,
+              allyId: p.id,
+              allyCode: p.code,
+              playerId: s.activePlayerId,
+              performed: true,
+              targetId: e.wideawakeTargetId,
+              targetCode: e.wideawakeTargetCode,
+              defeatedMinion: !!s.flags[`wideawakeMinionDefeat:${p.id}`],
+            },
+          }),
+        );
       break;
     }
     case "allyConsequence": {
       const p = find(s, e.id);
       const defeatedEnemy = !!s.flags[e.defeatKey];
       if (e.defeatKey) delete s.flags[e.defeatKey];
-      const amount = p
+      const baseAmount = p
         ? nebulaPack.nebulaPackConsequentialDamage(
             s,
             p,
@@ -20480,6 +21325,25 @@ function resolve(s: GameState, e: Effect) {
             nebulaPackPorts,
           )
         : 0;
+      const reduction =
+        p?.code === "32091"
+          ? wideawake.projectWideawakeConsequentialReduction(
+              s,
+              {
+                token: e.sinisterPowerToken || `cannonball:${p.id}`,
+                allyId: p.id,
+                allyCode: p.code,
+                playerId: s.activePlayerId,
+                performed: !!e.attack,
+                targetId: e.wideawakeTargetId,
+                targetCode: e.wideawakeTargetCode,
+                defeatedMinion: !!s.flags[`wideawakeMinionDefeat:${p.id}`],
+              },
+              wideawakePorts,
+            )
+          : 0;
+      if (p?.code === "32091") delete s.flags[`wideawakeMinionDefeat:${p.id}`];
+      const amount = Math.max(0, baseAmount - reduction);
       if (p && amount) {
         const token = `consequence:${s.nextId++}`;
         s.flags[`sinisterConsequential:${token}`] = amount;
@@ -20554,6 +21418,14 @@ function resolve(s: GameState, e: Effect) {
             s.villain.stage !== e.attackedEnemy.stage));
       break;
     case "dvRegroupDefeatAfter":
+      if (s.attack?.id === e.enemyAttackId)
+        recordZeroToleranceAllyDefeat(
+          s,
+          e.piece,
+          e.enemySource,
+          true,
+          e.playerId,
+        );
       if (e.playerId)
         add(
           s,
@@ -23047,7 +23919,7 @@ function resolve(s: GameState, e: Effect) {
     case "settle":
       need(
         !s.player.exhausted &&
-          (s.player.form === "alter" || !goblinIdentityLocked(s)),
+          (s.player.form === "alter" || canChangeIdentityForm(s, "alter")),
         "This obligation cannot be settled in the current form.",
       );
       s.player.form = "alter";
@@ -23063,7 +23935,10 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "stageSetup":
-      if (s.difficulty === "expert" && s.villainId !== "mutagen_formula")
+      if (
+        s.difficulty === "expert" &&
+        !["mutagen_formula", "project_wideawake"].includes(s.villainId)
+      )
         villainSetup(s);
       break;
     case "beginTurn":
@@ -23130,6 +24005,13 @@ function resolve(s: GameState, e: Effect) {
       log(s, `${heroCard(s).name} and their cards are ready.`, "phase");
       break;
     case "beginVillain":
+      if (!e.wideawakePlayerPhaseEnded) {
+        const effects = wideawake.projectWideawakeEndPlayerPhase(s);
+        if (effects.length) {
+          add(s, ...effects, { ...e, wideawakePlayerPhaseEnded: true });
+          break;
+        }
+      }
       niPack.novaIronheartPackPhaseEnded(s);
       spiderHam.spiderHamPhaseEnded(s);
       spiderHamPack.spiderHamPackPhaseEnded(s);
@@ -23484,6 +24366,7 @@ function resolve(s: GameState, e: Effect) {
       const order = playerOrder(s);
       s.firstPlayerId = (order[1] || order[0]).id;
       sabretooth.sabretoothFirstPlayerChanged(s);
+      wideawake.projectWideawakeFirstPlayerChanged(s, wideawakePorts);
       s.round++;
       s.phase = "player";
       s.villainStep = "newRound";
@@ -23683,6 +24566,10 @@ function run(s: GameState) {
       e.type.startsWith("sw:hydra") ||
       e.type.startsWith("sabretooth:") ||
       e.type.startsWith("sabretooth-native:") ||
+      e.type.startsWith("wideawake:") ||
+      e.type.startsWith("wideawake-native:") ||
+      e.type.startsWith("zero-tolerance:") ||
+      e.type.startsWith("sentinels:") ||
       e.type === "mystique-native:activation-finish";
     if (actor?.eliminated && !global) continue;
     activateSeat(
@@ -23966,6 +24853,12 @@ export function dispatch(state: GameState, command: Command): GameState {
           if (s.attachments.some((p) => p.id === command.id)) {
             const p = find(s, command.id)!;
             const custom = [
+              ...wideawake.projectWideawakeActionOptions(
+                s,
+                p.id,
+                wideawakePorts,
+              ),
+              ...sentinels.sentinelsAbilityOptions(s, p.id, sentinelsPorts),
               ...sabretooth.sabretoothActionOptions(s, p.id, sabretoothPorts),
               ...zzzax.zzzaxActions(s, p, zzzaxPorts),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -24056,6 +24949,16 @@ export function dispatch(state: GameState, command: Command): GameState {
             );
           }
           add(s, ...hulkTurnEnds(s));
+          if (s.player.inPlay.some((p) => p.code === "32099"))
+            add(
+              s,
+              ...wideawake.projectWideawakeEndPlayerTurn(
+                s,
+                s.activePlayerId,
+                `turn-end:${s.nextId++}`,
+                { isTextBlank },
+              ),
+            );
           add(
             s,
             ...spectrum.spectrumTurnEnded(s, s.turnPlayerId, spectrumPorts),

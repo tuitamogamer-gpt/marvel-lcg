@@ -650,7 +650,7 @@ export function resolveWaspEffect(
       // does not prevent the independent +2 for this use.
       if (e.power === "defense" && s.attack?.basicDefense)
         s.attack.defenseBonus = Number(s.attack.defenseBonus || 0) + 2;
-      if (waspForm(s) !== "giant" && ports.canChangeForm(s))
+      if (waspForm(s) !== "giant" && ports.canChangeForm(s, "giant"))
         ports.flip(s, false, "giant");
       break;
     case "wasp:giant-help":
@@ -807,7 +807,7 @@ export function resolveWaspEffect(
         active(s) && e.piece?.code === "13026",
         "Red Dreams must resolve for Nadia Van Dyne.",
       );
-      if (s.player.form === "hero" && ports.canChangeForm(s))
+      if (s.player.form === "hero" && ports.canChangeForm(s, "alter"))
         ports.choose(
           s,
           "Red Dreams",
@@ -825,7 +825,9 @@ export function resolveWaspEffect(
       break;
     case "wasp:obligation-flip":
       need(
-        active(s) && s.player.form === "hero" && ports.canChangeForm(s),
+        active(s) &&
+          s.player.form === "hero" &&
+          ports.canChangeForm(s, "alter"),
         "Nadia cannot change form.",
       );
       ports.queue(s, W("obligation-choice", { piece: e.piece }));
