@@ -68,6 +68,7 @@ function fixture(team = false) {
   s.sideSchemes = [];
   const ports: MsMarvelPorts = {
     queue: (state, ...effects) => state.queue.unshift(...effects),
+    canChangeForm: () => true,
     choose: (state, title, text, options) => {
       state.prompt = { kind: "choice", title, text, options };
     },

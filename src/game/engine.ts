@@ -9950,7 +9950,7 @@ const spectrumPorts: spectrum.SpectrumPorts = {
   makePiece,
   isTextBlank,
   identityTextBlank: (s) => isTextBlank(s, heroCard(s).code),
-  canChangeForm: canChangeIdentityForm,
+  canChangeForm: (s) => canChangeIdentityForm(s, "hero"),
   canReadyIdentity: (s, id) => canReadyIdentity(seatView(s, id)),
   canPay,
   cardCost: (s, p) => cardCost(s, card(p), p),
@@ -10242,6 +10242,7 @@ const resourcePairs: Resource[][] = [
 const msPorts: MsMarvelPorts = {
   queue: add,
   choose,
+  canChangeForm: (s) => canChangeIdentityForm(s, "alter"),
   select,
   discardPiece,
   discardTop: (s, playerId, n) => {
@@ -17205,6 +17206,7 @@ function resolve(s: GameState, e: Effect) {
     resolveCaptainEffect(s, e, {
       queue: add,
       choose,
+      canChangeForm: (s) => canChangeIdentityForm(s, "alter"),
       select,
       shuffle,
       discardHand,

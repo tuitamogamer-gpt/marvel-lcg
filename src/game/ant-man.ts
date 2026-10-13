@@ -70,7 +70,7 @@ export interface AntManTarget {
 export interface AntManPorts {
   queue(s: GameState, ...effects: Effect[]): void;
   choose(s: GameState, title: string, text: string, options: Option[]): void;
-  canChangeForm(s: GameState): boolean;
+  canChangeForm(s: GameState, target?: AntManForm): boolean;
   flip(s: GameState, counts: boolean, target?: AntManForm): void;
   canReadyIdentity(s: GameState, playerId: string): boolean;
   canPay(
@@ -109,8 +109,8 @@ const applicableForm = (s: GameState): AntManForm =>
 export function antManCanChangeForm(s: GameState): boolean {
   return !s.flags.antManCannotChangeUntilTurnEnd;
 }
-const canChange = (s: GameState, ports: AntManPorts) =>
-  antManCanChangeForm(s) && ports.canChangeForm(s);
+const canChange = (s: GameState, ports: AntManPorts, target?: AntManForm) =>
+  antManCanChangeForm(s) && ports.canChangeForm(s, target);
 export function antManStats(s: GameState) {
   return {
     attack:
@@ -695,7 +695,7 @@ export function resolveAntManEffect(
         active(s) && e.piece?.code === "12025",
         "Care for Cassie must resolve for Scott Lang.",
       );
-      if (s.player.form === "hero" && canChange(s, ports))
+      if (s.player.form === "hero" && canChange(s, ports, "alter"))
         ports.choose(
           s,
           "Care for Cassie",
@@ -714,7 +714,7 @@ export function resolveAntManEffect(
     }
     case "antman:obligation-flip":
       need(
-        active(s) && s.player.form === "hero" && canChange(s, ports),
+        active(s) && s.player.form === "hero" && canChange(s, ports, "alter"),
         "Scott Lang cannot change form.",
       );
       ports.queue(s, A("obligation-choice", { piece: e.piece }));

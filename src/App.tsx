@@ -2933,7 +2933,11 @@ function PaymentDecision({
       <div className="payment-workspace">
         <aside className="payment-target">
           <span className="small-label">
-            {p.card ? "YOU ARE PLAYING" : "YOU ARE PAYING FOR"}
+            {p.abilityCost
+              ? "YOU ARE USING AN ABILITY"
+              : p.card
+                ? "YOU ARE PLAYING"
+                : "YOU ARE PAYING FOR"}
           </span>
           {subject && (
             <button
@@ -2961,8 +2965,12 @@ function PaymentDecision({
             </div>
           )}
           <p>
-            Confirm payment to play the card. Your resources and the result
-            appear together in the action summary.
+            {p.abilityCost
+              ? "Confirm payment to use this ability."
+              : p.card
+                ? "Confirm payment to play the card."
+                : "Confirm payment to resolve this action."}{" "}
+            Your resources and the result appear together in the action summary.
           </p>
         </aside>
         <section

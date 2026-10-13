@@ -9,12 +9,14 @@ import {
 } from "../src/game/engine.js";
 import { activateSeat, seatView } from "../src/game/team.js";
 import { card } from "../src/game/cards.js";
+import { spectrumEnergyForm } from "../src/game/spectrum.js";
 import {
   actualEncounter,
   base,
   choose,
   command,
   conserved,
+  hand,
   native,
   physical,
   put,
@@ -132,6 +134,93 @@ describe("Sentinels actual native card rules", () => {
     s = settle(choose(s, "penalty"));
     expect(s.player).toMatchObject({ form: "hero", exhausted: false });
     conserved(s);
+  });
+
+  it.each([
+    ["captain_america", "03026"],
+    ["ms_marvel", "05025"],
+    ["ant", "12025"],
+    ["wsp", "13026"],
+  ])(
+    "Targeted prevents %s's actual obligation from offering an alter-ego flip or exhaustion cost",
+    (heroId, code) => {
+      let s = base(heroId);
+      const marker = actualEncounter(s, "32107"),
+        sentinel = actualEncounter(s, "32105"),
+        obligation = actualEncounter(s, code);
+      marker.attachedTo = "hero:p1";
+      sentinel.engagedWith = "p1";
+      s.attachments.push(marker);
+      s.minions.push(sentinel);
+      s = native(s, { type: "reveal", piece: obligation, skip: true });
+      expect(s.prompt?.options.some((o) => o.id === "flip")).toBe(false);
+      if (s.prompt?.options.some((o) => o.id === "stay")) s = choose(s, "stay");
+      expect(s.prompt?.options.map((o) => o.id)).toEqual(["discard"]);
+      expect(s.player).toMatchObject({ form: "hero", exhausted: false });
+      expect(s.resolving.some((p) => p.id === obligation.id)).toBe(true);
+      conserved(s);
+    },
+  );
+
+  it.each([
+    ["captain_america", "03026"],
+    ["ms_marvel", "05025"],
+    ["ant", "12025"],
+    ["wsp", "13026"],
+  ])(
+    "%s's saved obligation flip revalidates Targeted before changing form or paying exhaustion",
+    (heroId, code) => {
+      let s = base(heroId);
+      const obligation = actualEncounter(s, code);
+      s = native(s, { type: "reveal", piece: obligation, skip: true });
+      expect(s.prompt?.options.some((o) => o.id === "flip")).toBe(true);
+      const marker = actualEncounter(s, "32107"),
+        sentinel = actualEncounter(s, "32105");
+      marker.attachedTo = "hero:p1";
+      sentinel.engagedWith = "p1";
+      s.attachments.push(marker);
+      s.minions.push(sentinel);
+      const rejected = dispatch(reload(s), { type: "CHOOSE", id: "flip" });
+      expect(rejected.error).toBeTruthy();
+      expect(rejected.player).toMatchObject({
+        form: "hero",
+        exhausted: false,
+      });
+      expect(rejected.resolving.some((p) => p.id === obligation.id)).toBe(true);
+      conserved(rejected);
+    },
+  );
+
+  it("Targeted permits Spectrum's actual energy-form event while still preventing alter-ego", () => {
+    let s = newGame({
+      heroId: "spectrum",
+      aspect: "leadership",
+      villainId: "project_wideawake",
+      captureAllocation: [0],
+      seed: 321071,
+      pacing: "expert",
+    });
+    s = settle(command(s, { type: "MULLIGAN", ids: [] }));
+    s = command(s, { type: "FLIP" });
+    const pulsar = s.player.inPlay.find((p) => p.code === "21004")!;
+    s = settle(choose(s, pulsar.id));
+    const marker = actualEncounter(s, "32107"),
+      sentinel = actualEncounter(s, "32105");
+    marker.attachedTo = "hero:p1";
+    sentinel.engagedWith = "p1";
+    s.attachments.push(marker);
+    s.minions.push(sentinel);
+    expect(canChangeIdentityForm(s, "alter")).toBe(false);
+    const speed = hand(s, "21010")[0],
+      photon = s.player.inPlay.find((p) => p.code === "21003")!;
+    s = command(s, { type: "PLAY", id: speed.id });
+    expect(s.prompt?.options.some((o) => o.id === photon.id)).toBe(true);
+    s = settle(choose(s, photon.id));
+    expect(spectrumEnergyForm(s)).toBe("photon");
+    expect(s.player.form).toBe("hero");
+    expect(s.player.discard.filter((p) => p.id === speed.id)).toHaveLength(1);
+    expect(s.player.inPlay.filter((p) => p.id === photon.id)).toHaveLength(1);
+    expect(canChangeIdentityForm(s, "alter")).toBe(false);
   });
 
   it("a teammate cannot exhaust their identity to remove another player's marker", () => {

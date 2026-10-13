@@ -163,6 +163,9 @@ function runMission(config: (typeof missions)[number]) {
       (p) => isPermanent(card(p)) && codes.includes(p.code),
     ),
     ...(s.player.setAside || []).filter((p) => codes.includes(p.code)),
+    ...s.sideSchemes
+      .flatMap((p) => p.captured || [])
+      .filter((p) => p.ownerId === s.activePlayerId && codes.includes(p.code)),
   ];
   expect(initial.map((p) => p.code).sort()).toEqual([...codes].sort());
   const supplementary = [

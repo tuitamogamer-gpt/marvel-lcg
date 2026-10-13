@@ -63,6 +63,7 @@ export const CAPTAIN_AMERICA_SCRIPT_CODES = [
 export interface CaptainEnginePorts {
   queue(s: GameState, ...effects: Effect[]): void;
   choose(s: GameState, title: string, text: string, options: Option[]): void;
+  canChangeForm(s: GameState): boolean;
   select(
     s: GameState,
     title: string,
@@ -514,7 +515,7 @@ export function resolveCaptainEffect(
         "Man Out of Time",
         "You may flip to alter-ego form before resolving this obligation.",
         [
-          ...(s.player.form === "hero" && !goblinIdentityLocked(s)
+          ...(s.player.form === "hero" && ports.canChangeForm(s)
             ? [
                 option(
                   "flip",
@@ -531,7 +532,10 @@ export function resolveCaptainEffect(
       );
       break;
     case "cap:obligation-flip":
-      need(!goblinIdentityLocked(s), "All Tied Up prevents changing form.");
+      need(
+        s.player.form === "hero" && ports.canChangeForm(s),
+        "This identity cannot change to alter-ego form.",
+      );
       s.player.form = "alter";
       ports.queue(s, cap("obligation-choice", { piece: e.piece }));
       break;

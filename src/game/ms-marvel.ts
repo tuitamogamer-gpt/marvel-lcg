@@ -3,7 +3,6 @@ import { defenseEventSources, isTextBlank } from "./card-text.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { uniqueConflict } from "./unique.js";
-import { goblinIdentityLocked } from "./goblin-modules.js";
 import { rulesCode } from "./rules-code.js";
 import type { PaymentSource } from "./payment.js";
 import type {
@@ -112,6 +111,7 @@ export interface MsMarvelDamageWindow {
 export interface MsMarvelPorts {
   queue(s: GameState, ...effects: Effect[]): void;
   choose(s: GameState, title: string, text: string, options: Option[]): void;
+  canChangeForm(s: GameState): boolean;
   select(
     s: GameState,
     title: string,
@@ -1166,7 +1166,7 @@ export function resolveMsMarvelEffect(
       break;
     }
     case "ms:obligation":
-      if (s.player.form === "hero" && !goblinIdentityLocked(s))
+      if (s.player.form === "hero" && ports.canChangeForm(s))
         ports.choose(
           s,
           "Home by Dawn",
@@ -1184,6 +1184,10 @@ export function resolveMsMarvelEffect(
       else ports.queue(s, M("obligation-choice", { piece: e.piece }));
       break;
     case "ms:obligation-flip":
+      need(
+        s.player.form === "hero" && ports.canChangeForm(s),
+        "Kamala Khan cannot change to alter-ego form.",
+      );
       ports.flip(s, false);
       break;
     case "ms:obligation-choice": {
