@@ -57,6 +57,15 @@ import type { SavedDeck, MissionRecord } from "./account/types";
 import { significantEvent, type Milestone } from "./milestones";
 const MilestoneAnimation = lazy(() => import("./MilestoneAnimation"));
 import { HeroEmblem } from "./HeroEmblem";
+import { HeroRoster } from "./HeroRoster";
+import { readStorage, writeStorage } from "./browser-storage";
+import {
+  missionRecord,
+  readHistory,
+  replaySetup,
+  writeHistory,
+  type GuestRecord,
+} from "./mission-history";
 import { KeywordGuide, TutorialCoach } from "./Onboarding";
 import { readTutorial, saveTutorial, TUTORIAL_SETUP } from "./tutorial";
 import { shortReason } from "./game/glossary";
@@ -221,33 +230,6 @@ function timelineSummary(entry: ActionReview) {
   return change
     ? `${change.label}: ${change.before} → ${change.after}`
     : entry.messages[0] || entry.actor;
-}
-const HISTORY_KEY = "champions.history.v1";
-type GuestRecord = {
-  id: string;
-  date: string;
-  heroes: { heroId: string; aspect: Aspect }[];
-  villainId: string;
-  difficulty: "standard" | "expert";
-  heroic: number;
-  round: number;
-  outcome: "won" | "lost";
-  seed: number;
-};
-function readHistory(): GuestRecord[] {
-  try {
-    const list = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
-    return Array.isArray(list) ? list.filter((r) => r && r.id) : [];
-  } catch {
-    return [];
-  }
-}
-function writeHistory(list: GuestRecord[]) {
-  try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
-  } catch {
-    // Blocked storage only loses the guest history.
-  }
 }
 function missionSummary(g: GameState) {
   const heroes = g.players
@@ -814,7 +796,7 @@ export default function App() {
   const [toast, setToast] = useState("");
   const [logOpen, setLogOpen] = useState(true);
   const [sound, setSound] = useState(
-    () => localStorage.getItem("champions.sound") === "on",
+    () => readStorage("champions.sound") === "on",
   );
   const [pacing, setPacingState] = useState<Pacing>(readPacing);
   const [heroic, setHeroic] = useState(0);
@@ -857,6 +839,14 @@ export default function App() {
         setStorageError(true);
       }
   }, [game, gameOwner]);
+  useEffect(() => {
+    if (!storageError || gameOwner) return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [storageError, gameOwner]);
   useEffect(() => {
     if (
       gameOwner &&
@@ -952,17 +942,7 @@ export default function App() {
       !game.accountMission
     )
       return;
-    const record: GuestRecord = {
-      id: game.accountMission.id,
-      date: new Date().toISOString(),
-      heroes: game.players.map((p) => ({ heroId: p.heroId, aspect: p.aspect })),
-      villainId: game.villainId,
-      difficulty: game.difficulty,
-      heroic: game.heroic || 0,
-      round: game.round,
-      outcome: game.phase as "won" | "lost",
-      seed: game.startSeed || 0,
-    };
+    const record = missionRecord(game);
     setGuestHistory((list) => {
       if (list.some((r) => r.id === record.id)) return list;
       const next = [record, ...list].slice(0, 30);
@@ -1293,7 +1273,7 @@ export default function App() {
             title={sound ? "Mute sound" : "Enable sound"}
             onClick={() => {
               setSound(!sound);
-              localStorage.setItem("champions.sound", sound ? "off" : "on");
+              writeStorage("champions.sound", sound ? "off" : "on");
             }}
           >
             {sound ? <SpeakerHigh size={19} /> : <SpeakerSlash size={19} />}
@@ -1309,6 +1289,25 @@ export default function App() {
           )}
         </div>
       </header>
+      {storageError && !gameOwner && (
+        <div className="storage-notice" role="alert">
+          <Warning size={19} aria-hidden="true" />
+          <span>
+            Progress is not saved. Browser storage is full or unavailable. Keep
+            this tab open to continue playing.
+          </span>
+          <button
+            onClick={() => {
+              if (game && writeStorage(SAVE_KEY, JSON.stringify(game))) {
+                setStorageError(false);
+                setToast("Mission saved on this device.");
+              }
+            }}
+          >
+            Retry save
+          </button>
+        </div>
+      )}
       {gameOwner && (
         <div
           className={`account-sync ${missionSync.status === "error" ? "error" : ""}`}
@@ -1544,46 +1543,16 @@ export default function App() {
                 </div>
                 <span className="muted">Find your superpower.</span>
               </div>
-              <div className="hero-roster">
-                {HEROES.map((h) => (
-                  <button
-                    key={h.id}
-                    className={`hero-tile ${h.id === hero.id ? "selected" : ""}`}
-                    style={aspectStyle(h.color)}
-                    onClick={() => {
-                      setHero(h);
-                      setAspect(h.aspect);
-                    }}
-                    disabled={team.some(
-                      (p, i) => i !== setupSeat && p.heroId === h.id,
-                    )}
-                    title={
-                      team.some((p, i) => i !== setupSeat && p.heroId === h.id)
-                        ? "Already assigned to another hero seat"
-                        : h.name
-                    }
-                    aria-pressed={hero.id === h.id}
-                  >
-                    <div className="portrait">
-                      <img
-                        data-card-preview={h.code}
-                        src={imageFor(h.code)}
-                        alt={h.name}
-                      />
-                    </div>
-                    {hero.id === h.id && (
-                      <span className="selected-check">
-                        <Check size={14} weight="bold" />
-                      </span>
-                    )}
-                    <div className="hero-tile-copy">
-                      <strong>{h.name}</strong>
-                      <small>{h.identity}</small>
-                    </div>
-                    <span className="tile-border" />
-                  </button>
-                ))}
-              </div>
+              <HeroRoster
+                selectedId={hero.id}
+                assignedIds={team
+                  .filter((_, i) => i !== setupSeat)
+                  .map((seat) => seat.heroId)}
+                onChoose={(next) => {
+                  setHero(next);
+                  setAspect(next.aspect);
+                }}
+              />
               <button
                 className="content-entry"
                 onClick={() => setContentView(true)}
@@ -1825,6 +1794,11 @@ export default function App() {
                   ))}
                 </div>
               </div>
+              <p className="setting-help">
+                {difficulty === "expert"
+                  ? "Villain stages II → III. Includes the Expert encounter set."
+                  : "Villain stages I → II. Recommended for your first mission."}
+              </p>
               <div className="setting-line tempo-line">
                 <span>Tempo</span>
                 <div className="segmented">
@@ -1865,6 +1839,12 @@ export default function App() {
                   ))}
                 </div>
               </div>
+              {heroic > 0 && (
+                <p className="setting-help">
+                  Each hero receives {heroic} extra encounter{" "}
+                  {heroic === 1 ? "card" : "cards"} every villain phase.
+                </p>
+              )}
               <div className="seed-line">
                 <label>
                   Seed
@@ -1949,7 +1929,10 @@ export default function App() {
                 <ArrowRight size={20} />
               </button>
               <span className="save-note">
-                <ShieldCheck size={13} /> Your progress saves automatically.
+                <ShieldCheck size={13} />
+                {storageError && !gameOwner
+                  ? "Saving is unavailable on this device."
+                  : "Your progress saves automatically."}
               </span>
             </section>
           </div>
@@ -1982,9 +1965,18 @@ export default function App() {
                     </span>
                     <button
                       className="text-button"
-                      title="Load this mission's seed and setup"
+                      title="Load this mission's team, decks, modular set and seed"
                       onClick={() => {
-                        setTeam(r.heroes.map((p) => ({ ...p })));
+                        const setup = replaySetup(r);
+                        setTeam(
+                          setup.heroes.map((seat) => ({
+                            ...seat,
+                            ...(seat.deckCards
+                              ? { deckName: "Replayed deck" }
+                              : {}),
+                          })),
+                        );
+                        setModule(setup.module);
                         setSetupSeat(0);
                         setVillain(
                           VILLAINS.find((v) => v.id === r.villainId) ||
@@ -1994,7 +1986,9 @@ export default function App() {
                         setHeroic(r.heroic);
                         setSeedText(r.seed ? String(r.seed) : "");
                         setToast(
-                          "Setup and seed loaded. Start the mission to replay it.",
+                          r.module && r.heroes.every((seat) => seat.deckCards)
+                            ? "Original team, decks, modular set and seed loaded. Start the mission to replay it."
+                            : "This older result did not record full setup details. Starter decks and the recommended modular set are loaded with its original seed.",
                         );
                       }}
                     >
@@ -2537,10 +2531,10 @@ export default function App() {
           />
         </Suspense>
       )}
-      {(toast || storageError) && (
-        <div className="toast" role="alert">
+      {toast && (
+        <div className="toast" role="status">
           <Info size={20} />
-          {toast || "Browser storage is full. This session cannot be saved."}
+          {toast}
           <button aria-label="Dismiss message" onClick={() => setToast("")}>
             <X size={16} />
           </button>
@@ -3480,6 +3474,7 @@ function ReviewDetails({
 }
 function ActionDirector({
   game: s,
+  saveLabel,
   send,
   inspect,
   pacing,
@@ -3487,6 +3482,7 @@ function ActionDirector({
   onEnd,
 }: {
   game: GameState;
+  saveLabel: string;
   send: (c: Command) => void;
   inspect: (c: Inspect) => void;
   pacing: Pacing;
@@ -3723,7 +3719,7 @@ function ActionDirector({
                 )}
               </div>
               <span className="pace-note">
-                <ShieldCheck size={14} /> Every step is saved automatically.
+                <ShieldCheck size={14} /> {saveLabel}
               </span>
             </>
           )}
@@ -5679,6 +5675,7 @@ function Tabletop({
           {coach}
           <ActionDirector
             game={game}
+            saveLabel={saveLabel}
             send={send}
             inspect={inspect}
             pacing={pacing}
