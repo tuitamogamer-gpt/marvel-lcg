@@ -346,7 +346,7 @@ for (const spec of specs)
   });
 
 describe("Mutant Genesis printed scope and physical forms", () => {
-  it("registers exactly the sixty-two original hero-scope faces without enabling box scenarios", () => {
+  it("retains the sixty-two original hero-scope faces and unsupported later box content", () => {
     const scoped = catalog.filter(
       (c) => c.pack_code === "mut_gen" && c.position <= 59,
     );
@@ -371,7 +371,7 @@ describe("Mutant Genesis printed scope and physical forms", () => {
     }
     for (const c of catalog.filter(
       (c) =>
-        c.pack_code === "mut_gen" && c.position > 120 && c.code !== "32172b",
+        c.pack_code === "mut_gen" && c.position > 137 && c.code !== "32172b",
     )) {
       expect(hasExecutableScript(c.code), c.code).toBe(false);
       expect(EXPLICIT_CARD_SCRIPTS.has(c.code), c.code).toBe(false);

@@ -41,6 +41,7 @@ import * as mystique from "./mystique.js";
 import * as sentinels from "./sentinels.js";
 import * as wideawake from "./project-wideawake.js";
 import * as masterMold from "./master-mold.js";
+import * as mansionAttack from "./mansion-attack.js";
 import * as zeroTolerance from "./zero-tolerance.js";
 import * as nebula from "./nebula.js";
 import { isPermanent } from "./hero-runtime.js";
@@ -529,7 +530,14 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
   );
 }
 function nativeStatusModifiers(s: GameState, p: StatusState) {
-  if (!("code" in p)) return {};
+  if (!("code" in p))
+    return s.villainId === "mansion_attack"
+      ? {
+          steady: mansionAttack.mansionAttackModifiers(s, "hero", {
+            isTextBlank,
+          }).steady,
+        }
+      : {};
   const piece = p as Piece;
   const inherited = inheritors.inheritorsModifiers(s, piece);
   return {
@@ -539,6 +547,9 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     ...(inherited.stalwart ||
     sabretooth.sabretoothModifiers(s, piece.id).stalwart
       ? { stalwart: true }
+      : {}),
+    ...(mansionAttack.mansionAttackModifiers(s, piece, { isTextBlank }).steady
+      ? { steady: true }
       : {}),
   };
 }
@@ -563,9 +574,13 @@ function giveCharacterStatus(
             nebula.nebulaAttackKeywords(identity).stalwart ||
             vision.visionStalwart(identity),
           toughLimit: colossus.colossusToughLimit(identity, colossusPorts),
-          steady: spdrPack.spdrPackCharacterSteady(identity, "hero", {
-            isTextBlank,
-          }),
+          steady:
+            spdrPack.spdrPackCharacterSteady(identity, "hero", {
+              isTextBlank,
+            }) ||
+            mansionAttack.mansionAttackModifiers(identity, "hero", {
+              isTextBlank,
+            }).steady,
         }
       : nativeStatusModifiers(s, p),
   );
@@ -587,6 +602,25 @@ function syncNebulaIdentityStatuses(s: GameState) {
       vision.visionStalwart(view)
     )
       syncStatuses(view.player, heroCard(view), { stalwart: true });
+    else if (s.villainId === "mansion_attack") {
+      const steady =
+        mansionAttack.mansionAttackModifiers(view, "hero", { isTextBlank })
+          .steady ||
+        spdrPack.spdrPackCharacterSteady(view, "hero", { isTextBlank });
+      if (!steady && !printedKeyword(heroCard(view), "Steady")) {
+        view.player.stunCards = Math.min(
+          1,
+          statusCards(view.player, "stunned"),
+        );
+        view.player.confuseCards = Math.min(
+          1,
+          statusCards(view.player, "confused"),
+        );
+      }
+      syncStatuses(view.player, heroCard(view), {
+        steady,
+      });
+    }
   }
   for (const p of [
     s.villain,
@@ -597,9 +631,19 @@ function syncNebulaIdentityStatuses(s: GameState) {
       printedKeyword(card(p), "Steady") ||
       printedKeyword(card(p), "Stalwart") ||
       inheritors.inheritorsModifiers(s, p).stalwart ||
-      sabretooth.sabretoothModifiers(s, p.id).stalwart
-    )
+      sabretooth.sabretoothModifiers(s, p.id).stalwart ||
+      s.villainId === "mansion_attack"
+    ) {
+      const modifiers = nativeStatusModifiers(s, p);
+      if (
+        s.villainId === "mansion_attack" &&
+        !(modifiers.steady ?? printedKeyword(card(p), "Steady"))
+      ) {
+        p.stunCards = Math.min(1, statusCards(p, "stunned"));
+        p.confuseCards = Math.min(1, statusCards(p, "confused"));
+      }
       syncStatuses(p, card(p), nativeStatusModifiers(s, p));
+    }
 }
 function canReadyIdentity(s: GameState) {
   return !goblinIdentityLocked(s) && quicksilver.quicksilverCanReady(s);
@@ -631,6 +675,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         : 0) +
       (name === "Retaliate"
         ? captainStats(s).retaliate +
+          mansionAttack.mansionAttackModifiers(s, "hero", { isTextBlank })
+            .retaliate +
           hulkStats(s).retaliate +
           drax.draxStats(s).retaliate +
           spectrum.spectrumRetaliate(s) +
@@ -648,6 +694,9 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
   const moldKeywords = masterMold.masterMoldModifiers(s, p, {
     isTextBlank,
     hasTrait: captainPackHasTrait,
+  });
+  const mansionKeywords = mansionAttack.mansionAttackModifiers(s, p, {
+    isTextBlank,
   });
   if (name === "Overkill" && ironspider.ironspiderSinisterOverkill(s, p))
     return 1;
@@ -725,7 +774,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     inherited[name.toLowerCase() as keyof typeof inherited] || 0,
   );
   return name === "Retaliate"
-    ? intrinsic + grantedValue
+    ? intrinsic + grantedValue + mansionKeywords.retaliate
     : Math.max(intrinsic, grantedValue);
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
@@ -821,6 +870,9 @@ function finishResolution(s: GameState, id: string) {
 }
 function effectContext(s: GameState, e: Effect): Effect {
   return {
+    ...(s.villainId === "mansion_attack" && (s.attack?.id || s.scheming?.id)
+      ? { mansionActivationId: s.attack?.id || s.scheming?.id }
+      : {}),
     actorId: s.activePlayerId,
     eventId: s.currentEventId,
     attackProgramId: s.currentAttackProgramId,
@@ -908,7 +960,7 @@ function select(
   };
 }
 const allPieces = (s: GameState) => [
-  s.villain,
+  ...(!s.mansionAttack?.activeVillainRetired ? [s.villain] : []),
   ...s.minions,
   ...s.sideSchemes,
   ...allInPlay(s),
@@ -917,7 +969,7 @@ const allPieces = (s: GameState) => [
   ...(s.sabretooth?.kelly ? [s.sabretooth.kelly] : []),
 ];
 const find = (s: GameState, id: string) =>
-  allPieces(s).find((p) => p.id === id) ||
+  allPieces(s).find((p) => p.id === (id === "villain" ? s.villain.id : id)) ||
   s.players
     .flatMap((seat) => {
       const p = seatView(s, seat).player;
@@ -1585,15 +1637,24 @@ function endGame(s: GameState, won: boolean, reason: string) {
     for (const p of activation.pendingBoosts || []) pending.set(p.id, p);
     activation.pendingBoosts = [];
     const callback = activation.activationAfter;
-    if (callback?.type === "mystique-native:activation-finish") {
+    if (
+      callback &&
+      [
+        "mystique-native:activation-finish",
+        "mansion-native:activation-finish",
+      ].includes(callback.type)
+    ) {
       collect(callback.outerAttack);
       collect(callback.outerScheme);
     }
   };
   collect(s.attack);
   collect(s.scheming);
-  for (const callback of s.queue.filter(
-    (e) => e.type === "mystique-native:activation-finish",
+  for (const callback of s.queue.filter((e) =>
+    [
+      "mystique-native:activation-finish",
+      "mansion-native:activation-finish",
+    ].includes(e.type),
   )) {
     collect(callback.outerAttack);
     collect(callback.outerScheme);
@@ -1746,6 +1807,11 @@ function syncVillainTextHealth(s: GameState) {
 function check(s: GameState) {
   syncValkyrieConvertedCards(s);
   syncVillainTextHealth(s);
+  if (
+    s.villainId === "mansion_attack" &&
+    mansionAttack.mansionAttackCheckOutcome(s, mansionAttackPorts)
+  )
+    return;
   wideawake.projectWideawakeFirstPlayerChanged(s, wideawakePorts);
   masterMold.masterMoldFirstPlayerChanged(s, masterMoldPorts);
   if (zeroTolerance.zeroToleranceCheckLoss(s, zeroTolerancePorts)) return;
@@ -1941,6 +2007,7 @@ function check(s: GameState) {
   }
 }
 export function schemeLimit(s: GameState) {
+  const mansionLimit = mansionAttack.mansionAttackMainThreatLimit(s);
   const wideawakeLimit = wideawake.projectWideawakeMainThreatLimit(s);
   if (wideawakeLimit !== undefined) return wideawakeLimit;
   const sabretoothLimit = sabretooth.sabretoothMainThreatLimit(s);
@@ -1952,6 +2019,7 @@ export function schemeLimit(s: GameState) {
         p.code === "06031" &&
         ["main", `main:${s.scheme.code}`].includes(p.attachedTo || ""),
     ).length * 4;
+  if (mansionLimit !== undefined) return mansionLimit + surveillance;
   if (value) return value.threshold + surveillance;
   return (
     (card(s.scheme.code).threat || 0) *
@@ -2446,6 +2514,8 @@ function dealDamage(
             isTextBlank,
             hasTrait: captainPackHasTrait,
           }).retaliate +
+          mansionAttack.mansionAttackModifiers(s, original, { isTextBlank })
+            .retaliate +
           (target === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -2459,6 +2529,9 @@ function dealDamage(
           retaliateSource: original.id,
           inheritorRetaliate: inheritors.inheritorsModifiers(s, original)
             .retaliate,
+          mansionRetaliate: mansionAttack.mansionAttackModifiers(s, original, {
+            isTextBlank,
+          }).retaliate,
           title: `${card(original).name} · Retaliate ${amount}`,
           mandatory: true,
           afterAttack: true,
@@ -3060,6 +3133,25 @@ function advanceVillain(
     "enemy-defeat",
     `${s.villain.id}:${s.villain.stage}`,
   );
+  if (s.villainId === "mansion_attack") {
+    if (s.villain.pendingDefeat || s.mansionAttack?.activeVillainRetired)
+      return;
+    s.villain.pendingDefeat = true;
+    const defeated = s.villain;
+    mansionAttackEndDepartedActivation(s, defeated.id);
+    add(
+      s,
+      ...mansionAttack.mansionAttackVillainDefeated(
+        s,
+        {
+          token: `mansion-defeat:${defeated.id}`,
+          piece: defeated,
+        },
+        { isTextBlank },
+      ),
+    );
+    return;
+  }
   const previousTitle = card(s.villain).name;
   const last = s.difficulty === "expert" ? 3 : 2;
   if (s.villain.stage === last) {
@@ -3213,6 +3305,24 @@ function threat(
         ),
       );
     if (schemeLimit(s) > 0 && s.scheme.threat >= schemeLimit(s)) {
+      if (s.villainId === "mansion_attack") {
+        if (!s.pendingMainCompletion) {
+          s.pendingMainCompletion = true;
+          add(
+            s,
+            ...mansionAttack.mansionAttackMainCompleted(
+              s,
+              {
+                token: `mansion-main:${s.mansionAttack?.currentMain?.id}`,
+                schemeCode: s.scheme.code,
+              },
+              { isTextBlank },
+            ),
+            E("clearMainCompletion"),
+          );
+        }
+        return;
+      }
       if (s.villainId === "master_mold") {
         if (s.scheme.code === "32113b") {
           endGame(
@@ -3386,12 +3496,27 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
     s.activePlayerId,
     { isTextBlank },
   );
+  const mansionDefeat = mansionAttack.mansionAttackSideSchemeDefeated(
+    s,
+    p,
+    s.activePlayerId,
+    { isTextBlank },
+  );
   const victory =
     ["32071", "32100", "32120"].includes(p.code) && !isTextBlank(s, p);
   const retainFind =
     ["32065a", "32088a"].includes(p.code) && !isTextBlank(s, p);
   if (!victory && !retainFind) discardPiece(s, p.id);
   const responses = [
+    ...(mansionDefeat?.length
+      ? [
+          {
+            id: `${p.id}:mansion-defeated`,
+            title: card(p).name,
+            effects: mansionDefeat,
+          },
+        ]
+      : []),
     ...(moldDefeat?.length
       ? [
           {
@@ -5007,6 +5132,21 @@ function pay(
     generated: [...printed],
     overpaid: Math.max(0, printed.length - (p.cost || 0)),
   }));
+  if (p.card && ["21043", "21050", "21055"].includes(p.card.code)) {
+    // Printed costs before the arrow and resource costs are paid together.
+    // A spent-resource Response cannot alter a target between those costs.
+    add(
+      s,
+      ...mtsPlayerPack.mtsPlayerPackBeforeEvent(s, p.card, [
+        E("mtsPackCommittedPayment", {
+          pieceId: p.card.id,
+          spentResponses,
+          after,
+        }),
+      ]),
+    );
+    return;
+  }
   if (p.card?.code === "31017") {
     // The selected resource payment and printed damage are one card cost.
     // Resource-generation responses wait until its damage cost is complete.
@@ -5279,7 +5419,27 @@ export function newGame(config: {
       Array.from({ length: c.quantity }, () => makePiece(s, c.code)),
     ),
   );
-  if (v.id === "master_mold") {
+  if (v.id === "mansion_attack") {
+    mansionAttack.mansionAttackSetup(
+      s,
+      {
+        villains: v.codes.map((code) => makePiece(s, code)),
+        rooms: ["32126a", "32127a", "32128a", "32129a"].map((code) =>
+          makePiece(s, code),
+        ),
+        opening: makePiece(s, "32125a"),
+        saveSchool: makePiece(s, "32130"),
+      },
+      mansionAttackPorts,
+    );
+    s.queue.push(
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "master_mold") {
     s.scheme.threat = s.playerCount;
     masterMold.masterMoldSetup(s, makePiece(s, "32172b"), masterMoldPorts);
     s.queue.push(
@@ -6233,6 +6393,8 @@ function allyEnter(
   paidForCard: Resource[] = [],
   syncPaid = 0,
 ) {
+  if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
+    giveCharacterStatus(s, p, "tough");
   if (isTextBlank(s, p)) return;
   if (p.code === "32032") {
     add(s, ...shadowcat.shadowcatCardEntered(s, p, shadowcatPorts));
@@ -7093,6 +7255,9 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
     (p.code === "31003" && !isTextBlank(s, p) ? p.counters : 0) +
     (noir ? noir[kind] - (card(p)[kind] || 0) : 0) +
     (card(p)[kind] || 0) +
+    (kind === "attack"
+      ? mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).attack
+      : 0) +
     Number(s.flags.lead || 0) +
     allInPlay(s).filter(
       (x) => rulesCode(x) === "01074" && x.attachedTo === p.id,
@@ -11628,6 +11793,315 @@ const wideawakePorts: wideawake.ProjectWideawakePorts = {
       E("heal", { target: s.villain.id, amount, source, origin: "encounter" }),
     ),
 };
+/** Cancel the departed physical villain's activation, including saved nested
+ * continuations. A different Brotherhood member never inherits that attack. */
+function mansionAttackEndDepartedActivation(s: GameState, villainId: string) {
+  const cancelled = (s.mansionAttack!.cancelledActivations ||= []);
+  const clean = (activation: GameState["attack"] | GameState["scheming"]) => {
+    if (!activation) return false;
+    const callback = activation.activationAfter;
+    if (
+      callback &&
+      [
+        "mystique-native:activation-finish",
+        "mansion-native:activation-finish",
+      ].includes(callback.type)
+    ) {
+      if (clean(callback.outerAttack)) delete callback.outerAttack;
+      if (clean(callback.outerScheme)) delete callback.outerScheme;
+    }
+    if (activation.attacker !== villainId) return false;
+    if (
+      !("completionRecorded" in activation && activation.completionRecorded) &&
+      activation.id &&
+      !cancelled.includes(activation.id)
+    )
+      cancelled.push(activation.id);
+    const pending = activation.pendingBoosts || [];
+    activation.pendingBoosts = [];
+    for (const p of pending)
+      if (!s.encounter.discard.some((q) => q.id === p.id))
+        s.encounter.discard.push(resetPiece(p));
+    for (const id of activation.boostIds || []) finishResolution(s, id);
+    return true;
+  };
+  if (clean(s.attack)) s.attack = null;
+  if (clean(s.scheming)) delete s.scheming;
+  for (const callback of s.queue) {
+    if (clean(callback.outerAttack)) delete callback.outerAttack;
+    if (clean(callback.outerScheme)) delete callback.outerScheme;
+  }
+}
+const mansionAttackPorts: mansionAttack.MansionAttackPorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  hasTrait: captainPackHasTrait,
+  isEngagedWith: (s, p, playerId) =>
+    !p.engagedWith || p.engagedWith === playerId,
+  randomIndex: (s, length) => Math.floor(random(s) * length),
+  putEnvironment: (s, p) => {
+    removeEncounterInstance(s, p.id);
+    (s.environments ||= []).push(p);
+  },
+  revealVillain: (s, p, after) => {
+    const previous = s.villain;
+    Object.assign(p, resetPiece(p));
+    const hp = card(p).health! * s.playerCount;
+    s.villain = Object.assign(p, {
+      hp,
+      maxHp: hp,
+      stage: s.difficulty === "expert" ? 2 : 1,
+    });
+    s.mansionAttack!.activeVillainRetired = false;
+    // Permanent attachments survive the villain change with their original IDs.
+    for (const a of [...allInPlay(s), ...s.attachments])
+      if (a.attachedTo === previous.id && isPermanent(card(a)))
+        a.attachedTo = p.id;
+    if (keyword(p, "Toughness", s)) giveCharacterStatus(s, p, "tough");
+    revealHidden(s);
+    log(s, `${card(p).name} is revealed from the villain deck.`, "bad");
+    add(s, ...after);
+  },
+  revealMain: (s, p, after) => {
+    discardMainAttachments(s);
+    p.code = `${p.code.slice(0, -1)}b`;
+    s.scheme = {
+      code: p.code,
+      threat:
+        (card(p).base_threat || 0) *
+        (card(p).base_threat_fixed ? 1 : s.playerCount),
+      index: p.code === "32125b" ? 0 : (s.scheme.index || 0) + 1,
+    };
+    revealHidden(s);
+    log(s, `The main scheme is revealed: ${card(p).name}.`, "bad");
+    add(
+      s,
+      ...(mansionAttack.mansionAttackReveal(s, p, { isTextBlank }) || []),
+      ...after,
+    );
+  },
+  addToVictory: (s, p) => {
+    if (card(p).type_code === "villain") {
+      mansionAttackEndDepartedActivation(s, p.id);
+      for (const a of [...allInPlay(s), ...s.attachments])
+        if (a.attachedTo === p.id && !isPermanent(card(a)))
+          discardPiece(s, a.id);
+      wideawake.projectWideawakeEnemyLeftPlay(s, p.id);
+      // The required native villain field becomes a presentation snapshot until
+      // another physical villain enters. Only victoryDisplay owns this card.
+      s.mansionAttack!.activeVillainRetired = true;
+      s.villain = structuredClone(s.villain);
+    } else discardMainAttachments(s);
+    if (!(s.victoryDisplay ||= []).some((q) => q.id === p.id))
+      s.victoryDisplay.push(resetPiece(p));
+    log(s, `${card(p).name} enters the victory display.`, "good");
+  },
+  removeDefeatedVillain: (s, p) => {
+    mansionAttackEndDepartedActivation(s, p.id);
+    for (const a of [...allInPlay(s), ...s.attachments])
+      if (a.attachedTo === p.id && !isPermanent(card(a))) discardPiece(s, a.id);
+    wideawake.projectWideawakeEnemyLeftPlay(s, p.id);
+    s.mansionAttack!.activeVillainRetired = true;
+    s.villain = structuredClone(s.villain);
+    if (!s.removed.some((q) => q.id === p.id)) s.removed.push(resetPiece(p));
+    log(s, `${card(p).name} is defeated and leaves play.`, "good");
+  },
+  dealEncounter,
+  win: (s, reason) => endGame(s, true, reason),
+  lose: (s, reason) => endGame(s, false, reason),
+  discardPiece,
+  activateEnemy: (s, enemyId, playerId, kind, sourceId) =>
+    add(
+      s,
+      E("mansion-native:activate", {
+        enemyId,
+        playerId,
+        kind,
+        sourceId,
+        actorId: playerId,
+      }),
+    ),
+  searchAndRevealMinion: (s, name, playerId, after) => {
+    revealHidden(s);
+    const candidates = [...s.encounter.deck, ...s.encounter.discard].filter(
+      (p) => card(p).type_code === "minion" && card(p).name === name,
+    );
+    if (!candidates.length) {
+      mutagenPorts.shuffleEncounter(s);
+      add(s, ...after);
+    } else {
+      const effects = (id: string) => [
+        E("wideawake-native:reveal-searched", {
+          id,
+          playerId,
+          after,
+          actorId: playerId,
+        }),
+      ];
+      if (candidates.length === 1) add(s, ...effects(candidates[0].id));
+      else
+        choose(
+          s,
+          name,
+          "Choose a minion to reveal.",
+          candidates.map((p) =>
+            option(p.id, card(p).name, effects(p.id), undefined, p.code),
+          ),
+        );
+    }
+  },
+  additionalBoost: (s) => {
+    const activation = s.scheming || s.attack;
+    if (!activation || activation.attacker !== s.villain.id) return;
+    const p = drawEncounter(s);
+    if (p) (activation.pendingBoosts ||= []).push(p);
+  },
+  exhaustIdentity: (s, playerId) => {
+    seatView(s, playerId).player.exhausted = true;
+  },
+  stun: (s, target, source) =>
+    add(s, E("status", { target, status: "stunned", source })),
+  indirectDamage: (s, playerId, amount, sourceId) =>
+    ironspiderPorts.indirect(s, {
+      playerId,
+      amount,
+      sourceId,
+      sourceTitle: "Pyro",
+      after: E("mansion-native:after", { after: [], actorId: playerId }),
+    }),
+  discardRandomHand: (s, playerId) =>
+    brotherhoodPorts.discardRandomHand(s, playerId, []),
+  exhaustAlly: (s, id) => {
+    const p = find(s, id);
+    if (p) p.exhausted = true;
+  },
+  discardPlayerTop: (s, playerId, count, after) =>
+    add(
+      s,
+      E("mansion-native:discard-player-top", {
+        playerId,
+        count,
+        after,
+        actorId: playerId,
+      }),
+    ),
+  searchPlayerAlly: (s, playerId, sourceId) =>
+    add(
+      s,
+      E("mansion-native:search-ally", {
+        playerId,
+        sourceId,
+        actorId: playerId,
+      }),
+    ),
+  addSideThreat: (s, target, amount, source) =>
+    add(s, E("threat", { target, amount, source })),
+};
+function resolveMansionAttackNativeEffect(s: GameState, e: Effect): boolean {
+  if (!e.type.startsWith("mansion-native:")) return false;
+  switch (e.type) {
+    case "mansion-native:after":
+      add(s, ...(e.after || []));
+      break;
+    case "mansion-native:activate": {
+      if (!find(s, e.enemyId)) break;
+      const outerAttack = s.attack,
+        outerScheme = s.scheming;
+      s.attack = null;
+      delete s.scheming;
+      const request: MutagenActivation = {
+        enemyId: e.enemyId,
+        playerId: e.playerId,
+        kind: e.kind,
+        modifier: 0,
+        after: E("mansion-native:activation-finish", {
+          outerAttack,
+          outerScheme,
+          actorId: e.playerId,
+        }),
+      };
+      if (e.kind === "attack") enemyAttack(s, e.enemyId, undefined, request);
+      else enemyScheme(s, e.enemyId, undefined, request);
+      break;
+    }
+    case "mansion-native:activation-finish":
+      s.attack =
+        e.outerAttack && find(s, e.outerAttack.attacker) ? e.outerAttack : null;
+      if (e.outerScheme && find(s, e.outerScheme.attacker))
+        s.scheming = e.outerScheme;
+      else delete s.scheming;
+      break;
+    case "mansion-native:discard-player-top": {
+      const previous = s.activePlayerId;
+      activateSeat(s, e.playerId);
+      const before = new Set(s.queue);
+      let printedResourceIcons = 0;
+      for (let i = 0; i < e.count; i++) {
+        const result = discardNativePlayerTop(s);
+        if (result.piece)
+          printedResourceIcons += brotherhood.brotherhoodPrintedResources(
+            result.piece,
+          );
+        if (!result.piece || result.emptied) break;
+      }
+      const generated = s.queue.filter((effect) => !before.has(effect));
+      s.queue = s.queue.filter((effect) => before.has(effect));
+      activateSeat(s, previous);
+      add(
+        s,
+        ...generated,
+        ...e.after.map((effect: Effect) => ({
+          ...effect,
+          printedResourceIcons,
+          actorId: e.playerId,
+        })),
+      );
+      break;
+    }
+    case "mansion-native:search-ally": {
+      revealHidden(s);
+      const player = seatView(s, e.playerId).player;
+      const candidates = [...player.deck, ...player.discard].filter(
+        (p) => card(p).type_code === "ally",
+      );
+      const effects = (id?: string) => [
+        E("mansion-native:take-ally", {
+          id,
+          playerId: e.playerId,
+          actorId: e.playerId,
+        }),
+      ];
+      choose(
+        s,
+        "Protect the Students",
+        "Search your deck and discard pile for an ally to add to your hand.",
+        [
+          ...candidates.map((p) =>
+            option(p.id, card(p).name, effects(p.id), undefined, p.code),
+          ),
+          option("none", "Finish search", effects()),
+        ],
+      );
+      break;
+    }
+    case "mansion-native:take-ally": {
+      const player = seatView(s, e.playerId).player;
+      for (const zone of [player.deck, player.discard]) {
+        const index = zone.findIndex((p) => p.id === e.id);
+        if (index >= 0) {
+          player.hand.push(...zone.splice(index, 1));
+          break;
+        }
+      }
+      player.deck = shuffle(s, player.deck);
+      break;
+    }
+    default:
+      throw Error(`Unknown native Mansion Attack effect: ${e.type}`);
+  }
+  return true;
+}
 const masterMoldPorts: masterMold.MasterMoldPorts = {
   queue: add,
   choose,
@@ -12179,6 +12653,8 @@ function minionEntered(s: GameState, p: Piece) {
   }
   const underlying = p.droneCard;
   Object.assign(p, resetPiece(p, true));
+  if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
+    giveCharacterStatus(s, p, "tough");
   if (underlying) p.droneCard = underlying;
   p.engagedWith = s.activePlayerId;
   s.resolving = s.resolving.filter((x) => x.id !== p.id);
@@ -14704,7 +15180,8 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     mutagenAttackModifiers(s, p).goblinNation +
     armadillo.armadilloAttackBonus(s, p) +
     zzzax.zzzaxEnemyStats(s, p).attack +
-    inheritors.inheritorsModifiers(s, p).attack;
+    inheritors.inheritorsModifiers(s, p).attack +
+    mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).attack;
   const attachments = enemyAttachmentModifier(s, p.id, "attack");
   const base =
     p.id === s.villain.id
@@ -14910,6 +15387,7 @@ function declareDefense(s: GameState) {
 }
 function boostEffects(s: GameState, p: Piece) {
   const mutantScenarioBoost =
+    mansionAttack.mansionAttackBoost(s, p) ??
     masterMold.masterMoldBoost(s, p) ??
     wideawake.projectWideawakeBoost(s, p) ??
     zeroTolerance.zeroToleranceBoost(s, p) ??
@@ -15622,6 +16100,50 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
   }
   finishAttackAfterDamage(s, target, before, recipientId, a);
 }
+function mansionAttackEnemyAttackAfter(
+  s: GameState,
+  a: NonNullable<GameState["attack"]>,
+  target: string,
+  recipientId: string,
+): Effect[] {
+  if (s.villainId !== "mansion_attack") return [];
+  // Redirected attacks against an enemy do not attack a player. Blob's
+  // character-damage response still applies to the actual damaged character.
+  if (
+    attackTargetsEnemy(s, a) &&
+    card(a.attackerSnapshot || s.villain).name !== "Blob"
+  )
+    return [];
+  const damaged = a.attackDamageReceipts || [
+    {
+      target: target === "hero" ? `hero:${recipientId}` : target,
+      actualDamage: a.damage,
+    },
+    ...(target !== "hero"
+      ? [{ target: `hero:${recipientId}`, actualDamage: a.identityDamage || 0 }]
+      : []),
+  ];
+  return mansionAttack.mansionAttackAfterEnemyAttack(
+    s,
+    {
+      token: a.id!,
+      enemyId: a.attacker,
+      enemyCode: a.attackerSnapshot?.code || "",
+      playerId: recipientId,
+      performed: !!a.completionRecorded,
+      damagedTargets: damaged.map((r) => ({
+        targetId: r.target,
+        actualDamage: r.actualDamage,
+        playerId: r.target.startsWith("hero:")
+          ? r.target.slice(5)
+          : r.target === target
+            ? a.primaryTargetControllerId || controller(s, r.target)?.id
+            : controller(s, r.target)?.id,
+      })),
+    },
+    { isTextBlank },
+  );
+}
 function finishAttackAfterDamage(
   s: GameState,
   target: string,
@@ -15682,6 +16204,7 @@ function finishAttackAfterDamage(
     },
     { isTextBlank },
   );
+  const mansionAfter = mansionAttackEnemyAttackAfter(s, a, target, recipientId);
   const zeroReceipt: zeroTolerance.ZeroToleranceAttackReceipt = {
     token: a.id!,
     attackerId: a.attacker,
@@ -15788,6 +16311,12 @@ function finishAttackAfterDamage(
       {
         receipt: zeroReceipt,
         responses: [
+          ...mansionAfter.map((effect, index) => ({
+            id: `${a.id}:mansion-after:${index}`,
+            sourceId: a.attacker,
+            title: card(a.attackerSnapshot || p!).name,
+            effects: [effect],
+          })),
           ...moldAfter.map((effect, index) => ({
             id: `${a.id}:stun-beam:${index}`,
             title: "Stun Beam",
@@ -15898,6 +16427,11 @@ function finishAttackAfterDamage(
                       target: a.attacker,
                       sourceTarget: target,
                       amount: retaliation,
+                      mansionRetaliate: mansionAttack.mansionAttackModifiers(
+                        s,
+                        target === "hero" ? "hero" : find(s, target)!,
+                        { isTextBlank },
+                      ).retaliate,
                       actorId: s.activePlayerId,
                     }),
                   ],
@@ -16270,6 +16804,7 @@ function reveal(
     } else if (c.type_code === "side_scheme") {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       p.counters =
+        mansionAttack.mansionAttackSideSchemeBaseThreat(s, p) ??
         (c.base_threat || 0) * (c.base_threat_fixed ? 1 : s.playerCount);
       s.sideSchemes.push(p);
       if (p.code === "32079") (s.brotherhoodEntered ||= {})[p.id] = true;
@@ -16333,7 +16868,10 @@ function reveal(
   }
   if (
     !repeat &&
-    (masterMold.MASTER_MOLD_SCRIPT_CODES.some((code) => code === p.code) ||
+    (mansionAttack.MANSION_ATTACK_SCRIPT_CODES.some(
+      (code) => code === p.code,
+    ) ||
+      masterMold.MASTER_MOLD_SCRIPT_CODES.some((code) => code === p.code) ||
       wideawake.PROJECT_WIDEAWAKE_SCRIPT_CODES.some(
         (code) => code === p.code,
       ) ||
@@ -16356,6 +16894,7 @@ function reveal(
     } else if (c.type_code === "side_scheme") {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       p.counters =
+        mansionAttack.mansionAttackSideSchemeBaseThreat(s, p) ??
         (c.base_threat || 0) * (c.base_threat_fixed ? 1 : s.playerCount);
       s.sideSchemes.push(p);
       if (p.code === "32079") (s.brotherhoodEntered ||= {})[p.id] = true;
@@ -16515,6 +17054,7 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    mansionAttack.mansionAttackReveal(s, p, { isTextBlank }) ??
     masterMold.masterMoldReveal(s, p, { isTextBlank }) ??
     wideawake.projectWideawakeReveal(s, p, { isTextBlank }) ??
     zeroTolerance.zeroToleranceReveal(s, p, zeroTolerancePorts) ??
@@ -17241,17 +17781,42 @@ function refreshInheritorsRetaliate(
   const recipient = find(s, e.retaliateSource);
   if (!recipient) return undefined;
   const inherited = inheritors.inheritorsModifiers(s, recipient).retaliate;
-  const amount = e.amount - e.inheritorRetaliate + inherited;
+  const mansion = mansionAttack.mansionAttackModifiers(s, recipient, {
+    isTextBlank,
+  }).retaliate;
+  const amount =
+    e.amount -
+    e.inheritorRetaliate +
+    inherited -
+    (e.mansionRetaliate || 0) +
+    mansion;
   return amount > 0
     ? {
         ...e,
         amount,
         inheritorRetaliate: inherited,
+        mansionRetaliate: mansion,
         title: `${card(recipient).name} · Retaliate ${amount}`,
       }
     : undefined;
 }
 function resolve(s: GameState, e: Effect) {
+  if (
+    e.mansionActivationId &&
+    s.mansionAttack?.cancelledActivations?.includes(e.mansionActivationId) &&
+    !e.eventId &&
+    e.type !== "finishResolution" &&
+    !(e.piece && card(e.piece).faction_code !== "encounter")
+  )
+    return;
+  // Capture the canonical alias as the current original-source villain ID.
+  if (s.villainId === "mansion_attack") {
+    for (const key of ["target", "targetId", "enemyId", "attacker"])
+      if (e[key] === "villain") e[key] = s.villain.id;
+  }
+  if (resolveMansionAttackNativeEffect(s, e)) return;
+  if (mansionAttack.resolveMansionAttackEffect(s, e, mansionAttackPorts))
+    return;
   if (resolveMasterMoldNativeEffect(s, e)) return;
   if (masterMold.resolveMasterMoldEffect(s, e, masterMoldPorts)) return;
   if (resolveSabretoothNativeEffect(s, e)) return;
@@ -17364,6 +17929,7 @@ function resolve(s: GameState, e: Effect) {
         const previous = state.currentRevealWindowId;
         state.currentRevealWindowId = windowId;
         const effects =
+          mansionAttack.mansionAttackReveal(state, piece, { isTextBlank }) ??
           masterMold.masterMoldReveal(state, piece, { isTextBlank }) ??
           wideawake.projectWideawakeReveal(state, piece, { isTextBlank }) ??
           zeroTolerance.zeroToleranceReveal(state, piece, zeroTolerancePorts) ??
@@ -17838,6 +18404,10 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "eventResolve": {
+      if (s.flags[`mtsPackPaymentCostPaid:${e.piece.id}`]) {
+        delete s.flags[`mtsPackPaymentCostPaid:${e.piece.id}`];
+        e.mtsPackAdditionalCostPaid = true;
+      }
       if (!e.colossusCostHandled && e.piece?.code === "32009") {
         add(s, ...colossus.colossusAdditionalCost(s, e.piece), {
           ...e,
@@ -19232,7 +19802,20 @@ function resolve(s: GameState, e: Effect) {
       if (
         e.sourceTarget === "hero" ? s.player.hp > 0 : !!find(s, e.sourceTarget)
       )
-        dealDamage(s, e.target, e.amount, "retaliate");
+        dealDamage(
+          s,
+          e.target,
+          e.amount -
+            (e.mansionRetaliate || 0) +
+            (e.mansionRetaliate !== undefined
+              ? mansionAttack.mansionAttackModifiers(
+                  s,
+                  e.sourceTarget === "hero" ? "hero" : find(s, e.sourceTarget)!,
+                  { isTextBlank },
+                ).retaliate
+              : 0),
+          "retaliate",
+        );
       break;
     case "forcedResponses": {
       const remaining = (
@@ -22179,17 +22762,25 @@ function resolve(s: GameState, e: Effect) {
         },
         { isTextBlank },
       );
+      const mansionAfter = mansionAttackEnemyAttackAfter(
+        s,
+        a,
+        a.originalTarget || "",
+        a.targetPlayerId || s.activePlayerId,
+      );
       s.attack = null;
       add(
         s,
-        ...(moldAfter.length
+        ...(moldAfter.length || mansionAfter.length
           ? [
               E("forcedResponses", {
-                responses: moldAfter.map((effect, index) => ({
-                  id: `${a.id}:stun-beam:${index}`,
-                  title: "Stun Beam",
-                  effects: [effect],
-                })),
+                responses: [...moldAfter, ...mansionAfter].map(
+                  (effect, index) => ({
+                    id: `${a.id}:stun-beam:${index}`,
+                    title: "Stun Beam",
+                    effects: [effect],
+                  }),
+                ),
                 actorId: s.firstPlayerId,
               }),
             ]
@@ -23925,6 +24516,10 @@ function resolve(s: GameState, e: Effect) {
       finishAttackAfterDamage(s, e.target, e.before, e.recipientId, a);
       break;
     }
+    case "mtsPackCommittedPayment":
+      s.flags[`mtsPackPaymentCostPaid:${e.pieceId}`] = true;
+      add(s, ...(e.spentResponses || []), ...(e.after || []));
+      break;
     case "spdrCommittedPayment": {
       const key = `spdrThwipDamageResponses:${e.pieceId}`;
       const optional = JSON.parse(String(s.flags[key] || "[]")) as Effect[];
@@ -24280,7 +24875,9 @@ function resolve(s: GameState, e: Effect) {
     case "stageSetup":
       if (
         s.difficulty === "expert" &&
-        !["mutagen_formula", "project_wideawake"].includes(s.villainId)
+        !["mutagen_formula", "project_wideawake", "mansion_attack"].includes(
+          s.villainId,
+        )
       )
         villainSetup(s);
       break;

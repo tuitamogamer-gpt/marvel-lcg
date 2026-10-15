@@ -17,16 +17,45 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm test
+      - run: npm test -- --exclude tests/expansion-missions.test.ts
       - run: npm run test:production-entry
       - run: npm run build
       - run: npm run format:check
+
+  missions:
+    name: Source missions (shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      MISSION_SHARD_INDEX: ${{ matrix.shard }}
+      MISSION_SHARD_COUNT: "4"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: mkdir -p output
+      - name: Run every assigned source mission
+        run: npx vitest run tests/expansion-missions.test.ts --reporter=verbose --reporter=json --outputFile=output/source-missions.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: source-missions-${{ matrix.shard }}
+          path: output/source-missions.json
+          if-no-files-found: warn
 
   browser:
     name: Browser flow (${{ matrix.group }})
     runs-on: ubuntu-latest
     timeout-minutes: ${{ matrix.timeout || 25 }}
-    needs: verify
+    needs: [verify, missions]
     strategy:
       fail-fast: false
       matrix:
@@ -79,6 +108,9 @@ jobs:
           - group: master-mold
             scripts: test:master-mold
             timeout: 45
+          - group: mansion-attack
+            scripts: test:mansion-attack
+            timeout: 45
           - group: spdr-identity
             scripts: test:spdr
             spdrScenarios: maintenance,pilot-flip,sync-cancel,rapid-deployment,web-trap,venom,systems-ready,systems-search,may-hero,may-alter,command-draw,command-ready,host-ready,psychic-thwart,fluid-attack,alloy-defense,ejection
@@ -110,7 +142,7 @@ jobs:
           done
           echo "Dev server did not start"; cat output-dev.log; exit 1
       - name: Build and serve production artifact
-        if: matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold'
+        if: matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold' || matrix.group == 'mansion-attack'
         run: |
           npm run build
           npm run preview -- --host 127.0.0.1 --port 4173 > output-preview.log 2>&1 &
@@ -125,7 +157,7 @@ jobs:
             npm run "$script"
           done
         env:
-          BASE_URL: ${{ (matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold') && 'http://127.0.0.1:4173' || 'http://127.0.0.1:5174' }}
+          BASE_URL: ${{ (matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold' || matrix.group == 'mansion-attack') && 'http://127.0.0.1:4173' || 'http://127.0.0.1:5174' }}
           CI_BROWSER_SCRIPTS: ${{ matrix.scripts }}
           SPDR_SCENARIOS: ${{ matrix.spdrScenarios }}
           SPDR_FIXTURE_ONLY: ${{ matrix.spdrFixtureOnly }}

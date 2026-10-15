@@ -209,6 +209,8 @@ export interface Attack {
   isVillain: boolean;
 }
 export interface GameState {
+  /** Original Mansion Attack hidden piles and physical active main scheme. */
+  mansionAttack?: import("./mansion-attack.js").MansionAttackState;
   /** Physical Magneto stays in an ordinary ally zone; these are saved receipts. */
   masterMold?: import("./master-mold.js").MasterMoldState;
   /** Actual set-aside Captive allies and saved Project Wideawake receipts. */

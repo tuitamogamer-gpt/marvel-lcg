@@ -266,16 +266,16 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(1532);
-    expect(coverage.unsupportedFaces).toBe(3019);
-    expect(coverage.dedicatedFaces).toBe(1060);
+    expect(coverage.executableFaces).toBe(1558);
+    expect(coverage.unsupportedFaces).toBe(2993);
+    expect(coverage.dedicatedFaces).toBe(1086);
     expect(coverage.registeredHeroIds).toHaveLength(37);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
     );
     expect(mutant).toMatchObject({
       faceCount: 224,
-      executableFaces: 131,
+      executableFaces: 157,
       installedCardClosure: false,
     });
     expect(mutant.unsupportedFaceCodes).toEqual(
@@ -283,7 +283,7 @@ describe("complete expansion rules inventory", () => {
         .filter(
           (entry: { pack_code: string; position: number; code: string }) =>
             entry.pack_code === "mut_gen" &&
-            entry.position > 120 &&
+            entry.position > 137 &&
             entry.code !== "32172b",
         )
         .map((entry: { code: string }) => entry.code)
@@ -437,7 +437,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(97);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(98);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
@@ -546,6 +546,7 @@ describe("complete expansion rules inventory", () => {
       "src/game/brotherhood.ts",
       "src/game/mystique.ts",
       "src/game/master-mold.ts",
+      "src/game/mansion-attack.ts",
       "src/game/printed-card-metadata.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",

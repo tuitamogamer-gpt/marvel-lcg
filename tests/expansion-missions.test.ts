@@ -86,6 +86,23 @@ const missions = heroIds.flatMap((heroId, hi) =>
   ),
 );
 
+// Build the complete grid before partitioning so every existing configuration
+// keeps the original global hero/scenario/module indexes and seeded shuffle.
+const shardIndex = process.env.MISSION_SHARD_INDEX;
+const shardCount = process.env.MISSION_SHARD_COUNT;
+const isSharded = shardIndex !== undefined || shardCount !== undefined;
+if (
+  isSharded &&
+  (shardCount !== "4" || !["0", "1", "2", "3"].includes(shardIndex ?? ""))
+)
+  throw Error(
+    "Set both MISSION_SHARD_COUNT=4 and MISSION_SHARD_INDEX=0..3, or neither.",
+  );
+const partitions = Array.from({ length: 4 }, (_, index) =>
+  missions.filter((mission) => heroIds.indexOf(mission.heroId) % 4 === index),
+);
+const selectedMissions = isSharded ? partitions[Number(shardIndex)] : missions;
+
 /** Only physical-zone auditing inspects hidden card IDs. The player strategy
  * uses hand cards, visible board state, and the same public prompts as the UI. */
 function ownedPieces(s: GameState, originalIds: Set<string>): Piece[] {
@@ -137,6 +154,75 @@ function ownedPieces(s: GameState, originalIds: Set<string>): Piece[] {
   // owned Cosmic Entities can be in encounter zones. Membership follows the
   // original physical source IDs, never the current zone or owner alone.
   return pieces.filter((p) => originalIds.has(p.id));
+}
+
+/** Mansion's physical piles include the active main card and suspended native
+ * boost piles. Public main counters and the retired villain view own no cards. */
+function mansionPhysicalPieces(s: GameState): Piece[] {
+  if (s.villainId !== "mansion_attack") return [];
+  const m = s.mansionAttack!;
+  const pieces: Piece[] = [];
+  const visit = (p: Piece) => {
+    pieces.push(p);
+    for (const child of [
+      ...(p.storedCards || []),
+      ...(p.captured || []),
+      ...(p.inheritorBoosts || []),
+      ...(p.droneCard ? [p.droneCard] : []),
+    ])
+      visit(child);
+  };
+  [
+    ...s.players.flatMap((seat) => {
+      const p = seatView(s, seat).player;
+      return [
+        ...p.hand,
+        ...p.deck,
+        ...p.discard,
+        ...p.inPlay,
+        ...(p.spdrIdentity ? [p.spdrIdentity] : []),
+        ...(p.setAside || []),
+        ...(p.invocationDeck || []),
+        ...(p.invocationDiscard || []),
+      ];
+    }),
+    ...s.encounter.deck,
+    ...s.encounter.discard,
+    ...s.encounter.dealt,
+    ...(s.encounter.storedBoosts || []),
+    ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
+      .setAside || []),
+    ...(m.activeVillainRetired ? [] : [s.villain]),
+    ...m.villainDeck,
+    ...m.mainDeck,
+    ...(m.currentMain ? [m.currentMain] : []),
+    ...s.minions,
+    ...s.sideSchemes,
+    ...s.attachments,
+    ...(s.environments || []),
+    ...(s.victoryDisplay || []),
+    ...s.resolving,
+    ...s.removed,
+  ].forEach(visit);
+  // These callbacks own suspended activations while a native nested activation
+  // runs. Attacker snapshots and arbitrary effect payloads are not card zones.
+  const activation = (a: GameState["attack"] | GameState["scheming"]) => {
+    if (!a) return;
+    (a.pendingBoosts || []).forEach(visit);
+    continuation(a.activationAfter);
+  };
+  const continuation = (e?: GameState["queue"][number]) => {
+    if (!e) return;
+    if (/native:activation-finish$/.test(e.type)) {
+      activation(e.outerAttack);
+      activation(e.outerScheme);
+    }
+    if (Array.isArray(e.after)) e.after.forEach(continuation);
+  };
+  activation(s.attack);
+  activation(s.scheming);
+  s.queue.forEach(continuation);
+  return pieces;
 }
 
 function runMission(config: (typeof missions)[number]) {
@@ -193,6 +279,23 @@ function runMission(config: (typeof missions)[number]) {
   expect(originalIds.size, "Original physical source IDs are distinct").toBe(
     total,
   );
+  const mansionSources =
+    s.villainId === "mansion_attack"
+      ? mansionPhysicalPieces(s).filter(
+          (p) => card(p).set_code === "mansion_attack",
+        )
+      : [];
+  const mansionIds = mansionSources.map((p) => p.id).sort();
+  const mansionCodeFamily = new Map(
+    mansionSources.map((p) => [p.id, p.code.replace(/[ab]$/, "")]),
+  );
+  if (s.villainId === "mansion_attack") {
+    expect(
+      mansionSources,
+      "all 25 original Mansion Attack cards begin in physical zones",
+    ).toHaveLength(25);
+    expect(new Set(mansionIds).size).toBe(25);
+  }
   const trace: string[] = [];
   let commands = 0;
   const audit = () => {
@@ -207,6 +310,20 @@ function runMission(config: (typeof missions)[number]) {
     ).toBe(total);
     // ownedPieces admits only original IDs. Equal total and distinct counts
     // therefore prove every original instance occurs exactly once.
+    if (s.villainId === "mansion_attack") {
+      const actual = mansionPhysicalPieces(s).filter(
+        (p) => card(p).set_code === "mansion_attack",
+      );
+      expect(
+        actual.map((p) => p.id).sort(),
+        `all original Mansion source IDs after ${trace.at(-1)}`,
+      ).toEqual(mansionIds);
+      for (const p of actual)
+        expect(
+          p.code.replace(/[ab]$/, ""),
+          `same original double-sided source ${p.id}`,
+        ).toBe(mansionCodeFamily.get(p.id));
+    }
   };
   const send = (command: Command) => {
     trace.push(
@@ -361,12 +478,30 @@ describe("published expansion starters across every supported mission setting", 
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(8);
+    expect(VILLAINS).toHaveLength(9);
     expect(MODULES).toHaveLength(17);
     expect(heroIds).toHaveLength(32);
-    expect(missions).toHaveLength(8576);
+    expect(missions).toHaveLength(9600);
+    const key = (mission: (typeof missions)[number]) =>
+      [
+        mission.heroId,
+        mission.villainId,
+        mission.difficulty,
+        mission.module,
+      ].join("/");
+    const manifest = (list: typeof missions) =>
+      list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
+    const combined = partitions.flat();
+    expect(new Set(missions.map(key)).size).toBe(9600);
+    expect(new Set(combined.map(key)).size).toBe(9600);
+    expect(manifest(combined)).toEqual(manifest(missions));
+    for (const partition of partitions) {
+      expect(partition).toHaveLength(2400);
+      expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(8);
+    }
+    expect(selectedMissions).toHaveLength(isSharded ? 2400 : 9600);
   });
-  for (const mission of missions)
+  for (const mission of selectedMissions)
     it(
       `${mission.heroId}/${mission.villainId}/${mission.difficulty}/${mission.module} seed${mission.seed}`,
       () => runMission(mission),
