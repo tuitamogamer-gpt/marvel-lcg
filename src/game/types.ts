@@ -209,6 +209,8 @@ export interface Attack {
   isVillain: boolean;
 }
 export interface GameState {
+  /** Physical Magneto stays in an ordinary ally zone; these are saved receipts. */
+  masterMold?: import("./master-mold.js").MasterMoldState;
   /** Actual set-aside Captive allies and saved Project Wideawake receipts. */
   projectWideawake?: import("./project-wideawake.js").ProjectWideawakeState;
   /** Saved confirmed defeat metadata, never another physical card zone. */

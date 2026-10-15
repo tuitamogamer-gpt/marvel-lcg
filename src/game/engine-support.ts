@@ -51,6 +51,7 @@ import { MYSTIQUE_SCRIPT_CODES } from "./mystique.js";
 import { PROJECT_WIDEAWAKE_SCRIPT_CODES } from "./project-wideawake.js";
 import { ZERO_TOLERANCE_SCRIPT_CODES } from "./zero-tolerance.js";
 import { SENTINELS_SCRIPT_CODES } from "./sentinels.js";
+import { MASTER_MOLD_SCRIPT_CODES } from "./master-mold.js";
 import { GOBLIN_MODULE_SCRIPT_CODES } from "./goblin-modules.js";
 import { BLACK_WIDOW_SCRIPT_CODES } from "./black-widow.js";
 import { DOCTOR_STRANGE_SCRIPT_CODES } from "./doctor-strange.js";
@@ -106,6 +107,7 @@ export const SCRIPTED_HERO_IDS = new Set([
   "shadowcat",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
+  ...MASTER_MOLD_SCRIPT_CODES,
   ...PROJECT_WIDEAWAKE_SCRIPT_CODES,
   ...ZERO_TOLERANCE_SCRIPT_CODES,
   ...SENTINELS_SCRIPT_CODES,
