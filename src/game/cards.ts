@@ -63,6 +63,7 @@ import { ironspiderSinisterHealthBonus } from "./ironspider-sinister.js";
 import { colossusStats } from "./colossus.js";
 import { brotherhoodModifiers } from "./brotherhood.js";
 import { masterMoldModifiers } from "./master-mold.js";
+import { mansionAttackModifiers } from "./mansion-attack.js";
 import {
   mutantGenesisPlayerPackCharacterModifiers,
   mutantGenesisPlayerPackMinionModifiers,
@@ -797,6 +798,20 @@ export const VILLAINS = [
     description:
       "Join forces with Magneto to stop Master Mold and its growing army of Sentinel minions.",
   },
+  {
+    id: "mansion_attack",
+    name: "Mansion Attack",
+    codes: ["32121a", "32122a", "32123a", "32124a"],
+    schemes: ["32125b", "32126b", "32127b", "32128b", "32129b"],
+    module: "mystique",
+    fixedSets: ["brotherhood"],
+    difficulty: 3,
+    title: "Attack on Xavier's",
+    location: "Xavier's School for Gifted Youngsters",
+    color: "#bd7656",
+    description:
+      "Defend the school against a hidden deck of Brotherhood villains as the battle moves through the mansion.",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1152,7 +1167,8 @@ export function heroStats(s: GameState) {
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
       spiderWomanStats(s).attack +
-      captainPackStats(s).attack,
+      captainPackStats(s).attack +
+      mansionAttackModifiers(s, "hero", { isTextBlank }).attack,
     thwart:
       h.thwart! +
       (has(s, "01065") ? 1 : 0) +

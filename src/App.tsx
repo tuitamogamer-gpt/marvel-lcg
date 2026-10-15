@@ -1957,6 +1957,14 @@ export default function App() {
                     additional modular set; Zero Tolerance is recommended.
                   </p>
                 )}
+                {villain.id === "mansion_attack" && (
+                  <p>
+                    Brotherhood is included with this scenario. Choose one
+                    additional modular set; Mystique is recommended. Defeat two
+                    villains in Standard or three in Expert before two rooms are
+                    completed.
+                  </p>
+                )}
                 {villain.id === "project_wideawake" && (
                   <>
                     <p>
@@ -2096,15 +2104,17 @@ export default function App() {
                 <div className="scaling-summary">
                   <span>
                     <Heart size={16} />
-                    {card(villain.codes[difficulty === "expert" ? 1 : 0])
-                      .health! * team.length}{" "}
-                    villain HP
+                    {villain.id === "mansion_attack"
+                      ? `${difficulty === "expert" ? 3 : 2} villains to defeat`
+                      : `${card(villain.codes[difficulty === "expert" ? 1 : 0]).health! * team.length} villain HP`}
                   </span>
                   <span>
                     <Target size={16} />
-                    {card(villain.schemes[0]).threat
-                      ? `${card(villain.schemes[0]).threat! * team.length} threat limit`
-                      : "No threat limit"}
+                    {villain.id === "mansion_attack"
+                      ? `${7 * team.length} room threat limit`
+                      : card(villain.schemes[0]).threat
+                        ? `${card(villain.schemes[0]).threat! * team.length} threat limit`
+                        : "No threat limit"}
                   </span>
                 </div>
               </div>
@@ -4594,7 +4604,9 @@ function Tabletop({
                 </div>
                 <div className="villain-info">
                   <span className="small-label">
-                    VILLAIN · STAGE {["", "I", "II", "III"][s.villain.stage]}
+                    {s.villainId === "mansion_attack"
+                      ? `VILLAIN · SIDE ${s.difficulty === "expert" ? "B" : "A"}`
+                      : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                   </span>
                   <h2>{card(s.villain).name.toUpperCase()}</h2>
                   <HealthDial
@@ -4607,10 +4619,12 @@ function Tabletop({
                     <StatToken
                       kind="attack"
                       value={
-                        riskyBlankPower(s, "attack", s.villain.id)
-                          ? 0
-                          : (card(s.villain).attack || 0) +
-                            enemyAttachmentModifier(s, s.villain.id, "attack")
+                        s.villainId === "mansion_attack"
+                          ? enemyStats(s, s.villain).attack
+                          : riskyBlankPower(s, "attack", s.villain.id)
+                            ? 0
+                            : (card(s.villain).attack || 0) +
+                              enemyAttachmentModifier(s, s.villain.id, "attack")
                       }
                       label="ATK"
                       compact
@@ -4631,6 +4645,17 @@ function Tabletop({
                     Before boosts & triggered abilities
                   </span>
                   <Status piece={s.villain} />
+                  {s.mansionAttack && (
+                    <span className="stat-caption">
+                      {
+                        (s.victoryDisplay || []).filter(
+                          (p) => card(p).type_code === "villain",
+                        ).length
+                      }
+                      /{s.mansionAttack.winTarget} villains defeated ·{" "}
+                      {s.mansionAttack.villainDeck.length} in the villain deck
+                    </span>
+                  )}
                   {projectWideawakeBombCount(s, s.villain.id) > 0 && (
                     <span
                       className="stat-caption"
@@ -4651,7 +4676,12 @@ function Tabletop({
                 >
                   <div className="scheme-heading">
                     <span className="small-label">MAIN SCHEME</span>
-                    <span className="scheme-stage">{s.scheme.index + 1}B</span>
+                    <span className="scheme-stage">
+                      {s.villainId === "mansion_attack" &&
+                      s.scheme.code !== "32125b"
+                        ? "2B"
+                        : `${s.scheme.index + 1}B`}
+                    </span>
                   </div>
                   <button
                     onClick={() => inspect({ code: s.scheme.code })}
@@ -4699,6 +4729,35 @@ function Tabletop({
                       )}{" "}
                     threat each villain phase
                   </p>
+                  {s.mansionAttack && (
+                    <>
+                      <p className="stat-caption">
+                        {
+                          (s.victoryDisplay || []).filter(
+                            (p) =>
+                              card(p).type_code === "main_scheme" &&
+                              p.code !== "32125b",
+                          ).length
+                        }
+                        /2 rooms completed · {s.mansionAttack.mainDeck.length}{" "}
+                        rooms in the main scheme deck
+                      </p>
+                      <details>
+                        <summary>
+                          Victory display ({(s.victoryDisplay || []).length})
+                        </summary>
+                        {(s.victoryDisplay || []).map((p) => (
+                          <button
+                            className="text-button"
+                            key={p.id}
+                            onClick={() => inspect({ code: p.code, piece: p })}
+                          >
+                            {card(p).name}
+                          </button>
+                        ))}
+                      </details>
+                    </>
+                  )}
                   {threatCritical && (
                     <span className="threat-warning">
                       <Warning size={15} weight="fill" /> Threat is critical
@@ -4758,7 +4817,8 @@ function Tabletop({
                       <strong>{card(p).name}</strong>
                       {p.code !== "29039" &&
                         p.code !== "31037" &&
-                        p.code !== "32065b" && (
+                        p.code !== "32065b" &&
+                        p.code !== "32130" && (
                           <span className="environment-counter">
                             <PremiumToken kind="counter" />
                             {p.counters}{" "}

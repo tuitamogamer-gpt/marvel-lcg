@@ -353,14 +353,10 @@ describe("Master Mold executable source acceptance", () => {
     }
     for (const c of catalog.filter(
       (c) =>
-        c.pack_code === "mut_gen" && c.position > 120 && c.code !== "32172b",
+        c.pack_code === "mut_gen" && c.position > 137 && c.code !== "32172b",
     ))
       expect(hasExecutableScript(c.code), c.code).toBe(false);
-    expect(
-      VILLAINS.filter((v) =>
-        ["mansion_attack", "magneto_villain"].includes(v.id),
-      ),
-    ).toEqual([]);
+    expect(VILLAINS.filter((v) => v.id === "magneto_villain")).toEqual([]);
   });
 
   it("requires fixed Sentinels and exactly one independently replaceable modular slot", () => {

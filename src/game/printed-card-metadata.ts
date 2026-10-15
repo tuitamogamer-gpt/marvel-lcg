@@ -2,7 +2,10 @@ import type { Card } from "./types.js";
 
 type PrintedMetadata = Readonly<
   Partial<
-    Pick<Card, "attack" | "boost" | "health" | "is_unique" | "subname" | "text">
+    Pick<
+      Card,
+      "name" | "attack" | "boost" | "health" | "is_unique" | "subname" | "text"
+    >
   >
 >;
 
@@ -44,6 +47,11 @@ const printedMetadata: Readonly<Record<string, PrintedMetadata>> = {
   "32092": { text: "[star] Wolfsbane's attacks gain piercing." },
   // public/cards/catalog/32106.webp: printed five hit points, not six.
   "32106": { health: 5 },
+  // Original 2A scans share this title; the room names appear on their 2B faces.
+  "32126a": { name: "Attack on Xavier's" },
+  "32127a": { name: "Attack on Xavier's" },
+  "32128a": { name: "Attack on Xavier's" },
+  "32129a": { name: "Attack on Xavier's" },
 };
 
 /** Return a playable face with verified printing fields, without mutating its
