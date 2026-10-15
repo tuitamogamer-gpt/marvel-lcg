@@ -2,6 +2,7 @@
  * hydrates every command. Printed triggered effects run through dispatch. */
 import { describe, expect, it } from "vitest";
 import { card } from "../src/game/cards.js";
+import { advisePrompt } from "../src/game/advisor.js";
 import {
   abilityOptions,
   allyCount,
@@ -90,8 +91,9 @@ function opening(
   team = false,
   difficulty: "standard" | "expert" = "standard",
   module = "zero_tolerance",
+  heroId = "spider_man",
 ) {
-  const first = { heroId: "spider_man", aspect: "justice" as const };
+  const first = { heroId, aspect: "justice" as const };
   return newGame({
     ...first,
     villainId: "master_mold",
@@ -113,8 +115,9 @@ function base(
   team = false,
   difficulty: "standard" | "expert" = "standard",
   module = "zero_tolerance",
+  heroId = "spider_man",
 ) {
-  let s = settle(opening(team, difficulty, module));
+  let s = settle(opening(team, difficulty, module, heroId));
   for (const _ of s.players) s = command(s, { type: "MULLIGAN", ids: [] });
   s = settle(s);
   for (const seat of s.players) {
@@ -336,6 +339,39 @@ describe("Master Mold original-source native setup and main scheme", () => {
     );
     exact(s);
   });
+
+  it.each([false, true])(
+    "Shield Toss's real target prompt and advisor honor granted Guard, including a blank minion (main blank %s)",
+    (mainBlank) => {
+      let s = base(false, "standard", "zero_tolerance", "captain_america");
+      const p = minion(s, "32105");
+      s.flags[`novaIronheartPackBlank:${p.id}`] = s.round;
+      if (mainBlank) s.flags["novaIronheartPackBlank:main"] = s.round;
+      const shield = take(s, "03009", "p1"),
+        toss = take(s, "03006", "p1"),
+        cost = take(s, "03003", "p1");
+      s.player.inPlay.push(shield);
+      s.player.hand.push(toss, cost);
+      s = command(s, { type: "PLAY", id: toss.id });
+      expect(s.prompt?.title).toBe("Shield Toss · discard");
+      s = command(s, { type: "SELECT", ids: [cost.id] });
+      expect(s.prompt?.title).toBe("Shield Toss · targets");
+      const legalTargets = targets(s, "enemy", true).map((t) => t.id);
+      expect(s.prompt?.options.map((o) => o.id)).toEqual(legalTargets);
+      expect(legalTargets.includes(s.villain.id)).toBe(mainBlank);
+      const advice = advisePrompt(s);
+      expect(advice?.command).toEqual({
+        type: "SELECT",
+        ids: [mainBlank ? s.villain.id : p.id],
+      });
+      s = settle(command(s, advice!.command));
+      expect(s.minions.find((m) => m.id === p.id)?.damage).toBe(
+        mainBlank ? 0 : 4,
+      );
+      expect(s.player.hand.some((p) => p.id === shield.id)).toBe(true);
+      expect(s.player.discard.some((p) => p.id === cost.id)).toBe(true);
+    },
+  );
 
   it("ordinary Operation Zero Tolerance remains defeatable in this main scheme", () => {
     let s = base();

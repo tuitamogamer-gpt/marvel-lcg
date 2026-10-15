@@ -17507,6 +17507,8 @@ function resolve(s: GameState, e: Effect) {
       shuffle,
       discardHand,
       discardPiece,
+      attackTargets: (state) =>
+        targets(state, "enemy", true).map((target) => find(state, target.id)!),
       attackBatch: (state, ids, amount) => {
         if (state.player.stunned) {
           consumeStatus(state.player, "stunned");

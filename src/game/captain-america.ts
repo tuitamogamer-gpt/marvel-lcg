@@ -76,6 +76,8 @@ export interface CaptainEnginePorts {
   shuffle(s: GameState, pieces: Piece[]): void;
   discardHand(s: GameState, id: string): void;
   discardPiece(s: GameState, id: string): void;
+  /** Native legal attack targets include granted keywords and restrictions. */
+  attackTargets?(s: GameState): Piece[];
   /** Targets are validated together before any damage. Resolve one multi-target
    * attack, including Tough, retaliate and defeat hooks. Return false if stunned. */
   attackBatch(s: GameState, ids: string[], amount: number): boolean;
@@ -431,7 +433,7 @@ export function resolveCaptainEffect(
     }
     case "cap:toss-cost": {
       need(shield(s), "Captain America’s Shield is no longer in play.");
-      const targets = captainAttackTargets(s);
+      const targets = ports.attackTargets?.(s) ?? captainAttackTargets(s);
       const max = Math.min(targets.length, s.player.hand.length);
       need(
         max > 0,
@@ -451,7 +453,7 @@ export function resolveCaptainEffect(
     case "cap:toss-paid": {
       const discard = selectedHand(s, e.ids);
       const sh = shield(s);
-      const targets = captainAttackTargets(s);
+      const targets = ports.attackTargets?.(s) ?? captainAttackTargets(s);
       need(
         sh && discard.length > 0 && discard.length <= targets.length,
         "Shield Toss costs cannot be paid.",
