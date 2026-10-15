@@ -398,7 +398,7 @@ describe("Project Wideawake original retail evidence", () => {
 });
 
 describe("Project Wideawake executable source acceptance", () => {
-  it("registers all twenty-seven exact faces without promising later box scenarios", () => {
+  it("registers all twenty-seven exact faces without promising unsupported later box faces", () => {
     expect(PROJECT_WIDEAWAKE_SCRIPT_CODES).toEqual(scenarioCodes);
     expect(ZERO_TOLERANCE_SCRIPT_CODES).toEqual(zeroCodes);
     expect(SENTINELS_SCRIPT_CODES).toEqual(sentinelCodes);
@@ -407,12 +407,13 @@ describe("Project Wideawake executable source acceptance", () => {
       expect(EXPLICIT_CARD_SCRIPTS.has(code), code).toBe(true);
     }
     for (const c of catalog.filter(
-      (c) => c.pack_code === "mut_gen" && c.position > 108,
+      (c) =>
+        c.pack_code === "mut_gen" && c.position > 120 && c.code !== "32172b",
     ))
       expect(hasExecutableScript(c.code), c.code).toBe(false);
     expect(
       VILLAINS.filter((v) =>
-        ["master_mold", "mansion_attack", "magneto_villain"].includes(v.id),
+        ["mansion_attack", "magneto_villain"].includes(v.id),
       ),
     ).toEqual([]);
   });

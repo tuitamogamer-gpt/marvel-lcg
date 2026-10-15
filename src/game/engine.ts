@@ -40,6 +40,7 @@ import * as sabretooth from "./sabretooth.js";
 import * as mystique from "./mystique.js";
 import * as sentinels from "./sentinels.js";
 import * as wideawake from "./project-wideawake.js";
+import * as masterMold from "./master-mold.js";
 import * as zeroTolerance from "./zero-tolerance.js";
 import * as nebula from "./nebula.js";
 import { isPermanent } from "./hero-runtime.js";
@@ -492,6 +493,15 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
       : undefined;
   return (
     printed ||
+    !!(
+      s &&
+      typeof p !== "string" &&
+      name === "Guard" &&
+      masterMold.masterMoldModifiers(s, p, {
+        isTextBlank,
+        hasTrait: captainPackHasTrait,
+      }).guard
+    ) ||
     !!inherited?.[name.toLowerCase() as keyof typeof inherited] ||
     !!(
       s &&
@@ -635,6 +645,10 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
   const wideawakeKeywords = wideawake.projectWideawakeModifiers(s, p, {
     isTextBlank,
   });
+  const moldKeywords = masterMold.masterMoldModifiers(s, p, {
+    isTextBlank,
+    hasTrait: captainPackHasTrait,
+  });
   if (name === "Overkill" && ironspider.ironspiderSinisterOverkill(s, p))
     return 1;
   const granted = hawkeyeEnemyAttackTraits(s, p);
@@ -646,6 +660,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
   );
   const intrinsic = Math.max(
     isTextBlank(s, p) ? 0 : printedKeyword(card(p), name),
+    Number(name === "Guard" && moldKeywords.guard),
     Number(
       name === "Stalwart" && sabretooth.sabretoothModifiers(s, p.id).stalwart,
     ),
@@ -701,7 +716,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
       ? niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
           .retaliate +
           ironheart.ironheartEnemyKeywords(s, p, { isTextBlank }).retaliate +
-          wideawakeKeywords.retaliate
+          wideawakeKeywords.retaliate +
+          moldKeywords.retaliate
       : 0,
   );
   const inherited = inheritors.inheritorsModifiers(s, p);
@@ -916,6 +932,9 @@ export function allyCount(s: GameState) {
   return friends(s).filter(
     (p) =>
       !antPack.antManPackAllyExcluded(s, p) &&
+      masterMold.masterMoldMagnetoCountsAgainstAllyLimit(s, p, {
+        isTextBlank,
+      }) &&
       wideawake.projectWideawakeJubileeCountsAgainstAllyLimit(s, p, {
         isTextBlank,
       }) &&
@@ -1340,6 +1359,7 @@ function movePieceFromPlay(
   if (
     removedSource &&
     !removed &&
+    !victory &&
     !setAsideOwnerId &&
     card(removedSource).faction_code !== "encounter" &&
     !s.flags[`niLeaveCommitted:${id}`]
@@ -1470,7 +1490,8 @@ function movePieceFromPlay(
   );
   for (const stored of [...(p.storedCards || []), ...(p.captured || [])]) {
     const owner = s.players.find((seat) => seat.id === stored.ownerId);
-    if (stored.code === "32088b") s.removed.push(resetPiece(stored));
+    if (["32088b", "32172b"].includes(stored.code))
+      s.removed.push(resetPiece(stored));
     else if (
       card(stored).faction_code === "encounter" &&
       !(wideawakeCaptive(stored) && stored.ownerId)
@@ -1492,7 +1513,10 @@ function movePieceFromPlay(
         seatView(s, owner).player.discard.push(p.droneCard);
       else s.removed.push(p.droneCard);
     }
-  } else if (p.code === "32088b" && !victory) s.removed.push(resetPiece(p));
+  } else if (["32088b", "32172b"].includes(p.code) && !victory)
+    s.removed.push(resetPiece(p));
+  else if (p.code === "32172b" && victory)
+    (s.victoryDisplay ||= []).push(resetPiece(p));
   else if (
     card(p).faction_code === "encounter" &&
     !(wideawakeCaptive(p) && p.ownerId)
@@ -1723,6 +1747,7 @@ function check(s: GameState) {
   syncValkyrieConvertedCards(s);
   syncVillainTextHealth(s);
   wideawake.projectWideawakeFirstPlayerChanged(s, wideawakePorts);
+  masterMold.masterMoldFirstPlayerChanged(s, masterMoldPorts);
   if (zeroTolerance.zeroToleranceCheckLoss(s, zeroTolerancePorts)) return;
   // Simultaneous Spectrum batches place every prepared packet before checking
   // hero elimination. This flag exists only during the synchronous commit.
@@ -1859,6 +1884,7 @@ function check(s: GameState) {
       s.firstPlayerId = next.id;
       sabretooth.sabretoothFirstPlayerChanged(s);
       wideawake.projectWideawakeFirstPlayerChanged(s, wideawakePorts);
+      masterMold.masterMoldFirstPlayerChanged(s, masterMoldPorts);
     }
     const remainingNPC = sabretooth.sabretoothKelly(s);
     if (remainingNPC && controller(s, remainingNPC.id)?.id === seat.id) {
@@ -1868,6 +1894,18 @@ function check(s: GameState) {
     for (const m of s.minions)
       if (m.engagedWith === seat.id) {
         m.engagedWith = next.id;
+        add(
+          s,
+          ...masterMold.masterMoldMinionEngaged(
+            s,
+            {
+              token: `engagement:${s.nextId++}`,
+              minionId: m.id,
+              playerId: next.id,
+            },
+            { isTextBlank },
+          ),
+        );
         add(s, ...spiderHam.spiderHamMinionEngaged(s, m, next.id));
         add(
           s,
@@ -2404,6 +2442,10 @@ function dealDamage(
           ).retaliate +
           wideawake.projectWideawakeModifiers(s, original, { isTextBlank })
             .retaliate +
+          masterMold.masterMoldModifiers(s, original, {
+            isTextBlank,
+            hasTrait: captainPackHasTrait,
+          }).retaliate +
           (target === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -2705,7 +2747,7 @@ function allyDefeatInterruptOptions(
       : []),
     ...(enemyAttack &&
     card(m).type_code === "ally" &&
-    !(m.code === "32088b" && !isTextBlank(s, m))
+    !(["32088b", "32172b"].includes(m.code) && !isTextBlank(s, m))
       ? draxPack.draxPackRegroupOptions(
           s,
           m,
@@ -2855,13 +2897,14 @@ function defeatCharacter(
   );
   const name = card(m).name;
   const textWasBlank = isTextBlank(s, m);
+  const defeatedSentinel = minion && captainPackHasTrait(s, m.id, "Sentinel");
   const allyController = controller(s, m.id)?.id;
   const sabretoothDefeat = (m as SabretoothAttackDefeatPiece)
     .sabretoothAttackDefeatReceipt;
   if (!minion) recordMilesEnemyAttackDefeat(s, source, enemyAttack);
   if (!minion)
     recordZeroToleranceAllyDefeat(s, m, source, enemyAttack, allyController);
-  if (!minion && m.code === "32088b" && !textWasBlank)
+  if (!minion && ["32088b", "32172b"].includes(m.code) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
   else discardPiece(s, m.id);
   if (!minion && enemyAttack && sabretoothDefeat?.attackerId === source) {
@@ -2890,6 +2933,13 @@ function defeatCharacter(
     );
   log(s, `${name} is defeated.`, "good");
   if (minion) {
+    if (
+      attack &&
+      source &&
+      find(s, source)?.code === "32172b" &&
+      defeatedSentinel
+    )
+      s.flags[`masterMoldMinionDefeat:${source}`] = true;
     if (attack && source && find(s, source)?.code === "32091")
       s.flags[`wideawakeMinionDefeat:${source}`] = true;
     const excess = Number(s.flags[`ironspiderExcess:${m.id}`] || 0);
@@ -3163,6 +3213,28 @@ function threat(
         ),
       );
     if (schemeLimit(s) > 0 && s.scheme.threat >= schemeLimit(s)) {
+      if (s.villainId === "master_mold") {
+        if (s.scheme.code === "32113b") {
+          endGame(
+            s,
+            false,
+            "Master Mold's Agenda is complete. The players lose.",
+          );
+        } else if (!s.pendingMainCompletion) {
+          s.pendingMainCompletion = true;
+          discardMainAttachments(s);
+          s.scheme.index = 1;
+          s.scheme.code = "32113a";
+          s.scheme.threat = 0;
+          add(
+            s,
+            ...masterMold.masterMoldMainRevealed(s, "32113a"),
+            E("mastermold-native:main-back", { actorId: s.firstPlayerId }),
+            E("clearMainCompletion"),
+          );
+        }
+        return;
+      }
       const mutagen =
         sabretooth.sabretoothMainCompleted(s) ??
         riskyMainCompleted(s) ??
@@ -3308,11 +3380,27 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
     s.activePlayerId,
     { isTextBlank },
   );
-  const victory = ["32071", "32100"].includes(p.code) && !isTextBlank(s, p);
+  const moldDefeat = masterMold.masterMoldSideSchemeDefeated(
+    s,
+    p,
+    s.activePlayerId,
+    { isTextBlank },
+  );
+  const victory =
+    ["32071", "32100", "32120"].includes(p.code) && !isTextBlank(s, p);
   const retainFind =
     ["32065a", "32088a"].includes(p.code) && !isTextBlank(s, p);
   if (!victory && !retainFind) discardPiece(s, p.id);
   const responses = [
+    ...(moldDefeat?.length
+      ? [
+          {
+            id: `${p.id}:mastermold-defeated`,
+            title: card(p).name,
+            effects: moldDefeat,
+          },
+        ]
+      : []),
     ...(wideawakeDefeat?.length
       ? [
           {
@@ -5191,7 +5279,20 @@ export function newGame(config: {
       Array.from({ length: c.quantity }, () => makePiece(s, c.code)),
     ),
   );
-  if (v.id === "project_wideawake") {
+  if (v.id === "master_mold") {
+    s.scheme.threat = s.playerCount;
+    masterMold.masterMoldSetup(s, makePiece(s, "32172b"), masterMoldPorts);
+    s.queue.push(
+      ...masterMold
+        .masterMoldMainRevealed(s, "32112b")
+        .map((e) => effectContext(s, e)),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "project_wideawake") {
     const captives = s.encounter.deck.filter((p) =>
       ["32089", "32090", "32091", "32092"].includes(p.code),
     );
@@ -10220,6 +10321,11 @@ const thorPorts: ThorEnginePorts = {
     p.engagedWith = playerId;
     add(
       s,
+      ...masterMold.masterMoldMinionEngaged(
+        s,
+        { token: `engagement:${s.nextId++}`, minionId: p.id, playerId },
+        { isTextBlank },
+      ),
       ...spiderHam.spiderHamMinionEngaged(s, p, playerId),
       ...ironspider.ironspiderSinisterEngagementResponses(s, p, playerId),
       E("valkPackEngagementWindow", { id: p.id, actorId: playerId }),
@@ -11522,6 +11628,130 @@ const wideawakePorts: wideawake.ProjectWideawakePorts = {
       E("heal", { target: s.villain.id, amount, source, origin: "encounter" }),
     ),
 };
+const masterMoldPorts: masterMold.MasterMoldPorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  hasTrait: captainPackHasTrait,
+  isEngagedWith: (s, p, playerId) =>
+    !p.engagedWith || p.engagedWith === playerId,
+  findPiece: wideawakePhysicalPiece,
+  findAlly: (s, id) => wideawakePorts.findAlly(s, id),
+  putMagneto: (s, p, playerId) => {
+    Object.assign(p, resetPiece(p, true));
+    delete p.ownerId;
+    need(
+      !uniqueConflict(s, card(p)),
+      "The unique Magneto ally is already in play.",
+    );
+    seatView(s, playerId).player.inPlay.push(p);
+    add(s, E("allyEnter", { id: p.id, actorId: playerId, fromHand: false }));
+  },
+  transferAllyControl: hulkPackPorts.transferControl,
+  healAlly: (s, id, amount, source) =>
+    add(s, E("heal", { target: id, amount, source, origin: "player" })),
+  discardTop: mutagenPorts.discardTop,
+  putMinion: (s, p, playerId, after) => {
+    const outerAttack = s.attack,
+      outerScheme = s.scheming;
+    const actorId = s.activePlayerId;
+    s.attack = null;
+    delete s.scheming;
+    add(
+      s,
+      E("mystique-native:activation-finish", {
+        outerAttack,
+        outerScheme,
+        after,
+        actorId,
+      }),
+    );
+    mutagenPorts.putMinion(s, p, playerId);
+  },
+  shuffleEncounterDiscard: (s) => {
+    s.encounter.deck.push(...s.encounter.discard.splice(0));
+    mutagenPorts.shuffleEncounter(s);
+  },
+  attach: (s, p, targetId, boost) => {
+    if (boost) {
+      const activation = s.scheming || s.attack;
+      if (activation && !activation.retainedBoostIds?.includes(p.id))
+        (activation.retainedBoostIds ||= []).push(p.id);
+    }
+    mutagenPorts.attach(s, p, targetId);
+  },
+  activateEnemy: (s, enemyId, playerId, kind, sourceId) =>
+    add(
+      s,
+      E("mastermold-native:activate", {
+        enemyId,
+        playerId,
+        kind,
+        sourceId,
+        actorId: playerId,
+      }),
+    ),
+  giveTough: (s, id) => {
+    const p = find(s, id);
+    return !!p && giveCharacterStatus(s, p, "tough");
+  },
+  surge: (s, playerId, sourceId, sourceCode) =>
+    add(s, E("surge", { sourceId, sourceCode, actorId: playerId })),
+  damageBatch: (s, targets, sourceId, playerId) =>
+    wideawakePorts.damageBatch(s, targets, sourceId, playerId),
+  stun: (s, target, source) =>
+    add(s, E("status", { target, status: "stunned", source })),
+};
+function resolveMasterMoldNativeEffect(s: GameState, e: Effect): boolean {
+  if (!e.type.startsWith("mastermold-native:")) return false;
+  switch (e.type) {
+    case "mastermold-native:main-back":
+      s.scheme.code = "32113b";
+      s.scheme.threat = s.playerCount;
+      log(s, "The main scheme advances: Master Mold's Agenda.", "bad");
+      break;
+    case "mastermold-native:activate": {
+      if (!find(s, e.enemyId)) break;
+      const outerAttack = s.attack,
+        outerScheme = s.scheming;
+      s.attack = null;
+      delete s.scheming;
+      const request: MutagenActivation = {
+        enemyId: e.enemyId,
+        playerId: e.playerId,
+        kind: e.kind,
+        modifier: 0,
+        after: E("mystique-native:activation-finish", {
+          outerAttack,
+          outerScheme,
+          after: [],
+          actorId: e.playerId,
+        }),
+      };
+      if (e.kind === "attack") enemyAttack(s, e.enemyId, undefined, request);
+      else enemyScheme(s, e.enemyId, undefined, request);
+      break;
+    }
+    case "mastermold-native:ally-response": {
+      const options = masterMold.masterMoldAllyAttackResponseOptions(
+        s,
+        e.receipt,
+        masterMoldPorts,
+      );
+      if (options.length)
+        choose(
+          s,
+          "Magneto",
+          "Heal 1 damage after defeating a Sentinel minion?",
+          [...options, option("continue", "Continue", [])],
+        );
+      break;
+    }
+    default:
+      throw Error(`Unknown Master Mold native effect: ${e.type}`);
+  }
+  return true;
+}
 function resolveWideawakeNativeEffect(s: GameState, e: Effect): boolean {
   if (!e.type.startsWith("wideawake-native:")) return false;
   switch (e.type) {
@@ -11959,6 +12189,15 @@ function minionEntered(s: GameState, p: Piece) {
   );
   add(
     s,
+    ...masterMold.masterMoldMinionEngaged(
+      s,
+      {
+        token: `engagement:${s.nextId++}`,
+        minionId: p.id,
+        playerId: s.activePlayerId,
+      },
+      { isTextBlank },
+    ),
     ...ironspider.ironspiderSinisterEngagementResponses(s, p),
     ...spiderHam.spiderHamMinionEngaged(s, p),
     E("valkPackEngagementWindow", { id: p.id }),
@@ -14671,6 +14910,7 @@ function declareDefense(s: GameState) {
 }
 function boostEffects(s: GameState, p: Piece) {
   const mutantScenarioBoost =
+    masterMold.masterMoldBoost(s, p) ??
     wideawake.projectWideawakeBoost(s, p) ??
     zeroTolerance.zeroToleranceBoost(s, p) ??
     sentinels.sentinelsBoost(s, p) ??
@@ -14933,24 +15173,32 @@ function enemyScheme(
     );
     return;
   }
+  const moldReceipt: masterMold.MasterMoldSchemeReceipt = {
+    token: `scheme${s.nextId++}`,
+    enemyId: id,
+    enemyCode: p.code,
+    playerId: s.activePlayerId,
+    performed: true,
+  };
+  const omitNewBoost =
+    request?.omitNormalBoost ||
+    masterMold.masterMoldSuppressesBoost(s, moldReceipt, { isTextBlank });
   const pendingBoosts: Piece[] = [];
   if (id === s.villain.id)
     pendingBoosts.push(...(s.encounter.storedBoosts || []).splice(0));
   pendingBoosts.push(...(p.inheritorBoosts || []).splice(0));
-  const normal = request?.omitNormalBoost
+  const normal = omitNewBoost
     ? 0
     : id === s.villain.id || keyword(p, "Villainous", s)
       ? 1
       : 0;
-  const n = request?.omitNormalBoost
-    ? 0
-    : normal + mutagenAdditionalBoosts(s, id);
+  const n = omitNewBoost ? 0 : normal + mutagenAdditionalBoosts(s, id);
   for (let i = 0; i < n; i++) {
     const boost = drawEncounter(s);
     if (boost) pendingBoosts.push(boost);
   }
   s.scheming = {
-    id: `scheme${s.nextId++}`,
+    id: moldReceipt.token,
     attacker: id,
     boostCodes: [],
     boostIds: [],
@@ -14959,7 +15207,11 @@ function enemyScheme(
     modifier: request?.modifier || 0,
     activationAfter: request?.after,
   };
-  add(s, E(pendingBoosts.length ? "revealSchemeBoost" : "finishScheme"));
+  add(
+    s,
+    ...masterMold.masterMoldBeforeScheme(s, moldReceipt, { isTextBlank }),
+    E(pendingBoosts.length ? "revealSchemeBoost" : "finishScheme"),
+  );
 }
 function enemySCH(s: GameState, p: Piece, playerId: string): number {
   if (enemyDashPower(p, "scheme")) return 0;
@@ -15401,6 +15653,35 @@ function finishAttackAfterDamage(
     kind: "attack",
     performed: !!a.completionRecorded,
   });
+  const moldAfter = masterMold.masterMoldAfterEnemyAttack(
+    s,
+    {
+      token: a.id!,
+      enemyId: a.attacker,
+      enemyCode: a.attackerSnapshot?.code || p?.code || "",
+      performed: !!a.completionRecorded,
+      damagedTargets: a.attackDamageReceipts
+        ? a.attackDamageReceipts.map((r) => ({
+            targetId: r.target,
+            actualDamage: r.actualDamage,
+          }))
+        : [
+            {
+              targetId: target === "hero" ? `hero:${recipientId}` : target,
+              actualDamage: a.damage,
+            },
+            ...(target !== "hero"
+              ? [
+                  {
+                    targetId: `hero:${recipientId}`,
+                    actualDamage: a.identityDamage || 0,
+                  },
+                ]
+              : []),
+          ],
+    },
+    { isTextBlank },
+  );
   const zeroReceipt: zeroTolerance.ZeroToleranceAttackReceipt = {
     token: a.id!,
     attackerId: a.attacker,
@@ -15507,6 +15788,11 @@ function finishAttackAfterDamage(
       {
         receipt: zeroReceipt,
         responses: [
+          ...moldAfter.map((effect, index) => ({
+            id: `${a.id}:stun-beam:${index}`,
+            title: "Stun Beam",
+            effects: [effect],
+          })),
           ...(brotherhoodAfter.length
             ? [
                 {
@@ -16028,11 +16314,14 @@ function reveal(
       "32096",
       "32103",
       "32107",
+      "32115",
+      "32116",
     ].includes(p.code)
   ) {
     add(
       s,
-      ...((wideawake.projectWideawakeReveal(s, p, { isTextBlank }) ??
+      ...((masterMold.masterMoldReveal(s, p, { isTextBlank }) ??
+        wideawake.projectWideawakeReveal(s, p, { isTextBlank }) ??
         zeroTolerance.zeroToleranceReveal(s, p, zeroTolerancePorts) ??
         sentinels.sentinelsReveal(s, p, sentinelsPorts) ??
         sabretooth.sabretoothReveal(s, p) ??
@@ -16044,7 +16333,10 @@ function reveal(
   }
   if (
     !repeat &&
-    (wideawake.PROJECT_WIDEAWAKE_SCRIPT_CODES.some((code) => code === p.code) ||
+    (masterMold.MASTER_MOLD_SCRIPT_CODES.some((code) => code === p.code) ||
+      wideawake.PROJECT_WIDEAWAKE_SCRIPT_CODES.some(
+        (code) => code === p.code,
+      ) ||
       zeroTolerance.ZERO_TOLERANCE_SCRIPT_CODES.some(
         (code) => code === p.code,
       ) ||
@@ -16223,6 +16515,7 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    masterMold.masterMoldReveal(s, p, { isTextBlank }) ??
     wideawake.projectWideawakeReveal(s, p, { isTextBlank }) ??
     zeroTolerance.zeroToleranceReveal(s, p, zeroTolerancePorts) ??
     sentinels.sentinelsReveal(s, p, sentinelsPorts) ??
@@ -16959,6 +17252,8 @@ function refreshInheritorsRetaliate(
     : undefined;
 }
 function resolve(s: GameState, e: Effect) {
+  if (resolveMasterMoldNativeEffect(s, e)) return;
+  if (masterMold.resolveMasterMoldEffect(s, e, masterMoldPorts)) return;
   if (resolveSabretoothNativeEffect(s, e)) return;
   if (sabretooth.resolveSabretoothEffect(s, e, sabretoothPorts)) return;
   if (resolveBrotherhoodNativeEffect(s, e)) return;
@@ -17069,6 +17364,7 @@ function resolve(s: GameState, e: Effect) {
         const previous = state.currentRevealWindowId;
         state.currentRevealWindowId = windowId;
         const effects =
+          masterMold.masterMoldReveal(state, piece, { isTextBlank }) ??
           wideawake.projectWideawakeReveal(state, piece, { isTextBlank }) ??
           zeroTolerance.zeroToleranceReveal(state, piece, zeroTolerancePorts) ??
           sentinels.sentinelsReveal(state, piece, sentinelsPorts) ??
@@ -17211,6 +17507,8 @@ function resolve(s: GameState, e: Effect) {
       shuffle,
       discardHand,
       discardPiece,
+      attackTargets: (state) =>
+        targets(state, "enemy", true).map((target) => find(state, target.id)!),
       attackBatch: (state, ids, amount) => {
         if (state.player.stunned) {
           consumeStatus(state.player, "stunned");
@@ -21070,6 +21368,8 @@ function resolve(s: GameState, e: Effect) {
       const queuedBefore = s.queue.length;
       if (attack && p.code === "32091")
         delete s.flags[`wideawakeMinionDefeat:${p.id}`];
+      if (attack && p.code === "32172b")
+        delete s.flags[`masterMoldMinionDefeat:${p.id}`];
       const bonus = attack
         ? scarletPack.scarletWitchPackAllyAttackBonus(s, p)
         : 0;
@@ -21310,6 +21610,24 @@ function resolve(s: GameState, e: Effect) {
             },
           }),
         );
+      if (e.attack && p.code === "32172b") {
+        const defeatedSentinelMinion =
+          !!s.flags[`masterMoldMinionDefeat:${p.id}`];
+        delete s.flags[`masterMoldMinionDefeat:${p.id}`];
+        add(
+          s,
+          E("mastermold-native:ally-response", {
+            receipt: {
+              token: e.sinisterPowerToken,
+              allyId: p.id,
+              allyCode: p.code,
+              playerId: s.activePlayerId,
+              performed: true,
+              defeatedSentinelMinion,
+            },
+          }),
+        );
+      }
       break;
     }
     case "allyConsequence": {
@@ -21848,9 +22166,34 @@ function resolve(s: GameState, e: Effect) {
     }
     case "enemyTargetAttackComplete": {
       const a = e.snapshot as NonNullable<GameState["attack"]>;
+      const moldAfter = masterMold.masterMoldAfterEnemyAttack(
+        s,
+        {
+          token: a.id!,
+          enemyId: a.attacker,
+          enemyCode: a.attackerSnapshot?.code || "",
+          performed: !!a.completionRecorded,
+          damagedTargets: a.originalTarget
+            ? [{ targetId: a.originalTarget, actualDamage: a.damage }]
+            : [],
+        },
+        { isTextBlank },
+      );
       s.attack = null;
       add(
         s,
+        ...(moldAfter.length
+          ? [
+              E("forcedResponses", {
+                responses: moldAfter.map((effect, index) => ({
+                  id: `${a.id}:stun-beam:${index}`,
+                  title: "Stun Beam",
+                  effects: [effect],
+                })),
+                actorId: s.firstPlayerId,
+              }),
+            ]
+          : []),
         ...antMan.antManEnemyActivated(s, a.attacker),
         ...(a.completionRecorded && a.attackerSnapshot
           ? spectrum.spectrumEnemyActivated(
@@ -24568,6 +24911,8 @@ function run(s: GameState) {
       e.type.startsWith("sabretooth-native:") ||
       e.type.startsWith("wideawake:") ||
       e.type.startsWith("wideawake-native:") ||
+      e.type.startsWith("mastermold:") ||
+      e.type.startsWith("mastermold-native:") ||
       e.type.startsWith("zero-tolerance:") ||
       e.type.startsWith("sentinels:") ||
       e.type === "mystique-native:activation-finish";

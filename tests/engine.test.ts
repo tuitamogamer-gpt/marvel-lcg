@@ -640,7 +640,9 @@ describe("complete seeded missions", () => {
           [
             ...s.player.hand,
             ...s.player.deck,
-            ...s.player.inPlay,
+            // Setup NPC allies occupy the same zone without joining this
+            // player's original deck. Owned setup permanents still count.
+            ...s.player.inPlay.filter((p) => p.ownerId === s.activePlayerId),
             ...(s.player.spdrIdentity ? [s.player.spdrIdentity] : []),
             ...(s.player.setAside || []).filter(
               (p) => card(p).faction_code !== "encounter",

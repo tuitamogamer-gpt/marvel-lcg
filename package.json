@@ -49,7 +49,8 @@
     "test:spdr": "node scripts/spdr-check.mjs",
     "test:mutant-genesis": "node scripts/mutant-genesis-check.mjs",
     "test:sabretooth": "node scripts/sabretooth-check.mjs",
-    "test:project-wideawake": "node scripts/project-wideawake-check.mjs"
+    "test:project-wideawake": "node scripts/project-wideawake-check.mjs",
+    "test:master-mold": "node scripts/master-mold-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

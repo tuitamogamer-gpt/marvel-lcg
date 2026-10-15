@@ -62,6 +62,7 @@ import { spdrPackCharacterModifiers } from "./spdr-pack.js";
 import { ironspiderSinisterHealthBonus } from "./ironspider-sinister.js";
 import { colossusStats } from "./colossus.js";
 import { brotherhoodModifiers } from "./brotherhood.js";
+import { masterMoldModifiers } from "./master-mold.js";
 import {
   mutantGenesisPlayerPackCharacterModifiers,
   mutantGenesisPlayerPackMinionModifiers,
@@ -782,6 +783,20 @@ export const VILLAINS = [
     description:
       "Rescue captive mutants while the Sentinels seize allies and player cards under Operation Zero Tolerance.",
   },
+  {
+    id: "master_mold",
+    name: "Master Mold",
+    codes: ["32109", "32110", "32111"],
+    schemes: ["32112b", "32113b"],
+    module: "zero_tolerance",
+    fixedSets: ["sentinels"],
+    difficulty: 3,
+    title: "The Sentinel Factory",
+    location: "Sentinel manufacturing facility",
+    color: "#9b6ba4",
+    description:
+      "Join forces with Magneto to stop Master Mold and its growing army of Sentinel minions.",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1270,6 +1285,11 @@ export function pieceHP(s: GameState, p: Piece) {
     mutantGenesisPlayerPackCharacterModifiers(s, p.id, { isTextBlank }).health +
     mutantGenesisPlayerPackMinionModifiers(s, p, { isTextBlank }).health +
     brotherhoodModifiers(s, p, {
+      isTextBlank,
+      hasTrait: (_s, _target, trait) =>
+        (card(p).traits || "").split(/\.\s*/).includes(trait),
+    }).health +
+    masterMoldModifiers(s, p, {
       isTextBlank,
       hasTrait: (_s, _target, trait) =>
         (card(p).traits || "").split(/\.\s*/).includes(trait),

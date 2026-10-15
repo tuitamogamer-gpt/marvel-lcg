@@ -1951,6 +1951,12 @@ export default function App() {
                     ))}
                   </select>
                 </label>
+                {villain.id === "master_mold" && (
+                  <p>
+                    Sentinels is included with this scenario. Choose one
+                    additional modular set; Zero Tolerance is recommended.
+                  </p>
+                )}
                 {villain.id === "project_wideawake" && (
                   <>
                     <p>

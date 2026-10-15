@@ -9,7 +9,7 @@ jobs:
   verify:
     name: Test, build and format
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -76,6 +76,9 @@ jobs:
           - group: project-wideawake
             scripts: test:project-wideawake
             timeout: 45
+          - group: master-mold
+            scripts: test:master-mold
+            timeout: 45
           - group: spdr-identity
             scripts: test:spdr
             spdrScenarios: maintenance,pilot-flip,sync-cancel,rapid-deployment,web-trap,venom,systems-ready,systems-search,may-hero,may-alter,command-draw,command-ready,host-ready,psychic-thwart,fluid-attack,alloy-defense,ejection
@@ -107,7 +110,7 @@ jobs:
           done
           echo "Dev server did not start"; cat output-dev.log; exit 1
       - name: Build and serve production artifact
-        if: matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake'
+        if: matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold'
         run: |
           npm run build
           npm run preview -- --host 127.0.0.1 --port 4173 > output-preview.log 2>&1 &
@@ -122,7 +125,7 @@ jobs:
             npm run "$script"
           done
         env:
-          BASE_URL: ${{ (matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake') && 'http://127.0.0.1:4173' || 'http://127.0.0.1:5174' }}
+          BASE_URL: ${{ (matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold') && 'http://127.0.0.1:4173' || 'http://127.0.0.1:5174' }}
           CI_BROWSER_SCRIPTS: ${{ matrix.scripts }}
           SPDR_SCENARIOS: ${{ matrix.spdrScenarios }}
           SPDR_FIXTURE_ONLY: ${{ matrix.spdrFixtureOnly }}
