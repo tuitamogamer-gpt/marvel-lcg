@@ -176,8 +176,8 @@ export function fixture(kind){
  }else if(kind==='children-alter'){
   player().form='alter';const effects=revealEffects(['32117']);ids.milledIds=order(['32107','32105']).map(p=>p.id);native(effects);
  }else if(kind==='shields-up'){
-  ids.minionIds=[minion('32101').id,minion('32105').id];ids.otherId=order(['32118'])[0].id;
-  native([...revealEffects(['32118']),{type:'enemyAttack',id:s.villain.id,actorId:'p1'}]);
+  ids.minionIds=[minion('32101').id,minion('32105').id];const effects=revealEffects(['32118']);ids.otherId=order(['32118'])[0].id;
+  native([...effects,{type:'enemyAttack',id:s.villain.id,actorId:'p1'}]);
  }else if(kind==='intruder-defeater'){
   const p=encounter('32119');p.counters=1;s.sideSchemes.push(p);ids.schemeId=p.id;activateSeat(s,'p2');s.turnPlayerId='p2';ids.milledIds=order(['32107','32105']).map(p=>p.id);
  }else if(kind==='virus-hinder'){
@@ -859,20 +859,26 @@ async function checkpoint(name, width, f) {
       "Actual current original Master Mold main scheme artwork",
     );
     const magneto = allPieces(state).find((p) => p.code === "32172b");
-    if (
-      state.players.some((p) =>
-        seat(state, p.id).inPlay.some((q) => q.id === magneto.id),
-      )
-    )
-      assert.equal(
-        await page
-          .locator(
-            `.in-play-card[data-piece-id="${magneto.id}"][data-card-code="32172b"]`,
-          )
-          .count(),
-        1,
-        "The actual controlled standalone Magneto appears once",
+    const controller = state.players.find((p) =>
+      seat(state, p.id).inPlay.some((q) => q.id === magneto.id),
+    );
+    if (controller) {
+      const active = page.locator(
+        `.in-play-card[data-piece-id="${magneto.id}"][data-card-code="32172b"]`,
       );
+      const teammate = page
+        .locator(".teammate-tableau")
+        .getByRole("button", {
+          name: `Inspect ${sources[controller.heroId].name}’s Magneto`,
+          exact: true,
+        })
+        .locator(`img[src="${imageFor("32172b")}"]`);
+      assert.equal(
+        (await active.count()) + (await teammate.count()),
+        1,
+        "The actual controller's standalone Magneto appears once in the active or teammate play area",
+      );
+    }
   }
   await page.mouse.move(4, 4);
   for (const selector of [
