@@ -6,6 +6,7 @@ import { dispatch, makePiece, newGame, playable } from "../src/game/engine.js";
 import { deckErrors } from "../src/game/decks.js";
 import { paymentSources, paymentStatus } from "../src/game/payment.js";
 import {
+  SPECTRUM_FORM_CODES,
   spectrumEnergyForm,
   spectrumFormFaceup,
 } from "../src/game/spectrum.js";
@@ -679,6 +680,9 @@ describe("MTS independent simultaneous friendly damage placement", () => {
 
   it("a lethal batch places the teammate and ally damage before eliminating the first identity", () => {
     let s = base("spectrum", "warlock");
+    const formCodes = Object.values(SPECTRUM_FORM_CODES) as string[];
+    const forms = s.player.inPlay.filter((p) => formCodes.includes(p.code));
+    expect(forms).toHaveLength(3);
     const ally = take(s, "21019", "inPlay"),
       scheme = makePiece(s, "21028");
     ally.damage = 2;
@@ -699,6 +703,10 @@ describe("MTS independent simultaneous friendly damage placement", () => {
     expect(seatView(s, "p2").player.hp).toBe(4);
     expect(pieces(s).filter((p) => p.id === ally.id)).toHaveLength(1);
     expect(s.removed.some((p) => p.id === ally.id)).toBe(true);
+    for (const form of forms) {
+      expect(pieces(s).filter((p) => p.id === form.id)).toHaveLength(1);
+      expect(s.removed.filter((p) => p.id === form.id)).toHaveLength(1);
+    }
     conserved(s);
   });
 });

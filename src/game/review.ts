@@ -446,6 +446,7 @@ const plumbing = new Set([
   // A turn hand-off or an empty scenario setup only restates what the table shows.
   "beginTurn",
   "stageSetup",
+  "wolverinePlayerPhase",
 ]);
 /** Villain-phase bookkeeping the encounter deck performs on its own. */
 const villainEffects = new Set([

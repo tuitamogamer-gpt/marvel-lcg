@@ -452,7 +452,7 @@ export function mutantGenesisPlayerPackResourceSources(
   return allInPlay(s)
     .filter(
       (p) =>
-        p.code === "32020" &&
+        ["32020", "36023"].includes(p.code) &&
         !p.exhausted &&
         !ports.isTextBlank(seatView(s, controller(s, p.id)!), p),
     )
@@ -492,7 +492,7 @@ export function mutantGenesisPlayerPackPaymentInterrupts(
       (p) =>
         receipt.resourceIds.includes(p.id) &&
         ((p.code === "32018" && traits.includes("Defense")) ||
-          (p.code === "32047" && traits.includes("Attack"))),
+          (["32047", "35020"].includes(p.code) && traits.includes("Attack"))),
     )
     .flatMap((p) =>
       s.flags[responseKey(receipt.token, p.id)]
@@ -694,7 +694,9 @@ export function mutantGenesisPlayerPackAbilityOptions(
   id: string,
   ports: MutantGenesisPlayerPackPorts,
 ): Option[] {
-  const p = allInPlay(s).find((p) => p.id === id && p.code === "32049");
+  const p = allInPlay(s).find(
+    (p) => p.id === id && ["32049", "36025"].includes(p.code),
+  );
   if (
     !p ||
     p.exhausted ||
@@ -1056,7 +1058,7 @@ export function resolveMutantGenesisPlayerPackEffect(
       );
       s.flags[responseKey(r.token, e.id)] = true;
       if (e.code === "32018") ports.queue(s, E("draw", { amount: 1 }));
-      else if (e.code === "32047")
+      else if (["32047", "35020"].includes(e.code))
         s.flags[eventBonusKey(r.eventId)] =
           Number(s.flags[eventBonusKey(r.eventId)] || 0) + 1;
       break;

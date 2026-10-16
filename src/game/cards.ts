@@ -1,3 +1,6 @@
+import { CARDS, CATALOG_CARDS, card } from "./card-definitions.js";
+export { CARDS, CATALOG_CARDS, DB, card } from "./card-definitions.js";
+import { cyclopsCharacterModifiers } from "./cyclops.js";
 import { ghostSpiderEnemyModifiers } from "./ghost-spider.js";
 import { zzzaxEnemyStats } from "./zzzax.js";
 import { antManStats } from "./ant-man.js";
@@ -33,8 +36,6 @@ import {
   doctorStrangeStats,
   doctorStrangeTraits,
 } from "./doctor-strange.js";
-import { expansionErrata } from "./expansion-errata.js";
-import { printedCardMetadata } from "./printed-card-metadata.js";
 import { spectrumStats } from "./spectrum.js";
 import { warlockStats } from "./warlock.js";
 import { mtsPlayerPackHeroStats } from "./mts-player-pack.js";
@@ -60,6 +61,9 @@ import { spiderHamStats, spiderHamTraits } from "./spider-ham.js";
 import { spiderHamPackCharacterModifiers } from "./spider-ham-pack.js";
 import { spdrPackCharacterModifiers } from "./spdr-pack.js";
 import { ironspiderSinisterHealthBonus } from "./ironspider-sinister.js";
+import { phoenixStats, phoenixAllyModifiers } from "./phoenix.js";
+import { wolverineStats } from "./wolverine.js";
+import { stormGlobal, stormStats, stormAllyHP } from "./storm.js";
 import { colossusStats } from "./colossus.js";
 import { brotherhoodModifiers } from "./brotherhood.js";
 import { masterMoldModifiers } from "./master-mold.js";
@@ -76,73 +80,9 @@ import { captainStats } from "./captain-america.js";
 import { hulkStats } from "./hulk.js";
 import { captainPackModifiers, captainPackStats } from "./captain-pack.js";
 import { scriptedModifier } from "./script-registry.js";
-import playerData from "../data/core-player.json" with { type: "json" };
-import encounterData from "../data/core-encounter.json" with { type: "json" };
-import errata from "../data/core-errata.json" with { type: "json" };
-import catalogData from "../data/catalog-cards.json" with { type: "json" };
 import catalogImages from "../data/catalog-images.json" with { type: "json" };
 import sourceDecks from "../data/catalog-decks.json" with { type: "json" };
 import type { Aspect, Card, GameState, Piece, Resource } from "./types.js";
-// Keep the downloaded snapshots intact; official corrections survive data syncs.
-export const CARDS = ([...playerData, ...encounterData] as Card[]).map((c) => {
-  const correction = errata.find((e) => e.code === c.code);
-  if (correction)
-    return {
-      ...c,
-      text: correction.text,
-      errata: { reference: correction.reference, url: correction.url },
-    };
-  const text = c.text?.replace(
-    /(Surge\.? )<i>\([^<]*additional encounter card[^<]*\)<\/i>/,
-    "$1<i>(When revealed, deal yourself 1 facedown encounter card.)</i>",
-  );
-  return text !== c.text
-    ? {
-        ...c,
-        text,
-        errata: {
-          reference: "FFG Rules Reference 1.8, p. 42",
-          url: errata[0].url.replace("#page=65", "#page=42"),
-        },
-      }
-    : c;
-});
-/** Read-only collection: imported cards do not gain rules handlers by being in the database. */
-export const CATALOG_CARDS = [
-  ...CARDS,
-  ...(catalogData as Card[])
-    .map(printedCardMetadata)
-    .map(expansionErrata)
-    .filter((c) => !CARDS.some((core) => core.code === c.code)),
-];
-export const DB = Object.fromEntries(
-  CATALOG_CARDS.map((c) => [c.code, c]),
-) as Record<string, Card>;
-DB.drone = {
-  code: "drone",
-  name: "Ultron Drone",
-  type_code: "minion",
-  faction_code: "encounter",
-  quantity: 1,
-  position: 0,
-  attack: 1,
-  scheme: 1,
-  health: 1,
-  traits: "Drone.",
-  text: "Facedown card from your deck. When defeated, return it to your discard pile.",
-};
-export const card = (piece: Piece | string): Card => {
-  const printed = DB[typeof piece === "string" ? piece : piece.code];
-  return typeof piece !== "string" && piece.treatedAsMinion
-    ? {
-        ...printed,
-        type_code: "minion",
-        text: "",
-        scheme: printed.thwart || 0,
-        traits: `${printed.traits || ""} Enthralled.`,
-      }
-    : printed;
-};
 export const plain = (text = "") =>
   text
     .replace(/<[^>]*>/g, "")
@@ -153,6 +93,14 @@ const coreImageCodes = new Set(CARDS.map((c) => c.code));
 // These scans label the physical alter-ego side A and hero side B, while the
 // pinned catalog gives the hero an "a" code. Retain the original scans/data.
 const identityImageCodes: Readonly<Record<string, string>> = {
+  "33001a": "33001b",
+  "33001b": "33001a",
+  "34001a": "34001b",
+  "34001b": "34001a",
+  "35001a": "35001b",
+  "35001b": "35001a",
+  "36001a": "36001b",
+  "36001b": "36001a",
   "32001a": "32001b",
   "32001b": "32001a",
   "32030a": "32030b",
@@ -661,6 +609,20 @@ export const HEROES = [
     complexity: 3,
   },
   {
+    id: "cyclops",
+    code: "33001a",
+    alter: "33001b",
+    name: "Cyclops",
+    identity: "Scott Summers",
+    aspect: "leadership" as Aspect,
+    color: "#d9b447",
+    tag: "Lead the X-Men into battle.",
+    description:
+      "Coordinate X-Men from every aspect, mark enemies with Tactics, and unleash precise Optic Blasts.",
+    style: "Tactics and X-Men · Leadership",
+    complexity: 3,
+  },
+  {
     id: "colossus",
     code: "32001a",
     alter: "32001b",
@@ -686,6 +648,48 @@ export const HEROES = [
     description:
       "Change between Solid and Phased mass forms, bypass enemy restrictions, and defend while attacks pass through you.",
     style: "Mass forms · Aggression",
+    complexity: 3,
+  },
+  {
+    id: "phoenix",
+    code: "34001a",
+    alter: "34001b",
+    name: "Phoenix",
+    identity: "Jean Grey",
+    aspect: "justice" as Aspect,
+    color: "#c57935",
+    tag: "Power beyond restraint.",
+    description:
+      "Channel Phoenix Force into resources, then unleash your psionic power while holding Dark Phoenix at bay.",
+    style: "Phoenix Force · Justice",
+    complexity: 3,
+  },
+  {
+    id: "wolverine",
+    code: "35001a",
+    alter: "35001b",
+    name: "Wolverine",
+    identity: "Logan",
+    aspect: "aggression" as Aspect,
+    color: "#c7a336",
+    tag: "The best at what he does.",
+    description:
+      "Pay for attacks with your health, cut through Tough with adamantium claws, and recover with your healing factor.",
+    style: "Claws and healing · Aggression",
+    complexity: 2,
+  },
+  {
+    id: "storm",
+    code: "36001a",
+    alter: "36001b",
+    name: "Storm",
+    identity: "Ororo Munroe",
+    aspect: "leadership" as Aspect,
+    color: "#6c85a4",
+    tag: "The elements answer your call.",
+    description:
+      "Change the weather for every character, unleash powerful Specials, and lead your X-Men allies.",
+    style: "Weather control · Leadership",
     complexity: 3,
   },
 ];
@@ -849,6 +853,8 @@ export const MODULES = [
   { id: "zero_tolerance", name: "Zero Tolerance", difficulty: 3 },
   { id: "sentinels", name: "Sentinels", difficulty: 3 },
   { id: "acolytes", name: "Acolytes", difficulty: 4 },
+  { id: "deathstrike", name: "Lady Deathstrike", difficulty: 3 },
+  { id: "shadow_king", name: "Shadow King", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -977,8 +983,12 @@ export function deckCodes(
       (hero === "ironheart" && aspect === "leadership") ||
       (hero === "spiderham" && aspect === "justice") ||
       (hero === "spdr" && aspect === "protection") ||
+      (hero === "cyclops" && aspect === "leadership") ||
+      (hero === "storm" && aspect === "leadership") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
+      (hero === "phoenix" && aspect === "justice") ||
+      (hero === "wolverine" && aspect === "aggression") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
@@ -1001,7 +1011,9 @@ export function deckCodes(
         !["hero", "alter_ego"].includes(c.type_code) &&
         (!c.permanent ||
           hero === "spectrum" ||
+          (hero === "wolverine" && c.code === "35002") ||
           (hero === "shadowcat" && c.code === "32031a") ||
+          (hero === "phoenix" && c.code === "34002a") ||
           (hero === "vision" && c.code === "26002")),
     )
     .flatMap((c) => Array(c.quantity).fill(c.code)) as string[];
@@ -1102,6 +1114,8 @@ export function maxHP(s: GameState) {
       0,
     ) +
     scriptedModifier(s, "health") +
+    cyclopsCharacterModifiers(s, "hero").health +
+    wolverineStats(s).health +
     hulkStats(s).health +
     msMarvelStats(s).health +
     rocketMaxHpBonus(s) +
@@ -1117,6 +1131,7 @@ export function aerial(s: GameState) {
   return (
     (s.player.form === "hero" &&
       (has(s, "01017") || !!s.flags.aerial || thorStats(s).aerial)) ||
+    stormStats(s).aerial ||
     doctorStrangeTraits(s).includes("Aerial") ||
     spiderWomanHasAerial(s) ||
     rocketHeroTraits(s).includes("Aerial") ||
@@ -1143,6 +1158,7 @@ export function heroStats(s: GameState) {
   return {
     attack:
       h.attack! +
+      stormGlobal(s).attack +
       s.attachments
         .filter(
           (p) =>
@@ -1177,6 +1193,8 @@ export function heroStats(s: GameState) {
       spiderHamPackCharacterModifiers(s, "hero").attack +
       spdrPackCharacterModifiers(s, "hero").attack +
       colossusStats(s, { isTextBlank }).attack +
+      phoenixStats(s).attack +
+      wolverineStats(s).attack +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
@@ -1185,6 +1203,7 @@ export function heroStats(s: GameState) {
       mansionAttackModifiers(s, "hero", { isTextBlank }).attack,
     thwart:
       h.thwart! +
+      stormStats(s).thwart +
       (has(s, "01065") ? 1 : 0) +
       Number(s.flags.lead || 0) +
       captainStats(s).thw +
@@ -1207,6 +1226,7 @@ export function heroStats(s: GameState) {
       spiderHamStats(s, { isTextBlank }).thwart +
       spdrPackCharacterModifiers(s, "hero").thwart +
       colossusStats(s, { isTextBlank }).thwart +
+      phoenixStats(s).thwart +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
@@ -1214,6 +1234,7 @@ export function heroStats(s: GameState) {
       captainPackStats(s).thwart,
     defense:
       h.defense! +
+      stormStats(s).defense +
       (has(s, "01081") ? 1 : 0) +
       (has(s, "01016") ? (aerial(s) ? 2 : 1) : 0) +
       captainStats(s).def +
@@ -1304,6 +1325,8 @@ export function pieceHP(s: GameState, p: Piece) {
     ).length *
       3 +
     scriptedModifier(s, "health", p) +
+    phoenixAllyModifiers(s, p).health +
+    stormAllyHP(s, p) +
     hawkeyeAllyMaxHP(s, p) +
     antManPackAllyHP(s, p) +
     waspPackAllyHP(s, p) +
@@ -1312,6 +1335,7 @@ export function pieceHP(s: GameState, p: Piece) {
     ironheartEnemyStats(s, p, { isTextBlank }).health +
     zzzaxEnemyStats(s, p).health +
     ironspiderSinisterHealthBonus(s, p) +
+    cyclopsCharacterModifiers(s, p.id).health +
     mutantGenesisPlayerPackCharacterModifiers(s, p.id, { isTextBlank }).health +
     mutantGenesisPlayerPackMinionModifiers(s, p, { isTextBlank }).health +
     brotherhoodModifiers(s, p, {

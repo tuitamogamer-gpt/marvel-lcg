@@ -48,6 +48,7 @@ export function deckOptions(
     (c) =>
       c.code !== "26002b" &&
       c.code !== "32031b" &&
+      c.code !== "34002b" &&
       !identityCodes.has(c.code) &&
       !identityMatch(heroId, c) &&
       (hasExecutableScript(c) ||
@@ -61,6 +62,9 @@ export function deckOptions(
         c.pack_code === heroPack) ||
         selectedAspects.includes(c.faction_code as Aspect) ||
         heroAllowsOffAspectEvent(heroId, c) ||
+        (heroId === "cyclops" &&
+          c.type_code === "ally" &&
+          (c.traits || "").split(/\.\s*/).includes("X-Men")) ||
         c.faction_code === "basic"),
   );
 }
@@ -107,8 +111,10 @@ export function deckErrors(
       "nova",
       "ironheart",
       "spdr",
+      "cyclops",
       "colossus",
       "shadowcat",
+      "wolverine",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

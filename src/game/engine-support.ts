@@ -1,3 +1,9 @@
+import {
+  CYCLOPS_SCRIPT_CODES,
+  CYCLOPS_SHARED_SCRIPT_CODES,
+} from "./cyclops.js";
+import { WOLVERINE_SCRIPT_CODES } from "./wolverine.js";
+import { STORM_SCRIPT_CODES } from "./storm.js";
 import { MAGNETO_SCRIPT_CODES } from "./magneto.js";
 import { ACOLYTES_SCRIPT_CODES } from "./acolytes.js";
 import { ANT_MAN_SCRIPT_CODES } from "./ant-man.js";
@@ -44,6 +50,7 @@ import { SPIDER_HAM_PACK_SCRIPT_CODES } from "./spider-ham-pack.js";
 import { SPDR_SCRIPT_CODES } from "./spdr.js";
 import { SPDR_PACK_SCRIPT_CODES } from "./spdr-pack.js";
 import { IRONSPIDER_SINISTER_SCRIPT_CODES } from "./ironspider-sinister.js";
+import { PHOENIX_SCRIPT_CODES } from "./phoenix.js";
 import { COLOSSUS_SCRIPT_CODES } from "./colossus.js";
 import { SHADOWCAT_SCRIPT_CODES } from "./shadowcat.js";
 import { MUTANT_GENESIS_PLAYER_PACK_SCRIPT_CODES } from "./mutant-genesis-player-pack.js";
@@ -106,10 +113,18 @@ export const SCRIPTED_HERO_IDS = new Set([
   "ironheart",
   "spiderham",
   "spdr",
+  "cyclops",
   "colossus",
   "shadowcat",
+  "phoenix",
+  "wolverine",
+  "storm",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
+  ...CYCLOPS_SCRIPT_CODES,
+  ...CYCLOPS_SHARED_SCRIPT_CODES,
+  ...WOLVERINE_SCRIPT_CODES,
+  ...STORM_SCRIPT_CODES,
   ...MAGNETO_SCRIPT_CODES,
   ...ACOLYTES_SCRIPT_CODES,
   ...MASTER_MOLD_SCRIPT_CODES,
@@ -118,6 +133,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ZERO_TOLERANCE_SCRIPT_CODES,
   ...SENTINELS_SCRIPT_CODES,
   ...COLOSSUS_SCRIPT_CODES,
+  ...PHOENIX_SCRIPT_CODES,
   ...SHADOWCAT_SCRIPT_CODES,
   ...MUTANT_GENESIS_PLAYER_PACK_SCRIPT_CODES,
   ...ANT_MAN_SCRIPT_CODES,

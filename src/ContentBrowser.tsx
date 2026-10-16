@@ -17,7 +17,11 @@ import { ASPECTS, CATALOG_CARDS, card, imageFor, plain } from "./game/cards";
 import { deckErrors } from "./game/decks";
 import { hasExecutableScript } from "./game/script-registry";
 import { matchesSearch, searchTerms, searchText } from "./search";
-import { heroStarterAspects, heroSetupCards } from "./game/hero-runtime";
+import {
+  heroStarterAspects,
+  heroSetupCards,
+  heroSupplementaryCards,
+} from "./game/hero-runtime";
 import {
   CATALOG_HEROES,
   CATALOG_SUMMARY,
@@ -338,6 +342,7 @@ export function ContentBrowser({
   const supplementaryCount = Object.values(
     deck?.supplementaryCards || {},
   ).reduce((a, b) => a + b, 0);
+  const nativeSupplementary = heroSupplementaryCards(hero.id);
   const supplementaryReady =
     !supplementaryCount ||
     (hero.id === "doctor_strange" &&
@@ -352,11 +357,18 @@ export function ContentBrowser({
       Object.keys(deck?.supplementaryCards || {}).length === 2 &&
       Object.entries(deck?.supplementaryCards || {}).every(
         ([code, count]) => ["29002a", "29003a"].includes(code) && count === 1,
+      )) ||
+    (hero.id === "storm" &&
+      Object.entries(deck?.supplementaryCards || {}).every(
+        ([code, count]) => nativeSupplementary[code] === count,
+      ) &&
+      Object.entries(nativeSupplementary).every(
+        ([code, count]) => deck?.supplementaryCards?.[code] === count,
       ));
   const deckSize = deck?.deckSize ?? codes.length - setupCount;
   const deckAspect =
     ASPECTS.find((aspect) => aspect.id === deck?.aspect)?.id ||
-    (["spider_woman", "gam", "warlock"].includes(hero.id) &&
+    (["spider_woman", "gam", "warlock", "cyclops"].includes(hero.id) &&
     deck?.aspect === "multi"
       ? ASPECTS.find((aspect) => aspect.id === heroStarterAspects(hero.id)[0])
           ?.id
@@ -369,7 +381,9 @@ export function ContentBrowser({
   const nativeSetup = heroSetupCards(hero.id);
   const setupReady =
     !setupCount ||
-    (["spectrum", "vision", "shadowcat"].includes(hero.id) &&
+    (["spectrum", "vision", "shadowcat", "phoenix", "wolverine"].includes(
+      hero.id,
+    ) &&
       Object.entries(deck?.setupCards || {}).every(
         ([code, count]) => nativeSetup[code] === count,
       ) &&

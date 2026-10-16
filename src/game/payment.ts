@@ -1,3 +1,6 @@
+import { cyclopsResourceSources } from "./cyclops.js";
+import { phoenixResourceSources } from "./phoenix.js";
+import { stormResourceSources } from "./storm.js";
 import { colossusResourceSources } from "./colossus.js";
 import { shadowcatResourceSources } from "./shadowcat.js";
 import { mutantGenesisPlayerPackResourceSources } from "./mutant-genesis-player-pack.js";
@@ -143,6 +146,7 @@ function localPaymentSources(
         kind: "ability",
       });
   }
+  sources.push(...stormResourceSources(s));
   sources.push(...thorResourceSources(s));
   sources.push(...waspPackResourceSources(s));
   sources.push(...quicksilverResourceSources(s));
@@ -156,6 +160,7 @@ function localPaymentSources(
       canTakeDamageCost: venomPaymentDamageCostAvailable,
     }),
   );
+  sources.push(...cyclopsResourceSources(s, targetCode));
   sources.push(...colossusResourceSources(s, { isTextBlank }));
   sources.push(...shadowcatResourceSources(s, targetCode, { isTextBlank }));
   sources.push(...spectrumResourceSources(s, { isTextBlank }));
@@ -181,6 +186,7 @@ function localPaymentSources(
     }),
   );
   sources.push(...spdrResourceSources(s, { isTextBlank }));
+  sources.push(...phoenixResourceSources(s));
   sources.push(
     ...spdrPackResourceSources(s, {
       isTextBlank,

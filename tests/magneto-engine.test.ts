@@ -144,7 +144,7 @@ describe("native standalone Magneto", () => {
     const v = VILLAINS.find((v) => v.id === "magneto")!;
     expect(v.module).toBe("acolytes");
     expect(v.fixedSets).toBeUndefined();
-    expect(MODULES).toHaveLength(18);
+    expect(MODULES).toHaveLength(20);
     const s = base(false, "standard", "bomb_scare");
     expect(
       s.encounter.deck.some((p) => card(p).set_code === "bomb_scare"),

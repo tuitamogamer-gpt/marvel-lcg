@@ -1,3 +1,5 @@
+import { cyclopsCanAttack } from "./game/cyclops";
+import { wolverineRecoverOptions } from "./game/wolverine";
 import { visionCanAttack } from "./game/vision";
 import {
   shadowcatCanAttack,
@@ -5941,7 +5943,9 @@ function Tabletop({
                               ? "Intangible prevents attack abilities."
                               : !shadowcatCanAttack(s)
                                 ? "Permanently Phased prevents attack abilities."
-                                : "Attack an enemy. Exhaust your identity."
+                                : !cyclopsCanAttack(s)
+                                  ? "Lost Visor prevents attack abilities."
+                                  : "Attack an enemy. Exhaust your identity."
                       }
                       disabled={
                         !acting ||
@@ -5949,7 +5953,8 @@ function Tabletop({
                         wrappedInMetal ||
                         valkyrieCannotBasicAttack(s) ||
                         !visionCanAttack(s) ||
-                        !shadowcatCanAttack(s)
+                        !shadowcatCanAttack(s) ||
+                        !cyclopsCanAttack(s)
                       }
                       onClick={() => send({ type: "BASIC", action: "attack" })}
                     >
@@ -5996,7 +6001,8 @@ function Tabletop({
                       !acting ||
                       s.player.exhausted ||
                       wrappedInMetal ||
-                      s.player.hp >= maxHP(s)
+                      (s.player.hp >= maxHP(s) &&
+                        !wolverineRecoverOptions(s, []).length)
                     }
                     onClick={() => send({ type: "BASIC", action: "recover" })}
                   >

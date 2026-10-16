@@ -53,7 +53,8 @@
     "test:master-mold": "node scripts/master-mold-check.mjs",
     "test:mansion-attack": "node scripts/mansion-attack-check.mjs",
     "test:acolytes": "node scripts/acolytes-check.mjs",
-    "test:magneto": "node scripts/magneto-check.mjs"
+    "test:magneto": "node scripts/magneto-check.mjs",
+    "test:quadruple-import": "node scripts/quadruple-import-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",
