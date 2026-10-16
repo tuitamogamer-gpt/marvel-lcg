@@ -1,3 +1,4 @@
+import { cyclopsCharacterModifiers } from "./cyclops.js";
 import { ghostSpiderEnemyModifiers } from "./ghost-spider.js";
 import { zzzaxEnemyStats } from "./zzzax.js";
 import { antManStats } from "./ant-man.js";
@@ -153,6 +154,8 @@ const coreImageCodes = new Set(CARDS.map((c) => c.code));
 // These scans label the physical alter-ego side A and hero side B, while the
 // pinned catalog gives the hero an "a" code. Retain the original scans/data.
 const identityImageCodes: Readonly<Record<string, string>> = {
+  "33001a": "33001b",
+  "33001b": "33001a",
   "32001a": "32001b",
   "32001b": "32001a",
   "32030a": "32030b",
@@ -661,6 +664,20 @@ export const HEROES = [
     complexity: 3,
   },
   {
+    id: "cyclops",
+    code: "33001a",
+    alter: "33001b",
+    name: "Cyclops",
+    identity: "Scott Summers",
+    aspect: "leadership" as Aspect,
+    color: "#d9b447",
+    tag: "Lead the X-Men into battle.",
+    description:
+      "Coordinate X-Men from every aspect, mark enemies with Tactics, and unleash precise Optic Blasts.",
+    style: "Tactics and X-Men · Leadership",
+    complexity: 3,
+  },
+  {
     id: "colossus",
     code: "32001a",
     alter: "32001b",
@@ -977,6 +994,7 @@ export function deckCodes(
       (hero === "ironheart" && aspect === "leadership") ||
       (hero === "spiderham" && aspect === "justice") ||
       (hero === "spdr" && aspect === "protection") ||
+      (hero === "cyclops" && aspect === "leadership") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
       hero === "warlock" ||
@@ -1102,6 +1120,7 @@ export function maxHP(s: GameState) {
       0,
     ) +
     scriptedModifier(s, "health") +
+    cyclopsCharacterModifiers(s, "hero").health +
     hulkStats(s).health +
     msMarvelStats(s).health +
     rocketMaxHpBonus(s) +
@@ -1312,6 +1331,7 @@ export function pieceHP(s: GameState, p: Piece) {
     ironheartEnemyStats(s, p, { isTextBlank }).health +
     zzzaxEnemyStats(s, p).health +
     ironspiderSinisterHealthBonus(s, p) +
+    cyclopsCharacterModifiers(s, p.id).health +
     mutantGenesisPlayerPackCharacterModifiers(s, p.id, { isTextBlank }).health +
     mutantGenesisPlayerPackMinionModifiers(s, p, { isTextBlank }).health +
     brotherhoodModifiers(s, p, {

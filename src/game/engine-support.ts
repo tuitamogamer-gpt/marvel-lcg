@@ -1,3 +1,7 @@
+import {
+  CYCLOPS_SCRIPT_CODES,
+  CYCLOPS_SHARED_SCRIPT_CODES,
+} from "./cyclops.js";
 import { MAGNETO_SCRIPT_CODES } from "./magneto.js";
 import { ACOLYTES_SCRIPT_CODES } from "./acolytes.js";
 import { ANT_MAN_SCRIPT_CODES } from "./ant-man.js";
@@ -106,10 +110,13 @@ export const SCRIPTED_HERO_IDS = new Set([
   "ironheart",
   "spiderham",
   "spdr",
+  "cyclops",
   "colossus",
   "shadowcat",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
+  ...CYCLOPS_SCRIPT_CODES,
+  ...CYCLOPS_SHARED_SCRIPT_CODES,
   ...MAGNETO_SCRIPT_CODES,
   ...ACOLYTES_SCRIPT_CODES,
   ...MASTER_MOLD_SCRIPT_CODES,

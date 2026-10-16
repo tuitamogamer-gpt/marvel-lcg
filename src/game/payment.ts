@@ -1,3 +1,4 @@
+import { cyclopsResourceSources } from "./cyclops.js";
 import { colossusResourceSources } from "./colossus.js";
 import { shadowcatResourceSources } from "./shadowcat.js";
 import { mutantGenesisPlayerPackResourceSources } from "./mutant-genesis-player-pack.js";
@@ -156,6 +157,7 @@ function localPaymentSources(
       canTakeDamageCost: venomPaymentDamageCostAvailable,
     }),
   );
+  sources.push(...cyclopsResourceSources(s, targetCode));
   sources.push(...colossusResourceSources(s, { isTextBlank }));
   sources.push(...shadowcatResourceSources(s, targetCode, { isTextBlank }));
   sources.push(...spectrumResourceSources(s, { isTextBlank }));

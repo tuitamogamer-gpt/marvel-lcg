@@ -1,3 +1,4 @@
+import * as cyclops from "./cyclops.js";
 import * as acolytes from "./acolytes.js";
 import * as armadillo from "./armadillo.js";
 import * as inheritors from "./inheritors.js";
@@ -1025,6 +1026,7 @@ export function allyCount(s: GameState) {
 export function allyLimit(s: GameState) {
   return (
     3 +
+    cyclops.cyclopsAllyLimit(s, captainPackHasTrait) +
     Number(has(s, "01073")) +
     captainPackAllyLimit(s) +
     starLordPack.starLordPackAllyLimit(s) +
@@ -1390,6 +1392,7 @@ function movePieceFromPlay(
   const viewBefore = controlling ? seatView(s, controlling) : s;
   const healthBefore = maxHP(viewBefore);
   const removedSource = find(s, id);
+  if (removedSource) cyclops.cyclopsCardLeft(s, removedSource);
   need(
     !removedSource || !zeroTolerance.zeroToleranceIsPermanent(s, removedSource),
     "Permanent cards cannot leave play.",
@@ -2314,6 +2317,7 @@ function attackExcess(s: GameState, packet: Effect): number {
     ["hero", `hero:${s.activePlayerId}`].includes(source)
   )
     amount += msMarvelEventAmountModifier(s, s.currentEventId, "damage");
+  amount += cyclops.cyclopsAttackModifiers(s, target.id).damage;
   const resistance = s.attachments.filter(
     (p) =>
       p.code === "14027" && p.attachedTo === target.id && !isTextBlank(s, p),
@@ -2376,6 +2380,14 @@ function dealDamage(
       mgPack.mutantGenesisPlayerPackAttackEventBonus(s, s.currentEventId || "");
   const original = find(s, target);
   const dealt = Math.max(0, traits.damageDealt ?? n);
+  // Exploit Weakness modifies damage TAKEN. Preserve the original dealt amount
+  // for replacement effects such as Armored Rhino Suit and dealt-damage receipts.
+  if (
+    attack &&
+    (target === s.villain.id || s.minions.some((p) => p.id === target))
+  )
+    n += cyclops.cyclopsAttackModifiers(s, target).damage;
+
   const code = original?.code;
   const originalStage = target === s.villain.id ? s.villain.stage : undefined;
   const sourceIsIdentity = rocket.rocketIsIdentitySource(s, source);
@@ -2963,6 +2975,31 @@ function defeatCharacter(
     log(s, "Biomechanical Upgrades restores the minion.");
     return false;
   }
+  if (
+    !s.flags[`cyclopsPriority:${m.id}`] &&
+    s.minions.some((p) => p.id === m.id)
+  ) {
+    const winner = source.startsWith("hero:")
+      ? source.slice(5)
+      : controller(s, source)?.id || s.activePlayerId;
+    const effects = cyclops.cyclopsPriorityTarget(s, m.id, winner);
+    if (effects.length) {
+      s.flags[`cyclopsPriority:${m.id}`] = true;
+      m.pendingDefeat = true;
+      add(
+        s,
+        ...effects,
+        E("finishDefeat", {
+          id: m.id,
+          source,
+          attack,
+          enemyAttack,
+          valkyrieReceipts,
+        }),
+      );
+      return true;
+    }
+  }
   const minion = s.minions.some((x) => x.id === m.id);
   if (minion && !s.flags[`mutantGenesisGatekeeperHandled:${m.id}`]) {
     const token = `mutant-defeat:${s.nextId++}`;
@@ -3212,6 +3249,22 @@ function advanceVillain(
   attack = false,
   captured?: valkyrie.ValkyrieDefeatReceipt[],
 ) {
+  const priorityKey = `cyclopsPriority:${s.villain.id}:${s.villain.stage}`;
+  if (!s.flags[priorityKey]) {
+    const winner = source.startsWith("hero:")
+      ? source.slice(5)
+      : controller(s, source)?.id || s.activePlayerId;
+    const effects = cyclops.cyclopsPriorityTarget(s, s.villain.id, winner);
+    if (effects.length) {
+      s.flags[priorityKey] = true;
+      add(
+        s,
+        ...effects,
+        E("cyclops-native:advance", { source, attack, captured }),
+      );
+      return;
+    }
+  }
   const receipts =
     captured ??
     valkyrie.valkyrieDefeatReceipt(s, s.villain.id, {
@@ -3623,6 +3676,7 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
     s,
     ...wasp.waspDefeated(s, "side_scheme", source, s.currentEventId, false),
   );
+  if (!isTextBlank(s, p)) add(s, ...cyclops.cyclopsSideSchemeDefeated(s, p));
   add(s, ...spectrum.spectrumSideSchemeDefeated(s, p, spectrumPorts));
   add(s, ...warMachine.warMachineSchemeDefeated(s, p));
   add(
@@ -3982,6 +4036,11 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
         physical || ({ code: c.code } as Piece),
         spiderHamPackPorts,
       ) -
+      (c.code === "33019" &&
+      (captainPackHasTrait(s, "hero", "Mutant") ||
+        captainPackHasTrait(s, "hero", "X-Men"))
+        ? 1
+        : 0) -
       mgPack.mutantGenesisPlayerPackCostReduction(
         s,
         physical || ({ code: c.code } as Piece),
@@ -3999,6 +4058,11 @@ function captainPackHasTrait(
   target: string,
   trait: string,
 ): boolean {
+  if (
+    trait.toLowerCase() === "x-men" &&
+    cyclops.cyclopsCharacterModifiers(s, target).xmen
+  )
+    return true;
   if (captainPrintedHasTrait(s, target, trait)) return true;
   if (
     spiderHamPack
@@ -4217,6 +4281,7 @@ function attackAction(
     mutantGenesisBonusApplied?: boolean;
   } = {},
 ) {
+  overkill ||= cyclops.cyclopsAttackModifiers(s, target).overkill;
   const p = source === "hero" ? s.player : find(s, source);
   if (!p) return;
   if (
@@ -4230,7 +4295,8 @@ function attackAction(
     (magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank }) ||
       !valkyrie.valkyrieCanAttackTarget(s, target) ||
       !vision.visionCanAttack(s) ||
-      !shadowcat.shadowcatCanAttack(s))
+      !shadowcat.shadowcatCanAttack(s) ||
+      !cyclops.cyclopsCanAttack(s))
   )
     return;
   if (p.stunned && !traits.initiated) {
@@ -4668,6 +4734,13 @@ function requestPayment(
         s.activePlayerId,
         niPackPorts,
       ).length ||
+      spentResponseCards.some(
+        (p) =>
+          ["33018", "36021"].includes(p.code) &&
+          !!piece &&
+          card(piece).type_code === "ally" &&
+          !abilityCost,
+      ) ||
       mgPack.mutantGenesisPlayerPackPaymentInterrupts(s, spentResponseCards, {
         token: "zero-payment-probe",
         playerId: s.activePlayerId,
@@ -5163,6 +5236,8 @@ function pay(
         ];
       } else if (spdr.spdrResourceSpent(s, id)) {
         // Sync Ratio exhausts the actual selected Interface card.
+      } else if (cyclops.cyclopsResourceSpent(s, id, p.paymentTarget)) {
+        // Only the actual Visor can generate this Optic Blast resource.
       } else if (colossus.colossusResourceSpent(s, id, { isTextBlank })) {
         // Exhaust the actual ready Titanium Muscles, retaining current Tough.
       } else if (
@@ -5175,6 +5250,14 @@ function pay(
         // Counter resources are validated together and spent individually.
       } else if (s.player.hand.some((x) => x.id === id)) {
         const spent = discardHand(s, id);
+        spentResponses.push(
+          ...cyclops.cyclopsResourceCardSpent(
+            s,
+            spent,
+            p.card,
+            !!p.card && !p.abilityCost,
+          ),
+        );
         spentResponses.push(
           ...mgPack.mutantGenesisPlayerPackPaymentInterrupts(s, [spent], {
             token: `mutant-payment:${s.nextId++}`,
@@ -5546,6 +5629,7 @@ export function newGame(config: {
     spdr.spdrInitializeNemesis(s, { makePiece });
     spiderHam.spiderHamInitializeIdentity(s, { makePiece });
     spiderHam.spiderHamInitializeNemesis(s, { makePiece });
+    cyclops.cyclopsInitializeNemesis(s, { makePiece });
     colossus.colossusInitializeNemesis(s, { makePiece });
     ironheart.ironheartInitialize(s, { makePiece });
     // Extract the SAME three source-composition IDs before drawing an opening
@@ -5805,7 +5889,7 @@ function initialSetup(s: GameState) {
     s,
     ...setup,
     E("stageSetup"),
-    E("beginTurn", { actorId: s.firstPlayerId }),
+    E("beginTurn", { actorId: cyclops.cyclopsFirstTurn(s) }),
   );
 }
 const reactionCards = [
@@ -5863,7 +5947,8 @@ export function playable(s: GameState, p: Piece): string | null {
     c.text?.includes("(attack)") &&
     vision.visionEventAction(s, p) !== "thwart" &&
     (!vision.visionCanAttack(s) ||
-      !shadowcat.shadowcatCanAttack(s, shadowcatPorts))
+      !shadowcat.shadowcatCanAttack(s, shadowcatPorts) ||
+      !cyclops.cyclopsCanAttack(s))
   )
     return "This identity cannot attack in its current form.";
   if (
@@ -5920,6 +6005,7 @@ export function playable(s: GameState, p: Piece): string | null {
     starLord.starLordPlayRestriction(s, p) ||
     gamora.gamoraPlayRestriction(s, p, gamoraPorts) ||
     drax.draxPlayRestriction(s, p, draxPorts) ||
+    cyclops.cyclopsPlayRestriction(s, p, cyclopsPorts) ||
     colossus.colossusPlayRestriction(s, p, colossusPorts) ||
     shadowcat.shadowcatPlayRestriction(s, p, shadowcatPorts) ||
     mgPack.mutantGenesisPlayerPackPlayRestriction(
@@ -6463,6 +6549,7 @@ function play(
     if (attachedTarget && !["22032", "22035", "23035"].includes(p.code))
       p.attachedTo = attachedTarget;
     s.player.inPlay.push(p);
+    cyclops.cyclopsEffectiveLeadership(s, p);
     miles.milesCardEntered(s, p);
     add(s, ...ghostSpider.ghostSpiderCardEntered(s, p));
     if (attachedTarget && ["22032", "22035", "23035"].includes(p.code))
@@ -6476,6 +6563,7 @@ function play(
     );
     add(
       s,
+      ...cyclops.cyclopsCardEntered(s, p),
       ...colossus.colossusCardEntered(s, p),
       ...antMan.antManCardEntered(s, p, antManPorts),
       ...antPack.antManPackCardEntered(s, p),
@@ -6624,6 +6712,7 @@ function allyEnter(
   paidForCard: Resource[] = [],
   syncPaid = 0,
 ) {
+  add(s, ...cyclops.cyclopsAllyEntered(s, p));
   if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
     giveCharacterStatus(s, p, "tough");
   if (isTextBlank(s, p)) return;
@@ -6862,6 +6951,7 @@ function event(
   syncPaid = 0,
 ) {
   const ant =
+    cyclops.cyclopsEvent(s, p) ??
     colossus.colossusEvent(s, p) ??
     shadowcat.shadowcatEvent(s, p) ??
     mgPack.mutantGenesisPlayerPackEvent(s, p) ??
@@ -7490,6 +7580,7 @@ export function abilityOptions(
 function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   const noir = spdrPack.spdrPackAllyStats(s, p, spdrPackPorts);
   return (
+    cyclops.cyclopsCharacterModifiers(s, p.id)[kind] +
     (p.code === "31003" && !isTextBlank(s, p) ? p.counters : 0) +
     (noir ? noir[kind] - (card(p)[kind] || 0) : 0) +
     (card(p)[kind] || 0) +
@@ -7656,6 +7747,16 @@ function ability(s: GameState, id: string, action = "special") {
   if (ghostSpider.ghostSpiderAbility(s, id, ghostSpiderPorts, action)) return;
   if (id === "identity" && nova.novaHeroAbility(s, novaPorts, action)) return;
   if (nova.novaAbility(s, id, novaPorts, action)) return;
+  const cyclopsAbility = cyclops.cyclopsAbility(
+    s,
+    id,
+    cyclopsPorts,
+    action === "special" ? undefined : action,
+  );
+  if (cyclopsAbility !== null) {
+    add(s, ...cyclopsAbility);
+    return;
+  }
   const colossusAbility = colossus.colossusAbility(
     s,
     id,
@@ -8790,6 +8891,8 @@ function visionPackNativeDamageOptions(
   return [...options, ...sinisterNativeDamageOptions(s, packet, after)];
 }
 function allyUpgradeTargets(s: GameState, p: Piece) {
+  const cyclopsTargets = cyclops.cyclopsAttachmentTargets(s, p, cyclopsPorts);
+  if (cyclopsTargets !== null) return cyclopsTargets;
   return rawAllyUpgradeTargets(s, p).filter((t) =>
     playerAttachmentTarget(s, p, t.id),
   );
@@ -9917,6 +10020,7 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
     add(s, ...ghostSpider.ghostSpiderCardEntered(s, p));
     add(
       s,
+      ...cyclops.cyclopsCardEntered(s, p),
       ...colossus.colossusCardEntered(s, p),
       ...antMan.antManCardEntered(s, p, antManPorts),
       ...antPack.antManPackCardEntered(s, p),
@@ -10662,6 +10766,7 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...ghostSpider.ghostSpiderAbilityOptions(s, id, ghostSpiderPorts),
     ...(id === "identity" ? nova.novaHeroAbilityOptions(s, novaPorts) : []),
     ...nova.novaAbilityOptions(s, id, novaPorts),
+    ...cyclops.cyclopsAbilityOptions(s, id, cyclopsPorts),
     ...colossus.colossusAbilityOptions(s, id, colossusPorts),
     ...sabretooth.sabretoothActionOptions(s, id, sabretoothPorts),
     ...(find(s, id)
@@ -14784,6 +14889,7 @@ const nebulaPorts: nebula.NebulaPorts = {
       s.player.inPlay.push(p);
       add(
         s,
+        ...cyclops.cyclopsCardEntered(s, p),
         ...colossus.colossusCardEntered(s, p),
         ...antMan.antManCardEntered(s, p, antManPorts),
         ...antPack.antManPackCardEntered(s, p),
@@ -14882,6 +14988,96 @@ function colossusNativeDiscardTough(
     ...after,
   );
 }
+
+const cyclopsPorts: cyclops.CyclopsPorts = {
+  queue: add,
+  choose,
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  schemeTargets: (s, thwart) => targets(s, "scheme", thwart),
+  friendlyTargets: (s) =>
+    playerOrder(s).flatMap((seat) => [
+      { id: `hero:${seat.id}`, label: heroCard(seatView(s, seat)).name },
+      ...seatView(s, seat)
+        .player.inPlay.filter((p) => card(p).type_code === "ally")
+        .map((p) => ({ id: p.id, label: card(p).name, code: p.code })),
+    ]),
+  hasTrait: captainPackHasTrait,
+  canReady: (s, id) =>
+    id.startsWith("hero:")
+      ? canReadyIdentity(seatView(s, id.slice(5))) &&
+        seatView(s, id.slice(5)).player.exhausted
+      : !!find(s, id)?.exhausted &&
+        nova.novaCanReadyPiece(s, find(s, id)!, { isTextBlank }),
+  canPay,
+  pay: (s, title, cost, after, targetCode) =>
+    requestPayment(
+      s,
+      title,
+      cost,
+      after,
+      [],
+      undefined,
+      true,
+      targetCode,
+      false,
+      [],
+      false,
+      false,
+      false,
+      true,
+    ),
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  attackProgram: niAttackProgram,
+  reactionEvents: (s) =>
+    ghostSpider.ghostSpiderCannotPlayEvents(s) ? [] : eventPlaySources(s),
+  playReaction: (s, id, effects, after) => {
+    const p = eventPlaySources(s).find((p) => p.id === id);
+    need(p, "Full Blast is unavailable.");
+    requestPayment(
+      s,
+      card(p!).name,
+      cardCost(s, card(p!), p),
+      [E("resolveHandEvent", { id, after: [], continuation: after })],
+      [],
+      p,
+      true,
+      undefined,
+      false,
+      effects,
+    );
+    if (s.prompt?.cancelable)
+      s.prompt.cancellationQueue = [...after, ...s.queue];
+  },
+  shufflePlayerDeck: warMachinePortsShufflePlayer,
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  makePiece,
+  discardPiece,
+  attach: (s, id, target) => {
+    const p = find(s, id);
+    need(p, "The physical upgrade is missing.");
+    const before = target.startsWith("hero:")
+      ? maxHP(seatView(s, target.slice(5)))
+      : 0;
+    p!.attachedTo = target;
+    if (target.startsWith("hero:")) {
+      const v = seatView(s, target.slice(5));
+      v.player.hp += maxHP(v) - before;
+    }
+  },
+  revealEncounter: (s, p) => add(s, E("reveal", { piece: p })),
+  attachEncounter: (s, p, target) => {
+    removeEncounterInstance(s, p.id);
+    mutagenPorts.attach(s, p, target);
+  },
+  keepObligation: (s, p) =>
+    spectrumPorts.giveObligation(s, p, s.activePlayerId),
+  removeEncounter: (s, p) => {
+    s.player.inPlay = s.player.inPlay.filter((q) => q.id !== p.id);
+    removeEncounterInstance(s, p.id);
+    s.removed.push(p);
+  },
+  revealHidden,
+};
 
 const colossusPorts: colossus.ColossusPorts = {
   queue: add,
@@ -15742,6 +15938,7 @@ function enemyAttack(
       usedIds: [],
     }),
   );
+  add(s, ...cyclops.cyclopsEnemyAttackStarted(s, id));
   add(s, ...colossus.colossusEnemyAttackStarted(s, id, colossusPorts));
   // Forced entry and its responses precede every optional initiation interrupt.
   if (isVillain && rulesCode(s.villain) === "01135") add(s, E("drone"));
@@ -15769,6 +15966,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
   if (enemyDashPower(p, "attack")) return 0;
   if (riskyBlankPower(s, "attack", p.id)) return 0;
   const bonus =
+    cyclops.cyclopsEnemyAttackModifier(s, p.id) +
     (p.bonusAtk || 0) +
     mutagenAttackModifiers(s, p).goblinNation +
     armadillo.armadilloAttackBonus(s, p) +
@@ -16003,6 +16201,8 @@ function boostEffects(s: GameState, p: Piece) {
     const activation = s.scheming || s.attack;
     if (activation) (activation.retainedBoostIds ||= []).push(p.id);
   }
+  const cyclopsBoost = cyclops.cyclopsBoost(s, p);
+  if (cyclopsBoost !== null) return cyclopsBoost;
   const colossusBoost = colossus.colossusBoost(s, p);
   if (colossusBoost !== null) {
     if (p.code === "32029" && colossusBoost.length) {
@@ -17585,6 +17785,7 @@ function reveal(
       ...vision.VISION_SCRIPT_CODES,
       ...spdr.SPDR_SCRIPT_CODES,
       ...spiderHam.SPIDER_HAM_SCRIPT_CODES,
+      ...cyclops.CYCLOPS_SCRIPT_CODES,
       ...colossus.COLOSSUS_SCRIPT_CODES,
     ].some((code) => code === p.code) ||
       CARDS.some(
@@ -17617,6 +17818,7 @@ function reveal(
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
+      "33030",
       "32028",
     ].some((code) => code === p.code)
   ) {
@@ -17632,6 +17834,7 @@ function reveal(
       mutagenEncounterReveal(s, p) ??
       armadillo.armadilloReveal(s, p) ??
       zzzax.zzzaxReveal(s, p) ??
+      cyclops.cyclopsEncounterReveal(s, p) ??
       colossus.colossusEncounterReveal(s, p) ??
       spiderHam.spiderHamEncounterReveal(s, p);
     need(entry !== null, "No native encounter attachment entry handler.");
@@ -17702,6 +17905,7 @@ function reveal(
     miles.milesEncounterReveal(s, p) ??
     ghostSpider.ghostSpiderEncounterReveal(s, p) ??
     nova.novaEncounterReveal(s, p) ??
+    cyclops.cyclopsEncounterReveal(s, p) ??
     colossus.colossusEncounterReveal(s, p) ??
     spdr.spdrEncounterReveal(s, p) ??
     spiderHam.spiderHamEncounterReveal(s, p) ??
@@ -17942,6 +18146,10 @@ function reveal(
   if (keyword(p, "Surge")) add(s, E("surge", { sourceCode: p.code }));
 }
 function obligation(s: GameState, p: Piece) {
+  if (p.code === "33027") {
+    add(s, ...(cyclops.cyclopsEncounterReveal(s, p) || []));
+    return;
+  }
   const colossusObligation = colossus.colossusEncounterReveal(s, p);
   if (colossusObligation !== null && p.code === "32025") {
     add(s, ...colossusObligation);
@@ -18007,6 +18215,11 @@ function treachery(s: GameState, p: Piece) {
   const shadowcatReveal = shadowcat.shadowcatEncounterReveal(s, p);
   if (shadowcatReveal !== null) {
     add(s, ...shadowcatReveal);
+    return;
+  }
+  const cyclopsTreachery = cyclops.cyclopsEncounterReveal(s, p);
+  if (cyclopsTreachery !== null) {
+    add(s, ...cyclopsTreachery);
     return;
   }
   const colossusTreachery = colossus.colossusEncounterReveal(s, p);
@@ -18274,6 +18487,11 @@ function treachery(s: GameState, p: Piece) {
       else surge();
       break;
     case "01190": {
+      const cyclopsNemesis = cyclops.cyclopsShadowOfPast(s);
+      if (cyclopsNemesis !== null) {
+        add(s, ...cyclopsNemesis);
+        break;
+      }
       const colossusNemesis = colossus.colossusShadowOfPast(s);
       if (colossusNemesis !== null) {
         add(s, ...colossusNemesis);
@@ -18480,6 +18698,11 @@ function resolve(s: GameState, e: Effect) {
     }
     return;
   }
+  if (e.type === "cyclops-native:advance") {
+    advanceVillain(s, e.source, e.attack, e.captured);
+    return;
+  }
+  if (cyclops.resolveCyclopsEffect(s, e, cyclopsPorts)) return;
   if (colossus.resolveColossusEffect(s, e, colossusPorts)) return;
   if (shadowcat.resolveShadowcatEffect(s, e, shadowcatPorts)) return;
   if (mgPack.resolveMutantGenesisPlayerPackEffect(s, e, mutantGenesisPackPorts))
@@ -18515,8 +18738,8 @@ function resolve(s: GameState, e: Effect) {
     !e.thorWindowHandled &&
     s.player.hand.some((p) =>
       e.power === "attack"
-        ? ["06015", "06032"].includes(p.code)
-        : p.code === "06032",
+        ? ["06015", "06032", "33017"].includes(p.code)
+        : ["06032", "33017"].includes(p.code),
     )
   ) {
     add(
@@ -18605,6 +18828,7 @@ function resolve(s: GameState, e: Effect) {
           miles.milesEncounterReveal(state, piece) ??
           ghostSpider.ghostSpiderEncounterReveal(state, piece) ??
           nova.novaEncounterReveal(state, piece) ??
+          cyclops.cyclopsEncounterReveal(state, piece) ??
           colossus.colossusEncounterReveal(state, piece) ??
           spdr.spdrEncounterReveal(state, piece) ??
           spiderHam.spiderHamEncounterReveal(state, piece) ??
@@ -21013,6 +21237,33 @@ function resolve(s: GameState, e: Effect) {
       add(s, { ...e, type: "damage", attack: true });
       break;
     case "damage":
+      if (
+        e.basic &&
+        e.attack &&
+        !e.cyclopsBefuddleHandled &&
+        cyclops.cyclopsAttackModifiers(s, e.target).befuddle &&
+        !s.player.stunned
+      ) {
+        choose(
+          s,
+          "Befuddle",
+          "Use your THW instead of ATK for this basic attack?",
+          [
+            option("thw", "Use THW", [
+              {
+                ...e,
+                amount:
+                  (e.amount ?? heroStats(s).attack) -
+                  heroStats(s).attack +
+                  heroStats(s).thwart,
+                cyclopsBefuddleHandled: true,
+              },
+            ]),
+            option("atk", "Use ATK", [{ ...e, cyclopsBefuddleHandled: true }]),
+          ],
+        );
+        break;
+      }
       if (e.attack && shadowcatNativeIgnoreWindow(s, e, "attack")) break;
       if (e.basic && !e.colossusRageHandled) {
         const next = { ...e, colossusRageHandled: true };
@@ -21054,7 +21305,9 @@ function resolve(s: GameState, e: Effect) {
       if (
         e.basic &&
         !e.thorWindowHandled &&
-        s.player.hand.some((p) => ["06015", "06032"].includes(p.code)) &&
+        s.player.hand.some((p) =>
+          ["06015", "06032", "33017"].includes(p.code),
+        ) &&
         !s.player.stunned
       ) {
         add(
@@ -21673,7 +21926,7 @@ function resolve(s: GameState, e: Effect) {
       if (
         e.basic &&
         !e.thorWindowHandled &&
-        s.player.hand.some((p) => p.code === "06032") &&
+        s.player.hand.some((p) => ["06032", "33017"].includes(p.code)) &&
         !s.player.confused
       ) {
         add(
@@ -22364,6 +22617,54 @@ function resolve(s: GameState, e: Effect) {
       const p = find(s, e.id);
       if (!p) break;
       const attack = e.kind === "attack";
+      if (
+        attack &&
+        !e.cyclopsDustHandled &&
+        p.code === "33012" &&
+        !p.stunned &&
+        !isTextBlank(s, p) &&
+        s.minions.some((m) => m.id === e.target)
+      ) {
+        const packet = { ...e, cyclopsDustHandled: true };
+        choose(
+          s,
+          "Dust",
+          "Attack every minion and take +1 consequential damage?",
+          [
+            option("all", "Attack each minion", [
+              { ...packet, cyclopsDust: true },
+            ]),
+            option("single", "Attack only the chosen minion", [packet]),
+          ],
+        );
+        break;
+      }
+      if (attack && e.cyclopsConsequenceReduction === undefined)
+        e.cyclopsConsequenceReduction = (
+          e.cyclopsDust ? s.minions.map((m) => m.id) : [e.target]
+        ).reduce(
+          (n: number, id: string) =>
+            n + cyclops.cyclopsAttackModifiers(s, id).consequence,
+          0,
+        );
+      if (
+        attack &&
+        !e.cyclopsBefuddleHandled &&
+        cyclops.cyclopsAttackModifiers(s, e.target).befuddle &&
+        !p.stunned
+      ) {
+        choose(s, "Befuddle", "Use this ally's THW instead of ATK?", [
+          option("thw", "Use THW", [
+            {
+              ...e,
+              amount: allyStat(s, p, "thwart"),
+              cyclopsBefuddleHandled: true,
+            },
+          ]),
+          option("atk", "Use ATK", [{ ...e, cyclopsBefuddleHandled: true }]),
+        ]);
+        break;
+      }
       if (!e.nebulaPackCosmoHandled && !(attack ? p.stunned : p.confused)) {
         const packet = {
           ...e,
@@ -22670,6 +22971,8 @@ function resolve(s: GameState, e: Effect) {
         );
         break;
       }
+      if (attack && e.cyclopsDust)
+        e.bombshellPackets = s.minions.map((m) => ({ target: m.id, amount }));
       if (attack && e.bombshellPackets) {
         const program = `program${s.nextId++}`;
         s.currentAttackProgramId = program;
@@ -22766,8 +23069,13 @@ function resolve(s: GameState, e: Effect) {
           amount: starLordPack.starLordPackConsequentialDamage(
             e,
             attack
-              ? (card(p).attack_cost || 0) +
-                  captainPackModifiers(s, p.id).consequentialAttack
+              ? Math.max(
+                  0,
+                  (card(p).attack_cost || 0) +
+                    Number(!!e.cyclopsDust) -
+                    Number(e.cyclopsConsequenceReduction || 0) +
+                    captainPackModifiers(s, p.id).consequentialAttack,
+                )
               : card(p).thwart_cost || 0,
           ),
         }),
@@ -25879,6 +26187,13 @@ function resolve(s: GameState, e: Effect) {
       spiderHam.spiderHamPhaseEnded(s);
       spiderHamPack.spiderHamPackPhaseEnded(s);
       niPack.novaIronheartPackRoundEnded(s);
+      if (!e.cyclopsRoundEnded) {
+        const ending = cyclops.cyclopsRoundEnded(s);
+        if (ending.length) {
+          add(s, ...ending, { ...e, cyclopsRoundEnded: true });
+          break;
+        }
+      }
       if (!e.mutantGenesisRoundEnded) {
         const ending = mgPack.mutantGenesisPlayerPackRoundEnded(s);
         if (ending.length) {
@@ -25944,6 +26259,7 @@ function resolve(s: GameState, e: Effect) {
           ...Object.fromEntries(
             Object.entries(s.flags).filter(
               ([key]) =>
+                key === "cyclopsNemesisInitialized" ||
                 key.startsWith("valkyrie") ||
                 key.startsWith("vision") ||
                 key.startsWith("nova") ||
@@ -25996,10 +26312,11 @@ function resolve(s: GameState, e: Effect) {
       s.villainStep = "newRound";
       s.attack = null;
       activateSeat(s, s.firstPlayerId);
-      s.turnPlayerId = s.firstPlayerId;
+      s.turnPlayerId = cyclops.cyclopsFirstTurn(s);
+      activateSeat(s, s.turnPlayerId);
       log(
         s,
-        `Round ${s.round} · ${heroCard(s).name} holds the first-player token.`,
+        `Round ${s.round} · ${heroCard(seatView(s, s.firstPlayerId)).name} holds the first-player token.`,
         "phase",
       );
       add(
@@ -26420,6 +26737,11 @@ export function dispatch(state: GameState, command: Command): GameState {
         s.flags.heroKill = false;
         if (command.type === "FLIP") flip(s, true, command.target);
         else if (command.type === "BASIC") {
+          if (command.action === "attack")
+            need(
+              cyclops.cyclopsCanAttack(s),
+              "Lost Visor prevents Cyclops from attacking.",
+            );
           need(!s.player.exhausted, "Your identity is exhausted.");
           need(
             !magneto.magnetoIdentityRestricted(s, s.activePlayerId, {

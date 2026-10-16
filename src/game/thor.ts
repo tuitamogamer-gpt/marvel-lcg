@@ -189,7 +189,7 @@ export function thorPlayRestriction(
   p: Piece,
   ports?: Pick<ThorEnginePorts, "identityMaxHP" | "canPay">,
 ): string | null {
-  if (["06015", "06032"].includes(p.code))
+  if (["06015", "06032", "33017"].includes(p.code))
     return "Play this card during your basic power's interrupt window.";
   if (p.code === "06005" && (!mjolnir(s) || mjolnir(s)!.exhausted))
     return "Hammer Throw requires a ready Mjolnir.";
@@ -293,6 +293,7 @@ export function thorEvent(
         }),
       ];
     case "06015":
+    case "33017":
     case "06032":
       throw Error("This event requires its basic power interrupt window.");
     case "06033":
@@ -859,7 +860,7 @@ export function resolveThorEffect(
             ),
           );
         if (
-          p.code === "06032" &&
+          ["06032", "33017"].includes(p.code) &&
           readyAllies(s).some((ally) => ports.allyPower(s, ally, e.kind) > 0)
         )
           playable.push(
@@ -883,7 +884,7 @@ export function resolveThorEffect(
     }
     case "thor:basic-cost": {
       const p = eventPlaySources(s).find(
-        (p) => p.id === e.id && ["06015", "06032"].includes(p.code),
+        (p) => p.id === e.id && ["06015", "06032", "33017"].includes(p.code),
       );
       need(p, "Basic-power interrupt is no longer in hand.");
       const eligible =
@@ -920,7 +921,7 @@ export function resolveThorEffect(
     case "thor:basic-paid": {
       const p = eventPlaySources(s).find((p) => p.id === e.id);
       need(
-        p && ["06015", "06032"].includes(p.code),
+        p && ["06015", "06032", "33017"].includes(p.code),
         "Basic-power interrupt is no longer in hand.",
       );
       const source = (
