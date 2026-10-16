@@ -473,7 +473,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(104);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(105);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
@@ -587,6 +587,7 @@ describe("complete expansion rules inventory", () => {
       "src/game/mystique.ts",
       "src/game/master-mold.ts",
       "src/game/mansion-attack.ts",
+      "src/game/card-definitions.ts",
       "src/game/printed-card-metadata.ts",
       "src/game/expansion-errata.ts",
       "src/game/reveal-window.ts",

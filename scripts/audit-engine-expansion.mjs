@@ -1047,6 +1047,7 @@ export async function generateAudit(
     "src/game/engine-support.ts",
     "src/game/engine.ts",
     "src/game/cards.ts",
+    "src/game/card-definitions.ts",
     "src/game/captain-america.ts",
     "src/game/captain-pack.ts",
     "src/game/hulk.ts",

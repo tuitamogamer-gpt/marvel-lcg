@@ -1,5 +1,5 @@
 import { isTextBlank } from "./card-text.js";
-import { card } from "./cards.js";
+import { card } from "./card-definitions.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import type { AntManTarget } from "./ant-man.js";
 import type { PaymentSource } from "./payment.js";
