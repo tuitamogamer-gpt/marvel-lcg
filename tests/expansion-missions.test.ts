@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { magnetoIdentityRestricted } from "../src/game/magneto";
 import { isTextBlank } from "../src/game/card-text";
 import { visionCanAttack } from "../src/game/vision";
@@ -34,7 +35,11 @@ import {
 } from "../src/game/captain-america";
 import { hulkAbilityOptions } from "../src/game/hulk";
 import { uniqueConflict } from "../src/game/unique";
-import { heroStarterAspects, isPermanent } from "../src/game/hero-runtime";
+import {
+  heroStarterAspects,
+  heroSupplementaryCards,
+  isPermanent,
+} from "../src/game/hero-runtime";
 import { deckSizeFor } from "../src/game/decks";
 import { seatView } from "../src/game/team";
 import type { Aspect, Command, GameState, Piece } from "../src/game/types";
@@ -73,6 +78,10 @@ const heroIds = [
   "spdr",
   "colossus",
   "shadowcat",
+  "cyclops",
+  "phoenix",
+  "wolverine",
+  "storm",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -265,6 +274,11 @@ function runMission(config: (typeof missions)[number]) {
   const supplementary = [
     ...(s.player.invocationDeck || []),
     ...(s.player.invocationDiscard || []),
+    ...[...s.player.inPlay, ...(s.player.setAside || [])].filter(
+      (p) =>
+        !codes.includes(p.code) &&
+        Object.hasOwn(heroSupplementaryCards(hero.id), p.code),
+    ),
   ];
   const identities = s.player.spdrIdentity
     ? [
@@ -500,9 +514,9 @@ describe("published expansion starters across every supported mission setting", 
         ),
     );
     expect(VILLAINS).toHaveLength(10);
-    expect(MODULES).toHaveLength(18);
-    expect(heroIds).toHaveLength(32);
-    expect(missions).toHaveLength(11328);
+    expect(MODULES).toHaveLength(20);
+    expect(heroIds).toHaveLength(36);
+    expect(missions).toHaveLength(14184);
     const key = (mission: (typeof missions)[number]) =>
       [
         mission.heroId,
@@ -513,14 +527,27 @@ describe("published expansion starters across every supported mission setting", 
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
     const combined = partitions.flat();
-    expect(new Set(missions.map(key)).size).toBe(11328);
-    expect(new Set(combined.map(key)).size).toBe(11328);
+    // New heroes and modular sets extend the published mission grid without
+    // changing the names or seeded shuffles of the 11,328 prior missions.
+    const retained = missions.filter(
+      (mission) =>
+        heroIds.indexOf(mission.heroId) < 32 &&
+        !["deathstrike", "shadow_king"].includes(mission.module),
+    );
+    expect(retained).toHaveLength(11328);
+    expect(
+      createHash("sha256")
+        .update(manifest(retained).join("\n"))
+        .digest("hex"),
+    ).toBe("8639244ce44d6832c10f3f51edb418a1435a42fa862f629f47a62b4016e519a0");
+    expect(new Set(missions.map(key)).size).toBe(14184);
+    expect(new Set(combined.map(key)).size).toBe(14184);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(2832);
-      expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(8);
+      expect(partition).toHaveLength(3546);
+      expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(9);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 2832 : 11328);
+    expect(selectedMissions).toHaveLength(isSharded ? 3546 : 14184);
   });
   for (const mission of selectedMissions)
     it(
