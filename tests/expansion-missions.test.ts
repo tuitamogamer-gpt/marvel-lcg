@@ -113,7 +113,11 @@ if (
 const partitions = Array.from({ length: 4 }, (_, index) =>
   missions.filter((mission) => heroIds.indexOf(mission.heroId) % 4 === index),
 );
-const selectedMissions = isSharded ? partitions[Number(shardIndex)] : missions;
+// Exercise the newest imports first without changing any mission's original
+// seed or shard membership, so integration failures surface early in CI.
+const selectedMissions = [
+  ...(isSharded ? partitions[Number(shardIndex)] : missions),
+].sort((a, b) => heroIds.indexOf(b.heroId) - heroIds.indexOf(a.heroId));
 
 /** Only physical-zone auditing inspects hidden card IDs. The player strategy
  * uses hand cards, visible board state, and the same public prompts as the UI. */

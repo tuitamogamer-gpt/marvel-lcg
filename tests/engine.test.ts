@@ -27,6 +27,7 @@ import type { GameState, Resource, Piece } from "../src/game/types";
 import { deckSizeFor } from "../src/game/decks";
 import { heroRequiredCards, heroRuntime } from "../src/game/hero-runtime";
 import { visionCanAttack } from "../src/game/vision";
+import { cyclopsCanAttack } from "../src/game/cyclops";
 import { valkyrieCannotBasicAttack } from "../src/game/valkyrie";
 function base(
   heroId = "spider_man",
@@ -720,7 +721,9 @@ describe("complete seeded missions", () => {
             !magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
           ) {
             const cannotAttack =
-              !visionCanAttack(s) || valkyrieCannotBasicAttack(s);
+              !visionCanAttack(s) ||
+              !cyclopsCanAttack(s) ||
+              valkyrieCannotBasicAttack(s);
             const canThwart =
               s.player.confused ||
               (targets(s, "scheme").length > 0 && heroStats(s).thwart > 0);

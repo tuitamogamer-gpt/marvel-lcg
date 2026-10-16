@@ -1373,17 +1373,18 @@ function dealEncounter(s: GameState, playerId = s.activePlayerId) {
     s.encounter.dealt.push(p);
   }
 }
+function removedByPlayerElimination(s: GameState, p: Piece) {
+  return s.players.some(
+    (seat) =>
+      seat.eliminated &&
+      (p.ownerId === seat.id ||
+        seatView(s, seat).player.inPlay.some((q) => q.id === p.id)),
+  );
+}
 function discardPiece(s: GameState, id: string) {
   const p = find(s, id);
   need(
-    !p ||
-      !isPermanent(card(p)) ||
-      s.players.some(
-        (seat) =>
-          seat.eliminated &&
-          (p.ownerId === seat.id ||
-            seatView(s, seat).player.inPlay.some((q) => q.id === p.id)),
-      ),
+    !p || !isPermanent(card(p)) || removedByPlayerElimination(s, p),
     "Permanent cards cannot be discarded from play.",
   );
   need(
@@ -1416,7 +1417,8 @@ function movePieceFromPlay(
   if (removedSource) cyclops.cyclopsCardLeft(s, removedSource);
   need(
     !removedSource ||
-      (!isPermanent(card(removedSource)) &&
+      ((!isPermanent(card(removedSource)) ||
+        removedByPlayerElimination(s, removedSource)) &&
         !zeroTolerance.zeroToleranceIsPermanent(s, removedSource)),
     "Permanent cards cannot leave play.",
   );
@@ -1438,6 +1440,7 @@ function movePieceFromPlay(
   // Player elimination removes them through its ordinary whole-seat cleanup.
   if (
     removedSource &&
+    !removedByPlayerElimination(s, removedSource) &&
     Object.values(spectrum.SPECTRUM_FORM_CODES).includes(
       removedSource.code as (typeof spectrum.SPECTRUM_FORM_CODES)[keyof typeof spectrum.SPECTRUM_FORM_CODES],
     )

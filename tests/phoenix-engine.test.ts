@@ -115,6 +115,56 @@ function zeroBoost(s: GameState) {
 }
 
 describe("Phoenix physical source and native engine", () => {
+  it.each([false, true])(
+    "elimination removes the same Phoenix Force and owned cards while the teammate continues (Unleashed=%s)",
+    (unleashed) => {
+      let s = newGame({
+        heroId: "phoenix",
+        aspect: "justice",
+        villainId: "rhino",
+        seed: 34002,
+        pacing: "expert",
+        heroes: [
+          { heroId: "phoenix", aspect: "justice" },
+          { heroId: "spider_man", aspect: "justice" },
+        ],
+      });
+      s = resolve(command(s, { type: "MULLIGAN", ids: [] }));
+      s = resolve(command(s, { type: "MULLIGAN", ids: [] }));
+      const owned = original(s);
+      const force = phoenixForce(s)!;
+      if (unleashed) phoenixChangeCounters(s, -4);
+      s = resolve(
+        native(s, {
+          type: "damage",
+          target: "hero",
+          amount: 99,
+          source: "01103",
+          attack: false,
+        }),
+      );
+      expect(s.players.find((seat) => seat.id === "p1")?.eliminated).toBe(true);
+      expect(s.players.find((seat) => seat.id === "p2")?.eliminated).toBe(
+        false,
+      );
+      expect(s.phase).toBe("player");
+      expect(seatView(s, "p1").player.inPlay).toEqual([]);
+      expect(s.removed.filter((p) => p.id === force.id)).toHaveLength(1);
+      const physical = [
+        ...s.players.flatMap((seat) => {
+          const p = seatView(s, seat).player;
+          return [...p.deck, ...p.hand, ...p.discard, ...p.inPlay];
+        }),
+        ...s.resolving,
+        ...s.removed,
+      ];
+      expect(owned).toHaveLength(41);
+      for (const p of owned) {
+        expect(physical.filter((q) => q.id === p.id)).toHaveLength(1);
+        expect(s.removed.filter((q) => q.id === p.id)).toHaveLength(1);
+      }
+    },
+  );
   it("launches 40 original playing cards, one actual permanent with4 power and five reserved nemesis", () => {
     const s = start();
     expect(original(s)).toHaveLength(41);
