@@ -1,13 +1,9 @@
-import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { isTextBlank } from "./card-text.js";
+import { card } from "./cards.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import type { AntManTarget } from "./ant-man.js";
 import type { PaymentSource } from "./payment.js";
-import type { Card, Effect, GameState, Option, Piece } from "./types.js";
-
-const definitions = new Map((catalog as Card[]).map((c) => [c.code, c]));
-const card = (p: Piece | string) =>
-  definitions.get(typeof p === "string" ? p : p.code)!;
+import type { Effect, GameState, Option, Piece } from "./types.js";
 const E = (type: string, args: Record<string, unknown> = {}): Effect => ({
   type,
   ...args,
@@ -500,11 +496,11 @@ export function phoenixBeforeAlly(
       return [
         E("optional", {
           title: "Marvel Girl",
-          text: `Remove ${card(m).scheme || 0} threat from the main scheme?`,
+          text: `Remove ${card(m.code).scheme || 0} threat from the main scheme?`,
           effects: [
             E("thwart", {
               target: "main",
-              amount: card(m).scheme || 0,
+              amount: card(m.code).scheme || 0,
               ignoreCrisis: true,
               source: p.id,
             }),

@@ -845,3 +845,108 @@ describe("Passion for Justice expires after its actual paid event", () => {
     expect(s.player.discard.filter((p) => p.id === passion.id)).toHaveLength(1);
   });
 });
+
+describe("Phoenix effects handle actual synthetic Ultron Drones", () => {
+  it.each(["34008", "34009"])(
+    "%s attaches to the actual Drone and preserves its captured player card through removal",
+    (code) => {
+      let s = base();
+      const upgrade = take(s, code);
+      const resources = [take(s, "34025")];
+      if (code === "34009") resources.push(take(s, "34026"));
+      const captured = s.player.deck[0];
+      s = resolve(native(s, { type: "drone" }));
+      const drone = s.minions.find((p) => p.code === "drone")!;
+      expect(drone.droneCard?.id).toBe(captured.id);
+      expect(
+        playable(
+          s,
+          s.player.hand.find((p) => p.id === upgrade.id)!,
+        ),
+      ).toBeNull();
+      s = resolve(paid(s, upgrade, resources, drone.id));
+      if (code === "34008") {
+        s = resolve(
+          native(
+            s,
+            { type: "enemyAttack", id: drone.id },
+            { type: "enemyScheme", id: drone.id },
+          ),
+        );
+        expect(s.player.hp).toBe(9);
+        expect(s.scheme.threat).toBe(6);
+      } else {
+        const ally = s.player.inPlay.find((p) => p.id === drone.id)!;
+        expect(card(ally)).toMatchObject({ type_code: "ally", thwart: 1 });
+        expect(ally.droneCard?.id).toBe(captured.id);
+        expect(s.minions.some((p) => p.id === drone.id)).toBe(false);
+      }
+      s = resolve(native(s, { type: "discardPiece", id: upgrade.id }));
+      expect(s.minions.find((p) => p.id === drone.id)).toMatchObject({
+        code: "drone",
+        droneCard: { id: captured.id },
+        engagedWith: "p1",
+      });
+      s = resolve(native(s, { type: "damage", target: drone.id, amount: 1 }));
+      expect(s.minions.some((p) => p.id === drone.id)).toBe(false);
+      expect(s.player.discard.filter((p) => p.id === captured.id)).toHaveLength(
+        1,
+      );
+      expect(s.player.discard.filter((p) => p.id === upgrade.id)).toHaveLength(
+        1,
+      );
+      expect(original(s)).toHaveLength(41);
+    },
+  );
+  it("a Mind-Controlled Drone's defeat returns its actual captured card and attached upgrade exactly once", () => {
+    let s = base();
+    const upgrade = take(s, "34009");
+    const resources = [take(s, "34025"), take(s, "34026")];
+    const captured = s.player.deck[0];
+    s = resolve(native(s, { type: "drone" }));
+    const drone = s.minions.find((p) => p.code === "drone")!;
+    s = resolve(paid(s, upgrade, resources, drone.id));
+    s = resolve(native(s, { type: "damage", target: drone.id, amount: 1 }));
+    expect(s.player.inPlay.some((p) => p.id === drone.id)).toBe(false);
+    expect(s.minions.some((p) => p.id === drone.id)).toBe(false);
+    expect(s.player.discard.filter((p) => p.id === captured.id)).toHaveLength(
+      1,
+    );
+    expect(s.player.discard.filter((p) => p.id === upgrade.id)).toHaveLength(1);
+    expect(original(s)).toHaveLength(41);
+  });
+  it("Banshee names and confuses a Drone; Marvel Girl removes its printed1 SCH before defeating it", () => {
+    let s = base();
+    const banshee = take(s, "34014", "inPlay");
+    const marvelGirl = take(s, "34015", "inPlay");
+    const captured = s.player.deck[0];
+    s = resolve(native(s, { type: "drone" }));
+    const drone = s.minions.find((p) => p.code === "drone")!;
+    s = native(s, {
+      type: "allyAction",
+      id: banshee.id,
+      kind: "thwart",
+      target: "main",
+    });
+    s = respond(s, /Banshee/);
+    expect(s.prompt?.options).toContainEqual(
+      expect.objectContaining({ id: drone.id, label: "Ultron Drone" }),
+    );
+    s = resolve(choose(s, drone.id));
+    expect(s.minions.find((p) => p.id === drone.id)?.confused).toBe(true);
+    expect(s.scheme.threat).toBe(4);
+    s = native(s, {
+      type: "allyAction",
+      id: marvelGirl.id,
+      kind: "attack",
+      target: drone.id,
+    });
+    s = resolve(respond(s, /Marvel Girl/));
+    expect(s.scheme.threat).toBe(3);
+    expect(s.minions.some((p) => p.id === drone.id)).toBe(false);
+    expect(s.player.discard.filter((p) => p.id === captured.id)).toHaveLength(
+      1,
+    );
+    expect(original(s)).toHaveLength(41);
+  });
+});
