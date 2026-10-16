@@ -108,6 +108,8 @@ jobs:
           - group: master-mold
             scripts: test:master-mold
             timeout: 45
+          - group: acolytes
+            scripts: test:acolytes
           - group: mansion-attack
             scripts: test:mansion-attack
             timeout: 45
@@ -142,7 +144,7 @@ jobs:
           done
           echo "Dev server did not start"; cat output-dev.log; exit 1
       - name: Build and serve production artifact
-        if: matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold' || matrix.group == 'mansion-attack'
+        if: matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold' || matrix.group == 'mansion-attack' || matrix.group == 'acolytes'
         run: |
           npm run build
           npm run preview -- --host 127.0.0.1 --port 4173 > output-preview.log 2>&1 &
@@ -157,7 +159,7 @@ jobs:
             npm run "$script"
           done
         env:
-          BASE_URL: ${{ (matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold' || matrix.group == 'mansion-attack') && 'http://127.0.0.1:4173' || 'http://127.0.0.1:5174' }}
+          BASE_URL: ${{ (matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold' || matrix.group == 'mansion-attack' || matrix.group == 'acolytes') && 'http://127.0.0.1:4173' || 'http://127.0.0.1:5174' }}
           CI_BROWSER_SCRIPTS: ${{ matrix.scripts }}
           SPDR_SCENARIOS: ${{ matrix.spdrScenarios }}
           SPDR_FIXTURE_ONLY: ${{ matrix.spdrFixtureOnly }}

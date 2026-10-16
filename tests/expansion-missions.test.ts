@@ -479,9 +479,9 @@ describe("published expansion starters across every supported mission setting", 
         ),
     );
     expect(VILLAINS).toHaveLength(9);
-    expect(MODULES).toHaveLength(17);
+    expect(MODULES).toHaveLength(18);
     expect(heroIds).toHaveLength(32);
-    expect(missions).toHaveLength(9600);
+    expect(missions).toHaveLength(10176);
     const key = (mission: (typeof missions)[number]) =>
       [
         mission.heroId,
@@ -492,14 +492,14 @@ describe("published expansion starters across every supported mission setting", 
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
     const combined = partitions.flat();
-    expect(new Set(missions.map(key)).size).toBe(9600);
-    expect(new Set(combined.map(key)).size).toBe(9600);
+    expect(new Set(missions.map(key)).size).toBe(10176);
+    expect(new Set(combined.map(key)).size).toBe(10176);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(2400);
+      expect(partition).toHaveLength(2544);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(8);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 2400 : 9600);
+    expect(selectedMissions).toHaveLength(isSharded ? 2544 : 10176);
   });
   for (const mission of selectedMissions)
     it(

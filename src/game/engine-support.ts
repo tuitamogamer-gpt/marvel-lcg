@@ -1,3 +1,4 @@
+import { ACOLYTES_SCRIPT_CODES } from "./acolytes.js";
 import { ANT_MAN_SCRIPT_CODES } from "./ant-man.js";
 import { ANT_MAN_PACK_SCRIPT_CODES } from "./ant-man-pack.js";
 import { WASP_SCRIPT_CODES } from "./wasp.js";
@@ -108,6 +109,7 @@ export const SCRIPTED_HERO_IDS = new Set([
   "shadowcat",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
+  ...ACOLYTES_SCRIPT_CODES,
   ...MASTER_MOLD_SCRIPT_CODES,
   ...MANSION_ATTACK_SCRIPT_CODES,
   ...PROJECT_WIDEAWAKE_SCRIPT_CODES,

@@ -266,16 +266,16 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(1558);
-    expect(coverage.unsupportedFaces).toBe(2993);
-    expect(coverage.dedicatedFaces).toBe(1086);
+    expect(coverage.executableFaces).toBe(1565);
+    expect(coverage.unsupportedFaces).toBe(2986);
+    expect(coverage.dedicatedFaces).toBe(1093);
     expect(coverage.registeredHeroIds).toHaveLength(37);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
     );
     expect(mutant).toMatchObject({
       faceCount: 224,
-      executableFaces: 157,
+      executableFaces: 164,
       installedCardClosure: false,
     });
     expect(mutant.unsupportedFaceCodes).toEqual(
@@ -284,6 +284,7 @@ describe("complete expansion rules inventory", () => {
           (entry: { pack_code: string; position: number; code: string }) =>
             entry.pack_code === "mut_gen" &&
             entry.position > 137 &&
+            !(entry.position >= 159 && entry.position <= 165) &&
             entry.code !== "32172b",
         )
         .map((entry: { code: string }) => entry.code)
@@ -437,7 +438,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(98);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(99);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

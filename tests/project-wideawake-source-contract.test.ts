@@ -408,7 +408,10 @@ describe("Project Wideawake executable source acceptance", () => {
     }
     for (const c of catalog.filter(
       (c) =>
-        c.pack_code === "mut_gen" && c.position > 137 && c.code !== "32172b",
+        c.pack_code === "mut_gen" &&
+        c.position > 137 &&
+        c.set_code !== "acolytes" &&
+        c.code !== "32172b",
     ))
       expect(hasExecutableScript(c.code), c.code).toBe(false);
     expect(VILLAINS.filter((v) => v.id === "magneto_villain")).toEqual([]);
