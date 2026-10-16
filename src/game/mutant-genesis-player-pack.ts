@@ -492,7 +492,7 @@ export function mutantGenesisPlayerPackPaymentInterrupts(
       (p) =>
         receipt.resourceIds.includes(p.id) &&
         ((p.code === "32018" && traits.includes("Defense")) ||
-          (p.code === "32047" && traits.includes("Attack"))),
+          (["32047", "35020"].includes(p.code) && traits.includes("Attack"))),
     )
     .flatMap((p) =>
       s.flags[responseKey(receipt.token, p.id)]
@@ -1056,7 +1056,7 @@ export function resolveMutantGenesisPlayerPackEffect(
       );
       s.flags[responseKey(r.token, e.id)] = true;
       if (e.code === "32018") ports.queue(s, E("draw", { amount: 1 }));
-      else if (e.code === "32047")
+      else if (["32047", "35020"].includes(e.code))
         s.flags[eventBonusKey(r.eventId)] =
           Number(s.flags[eventBonusKey(r.eventId)] || 0) + 1;
       break;

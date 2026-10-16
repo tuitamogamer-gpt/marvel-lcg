@@ -62,6 +62,7 @@ import { spiderHamPackCharacterModifiers } from "./spider-ham-pack.js";
 import { spdrPackCharacterModifiers } from "./spdr-pack.js";
 import { ironspiderSinisterHealthBonus } from "./ironspider-sinister.js";
 import { phoenixStats, phoenixAllyModifiers } from "./phoenix.js";
+import { wolverineStats } from "./wolverine.js";
 import { colossusStats } from "./colossus.js";
 import { brotherhoodModifiers } from "./brotherhood.js";
 import { masterMoldModifiers } from "./master-mold.js";
@@ -169,6 +170,8 @@ const identityImageCodes: Readonly<Record<string, string>> = {
   "33001b": "33001a",
   "34001a": "34001b",
   "34001b": "34001a",
+  "35001a": "35001b",
+  "35001b": "35001a",
   "32001a": "32001b",
   "32001b": "32001a",
   "32030a": "32030b",
@@ -732,6 +735,20 @@ export const HEROES = [
     style: "Phoenix Force · Justice",
     complexity: 3,
   },
+  {
+    id: "wolverine",
+    code: "35001a",
+    alter: "35001b",
+    name: "Wolverine",
+    identity: "Logan",
+    aspect: "aggression" as Aspect,
+    color: "#c7a336",
+    tag: "The best at what he does.",
+    description:
+      "Pay for attacks with your health, cut through Tough with adamantium claws, and recover with your healing factor.",
+    style: "Claws and healing · Aggression",
+    complexity: 2,
+  },
 ];
 export const VILLAINS = [
   {
@@ -893,6 +910,7 @@ export const MODULES = [
   { id: "zero_tolerance", name: "Zero Tolerance", difficulty: 3 },
   { id: "sentinels", name: "Sentinels", difficulty: 3 },
   { id: "acolytes", name: "Acolytes", difficulty: 4 },
+  { id: "deathstrike", name: "Lady Deathstrike", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -1025,6 +1043,7 @@ export function deckCodes(
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
       (hero === "phoenix" && aspect === "justice") ||
+      (hero === "wolverine" && aspect === "aggression") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
@@ -1047,6 +1066,7 @@ export function deckCodes(
         !["hero", "alter_ego"].includes(c.type_code) &&
         (!c.permanent ||
           hero === "spectrum" ||
+          (hero === "wolverine" && c.code === "35002") ||
           (hero === "shadowcat" && c.code === "32031a") ||
           (hero === "phoenix" && c.code === "34002a") ||
           (hero === "vision" && c.code === "26002")),
@@ -1150,6 +1170,7 @@ export function maxHP(s: GameState) {
     ) +
     scriptedModifier(s, "health") +
     cyclopsCharacterModifiers(s, "hero").health +
+    wolverineStats(s).health +
     hulkStats(s).health +
     msMarvelStats(s).health +
     rocketMaxHpBonus(s) +
@@ -1226,6 +1247,7 @@ export function heroStats(s: GameState) {
       spdrPackCharacterModifiers(s, "hero").attack +
       colossusStats(s, { isTextBlank }).attack +
       phoenixStats(s).attack +
+      wolverineStats(s).attack +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +

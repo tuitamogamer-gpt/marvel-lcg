@@ -36,6 +36,7 @@ import * as spdrPack from "./spdr-pack.js";
 import * as spiderHam from "./spider-ham.js";
 import * as spiderHamPack from "./spider-ham-pack.js";
 import * as niPack from "./nova-ironheart-pack.js";
+import * as wolverine from "./wolverine.js";
 import * as colossus from "./colossus.js";
 import * as shadowcat from "./shadowcat.js";
 import * as mgPack from "./mutant-genesis-player-pack.js";
@@ -1658,7 +1659,7 @@ function movePieceFromPlay(
       p.code === "16035" ||
       p.code === "25007" ||
       p.code === "27191" ||
-      ["29012", "29013"].includes(p.code) ||
+      ["29012", "29013", "35004"].includes(p.code) ||
       (p.code === "22035" && p.attachedTo?.startsWith("hero:")) ||
       (p.code === "03025" && p.attachedTo?.startsWith("hero:"))
     )
@@ -1977,6 +1978,25 @@ function check(s: GameState) {
             option("defeat", "Allow defeat", [E("phoenix:allow-defeat")]),
           ],
         );
+        return;
+      }
+    }
+    if (view.flags.wolverineDefeatPending) continue;
+    if (
+      view.flags.wolverineLethalAttack &&
+      !view.flags.wolverineDefeatDeclined
+    ) {
+      const choices = wolverine.wolverineDefeatOptions(view, []);
+      if (choices.length) {
+        if (s.prompt) continue;
+        activateSeat(s, seat.id);
+        s.flags.wolverineDefeatPending = true;
+        choose(s, '"I Got Better"', "Replace defeat by this enemy attack?", [
+          ...choices,
+          option("defeat", "Allow defeat", [
+            { type: "wolverine:allow-defeat" },
+          ]),
+        ]);
         return;
       }
     }
@@ -2789,6 +2809,8 @@ function applyDamage(
     if (!traits.grootHandled) n -= groot.grootPreventDamage(s, "hero", n);
     if (n <= 0) return none;
     s.player.hp -= n;
+    if (s.player.hp <= 0 && traits.enemyAttack)
+      s.flags.wolverineLethalAttack = true;
     if (s.player.hp <= 0)
       recordMilesEnemyAttackDefeat(s, source, !!traits.enemyAttack);
     track(s, "damageTaken", n);
@@ -2954,6 +2976,7 @@ function defeatCharacter(
   enemyAttack = false,
   valkyrieReceipts?: valkyrie.ValkyrieDefeatReceipt[],
 ) {
+  if (wolverine.wolverineCannotDefeat(s, m)) return false;
   if (m.pendingDefeat && !interrupted) return true;
   const hamReceipt = s.spiderHamConsequentialReceipts?.[m.id];
   if (hamReceipt) {
@@ -4064,6 +4087,7 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
         sinisterNativeHasTrait(s, "hero", "X-Men"))
         ? 1
         : 0) -
+      wolverine.wolverineCostReduction(s, physical || c, wolverinePorts) -
       captainAllyDiscount(s, c) -
       captainPackDiscount(s, c) -
       msMarvelDiscount(s) -
@@ -4335,6 +4359,23 @@ function attackAction(
   overkill ||= cyclops.cyclopsAttackModifiers(s, target).overkill;
   const p = source === "hero" ? s.player : find(s, source);
   if (!p) return;
+  if (
+    traits.basic ||
+    (source !== "hero" && card(p as Piece)?.type_code === "ally")
+  )
+    n += wolverine.wolverineBasicBonus(s, source, target);
+  if (source === "hero" && traits.basic && wolverine.wolverineStats(s).piercing)
+    traits.piercing = true;
+  if (
+    source === "hero" &&
+    s.currentEventId &&
+    s.flags[`wolverineClaws:${s.currentEventId}`]
+  ) {
+    const key = `wolverineClawsAttack:${s.currentEventId}`;
+    const token = s.currentAttackProgramId || s.currentEventId;
+    s.flags[key] ||= token;
+    if (s.flags[key] === token) traits.piercing = true;
+  }
   if (
     !traits.initiated &&
     target === s.villain.id &&
@@ -5668,6 +5709,7 @@ export function newGame(config: {
     valkyrie.valkyrieSetup(s);
     vision.visionInitializeMass(s, { makePiece });
     shadowcat.shadowcatInitializeMass(s, { makePiece });
+    wolverine.wolverineInitialize(s, { makePiece });
     s.player.deck = shuffle(s, s.player.deck);
     doctorStrangeSetup(s, dsPorts);
     venom.venomInitializeNemesis(s, { makePiece });
@@ -5708,22 +5750,24 @@ export function newGame(config: {
               "acolytes",
             ].includes(c.set_code || "")
               ? "mut_gen"
-              : c.set_code === "ironspider_sinister"
-                ? "spdr"
-                : c.set_code === "inheritors"
-                  ? "spiderham"
-                  : c.set_code === "zzzax"
-                    ? "ironheart"
-                    : c.set_code === "armadillo"
-                      ? "nova"
-                      : [
-                            "goblin_gimmicks",
-                            "a_mess_of_things",
-                            "power_drain",
-                            "running_interference",
-                          ].includes(c.set_code || "")
-                        ? "gob"
-                        : "core")) ||
+              : c.set_code === "deathstrike"
+                ? "wolv"
+                : c.set_code === "ironspider_sinister"
+                  ? "spdr"
+                  : c.set_code === "inheritors"
+                    ? "spiderham"
+                    : c.set_code === "zzzax"
+                      ? "ironheart"
+                      : c.set_code === "armadillo"
+                        ? "nova"
+                        : [
+                              "goblin_gimmicks",
+                              "a_mess_of_things",
+                              "power_drain",
+                              "running_interference",
+                            ].includes(c.set_code || "")
+                          ? "gob"
+                          : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -5903,6 +5947,9 @@ function initialSetup(s: GameState) {
       ...shadowcat
         .shadowcatSetup(seatView(s, seat), { makePiece })
         .map((e) => ({ ...e, actorId: seat.id })),
+      ...wolverine
+        .wolverineSetup(seatView(s, seat))
+        .map((e) => ({ ...e, actorId: seat.id })),
       ...colossus.colossusSetup(seatView(s, seat)).map((e) => ({
         ...e,
         actorId: seat.id,
@@ -5944,6 +5991,7 @@ function initialSetup(s: GameState) {
     s,
     ...setup,
     E("stageSetup"),
+    E("wolverinePlayerPhase"),
     E("beginTurn", { actorId: cyclops.cyclopsFirstTurn(s) }),
   );
 }
@@ -6061,6 +6109,7 @@ export function playable(s: GameState, p: Piece): string | null {
     gamora.gamoraPlayRestriction(s, p, gamoraPorts) ||
     drax.draxPlayRestriction(s, p, draxPorts) ||
     cyclops.cyclopsPlayRestriction(s, p, cyclopsPorts) ||
+    wolverine.wolverinePlayRestriction(s, p, wolverinePorts) ||
     colossus.colossusPlayRestriction(s, p, colossusPorts) ||
     shadowcat.shadowcatPlayRestriction(s, p, shadowcatPorts) ||
     mgPack.mutantGenesisPlayerPackPlayRestriction(
@@ -6531,6 +6580,11 @@ function play(
     paidForCard || [],
     niPackPorts,
   );
+  if (c.type_code === "event") {
+    delete s.flags[`wolverineWarriorBonus:${p.id}`];
+    for (const key of Object.keys(s.flags))
+      if (key.startsWith(`wolverineWarriorUsed:${p.id}:`)) delete s.flags[key];
+  }
   if (niBonus) s.flags[`niHoned:${p.id}`] = niBonus;
   const niPlayed = {
     token: playToken,
@@ -6625,6 +6679,9 @@ function play(
       s,
       ...cyclops.cyclopsCardEntered(s, p),
       ...phoenix.phoenixCardEntered(s, p),
+      ...wolverine
+        .wolverineCardEntered(s, p, false)
+        .filter(() => !["35003", "35014"].includes(p.code)),
       ...colossus.colossusCardEntered(s, p),
       ...antMan.antManCardEntered(s, p, antManPorts),
       ...antPack.antManPackCardEntered(s, p),
@@ -6670,7 +6727,7 @@ function play(
       p.code === "16035" ||
       p.code === "25007" ||
       p.code === "27191" ||
-      ["29012", "29013"].includes(p.code)
+      ["29012", "29013", "35004"].includes(p.code)
     )
       s.player.hp += maxHP(s) - healthBefore;
     if (["01057", "01065", "01081"].includes(rulesCode(p)) && s.playerCount > 1)
@@ -6777,6 +6834,10 @@ function allyEnter(
   if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
     giveCharacterStatus(s, p, "tough");
   if (isTextBlank(s, p)) return;
+  if (["35003", "35014"].includes(p.code)) {
+    add(s, ...wolverine.wolverineCardEntered(s, p, fromHand));
+    return;
+  }
   if (p.code === "32032") {
     add(s, ...shadowcat.shadowcatCardEntered(s, p, shadowcatPorts));
     return;
@@ -7014,6 +7075,7 @@ function event(
 ) {
   const ant =
     cyclops.cyclopsEvent(s, p) ??
+    wolverine.wolverineEvent(s, p) ??
     colossus.colossusEvent(s, p) ??
     shadowcat.shadowcatEvent(s, p) ??
     mgPack.mutantGenesisPlayerPackEvent(s, p) ??
@@ -7443,6 +7505,7 @@ function flip(
     add(s, E("mtsPackFormResponses"));
   add(s, ...spectrum.spectrumChangedForm(s, spectrumPorts));
   add(s, ...warMachineResponses);
+  add(s, ...wolverine.wolverineFormChanged(s));
   add(s, ...colossus.colossusFormChanged(s, colossusPorts));
   log(
     s,
@@ -7821,6 +7884,16 @@ function ability(s: GameState, id: string, action = "special") {
   );
   if (cyclopsAbility !== null) {
     add(s, ...cyclopsAbility);
+    return;
+  }
+  const wolverineAbility = wolverine.wolverineAbility(
+    s,
+    id,
+    action,
+    wolverinePorts,
+  );
+  if (wolverineAbility !== null) {
+    add(s, ...wolverineAbility);
     return;
   }
   const colossusAbility = colossus.colossusAbility(
@@ -10096,6 +10169,9 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
     add(
       s,
       ...cyclops.cyclopsCardEntered(s, p),
+      ...wolverine
+        .wolverineCardEntered(s, p, false)
+        .filter(() => !["35003", "35014"].includes(p.code)),
       ...colossus.colossusCardEntered(s, p),
       ...antMan.antManCardEntered(s, p, antManPorts),
       ...antPack.antManPackCardEntered(s, p),
@@ -10842,6 +10918,7 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...(id === "identity" ? nova.novaHeroAbilityOptions(s, novaPorts) : []),
     ...nova.novaAbilityOptions(s, id, novaPorts),
     ...cyclops.cyclopsAbilityOptions(s, id, cyclopsPorts),
+    ...wolverine.wolverineAbilityOptions(s, id, wolverinePorts),
     ...colossus.colossusAbilityOptions(s, id, colossusPorts),
     ...sabretooth.sabretoothActionOptions(s, id, sabretoothPorts),
     ...(find(s, id)
@@ -15042,6 +15119,9 @@ const nebulaPorts: nebula.NebulaPorts = {
       add(
         s,
         ...cyclops.cyclopsCardEntered(s, p),
+        ...wolverine
+          .wolverineCardEntered(s, p, false)
+          .filter(() => !["35003", "35014"].includes(p.code)),
         ...colossus.colossusCardEntered(s, p),
         ...antMan.antManCardEntered(s, p, antManPorts),
         ...antPack.antManPackCardEntered(s, p),
@@ -15229,6 +15309,67 @@ const cyclopsPorts: cyclops.CyclopsPorts = {
     s.removed.push(p);
   },
   revealHidden,
+};
+
+const wolverinePorts: wolverine.WolverinePorts = {
+  ...antManPorts,
+  attackProgram: niAttackProgram,
+  makePiece,
+  maxHP,
+  isIdentityTextBlank: (s) => isTextBlank(s, heroCard(s)),
+  canTakeDamageCost: (s, amount) =>
+    amount === 0 ||
+    (venomPaymentDamageCostAvailable(s, amount) &&
+      !damageProhibition(s, "hero", false) &&
+      !groot.grootGrowthCounters(s)),
+  takeDamageCost: (s, amount) => {
+    if (!wolverinePorts.canTakeDamageCost(s, amount)) return false;
+    s.player.hp -= amount;
+    track(s, "damageTaken", amount);
+    return true;
+  },
+  damageBatch: (s, ids, amount, source) =>
+    rocketPorts.damageBatch(s, ids, amount, source),
+  canPlayIgnoringCost: (s, p) => scarletPorts.canPlayIgnoringCost(s, p),
+  playIgnoringCost: (s, p, after) => scarletPorts.playIgnoringCost(s, p, after),
+  playMeanSwing: (s, p, after) => {
+    add(s, ...after);
+    play(s, p, []);
+  },
+  shufflePlayerDeck: warMachinePortsShufflePlayer,
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  discardPlayerTop: discardNativePlayerTop,
+  discardEncounterTop: (s) => mutagenPorts.discardTop(s).piece,
+  discardRandomHand: randomDiscard,
+  putMinion: mutagenPorts.putMinion,
+  attach: (s, p, target) => {
+    s.resolving = s.resolving.filter((q) => q.id !== p.id);
+    p.attachedTo = target;
+    if (!s.attachments.some((q) => q.id === p.id)) s.attachments.push(p);
+  },
+  pay: (s, title, cost, requirements, after) =>
+    requestPayment(s, title, cost, after, requirements, undefined, true),
+  hasTrait: captainPackHasTrait,
+  hasEnemyKeyword: (s, id, name) =>
+    !!sourceKeyword(s, id, name as PrintedKeyword),
+  namedAttack: (s, name) => {
+    for (const seat of playerOrder(s)) {
+      const view = seatView(s, seat);
+      if (heroCard(view).name === name && view.player.form === "hero")
+        return heroStats(view).attack;
+    }
+    const p = allInPlay(s).find(
+      (p) => card(p).type_code === "ally" && card(p).name === name,
+    );
+    return p ? allyStat(s, p, "attack") : undefined;
+  },
+  defeatEnemy: (s, id, source) => {
+    const p = s.minions.find((q) => q.id === id);
+    if (p) defeatCharacter(s, p, source, false);
+  },
+  canDiscardAttachment: (s, p) =>
+    visionPorts.canDiscardAttachment?.(s, p) ?? !isPermanent(card(p)),
+  transferControl: venomPackPorts.transferControl,
 };
 
 const colossusPorts: colossus.ColossusPorts = {
@@ -16092,6 +16233,7 @@ function enemyAttack(
     }),
   );
   add(s, ...cyclops.cyclopsEnemyAttackStarted(s, id));
+  add(s, ...wolverine.wolverineEnemyAttackStarted(s, id));
   add(s, ...colossus.colossusEnemyAttackStarted(s, id, colossusPorts));
   // Forced entry and its responses precede every optional initiation interrupt.
   if (isVillain && rulesCode(s.villain) === "01135") add(s, E("drone"));
@@ -16356,6 +16498,11 @@ function boostEffects(s: GameState, p: Piece) {
   }
   const cyclopsBoost = cyclops.cyclopsBoost(s, p);
   if (cyclopsBoost !== null) return cyclopsBoost;
+  const wolverineBoost = wolverine.wolverineBoost(s, p);
+  if (wolverineBoost !== null) {
+    add(s, ...wolverineBoost);
+    return;
+  }
   const colossusBoost = colossus.colossusBoost(s, p);
   if (colossusBoost !== null) {
     if (p.code === "32029" && colossusBoost.length) {
@@ -16968,6 +17115,11 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
   }
   a.primaryTargetControllerId =
     target === "hero" ? recipientId : controller(s, target)?.id;
+  a.primaryTargetOwnerId =
+    target === "hero"
+      ? recipientId
+      : (receiving as Piece | undefined)?.ownerId ||
+        a.primaryTargetControllerId;
   if (
     receiving &&
     "code" in receiving &&
@@ -17247,6 +17399,16 @@ function finishAttackAfterDamage(
     );
   add(
     s,
+    ...wolverine.wolverineAfterEnemyAttack(s, {
+      enemyCode: p?.code || a.attackerSnapshot?.code || "",
+      target,
+      damage: a.damage,
+      identityDamage: target === "hero" ? a.damage : a.identityDamage || 0,
+      playerId: recipientId,
+      targetControllerId: a.primaryTargetControllerId,
+      targetOwnerId: a.primaryTargetOwnerId,
+      enemyTextBlank: !p || isTextBlank(s, p),
+    }),
     ...antMan.antManEnemyActivated(s, a.attacker),
     ...(a.afterActivation || []),
     ...(a.visionAfterAttack || []),
@@ -17958,6 +18120,7 @@ function reveal(
       ...spdr.SPDR_SCRIPT_CODES,
       ...spiderHam.SPIDER_HAM_SCRIPT_CODES,
       ...cyclops.CYCLOPS_SCRIPT_CODES,
+      ...wolverine.WOLVERINE_SCRIPT_CODES,
       ...colossus.COLOSSUS_SCRIPT_CODES,
     ].some((code) => code === p.code) ||
       CARDS.some(
@@ -17992,6 +18155,8 @@ function reveal(
       "30027",
       "33030",
       "32028",
+      "35030",
+      "35036",
     ].some((code) => code === p.code)
   ) {
     const window = beginRevealWindow(
@@ -18007,6 +18172,7 @@ function reveal(
       armadillo.armadilloReveal(s, p) ??
       zzzax.zzzaxReveal(s, p) ??
       cyclops.cyclopsEncounterReveal(s, p) ??
+      wolverine.wolverineEncounterReveal(s, p) ??
       colossus.colossusEncounterReveal(s, p) ??
       spiderHam.spiderHamEncounterReveal(s, p);
     need(entry !== null, "No native encounter attachment entry handler.");
@@ -18073,6 +18239,7 @@ function reveal(
     warMachine.warMachineEncounterReveal(s, p) ??
     valkyrie.valkyrieEncounterReveal(s, p) ??
     vision.visionEncounterReveal(s, p) ??
+    wolverine.wolverineEncounterReveal(s, p) ??
     shadowcat.shadowcatEncounterReveal(s, p) ??
     miles.milesEncounterReveal(s, p) ??
     ghostSpider.ghostSpiderEncounterReveal(s, p) ??
@@ -18336,6 +18503,10 @@ function obligation(s: GameState, p: Piece) {
     return;
   }
   activateSeat(s, owner.id);
+  if (p.code === "35027") {
+    add(s, ...wolverine.wolverineEncounterReveal(s, p)!);
+    return;
+  }
   const second: Effect[] =
     rulesCode(p) === "01155"
       ? [E("chooseDiscard", { filter: "panther" })]
@@ -18385,6 +18556,11 @@ function obligation(s: GameState, p: Piece) {
   );
 }
 function treachery(s: GameState, p: Piece) {
+  const wolverineReveal = wolverine.wolverineEncounterReveal(s, p);
+  if (wolverineReveal !== null) {
+    add(s, ...wolverineReveal);
+    return;
+  }
   const shadowcatReveal = shadowcat.shadowcatEncounterReveal(s, p);
   if (shadowcatReveal !== null) {
     add(s, ...shadowcatReveal);
@@ -18670,6 +18846,11 @@ function treachery(s: GameState, p: Piece) {
         add(s, ...phoenixNemesis);
         break;
       }
+      const wolverineNemesis = wolverine.wolverineShadowOfPast(s);
+      if (wolverineNemesis !== null) {
+        add(s, ...wolverineNemesis);
+        return;
+      }
       const colossusNemesis = colossus.colossusShadowOfPast(s);
       if (colossusNemesis !== null) {
         add(s, ...colossusNemesis);
@@ -18881,6 +19062,7 @@ function resolve(s: GameState, e: Effect) {
     return;
   }
   if (cyclops.resolveCyclopsEffect(s, e, cyclopsPorts)) return;
+  if (wolverine.resolveWolverineEffect(s, e, wolverinePorts)) return;
   if (colossus.resolveColossusEffect(s, e, colossusPorts)) return;
   if (shadowcat.resolveShadowcatEffect(s, e, shadowcatPorts)) return;
   if (mgPack.resolveMutantGenesisPlayerPackEffect(s, e, mutantGenesisPackPorts))
@@ -19003,6 +19185,7 @@ function resolve(s: GameState, e: Effect) {
           warMachine.warMachineEncounterReveal(state, piece) ??
           valkyrie.valkyrieEncounterReveal(state, piece) ??
           vision.visionEncounterReveal(state, piece) ??
+          wolverine.wolverineEncounterReveal(state, piece) ??
           shadowcat.shadowcatEncounterReveal(state, piece) ??
           miles.milesEncounterReveal(state, piece) ??
           ghostSpider.ghostSpiderEncounterReveal(state, piece) ??
@@ -20630,6 +20813,12 @@ function resolve(s: GameState, e: Effect) {
         add(s, ...antPack.antManPackAfterAttackDefeat(s, e.excessDamage));
       add(
         s,
+        ...wolverine.wolverineAfterDefeat(
+          s,
+          "hero",
+          e.wasMinion && !find(s, e.target),
+          true,
+        ),
         ...thorAfterHeroAttack(s, {
           target: e.target,
           defeatedMinion: e.wasMinion && !find(s, e.target),
@@ -21450,6 +21639,28 @@ function resolve(s: GameState, e: Effect) {
           add(s, ...shield);
           break;
         }
+      }
+      if (e.attack && !e.wolverineAttackHandled) {
+        e.wolverineAttackToken ||=
+          s.currentAttackProgramId ||
+          s.currentEventId ||
+          `wolverine-attack:${s.nextId++}`;
+        const opts = wolverine.wolverineAttackOptions(s, e, wolverinePorts);
+        if (opts.length) {
+          choose(s, "Attack interrupts", "Use an attack modifier?", [
+            ...opts,
+            option("continue", "Continue attack", [
+              { ...e, wolverineAttackHandled: true },
+            ]),
+          ]);
+          break;
+        }
+      }
+      if (e.attack && !e.wolverineBonusApplied) {
+        e.amount += Number(
+          s.flags[`wolverineWarriorBonus:${e.wolverineAttackToken}`] || 0,
+        );
+        e.wolverineBonusApplied = true;
       }
       if (e.attack && shadowcatNativeIgnoreWindow(s, e, "attack")) break;
       if (e.basic && !e.colossusRageHandled) {
@@ -22857,6 +23068,22 @@ function resolve(s: GameState, e: Effect) {
         add(s, ...phoenixBefore);
         break;
       }
+      if (attack && !e.wolverinePsylockeHandled) {
+        const options = wolverine.wolverineAllyAttackOptions(s, p, e);
+        if (options.length) {
+          choose(s, "Psylocke", "Spend a psionic counter?", [
+            ...options,
+            option("continue", "Continue attack", [
+              { ...e, wolverinePsylockeHandled: true },
+            ]),
+          ]);
+          break;
+        }
+      }
+      const wolverineThreatBefore =
+        e.target === "main"
+          ? s.scheme.threat
+          : s.sideSchemes.find((q) => q.id === e.target)?.counters || 0;
       if (!e.nebulaPackCosmoHandled && !(attack ? p.stunned : p.confused)) {
         const packet = {
           ...e,
@@ -23232,6 +23459,12 @@ function resolve(s: GameState, e: Effect) {
           attackedEnemy: attackedEnemySnapshot,
         }),
         ...phoenix.phoenixAllyUsed(s, p, attack ? "attack" : "thwart"),
+        E("wolverine:ally-after", {
+          piece: { ...p },
+          target: e.target,
+          attack,
+          before: wolverineThreatBefore,
+        }),
         ...spdrPack.spdrPackAllyUsed(
           s,
           p,
@@ -26122,6 +26355,16 @@ function resolve(s: GameState, e: Effect) {
       )
         villainSetup(s);
       break;
+    case "wolverinePlayerPhase":
+      add(
+        s,
+        ...playerOrder(s).flatMap((seat) =>
+          wolverine
+            .wolverinePhaseBegan(seatView(s, seat), wolverinePorts)
+            .map((e) => ({ ...e, actorId: seat.id })),
+        ),
+      );
+      break;
     case "beginTurn":
       add(s, ...mgPack.mutantGenesisPlayerPackTurnBegan(s, { isTextBlank }));
       add(s, ...niPack.novaIronheartPackTurnBegan(s, s.activePlayerId));
@@ -26512,7 +26755,8 @@ function resolve(s: GameState, e: Effect) {
                 key.startsWith("valkyrie") ||
                 key.startsWith("vision") ||
                 key.startsWith("nova") ||
-                key.startsWith("ironheart"),
+                key.startsWith("ironheart") ||
+                key === "wolverineInitialized",
             ),
           ),
           ...(s.heroId === "warm"
@@ -26570,6 +26814,7 @@ function resolve(s: GameState, e: Effect) {
       );
       add(
         s,
+        E("wolverinePlayerPhase"),
         ...nebula.nebulaTurnBegan(s, s.turnPlayerId, nebulaPorts),
         ...niPack.novaIronheartPackTurnBegan(s, s.turnPlayerId),
       );
@@ -27006,9 +27251,25 @@ export function dispatch(state: GameState, command: Command): GameState {
           const stats = heroStats(s);
           if (command.action === "recover") {
             need(s.player.form === "alter", "Recover in alter-ego form.");
-            need(s.player.hp < maxHP(s), "You are at full health.");
+            const deathFactor = wolverine.wolverineRecoverOptions(s, []);
+            need(
+              s.player.hp < maxHP(s) || deathFactor.length,
+              "You are at full health.",
+            );
             s.player.exhausted = true;
-            heal(s, "hero", stats.recover);
+            if (deathFactor.length)
+              choose(
+                s,
+                "Death Factor",
+                "Discard an attachment instead of healing?",
+                [
+                  ...deathFactor,
+                  option("heal", "Heal normally", [
+                    E("heal", { target: "hero", amount: stats.recover }),
+                  ]),
+                ],
+              );
+            else heal(s, "hero", stats.recover);
             add(s, ...phoenix.phoenixRecovered(s));
             add(
               s,
@@ -27061,6 +27322,7 @@ export function dispatch(state: GameState, command: Command): GameState {
           if (s.attachments.some((p) => p.id === command.id)) {
             const p = find(s, command.id)!;
             const custom = [
+              ...wolverine.wolverineAbilityOptions(s, p.id, wolverinePorts),
               ...wideawake.projectWideawakeActionOptions(
                 s,
                 p.id,
@@ -27140,6 +27402,7 @@ export function dispatch(state: GameState, command: Command): GameState {
           gmwPack.gmwPlayerPackTurnEnded(s);
           seat.ended = true;
           log(s, `${heroCard(s).name} ends their turn.`, "phase");
+          const wolverineTurnEnd = wolverine.wolverineTurnEnded(s);
           const next = playerOrder(s).find((p) => !p.ended);
           if (next) add(s, E("beginTurn", { actorId: next.id }));
           else {
@@ -27172,6 +27435,7 @@ export function dispatch(state: GameState, command: Command): GameState {
             s,
             ...spectrum.spectrumTurnEnded(s, s.turnPlayerId, spectrumPorts),
           );
+          add(s, ...wolverineTurnEnd);
         }
       }
     }

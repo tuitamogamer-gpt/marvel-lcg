@@ -1,4 +1,5 @@
 import { cyclopsCanAttack } from "./game/cyclops";
+import { wolverineRecoverOptions } from "./game/wolverine";
 import { visionCanAttack } from "./game/vision";
 import {
   shadowcatCanAttack,
@@ -6000,7 +6001,8 @@ function Tabletop({
                       !acting ||
                       s.player.exhausted ||
                       wrappedInMetal ||
-                      s.player.hp >= maxHP(s)
+                      (s.player.hp >= maxHP(s) &&
+                        !wolverineRecoverOptions(s, []).length)
                     }
                     onClick={() => send({ type: "BASIC", action: "recover" })}
                   >

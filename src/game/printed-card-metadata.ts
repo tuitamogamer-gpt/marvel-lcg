@@ -47,6 +47,7 @@ const printedMetadata: Readonly<Record<string, PrintedMetadata>> = {
   // Original Mutant Genesis ally has the printed secondary title PIOTR RASPUTIN.
   // public/cards/catalog/32048.webp; the downloaded text omitted this title.
   "32048": { subname: "Piotr Rasputin" },
+  "35021": { subname: "Piotr Rasputin" },
   // Original Sentinel III deals to EVERY player, including the first player.
   // public/cards/catalog/32086.webp; the snapshot copied stage II's wording.
   "32086": {

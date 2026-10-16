@@ -148,6 +148,8 @@ export interface Prompt {
 }
 export interface Attack {
   primaryTargetControllerId?: string;
+  /** Original owner survives the damaged ally leaving play (Lady Deathstrike). */
+  primaryTargetOwnerId?: string;
   /** Actual Sabretooth Strikes boost sources retained for this attack only. */
   sabretoothAllyDefeatBoostIds?: string[];
   /** Stable identity of this native enemy attack across saved interrupts. */
