@@ -53,6 +53,9 @@ describe("complete expansion rules inventory", () => {
       "32092",
       "32106",
       "32153",
+      "34028",
+      "34031",
+      "35021",
     ]);
     for (const [code, boost] of [
       ["19025", 2],
@@ -105,6 +108,14 @@ describe("complete expansion rules inventory", () => {
       ],
     });
     expect(
+      corrections.find((entry: { code: string }) => entry.code === "35021"),
+    ).toMatchObject({
+      url: "https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/35021.jpg",
+      changes: [
+        { field: "subname", imported: null, runtime: "Piotr Rasputin" },
+      ],
+    });
+    expect(
       corrections.find((entry: { code: string }) => entry.code === "32088a"),
     ).toMatchObject({
       changes: [{ field: "boost", imported: null, runtime: 1 }],
@@ -114,7 +125,7 @@ describe("complete expansion rules inventory", () => {
     ).toMatchObject({
       changes: [{ field: "health", imported: 6, runtime: 5 }],
     });
-    for (const code of ["32086", "32092"]) {
+    for (const code of ["32086", "32092", "34028", "34031"]) {
       const correction = inventory.runtimeRuleCorrections.find(
         (entry: { code: string }) => entry.code === code,
       );
@@ -184,6 +195,10 @@ describe("complete expansion rules inventory", () => {
       ["ironheart", 43],
       ["spiderham", 39],
       ["spdr", 39],
+      ["cyclops", 36],
+      ["phoenix", 37],
+      ["wolv", 38],
+      ["storm", 40],
     ] as const) {
       expect(
         coverage.products.find((pack: { code: string }) => pack.code === code),
@@ -267,10 +282,29 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(coverage.executableFaces).toBe(1591);
-    expect(coverage.unsupportedFaces).toBe(2960);
-    expect(coverage.dedicatedFaces).toBe(1119);
-    expect(coverage.registeredHeroIds).toHaveLength(37);
+    for (const [pack, hero] of [
+      ["cyclops", "cyclops"],
+      ["phoenix", "phoenix"],
+      ["wolv", "wolverine"],
+      ["storm", "storm"],
+    ])
+      expect(
+        inventory.heroes.find(
+          (entry: { id: string }) => entry.id === `${pack}:${hero}`,
+        ),
+      ).toMatchObject({
+        registeredHeroIds: [hero],
+        installedCardClosure: true,
+        installedUnsupportedDependencies: [],
+      });
+    expect(MODULES).toHaveLength(20);
+    expect(MODULES.map((module) => module.id)).toEqual(
+      expect.arrayContaining(["deathstrike", "shadow_king"]),
+    );
+    expect(coverage.executableFaces).toBe(1725);
+    expect(coverage.unsupportedFaces).toBe(2826);
+    expect(coverage.dedicatedFaces).toBe(1258);
+    expect(coverage.registeredHeroIds).toHaveLength(41);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
     );
@@ -439,7 +473,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(100);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(104);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
@@ -543,6 +577,10 @@ describe("complete expansion rules inventory", () => {
       "src/game/ironspider-sinister.ts",
       "src/game/colossus.ts",
       "src/game/shadowcat.ts",
+      "src/game/cyclops.ts",
+      "src/game/phoenix.ts",
+      "src/game/wolverine.ts",
+      "src/game/storm.ts",
       "src/game/mutant-genesis-player-pack.ts",
       "src/game/sabretooth.ts",
       "src/game/brotherhood.ts",

@@ -432,6 +432,22 @@ export function phoenixSyncControlled(s: GameState) {
           p.engagedWith = seat.id;
           if (!s.minions.some((q) => q.id === p.id)) s.minions.push(p);
         }
+      } else if (!latest && card(p).type_code === "ally") {
+        // RRG control: when a control-changing ability ends, an originally
+        // player-owned ally returns to its owner, not its last controller.
+        const current = controller(s, p.id);
+        const owner = s.players.find(
+          (seat) => seat.id === p.ownerId && !seat.eliminated,
+        );
+        if (owner && current?.id !== owner.id) {
+          if (current) {
+            const player = seatView(s, current).player;
+            player.inPlay = player.inPlay.filter((q) => q.id !== p.id);
+          }
+          s.minions = s.minions.filter((q) => q.id !== p.id);
+          delete p.engagedWith;
+          seatView(s, owner).player.inPlay.push(p);
+        }
       }
     }
   }
@@ -531,6 +547,12 @@ export function phoenixPayment(s: GameState, spent: Piece, event?: Piece) {
   )
     s.flags[`phoenixPassion:${event.id}`] =
       Number(s.flags[`phoenixPassion:${event.id}`] || 0) + 1;
+}
+/** Alterations belong to one play, even when the same physical event returns
+ * to hand before its resolving-zone cleanup runs. */
+export function phoenixEventFinished(s: GameState, id: string) {
+  for (const seat of s.players)
+    delete seatView(s, seat).flags[`phoenixPassion:${id}`];
 }
 export const phoenixThwartBonus = (s: GameState) =>
   Number(s.flags[`phoenixPassion:${s.currentEventId}`] || 0);

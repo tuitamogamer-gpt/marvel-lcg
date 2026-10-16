@@ -89,6 +89,26 @@ function useAlly(s: GameState, p: Piece, target: string) {
 }
 
 describe("Cyclops independent timing and cross-seat regressions", () => {
+  it.each([false, true])(
+    "Mister Sinister's actual villain boost resolves its star once (already stunned: %s)",
+    (alreadyStunned) => {
+      let s = base();
+      s.player.stunned = alreadyStunned;
+      s.player.stunCards = alreadyStunned ? 1 : 0;
+      const hp = s.player.hp;
+      const boost = makePiece(s, "33028");
+      s.encounter.deck.unshift(boost);
+      s = finish(native(s, { type: "enemyAttack", id: "villain" }));
+      expect(s.player.stunned).toBe(true);
+      expect(s.player.stunCards).toBe(1);
+      expect(s.player.hp).toBe(hp - 4 - (alreadyStunned ? 2 : 0));
+      expect(s.encounter.discard.filter((p) => p.id === boost.id)).toHaveLength(
+        1,
+      );
+      expect(s.attack).toBeNull();
+    },
+  );
+
   it("Exploit Weakness does not increase the dealt damage redirected to Armored Rhino Suit", () => {
     let s = base();
     attached(s, "33005", s.villain.id);

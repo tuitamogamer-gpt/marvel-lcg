@@ -900,6 +900,7 @@ function beginResolution(s: GameState, p: Piece) {
   if (!s.resolving.some((x) => x.id === p.id)) s.resolving.push(p);
 }
 function finishResolution(s: GameState, id: string) {
+  phoenix.phoenixEventFinished(s, id);
   const index = s.resolving.findIndex((p) => p.id === id);
   if (index < 0) return;
   const [p] = s.resolving.splice(index, 1);
@@ -17650,10 +17651,12 @@ function finishAttackAfterDamage(
   if (s.phase === "lost" || s.phase === "won") return;
   const retaliation =
     !sourceKeyword(s, a.attacker, "Ranged") &&
-    ((target === "hero" && s.player.hp > 0 && s.player.form === "hero") ||
+    ((target === "hero" && s.player.hp > 0) ||
       (target !== "hero" && !!find(s, target)))
       ? target === "hero"
-        ? sourceKeyword(s, "hero", "Retaliate")
+        ? s.player.form === "hero"
+          ? sourceKeyword(s, "hero", "Retaliate")
+          : storm.stormGlobal(s).retaliate
         : sourceKeyword(s, target, "Retaliate")
       : 0;
   if (a.isVillain) {

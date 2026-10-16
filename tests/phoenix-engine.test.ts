@@ -12,6 +12,7 @@ import {
   nativeHeroAbilityOptions,
   playable,
 } from "../src/game/engine.js";
+import { seatView, controller } from "../src/game/team.js";
 import { paymentSources } from "../src/game/payment.js";
 import { isTextBlank } from "../src/game/card-text.js";
 import { phoenixForce, phoenixChangeCounters } from "../src/game/phoenix.js";
@@ -530,7 +531,11 @@ describe("Phoenix pack timing and supplementary events", () => {
     const p = take(s, "34023"),
       r = take(s, "34025");
     s = paid(s, p, [r]);
-    s = resolve(choose(s, "power"));
+    const forceChoice = s.prompt?.options.find((o) =>
+      /Place 2 power counters/.test(o.label),
+    );
+    expect(forceChoice, JSON.stringify(s.prompt)).toBeDefined();
+    s = resolve(choose(s, forceChoice!.id));
     expect(s.player.exhausted).toBe(false);
     expect(s.player.inPlay.find((p) => p.id === cyclops.id)?.exhausted).toBe(
       false,
@@ -691,5 +696,102 @@ describe("Phoenix Suit applies identity-wide conditional keywords", () => {
     );
     expect(s.player.confused).toBe(false);
     expect(s.player.confuseCards).toBe(1);
+  });
+});
+
+describe("Mind Control ending returns original player-owned allies", () => {
+  it("returns the same ally to ownerp2 after older Beguiled leaves and Phoenixp1's Mind Control ends", () => {
+    let s = newGame({
+      heroId: "phoenix",
+      aspect: "justice",
+      villainId: "rhino",
+      seed: 34009,
+      pacing: "expert",
+      heroes: [
+        { heroId: "phoenix", aspect: "justice" },
+        { heroId: "spider_man", aspect: "justice" },
+      ],
+    });
+    s = resolve(command(s, { type: "MULLIGAN", ids: [] }));
+    s = resolve(command(s, { type: "MULLIGAN", ids: [] }));
+    s.player.deck.push(...s.player.hand.splice(0));
+    s.player.form = "hero";
+    const other = seatView(s, "p2").player;
+    const zone = [other.hand, other.deck].find((zone) =>
+      zone.some((p) => card(p).type_code === "ally"),
+    )!;
+    const index = zone.findIndex((p) => card(p).type_code === "ally");
+    const ally = zone.splice(index, 1)[0];
+    other.inPlay.push(ally);
+    expect(ally.ownerId).toBe("p2");
+    const beguiled = makePiece(s, "25031");
+    beguiled.attachedTo = ally.id;
+    s.attachments.push(beguiled);
+    s = resolve(native(s, { type: "draw", amount: 0 }));
+    expect(s.minions.some((p) => p.id === ally.id)).toBe(true);
+    const mind = take(s, "34009"),
+      a = take(s, "34025"),
+      b = take(s, "34026");
+    s = resolve(paid(s, mind, [a, b], ally.id));
+    expect(controller(s, ally.id)?.id).toBe("p1");
+    s = resolve(native(s, { type: "discardPiece", id: beguiled.id }));
+    expect(controller(s, ally.id)?.id).toBe("p1");
+    s = resolve(native(s, { type: "discardPiece", id: mind.id }));
+    expect(controller(s, ally.id)?.id).toBe("p2");
+    const physical = [
+      ...s.minions,
+      ...s.players.flatMap((seat) => seatView(s, seat).player.inPlay),
+    ].filter((p) => p.id === ally.id);
+    expect(physical).toHaveLength(1);
+    expect(physical[0].ownerId).toBe("p2");
+    expect(physical[0].treatedAsAlly).toBeUndefined();
+    expect(card(physical[0]).type_code).toBe("ally");
+  });
+});
+
+describe("Passion for Justice expires after its actual paid event", () => {
+  it("Morphogenetics returns the same Multitasking, whose replay removes only its printed2 threat from each scheme", () => {
+    const codes = deckCodes("ms_marvel", "justice");
+    const replace = codes
+      .map((code, index) => ({ code, index }))
+      .filter(({ code }) => card(code).faction_code === "justice")
+      .slice(0, 2);
+    codes[replace[0].index] = "15013";
+    codes[replace[1].index] = "34020";
+    let s = newGame({
+      heroId: "ms_marvel",
+      aspect: "justice",
+      villainId: "rhino",
+      seed: 34020,
+      pacing: "expert",
+      heroes: [{ heroId: "ms_marvel", aspect: "justice", deckCards: codes }],
+    });
+    s = resolve(command(s, { type: "MULLIGAN", ids: [] }));
+    s.player.deck.push(...s.player.hand.splice(0));
+    s.player.form = "hero";
+    s.player.exhausted = false;
+    s.scheme.threat = 6;
+    const event = take(s, "15013"),
+      passion = take(s, "34020");
+    const mentalCode = s.player.deck.find((p) => card(p).resource_mental)!;
+    const mental = take(s, mentalCode.code);
+    const side = encounter(s, "01107");
+    side.counters = 6;
+    s.sideSchemes.push(side);
+    s = command(s, { type: "PLAY", id: event.id });
+    s = pay(s, [passion], "mental");
+    s = choose(s, "main");
+    s = resolve(respond(s, /Morphogenetics/));
+    expect(s.scheme.threat).toBe(3);
+    expect(s.sideSchemes.find((p) => p.id === side.id)?.counters).toBe(3);
+    expect(s.player.hand.filter((p) => p.id === event.id)).toHaveLength(1);
+    expect(s.player.exhausted).toBe(true);
+    s = command(reload(s), { type: "PLAY", id: event.id });
+    s = pay(s, [mental]);
+    s = resolve(choose(s, "main"));
+    expect(s.scheme.threat).toBe(1);
+    expect(s.sideSchemes.find((p) => p.id === side.id)?.counters).toBe(1);
+    expect(s.player.discard.filter((p) => p.id === event.id)).toHaveLength(1);
+    expect(s.player.discard.filter((p) => p.id === passion.id)).toHaveLength(1);
   });
 });

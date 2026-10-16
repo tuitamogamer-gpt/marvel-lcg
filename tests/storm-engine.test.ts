@@ -178,6 +178,18 @@ describe("Storm original source and physical weather", () => {
     s = finish(s);
     expect(s.player.hp).toBe(hp - 1);
   });
+  it("Hurricane retaliates when Mutant Detected explicitly attacks an alter ego", () => {
+    let s = base("36003");
+    s.player.form = "alter";
+    const hp = s.player.hp;
+    const villainHP = s.villain.hp;
+    expect(card("32098").text).toContain("even if you are in alter-ego form");
+    s = choose(reveal(reload(s), "32098"), "attacks");
+    s = finish(s);
+    expect(s.player.form).toBe("alter");
+    expect(s.player.hp).toBe(hp - 2);
+    expect(s.villain.hp).toBe(villainHP - 1);
+  });
   it("Clear Skies removes statuses from every character even in alter ego", () => {
     let s = base("36004");
     const ally = take(s, "36014", "inPlay");
