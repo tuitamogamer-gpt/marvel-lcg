@@ -835,6 +835,7 @@ export const MODULES = [
   { id: "mystique", name: "Mystique", difficulty: 3 },
   { id: "zero_tolerance", name: "Zero Tolerance", difficulty: 3 },
   { id: "sentinels", name: "Sentinels", difficulty: 3 },
+  { id: "acolytes", name: "Acolytes", difficulty: 4 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {

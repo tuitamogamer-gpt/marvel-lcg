@@ -134867,8 +134867,8 @@
       },
       "installedRegistry": {
         "code": "32159",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -134909,8 +134909,8 @@
       },
       "installedRegistry": {
         "code": "32160",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -134953,8 +134953,8 @@
       },
       "installedRegistry": {
         "code": "32161",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -134995,8 +134995,8 @@
       },
       "installedRegistry": {
         "code": "32162",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -135038,8 +135038,8 @@
       },
       "installedRegistry": {
         "code": "32163",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -135075,8 +135075,8 @@
       },
       "installedRegistry": {
         "code": "32164",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -135115,8 +135115,8 @@
       },
       "installedRegistry": {
         "code": "32165",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -265017,15 +265017,15 @@
     "src/data/catalog-decks.json": "6d75a9c883223b59a9b9d950696de7b6876f8921ffe025d40e352495c1a2b886",
     "src/data/core-player.json": "451c26f5ca50fd7b9c4bfc167675a23031b411c291bc546ad011c608603bbfa2",
     "src/data/core-encounter.json": "db9ec82bf2b9aa6b00bc813bc6b64aac3d0237996e3393f47d8dbd3645ddd2da",
-    "src/game/engine.ts": "7b7d03ee3718c1750f59404df6bfe35801dd44d45c4395e7ff052f8a26d82118",
+    "src/game/engine.ts": "0bd0ffe8f6cbcfac114ac3b3ba426eb0c05176675c93c81e478cc1785808a2df",
     "src/data/catalog-provenance.json": "8dddd4de54508b44039d4cf196a98550503486efdaf2ac9771de55992a77b7e4",
     "src/game/scripts/compiler.ts": "33feb608b78cc98fa23bfca85926b8213dd82b4a056d419fa459e6bef5363e87",
     "src/game/scripts/runtime.ts": "60ed7040b44d97589d6eb3e0583e6153680757c1de50fe8788c5dd48d1c355ac",
     "src/game/scripts/types.ts": "7c911c5060b6d6945391256137de71ac00a4adb75b5765040b7a6f0a71dbe2fc",
     "src/game/script-registry.ts": "ef1a70d1b07d46a9165045e38cbaeb6acecbffc303bda84db9a810bc44d9d0f5",
     "src/game/keywords.ts": "773badc9609fc065a43227235c04609b4525e25cf25bdebe3bc216411a2e693d",
-    "src/game/engine-support.ts": "f013f57ba865dafff590a9c0548353e07b8be85275ab0259c66d85baf62c939c",
-    "src/game/cards.ts": "203d7af080711eb2c1fde5e242f7c8c909e9243c5b8ec9b0c24ef17fe48a797e",
+    "src/game/engine-support.ts": "4e97cac0aed86d8e4a25960096a37a2b048b3dc0461662891f50a1e010945a94",
+    "src/game/cards.ts": "e2bad35d7b3ab9f47a22495847074d610741720c03978915d057a1b720afab39",
     "src/game/captain-america.ts": "5bb14dcaabee414f466b7cc22e4f2a00f3e32575f7d6db9d9ff70294e43ef12f",
     "src/game/captain-pack.ts": "5da521a1e13a0eccca9b0821dc9418dc452947b1ed15ef81db550a362c8029ba",
     "src/game/hulk.ts": "b450aa1dc93bbc55150db96af40ac71e2c0cae858270018b73ebfc880e8b26e7",
@@ -265095,6 +265095,7 @@
     "src/game/mansion-attack.ts": "90a24305cb26b33a3912084ea8f1ec997d58dc7d38a7a31fc2f6e3b27e98f5ee",
     "src/game/zero-tolerance.ts": "c89468e4cbabed5c0173971bd5d0f750adb9fb9bf3a6097c6defb1348819ab19",
     "src/game/sentinels.ts": "2a924b5102d95733ebc3855884e6da3f84bd196e9bed1376c103aad976e405e8",
+    "src/game/acolytes.ts": "a054ef8b380b6b1b1adb5880c176a2b1ed0f533d8b246c05d33d44dfd2282170",
     "src/game/printed-card-metadata.ts": "2ac0b4b4f5f7c2174e9e1d1775614500c62b3016b0fa69df437faaf570d8627b",
     "src/game/card-text.ts": "c4db239cc347fee2309db4d39d5b29baf9361d431dc978e044d5710acb3150f8",
     "src/game/expansion-errata.ts": "239230c858f2b0abce2c474ea3962494402b9378e4e7902918e68aaf2422907d",
@@ -289382,9 +289383,9 @@
   },
   "installedRegistryCoverage": {
     "total": 4551,
-    "executableFaces": 1558,
-    "unsupportedFaces": 2993,
-    "dedicatedFaces": 1086,
+    "executableFaces": 1565,
+    "unsupportedFaces": 2986,
+    "dedicatedFaces": 1093,
     "dedicatedCodes": [
       "02001a",
       "02001b",
@@ -290471,6 +290472,13 @@
       "32135",
       "32136",
       "32137",
+      "32159",
+      "32160",
+      "32161",
+      "32162",
+      "32163",
+      "32164",
+      "32165",
       "32172b"
     ],
     "registeredHeroIds": [
@@ -291887,7 +291895,7 @@
         "code": "mut_gen",
         "name": "Mutant Genesis",
         "faceCount": 224,
-        "executableFaces": 157,
+        "executableFaces": 164,
         "unsupportedFaceCodes": [
           "32138",
           "32139",
@@ -291915,13 +291923,6 @@
           "32156",
           "32157",
           "32158",
-          "32159",
-          "32160",
-          "32161",
-          "32162",
-          "32163",
-          "32164",
-          "32165",
           "32166",
           "32167",
           "32168",
@@ -307830,44 +307831,44 @@
       },
       {
         "code": "32159",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "32160",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "32161",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "32162",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "32163",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "32164",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "32165",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {

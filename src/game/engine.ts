@@ -1,3 +1,4 @@
+import * as acolytes from "./acolytes.js";
 import * as armadillo from "./armadillo.js";
 import * as inheritors from "./inheritors.js";
 import * as brotherhood from "./brotherhood.js";
@@ -498,6 +499,12 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
       s &&
       typeof p !== "string" &&
       name === "Guard" &&
+      acolytes.acolytesGuard(s, p)
+    ) ||
+    !!(
+      s &&
+      typeof p !== "string" &&
+      name === "Guard" &&
       masterMold.masterMoldModifiers(s, p, {
         isTextBlank,
         hasTrait: captainPackHasTrait,
@@ -709,7 +716,9 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
   );
   const intrinsic = Math.max(
     isTextBlank(s, p) ? 0 : printedKeyword(card(p), name),
-    Number(name === "Guard" && moldKeywords.guard),
+    Number(
+      name === "Guard" && (moldKeywords.guard || acolytes.acolytesGuard(s, p)),
+    ),
     Number(
       name === "Stalwart" && sabretooth.sabretoothModifiers(s, p.id).stalwart,
     ),
@@ -723,7 +732,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     Number(
       !!(
         name === "Piercing" &&
-        (granted.piercing ||
+        (acolytes.acolytesPiercing(s, p) ||
+          granted.piercing ||
           nebula.nebulaNamedCharacterModifiers(s, card(p).name).piercing ||
           warMachine.warMachineEnemyKeywords(s, p).piercing ||
           sabretooth.sabretoothModifiers(s, p.id).piercing ||
@@ -2964,6 +2974,26 @@ function defeatCharacter(
     );
     return true;
   }
+  if (minion && !s.flags[`acolytesDefeat:${m.id}`]) {
+    const actor = source.startsWith("hero:")
+      ? source.slice(5)
+      : controller(s, source)?.id || s.activePlayerId;
+    const effects = acolytes.acolytesDefeated(s, m, actor, [
+      E("finishDefeat", {
+        id: m.id,
+        source,
+        attack,
+        enemyAttack,
+        valkyrieReceipts: receipts,
+      }),
+    ]);
+    if (effects) {
+      m.pendingDefeat = true;
+      s.flags[`acolytesDefeat:${m.id}`] = true;
+      add(s, ...effects);
+      return true;
+    }
+  }
   const tracers = allInPlay(s).filter(
     (a) =>
       rulesCode(a) === "01007" && a.attachedTo === m.id && !isTextBlank(s, a),
@@ -3004,6 +3034,7 @@ function defeatCharacter(
         actorId: allyController,
       }),
     );
+  delete s.flags[`acolytesDefeat:${m.id}`];
   log(s, `${name} is defeated.`, "good");
   if (minion) {
     if (
@@ -5378,6 +5409,7 @@ export function newGame(config: {
               "mystique",
               "zero_tolerance",
               "sentinels",
+              "acolytes",
             ].includes(c.set_code || "")
               ? "mut_gen"
               : c.set_code === "ironspider_sinister"
@@ -12610,6 +12642,41 @@ const mystiquePorts: mystique.MystiquePorts = {
   revealHidden,
 };
 
+const acolytesPorts: acolytes.AcolytesPorts = {
+  queue: add,
+  activate: (s, id, playerId) =>
+    mystiquePorts.activateMystique(s, id, playerId, []),
+  discardUntil: (s, trait, after) =>
+    brotherhoodPorts.discardUntilMinion(s, trait, after),
+  reveal: (s, p, playerId, after) =>
+    brotherhoodPorts.revealDiscardedMinion(s, p, playerId, after),
+  put: (s, p, playerId, after) => {
+    const before = s.queue.length;
+    mutagenPorts.putMinion(s, p, playerId);
+    const entered = s.queue.splice(0, s.queue.length - before);
+    // Fabian's When Defeated finishes and he leaves play BEFORE the new
+    // minion's Teamwork window (official June 17, 2025 ruling).
+    add(s, ...after, ...entered);
+  },
+  boost: (s) => {
+    const p = drawEncounter(s);
+    if (p) (s.encounter.storedBoosts ||= []).push(p);
+  },
+  clearVillainStatuses: (s) => {
+    s.villain.stunCards = s.villain.confuseCards = 0;
+    s.villain.stunned = s.villain.confused = false;
+  },
+  shuffle: (s) => {
+    const selected = s.encounter.discard.filter(acolytes.acolyte);
+    s.encounter.discard = s.encounter.discard.filter(
+      (p) => !selected.includes(p),
+    );
+    s.encounter.deck.push(...selected);
+    mutagenPorts.shuffleEncounter(s);
+    revealHidden(s);
+  },
+};
+
 const inheritorsPorts: inheritors.InheritorsPorts = {
   queue: add,
   choose,
@@ -12674,6 +12741,7 @@ function minionEntered(s: GameState, p: Piece) {
       },
       { isTextBlank },
     ),
+    ...acolytes.acolytesEngaged(s, p),
     ...ironspider.ironspiderSinisterEngagementResponses(s, p),
     ...spiderHam.spiderHamMinionEngaged(s, p),
     E("valkPackEngagementWindow", { id: p.id }),
@@ -15387,6 +15455,7 @@ function declareDefense(s: GameState) {
 }
 function boostEffects(s: GameState, p: Piece) {
   const mutantScenarioBoost =
+    acolytes.acolytesBoost(s, p) ??
     mansionAttack.mansionAttackBoost(s, p) ??
     masterMold.masterMoldBoost(s, p) ??
     wideawake.projectWideawakeBoost(s, p) ??
@@ -16868,9 +16937,10 @@ function reveal(
   }
   if (
     !repeat &&
-    (mansionAttack.MANSION_ATTACK_SCRIPT_CODES.some(
-      (code) => code === p.code,
-    ) ||
+    (acolytes.ACOLYTES_SCRIPT_CODES.some((code) => code === p.code) ||
+      mansionAttack.MANSION_ATTACK_SCRIPT_CODES.some(
+        (code) => code === p.code,
+      ) ||
       masterMold.MASTER_MOLD_SCRIPT_CODES.some((code) => code === p.code) ||
       wideawake.PROJECT_WIDEAWAKE_SCRIPT_CODES.some(
         (code) => code === p.code,
@@ -17054,6 +17124,7 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    acolytes.acolytesReveal(s, p) ??
     mansionAttack.mansionAttackReveal(s, p, { isTextBlank }) ??
     masterMold.masterMoldReveal(s, p, { isTextBlank }) ??
     wideawake.projectWideawakeReveal(s, p, { isTextBlank }) ??
@@ -17814,6 +17885,16 @@ function resolve(s: GameState, e: Effect) {
     for (const key of ["target", "targetId", "enemyId", "attacker"])
       if (e[key] === "villain") e[key] = s.villain.id;
   }
+  if (e.type === "acolytes-native:order") {
+    choose(
+      s,
+      "Zeal for the Cause",
+      "Choose the next When Defeated ability to resolve.",
+      e.options,
+    );
+    return;
+  }
+  if (acolytes.resolveAcolytesEffect(s, e, acolytesPorts)) return;
   if (resolveMansionAttackNativeEffect(s, e)) return;
   if (mansionAttack.resolveMansionAttackEffect(s, e, mansionAttackPorts))
     return;
@@ -17929,6 +18010,7 @@ function resolve(s: GameState, e: Effect) {
         const previous = state.currentRevealWindowId;
         state.currentRevealWindowId = windowId;
         const effects =
+          acolytes.acolytesReveal(state, piece) ??
           mansionAttack.mansionAttackReveal(state, piece, { isTextBlank }) ??
           masterMold.masterMoldReveal(state, piece, { isTextBlank }) ??
           wideawake.projectWideawakeReveal(state, piece, { isTextBlank }) ??
@@ -25512,6 +25594,8 @@ function run(s: GameState) {
       e.type.startsWith("mastermold-native:") ||
       e.type.startsWith("zero-tolerance:") ||
       e.type.startsWith("sentinels:") ||
+      e.type.startsWith("acolytes:") ||
+      e.type.startsWith("acolytes-native:") ||
       e.type === "mystique-native:activation-finish";
     if (actor?.eliminated && !global) continue;
     activateSeat(
