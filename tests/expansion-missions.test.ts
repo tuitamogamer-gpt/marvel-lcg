@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { magnetoIdentityRestricted } from "../src/game/magneto";
+import { cyclopsCanAttack } from "../src/game/cyclops";
 import { isTextBlank } from "../src/game/card-text";
 import { visionCanAttack } from "../src/game/vision";
 import { valkyrieCannotBasicAttack } from "../src/game/valkyrie";
@@ -475,7 +476,10 @@ function runMission(config: (typeof missions)[number]) {
         ((!!targets(s, "scheme").length && heroStats(s).thwart > 0) ||
           s.player.confused);
       const urgent = s.scheme.threat >= 3 || !!s.sideSchemes.length;
-      const canAttack = visionCanAttack(s) && !valkyrieCannotBasicAttack(s);
+      const canAttack =
+        visionCanAttack(s) &&
+        cyclopsCanAttack(s) &&
+        !valkyrieCannotBasicAttack(s);
       if (!canAttack && !canThwart) return;
       act({
         type: "BASIC",
@@ -536,9 +540,7 @@ describe("published expansion starters across every supported mission setting", 
     );
     expect(retained).toHaveLength(11328);
     expect(
-      createHash("sha256")
-        .update(manifest(retained).join("\n"))
-        .digest("hex"),
+      createHash("sha256").update(manifest(retained).join("\n")).digest("hex"),
     ).toBe("8639244ce44d6832c10f3f51edb418a1435a42fa862f629f47a62b4016e519a0");
     expect(new Set(missions.map(key)).size).toBe(14184);
     expect(new Set(combined.map(key)).size).toBe(14184);
