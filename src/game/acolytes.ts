@@ -94,22 +94,14 @@ export function resolveAcolytesEffect(
       const live = s.minions.filter((m) => !m.pendingDefeat && acolyte(m));
       const entered = live.find((m) => m.id === e.id);
       if (!entered || isTextBlank(s, entered) || live.length < 2) break;
-      // The second Acolyte may engage a different player. Every qualifying
-      // minion activates against its own engaged player, including the entrant.
+      // RRG 1.8 p43 supersedes the original expansion insert: only the
+      // entrant activates, against its own engaged player.
       ports.queue(
         s,
-        ...live
-          .filter(
-            (m) =>
-              !isTextBlank(s, m) &&
-              ACOLYTES_SCRIPT_CODES.slice(0, 5).includes(m.code as never),
-          )
-          .map((m) =>
-            A("activate", {
-              id: m.id,
-              playerId: m.engagedWith || s.activePlayerId,
-            }),
-          ),
+        A("activate", {
+          id: entered.id,
+          playerId: entered.engagedWith || s.activePlayerId,
+        }),
       );
       break;
     }

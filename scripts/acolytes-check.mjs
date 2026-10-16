@@ -156,7 +156,7 @@ try {
       const player = (id) => s.players.find((p) => p.id === id).player;
       // Active seat lives in s.player until synchronization; persisted seats are native.
       if (kind === "teamwork") {
-        assert.equal(player("p1").hp, 97);
+        assert.equal(player("p1").hp, 100);
         assert.equal(player("p2").hp, 99);
       }
       if (kind === "zeal") {

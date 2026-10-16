@@ -124,7 +124,7 @@ describe("Acolytes original-card native integration", () => {
     expect(s.player.hp).toBe(hp);
   });
   it.each(["hero", "alter"] as const)(
-    "Teamwork activates both minions against their own %s seats",
+    "current Teamwork activates only the entrant against its own %s seat",
     (form) => {
       let s = base(true);
       const first = put(s, "32161", "p1");
@@ -132,9 +132,9 @@ describe("Acolytes original-card native integration", () => {
       const before = s.scheme.threat;
       s = reveal(s, "32160", "p2");
       if (form === "hero") {
-        expect(seatView(s, "p1").player.hp).toBe(97);
+        expect(seatView(s, "p1").player.hp).toBe(100);
         expect(seatView(s, "p2").player.hp).toBe(99);
-      } else expect(s.scheme.threat).toBe(before + 3);
+      } else expect(s.scheme.threat).toBe(before + 2);
       expect(s.minions.find((p) => p.id === first.id)?.engagedWith).toBe("p1");
     },
   );
@@ -230,7 +230,7 @@ describe("Acolytes original-card native integration", () => {
     const next = take(s, "32161");
     s.encounter.deck.unshift(next);
     s = defeat(s, fabian);
-    expect(s.player.hp).toBe(96);
+    expect(s.player.hp).toBe(97);
   });
   it("Fabian's discard stops at deck exhaustion without finding himself", () => {
     let s = base();
@@ -382,5 +382,22 @@ describe("Acolytes original-card native integration", () => {
     s = reveal(s, "32164");
     expect(s.encounter.deck[0].id).toBe(next);
     expect(s.player.confused).toBe(false);
+  });
+  it("a blank entrant does not trigger Teamwork", () => {
+    let s = base(true);
+    put(s, "32161", "p1");
+    const entrant = take(s, "32160");
+    s.flags["novaIronheartPackBlank:" + entrant.id] = s.round;
+    s = settle(native(s, { type: "reveal", piece: entrant, actorId: "p2" }));
+    expect(seatView(s, "p1").player.hp).toBe(100);
+    expect(seatView(s, "p2").player.hp).toBe(100);
+  });
+  it("a blank other Acolyte still satisfies the entrant's trait condition", () => {
+    let s = base(true);
+    const other = put(s, "32161", "p1");
+    s.flags["novaIronheartPackBlank:" + other.id] = s.round;
+    s = reveal(s, "32160", "p2");
+    expect(seatView(s, "p1").player.hp).toBe(100);
+    expect(seatView(s, "p2").player.hp).toBe(99);
   });
 });

@@ -265095,7 +265095,7 @@
     "src/game/mansion-attack.ts": "90a24305cb26b33a3912084ea8f1ec997d58dc7d38a7a31fc2f6e3b27e98f5ee",
     "src/game/zero-tolerance.ts": "c89468e4cbabed5c0173971bd5d0f750adb9fb9bf3a6097c6defb1348819ab19",
     "src/game/sentinels.ts": "2a924b5102d95733ebc3855884e6da3f84bd196e9bed1376c103aad976e405e8",
-    "src/game/acolytes.ts": "a054ef8b380b6b1b1adb5880c176a2b1ed0f533d8b246c05d33d44dfd2282170",
+    "src/game/acolytes.ts": "45c5db6fe1fe52653bd01554f2fccc238ffff79bccc95ee1783f112e8cb1323f",
     "src/game/printed-card-metadata.ts": "2ac0b4b4f5f7c2174e9e1d1775614500c62b3016b0fa69df437faaf570d8627b",
     "src/game/card-text.ts": "c4db239cc347fee2309db4d39d5b29baf9361d431dc978e044d5710acb3150f8",
     "src/game/expansion-errata.ts": "239230c858f2b0abce2c474ea3962494402b9378e4e7902918e68aaf2422907d",
