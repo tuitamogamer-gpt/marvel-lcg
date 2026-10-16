@@ -374,6 +374,7 @@ describe("Mutant Genesis printed scope and physical forms", () => {
         c.pack_code === "mut_gen" &&
         c.position > 137 &&
         c.set_code !== "acolytes" &&
+        c.set_code !== "magneto_villain" &&
         c.code !== "32172b",
     )) {
       expect(hasExecutableScript(c.code), c.code).toBe(false);

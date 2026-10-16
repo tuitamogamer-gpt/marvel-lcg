@@ -1,3 +1,5 @@
+import { magnetoIdentityRestricted } from "../src/game/magneto";
+import { isTextBlank } from "../src/game/card-text";
 import { describe, expect, it } from "vitest";
 import {
   CARDS,
@@ -665,7 +667,11 @@ describe("complete seeded missions", () => {
           round++
         ) {
           if (s.player.form === "alter") {
-            if (s.player.hp < maxHP(s) && !s.player.exhausted)
+            if (
+              s.player.hp < maxHP(s) &&
+              !s.player.exhausted &&
+              !magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
+            )
               command({ type: "BASIC", action: "recover" });
             if (
               (h.id === "captain_marvel" && !s.flags.commander) ||
@@ -708,7 +714,11 @@ describe("complete seeded missions", () => {
             });
           }
           if (s.phase !== "player") break;
-          if (!s.player.exhausted && s.player.form === "hero") {
+          if (
+            !s.player.exhausted &&
+            s.player.form === "hero" &&
+            !magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
+          ) {
             const cannotAttack =
               !visionCanAttack(s) || valkyrieCannotBasicAttack(s);
             const canThwart =

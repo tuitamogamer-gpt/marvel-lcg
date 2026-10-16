@@ -812,6 +812,19 @@ export const VILLAINS = [
     description:
       "Defend the school against a hidden deck of Brotherhood villains as the battle moves through the mansion.",
   },
+  {
+    id: "magneto",
+    name: "Magneto",
+    codes: ["32138", "32139", "32140"],
+    schemes: ["32141b", "32142b", "32143b"],
+    module: "acolytes",
+    difficulty: 4,
+    title: "Asteroid M",
+    location: "Earth orbit",
+    color: "#a35b91",
+    description:
+      "Board Asteroid M, sabotage Master Mold and survive Magneto's magnetic assault.",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },

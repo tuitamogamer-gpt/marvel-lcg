@@ -465,10 +465,11 @@ describe("Mansion Attack executable source acceptance", () => {
         c.pack_code === "mut_gen" &&
         c.position > 137 &&
         c.set_code !== "acolytes" &&
+        c.set_code !== "magneto_villain" &&
         c.code !== "32172b",
     ))
       expect(hasExecutableScript(c.code), c.code).toBe(false);
-    expect(VILLAINS.some((v) => v.id === "magneto_villain")).toBe(false);
+    expect(MODULES.some((m) => m.id === "future_past")).toBe(false);
   });
 
   it("requires Brotherhood plus exactly one independently replaceable modular slot", () => {

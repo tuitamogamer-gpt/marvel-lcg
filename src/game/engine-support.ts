@@ -1,3 +1,4 @@
+import { MAGNETO_SCRIPT_CODES } from "./magneto.js";
 import { ACOLYTES_SCRIPT_CODES } from "./acolytes.js";
 import { ANT_MAN_SCRIPT_CODES } from "./ant-man.js";
 import { ANT_MAN_PACK_SCRIPT_CODES } from "./ant-man-pack.js";
@@ -109,6 +110,7 @@ export const SCRIPTED_HERO_IDS = new Set([
   "shadowcat",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
+  ...MAGNETO_SCRIPT_CODES,
   ...ACOLYTES_SCRIPT_CODES,
   ...MASTER_MOLD_SCRIPT_CODES,
   ...MANSION_ATTACK_SCRIPT_CODES,

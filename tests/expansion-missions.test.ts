@@ -1,3 +1,5 @@
+import { magnetoIdentityRestricted } from "../src/game/magneto";
+import { isTextBlank } from "../src/game/card-text";
 import { visionCanAttack } from "../src/game/vision";
 import { valkyrieCannotBasicAttack } from "../src/game/valkyrie";
 import { doctorStrangeAbilityOptions } from "../src/game/doctor-strange";
@@ -156,11 +158,12 @@ function ownedPieces(s: GameState, originalIds: Set<string>): Piece[] {
   return pieces.filter((p) => originalIds.has(p.id));
 }
 
-/** Mansion's physical piles include the active main card and suspended native
- * boost piles. Public main counters and the retired villain view own no cards. */
-function mansionPhysicalPieces(s: GameState): Piece[] {
-  if (s.villainId !== "mansion_attack") return [];
-  const m = s.mansionAttack!;
+/** Native scenario piles own original main/villain/progress cards. Public
+ * scheme counters, attacker snapshots and retired villain views own no cards. */
+function scenarioPhysicalPieces(s: GameState): Piece[] {
+  if (!["mansion_attack", "magneto"].includes(s.villainId)) return [];
+  const m = s.mansionAttack;
+  const g = s.magneto;
   const pieces: Piece[] = [];
   const visit = (p: Piece) => {
     pieces.push(p);
@@ -192,10 +195,15 @@ function mansionPhysicalPieces(s: GameState): Piece[] {
     ...(s.encounter.storedBoosts || []),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
-    ...(m.activeVillainRetired ? [] : [s.villain]),
-    ...m.villainDeck,
-    ...m.mainDeck,
-    ...(m.currentMain ? [m.currentMain] : []),
+    ...(m?.activeVillainRetired ? [] : [s.villain]),
+    ...(m?.villainDeck || g?.villainDeck || []),
+    ...(m?.mainDeck || g?.mainDeck || []),
+    ...(m?.currentMain
+      ? [m.currentMain]
+      : g?.currentMain
+        ? [g.currentMain]
+        : []),
+    ...(g?.orbital ? [g.orbital] : []),
     ...s.minions,
     ...s.sideSchemes,
     ...s.attachments,
@@ -279,22 +287,26 @@ function runMission(config: (typeof missions)[number]) {
   expect(originalIds.size, "Original physical source IDs are distinct").toBe(
     total,
   );
-  const mansionSources =
+  const scenarioSet =
     s.villainId === "mansion_attack"
-      ? mansionPhysicalPieces(s).filter(
-          (p) => card(p).set_code === "mansion_attack",
-        )
-      : [];
-  const mansionIds = mansionSources.map((p) => p.id).sort();
-  const mansionCodeFamily = new Map(
-    mansionSources.map((p) => [p.id, p.code.replace(/[ab]$/, "")]),
+      ? "mansion_attack"
+      : s.villainId === "magneto"
+        ? "magneto_villain"
+        : undefined;
+  const scenarioSources = scenarioSet
+    ? scenarioPhysicalPieces(s).filter((p) => card(p).set_code === scenarioSet)
+    : [];
+  const scenarioIds = scenarioSources.map((p) => p.id).sort();
+  const scenarioCodeFamily = new Map(
+    scenarioSources.map((p) => [p.id, p.code.replace(/[ab]$/, "")]),
   );
-  if (s.villainId === "mansion_attack") {
+  if (scenarioSet) {
+    const expected = scenarioSet === "mansion_attack" ? 25 : 29;
     expect(
-      mansionSources,
-      "all 25 original Mansion Attack cards begin in physical zones",
-    ).toHaveLength(25);
-    expect(new Set(mansionIds).size).toBe(25);
+      scenarioSources,
+      "All selected original scenario cards begin in physical zones",
+    ).toHaveLength(expected);
+    expect(new Set(scenarioIds).size).toBe(expected);
   }
   const trace: string[] = [];
   let commands = 0;
@@ -310,19 +322,19 @@ function runMission(config: (typeof missions)[number]) {
     ).toBe(total);
     // ownedPieces admits only original IDs. Equal total and distinct counts
     // therefore prove every original instance occurs exactly once.
-    if (s.villainId === "mansion_attack") {
-      const actual = mansionPhysicalPieces(s).filter(
-        (p) => card(p).set_code === "mansion_attack",
+    if (scenarioSet) {
+      const actual = scenarioPhysicalPieces(s).filter(
+        (p) => card(p).set_code === scenarioSet,
       );
       expect(
         actual.map((p) => p.id).sort(),
-        `all original Mansion source IDs after ${trace.at(-1)}`,
-      ).toEqual(mansionIds);
+        `all original ${scenarioSet} source IDs after ${trace.at(-1)}`,
+      ).toEqual(scenarioIds);
       for (const p of actual)
         expect(
           p.code.replace(/[ab]$/, ""),
           `same original double-sided source ${p.id}`,
-        ).toBe(mansionCodeFamily.get(p.id));
+        ).toBe(scenarioCodeFamily.get(p.id));
     }
   };
   const send = (command: Command) => {
@@ -372,7 +384,11 @@ function runMission(config: (typeof missions)[number]) {
   act({ type: "MULLIGAN", ids: [] });
   for (let round = 0; round < 60 && !ended(s); round++) {
     if (s.player.form === "alter") {
-      if (s.player.hp < maxHP(s) && !s.player.exhausted)
+      if (
+        s.player.hp < maxHP(s) &&
+        !s.player.exhausted &&
+        !magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
+      )
         act({ type: "BASIC", action: "recover" });
       const identity = [
         ...nativeHeroAbilityOptions(s),
@@ -434,7 +450,12 @@ function runMission(config: (typeof missions)[number]) {
       if (density) act({ type: "ABILITY", id: "identity", action: density.id });
     }
     const basic = () => {
-      if (s.player.exhausted || s.player.form !== "hero") return;
+      if (
+        s.player.exhausted ||
+        s.player.form !== "hero" ||
+        magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
+      )
+        return;
       const canThwart =
         !captainThwartBlocked(s) &&
         ((!!targets(s, "scheme").length && heroStats(s).thwart > 0) ||
@@ -478,10 +499,10 @@ describe("published expansion starters across every supported mission setting", 
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(9);
+    expect(VILLAINS).toHaveLength(10);
     expect(MODULES).toHaveLength(18);
     expect(heroIds).toHaveLength(32);
-    expect(missions).toHaveLength(10176);
+    expect(missions).toHaveLength(11328);
     const key = (mission: (typeof missions)[number]) =>
       [
         mission.heroId,
@@ -492,14 +513,14 @@ describe("published expansion starters across every supported mission setting", 
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
     const combined = partitions.flat();
-    expect(new Set(missions.map(key)).size).toBe(10176);
-    expect(new Set(combined.map(key)).size).toBe(10176);
+    expect(new Set(missions.map(key)).size).toBe(11328);
+    expect(new Set(combined.map(key)).size).toBe(11328);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(2544);
+      expect(partition).toHaveLength(2832);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(8);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 2544 : 10176);
+    expect(selectedMissions).toHaveLength(isSharded ? 2832 : 11328);
   });
   for (const mission of selectedMissions)
     it(

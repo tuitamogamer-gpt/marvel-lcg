@@ -15,6 +15,10 @@ type PrintedMetadata = Readonly<
  * https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/<code>.jpg
  */
 const printedMetadata: Readonly<Record<string, PrintedMetadata>> = {
+  // public/cards/catalog/32153.webp: printed instruction names a magnet counter.
+  "32153": {
+    text: "<b>When Revealed</b>: Exhaust each upgrade and support you control. Place 1 magnet counter on the main scheme.\n<hr />\n[star] <b>Boost</b>: Exhaust your identity.",
+  },
   // public/cards/catalog/19025.webp: two boost triangles, no boost star.
   "19025": { boost: 2 },
   // public/cards/catalog/19026.webp: two boost triangles, no boost star.

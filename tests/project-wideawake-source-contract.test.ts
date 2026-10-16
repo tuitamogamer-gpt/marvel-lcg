@@ -411,10 +411,11 @@ describe("Project Wideawake executable source acceptance", () => {
         c.pack_code === "mut_gen" &&
         c.position > 137 &&
         c.set_code !== "acolytes" &&
+        c.set_code !== "magneto_villain" &&
         c.code !== "32172b",
     ))
       expect(hasExecutableScript(c.code), c.code).toBe(false);
-    expect(VILLAINS.filter((v) => v.id === "magneto_villain")).toEqual([]);
+    expect(MODULES.filter((m) => m.id === "future_past")).toEqual([]);
   });
 
   it("requires fixed Zero Tolerance and exactly one separate replaceable modular set", () => {
