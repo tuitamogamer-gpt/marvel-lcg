@@ -1,6 +1,6 @@
 # Acolytes modular set
 
-This standalone import adds the seven original Mutant Genesis Acolytes cards (`32159`–`32165`) as an eighteenth selectable modular set. Magneto's scenario and the campaign remain pending. The downloaded catalog and images are unchanged.
+This standalone import adds the seven original Mutant Genesis Acolytes cards (`32159`–`32165`) as an eighteenth selectable modular set. The subsequent [Magneto scenario import](magneto-source-contract.md) uses Acolytes as its recommended modular set. Future Past and the campaign remain pending. The downloaded catalog and images are unchanged.
 
 ## Source contract
 

@@ -5,6 +5,19 @@ const url =
 /** Keep imported printing text intact. Apply published rules corrections in the
  * playable database and card inspector, independently of module registration. */
 export function expansionErrata(c: Card): Card {
+  if (["32141b", "32142b", "32143b"].includes(c.code))
+    return {
+      ...c,
+      text:
+        "<b>Forced Response</b>: After you place a magnet counter on this scheme, if there are at least 3 magnet counters here, remove 3 of them and discard cards from the encounter deck until a [[Magnetic]] card is discarded. Reveal that card." +
+        (c.code === "32143b"
+          ? "\n<b>If this stage is completed, the players lose the game.</b>"
+          : ""),
+      errata: {
+        reference: "FFG Rules Reference 1.8, p. 68",
+        url: url.replace("#page=66", "#page=68"),
+      },
+    };
   if (c.code === "32088a")
     return {
       ...c,

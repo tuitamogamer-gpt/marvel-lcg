@@ -34,6 +34,8 @@ import {
 import { riskyBlankPower } from "./game/risky-business";
 import { zeroToleranceIsPermanent } from "./game/zero-tolerance";
 import { projectWideawakeBombCount } from "./game/project-wideawake";
+import { magnetoDamageCap, magnetoIdentityRestricted } from "./game/magneto";
+import { isTextBlank } from "./game/card-text";
 import { mutagenAttachmentActions } from "./game/mutagen-formula";
 import {
   goblinModuleAttachmentActions,
@@ -4172,6 +4174,11 @@ function AttachedCards({
               <CardImage code={p.code} />
               <span>{card(p).name}</span>
             </button>
+            {p.code === "32149" && (
+              <small aria-label={`Magnetic Bubble damage: ${p.damage} of 8`}>
+                {p.damage}/8 damage
+              </small>
+            )}
             {game.playerCount > 1 && p.ownerId && (
               <small>
                 {
@@ -4214,6 +4221,7 @@ function AttachedCards({
                 "32095",
                 "32096",
                 "32107",
+                "32150",
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -4292,6 +4300,9 @@ function Tabletop({
       : PLAYMATS.find((mat) => mat.id === playmatId)!;
   const v = VILLAINS.find((v) => v.id === s.villainId)!;
   const stats = heroStats(s);
+  const wrappedInMetal = magnetoIdentityRestricted(s, s.activePlayerId, {
+    isTextBlank,
+  });
   const acting =
     s.phase === "player" &&
     !s.prompt &&
@@ -4645,6 +4656,16 @@ function Tabletop({
                     Before boosts & triggered abilities
                   </span>
                   <Status piece={s.villain} />
+                  {s.magneto &&
+                    magnetoDamageCap(s, { isTextBlank }) !== undefined && (
+                      <span
+                        className="stat-caption"
+                        aria-label={`Magneto damage limit: ${magnetoDamageCap(s, { isTextBlank })}`}
+                      >
+                        Can sustain up to {magnetoDamageCap(s, { isTextBlank })}{" "}
+                        damage
+                      </span>
+                    )}
                   {s.mansionAttack && (
                     <span className="stat-caption">
                       {
@@ -4704,6 +4725,15 @@ function Tabletop({
                     max={hasThreatLimit ? threatLimit : undefined}
                     label="Main scheme threat"
                   />
+                  {s.magneto && (
+                    <p
+                      className="stat-caption"
+                      aria-label={`Magnet counters: ${s.magneto.magnetCounters}`}
+                    >
+                      <strong>{s.magneto.magnetCounters}</strong> magnet
+                      counters · 3 trigger a Magnetic card
+                    </p>
+                  )}
                   {hasThreatLimit ? (
                     <div className="threat-track">
                       {Array.from({ length: threatLimit }, (_, i) => (
@@ -4757,6 +4787,22 @@ function Tabletop({
                         ))}
                       </details>
                     </>
+                  )}
+                  {s.magneto && !!s.victoryDisplay?.length && (
+                    <details>
+                      <summary>
+                        Victory display ({s.victoryDisplay.length})
+                      </summary>
+                      {s.victoryDisplay.map((p) => (
+                        <button
+                          className="text-button"
+                          key={p.id}
+                          onClick={() => inspect({ code: p.code, piece: p })}
+                        >
+                          {card(p).name}
+                        </button>
+                      ))}
+                    </details>
                   )}
                   {threatCritical && (
                     <span className="threat-warning">
@@ -5887,17 +5933,20 @@ function Tabletop({
                     <button
                       className="attack-action"
                       title={
-                        valkyrieCannotBasicAttack(s)
-                          ? "Seduced prevents basic attacks."
-                          : !visionCanAttack(s)
-                            ? "Intangible prevents attack abilities."
-                            : !shadowcatCanAttack(s)
-                              ? "Permanently Phased prevents attack abilities."
-                              : "Attack an enemy. Exhaust your identity."
+                        wrappedInMetal
+                          ? "Wrapped in Metal prevents attacks, thwarts, defenses and recoveries."
+                          : valkyrieCannotBasicAttack(s)
+                            ? "Seduced prevents basic attacks."
+                            : !visionCanAttack(s)
+                              ? "Intangible prevents attack abilities."
+                              : !shadowcatCanAttack(s)
+                                ? "Permanently Phased prevents attack abilities."
+                                : "Attack an enemy. Exhaust your identity."
                       }
                       disabled={
                         !acting ||
                         s.player.exhausted ||
+                        wrappedInMetal ||
                         valkyrieCannotBasicAttack(s) ||
                         !visionCanAttack(s) ||
                         !shadowcatCanAttack(s)
@@ -5914,8 +5963,12 @@ function Tabletop({
                     </button>
                     <button
                       className="thwart-action"
-                      title="Remove threat from a scheme. Exhaust your identity."
-                      disabled={!acting || s.player.exhausted}
+                      title={
+                        wrappedInMetal
+                          ? "Wrapped in Metal prevents thwarting."
+                          : "Remove threat from a scheme. Exhaust your identity."
+                      }
+                      disabled={!acting || s.player.exhausted || wrappedInMetal}
                       onClick={() => send({ type: "BASIC", action: "thwart" })}
                     >
                       <span className="action-emblem">
@@ -5934,9 +5987,16 @@ function Tabletop({
                 ) : (
                   <button
                     className="recover-action"
-                    title="Heal your identity. Exhaust your identity."
+                    title={
+                      wrappedInMetal
+                        ? "Wrapped in Metal prevents recovery."
+                        : "Heal your identity. Exhaust your identity."
+                    }
                     disabled={
-                      !acting || s.player.exhausted || s.player.hp >= maxHP(s)
+                      !acting ||
+                      s.player.exhausted ||
+                      wrappedInMetal ||
+                      s.player.hp >= maxHP(s)
                     }
                     onClick={() => send({ type: "BASIC", action: "recover" })}
                   >

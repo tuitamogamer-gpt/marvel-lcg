@@ -192,6 +192,8 @@ export interface Attack {
   /** The Best Defense replaces DEF with current ATK for this defender only. */
   valkyriePackAttackDefensePlayerId?: string;
   visionPackManchaHandled?: boolean;
+  magnetoAllyDefeatBoostIds?: string[];
+  magnetoAllyDefeated?: boolean;
   attacker: string;
   base: number;
   boostCodes: string[];
@@ -209,6 +211,8 @@ export interface Attack {
   isVillain: boolean;
 }
 export interface GameState {
+  /** Original Magneto main stages, future villains and set-aside Orbital Decay. */
+  magneto?: import("./magneto.js").MagnetoState;
   /** Original Mansion Attack hidden piles and physical active main scheme. */
   mansionAttack?: import("./mansion-attack.js").MansionAttackState;
   /** Physical Magneto stays in an ordinary ally zone; these are saved receipts. */

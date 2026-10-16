@@ -1117,6 +1117,7 @@ export async function generateAudit(
     "src/game/zero-tolerance.ts",
     "src/game/sentinels.ts",
     "src/game/acolytes.ts",
+    "src/game/magneto.ts",
     "src/game/printed-card-metadata.ts",
     "src/game/card-text.ts",
     "src/game/expansion-errata.ts",

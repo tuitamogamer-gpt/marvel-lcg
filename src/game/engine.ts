@@ -42,6 +42,7 @@ import * as mystique from "./mystique.js";
 import * as sentinels from "./sentinels.js";
 import * as wideawake from "./project-wideawake.js";
 import * as masterMold from "./master-mold.js";
+import * as magneto from "./magneto.js";
 import * as mansionAttack from "./mansion-attack.js";
 import * as zeroTolerance from "./zero-tolerance.js";
 import * as nebula from "./nebula.js";
@@ -546,6 +547,7 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
         }
       : {};
   const piece = p as Piece;
+  const magnetic = magneto.magnetoModifiers(s, piece, { isTextBlank });
   const inherited = inheritors.inheritorsModifiers(s, piece);
   return {
     ...(isTextBlank(s, piece)
@@ -555,6 +557,7 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     sabretooth.sabretoothModifiers(s, piece.id).stalwart
       ? { stalwart: true }
       : {}),
+    ...(magnetic.losesSteady ? { steady: false } : {}),
     ...(mansionAttack.mansionAttackModifiers(s, piece, { isTextBlank }).steady
       ? { steady: true }
       : {}),
@@ -570,6 +573,15 @@ function giveCharacterStatus(
   const identity = playerOrder(s)
     .map((seat) => seatView(s, seat))
     .find((view) => view.player === p);
+  const magnetic =
+    "code" in p
+      ? magneto.magnetoModifiers(s, p as Piece, { isTextBlank })
+      : undefined;
+  if (
+    (kind === "stunned" && magnetic?.cannotStun) ||
+    (kind === "confused" && magnetic?.cannotConfuse)
+  )
+    return false;
   const changed = giveStatus(
     p,
     c,
@@ -602,6 +614,9 @@ function giveCharacterStatus(
 }
 /** All identity-ready effects share absolute restrictions and actual ready responses. */
 function syncNebulaIdentityStatuses(s: GameState) {
+  const magneticCap = magneto.magnetoDamageCap(s, { isTextBlank });
+  if (magneticCap !== undefined && s.villain.maxHp - s.villain.hp > magneticCap)
+    s.villain.hp = s.villain.maxHp - magneticCap;
   for (const seat of playerOrder(s)) {
     const view = seatView(s, seat);
     if (
@@ -643,7 +658,7 @@ function syncNebulaIdentityStatuses(s: GameState) {
     ) {
       const modifiers = nativeStatusModifiers(s, p);
       if (
-        s.villainId === "mansion_attack" &&
+        ["mansion_attack", "magneto"].includes(s.villainId) &&
         !(modifiers.steady ?? printedKeyword(card(p), "Steady"))
       ) {
         p.stunCards = Math.min(1, statusCards(p, "stunned"));
@@ -919,12 +934,15 @@ function choose(
   // respect the identity's defense restrictions during an actual attack.
   if (s.attack)
     options = options.filter((o) => {
+      if (o.effects.some((e) => e.type === "magneto:missile-discard"))
+        return true;
       const c = o.image ? card(o.image) : undefined;
       const actorId =
         o.effects.find((e) => e.actorId)?.actorId || s.activePlayerId;
       return (
         (!/\([^)]*\bdefense\b/i.test(c?.text || "") ||
-          (vision.visionCanDefend(seatView(s, actorId)) &&
+          (!magneto.magnetoIdentityRestricted(s, actorId, { isTextBlank }) &&
+            vision.visionCanDefend(seatView(s, actorId)) &&
             shadowcat.shadowcatCanDefend(
               seatView(s, actorId),
               shadowcatPorts,
@@ -2017,6 +2035,8 @@ function check(s: GameState) {
   }
 }
 export function schemeLimit(s: GameState) {
+  const magneticLimit = magneto.magnetoMainThreatLimit(s);
+  if (magneticLimit !== undefined) return magneticLimit;
   const mansionLimit = mansionAttack.mansionAttackMainThreatLimit(s);
   const wideawakeLimit = wideawake.projectWideawakeMainThreatLimit(s);
   if (wideawakeLimit !== undefined) return wideawakeLimit;
@@ -2193,6 +2213,24 @@ function recordZeroToleranceAllyDefeat(
 ) {
   const attack = s.attack;
   if (
+    enemyAttack &&
+    attack?.attacker === source &&
+    card(p).type_code === "ally" &&
+    !p.treatedAsMinion
+  ) {
+    attack.magnetoAllyDefeated = true;
+    add(
+      s,
+      ...(attack.magnetoAllyDefeatBoostIds || []).flatMap((sourceId) =>
+        magneto.magnetoBoostAllyDefeated(s, {
+          attackId: attack.id!,
+          sourceId,
+          allyId: p.id,
+        }),
+      ),
+    );
+  }
+  if (
     !zeroToleranceNativePresent(s) ||
     !enemyAttack ||
     !attack ||
@@ -2342,6 +2380,12 @@ function dealDamage(
   const originalStage = target === s.villain.id ? s.villain.stage : undefined;
   const sourceIsIdentity = rocket.rocketIsIdentitySource(s, source);
   const wasHero = s.player.form === "hero";
+  const cap =
+    target === s.villain.id
+      ? magneto.magnetoDamageCap(s, { isTextBlank })
+      : undefined;
+  if (cap !== undefined)
+    n = Math.min(n, Math.max(0, cap - (s.villain.maxHp - s.villain.hp)));
   const targetPiece = target === "hero" ? s.player : original;
   const damageFromAttack = attack || !!traits.damageFromAttack;
   // A prohibition cannot be bypassed by Tough or Piercing. A dealt-damage
@@ -2386,7 +2430,7 @@ function dealDamage(
     !replaced &&
     targetPiece &&
     attack &&
-    n > 0 &&
+    (n > 0 || (cap !== undefined && dealt > 0)) &&
     (traits.piercing ?? !!sourceKeyword(s, source, "Piercing"))
   )
     colossusNativeDiscardTough(
@@ -2526,6 +2570,7 @@ function dealDamage(
           }).retaliate +
           mansionAttack.mansionAttackModifiers(s, original, { isTextBlank })
             .retaliate +
+          magneto.magnetoModifiers(s, original, { isTextBlank }).retaliate +
           (target === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -2703,6 +2748,8 @@ function applyDamage(
     return { actualDamage: n, excessDamage: 0 };
   }
   if (target === s.villain.id) {
+    const magnetic = magneto.magnetoReplaceDamage(s, target, n, magnetoPorts);
+    if (magnetic !== undefined) return none;
     const replaced = riskyDamageReplacement(s, target, n);
     if (replaced) {
       add(s, ...replaced);
@@ -2994,6 +3041,27 @@ function defeatCharacter(
       return true;
     }
   }
+  if (minion && !s.flags[`magnetoDefeat:${m.id}`]) {
+    const effects = magneto.magnetoMinionDefeated(s, m, s.activePlayerId, {
+      isTextBlank,
+    });
+    if (effects?.length) {
+      m.pendingDefeat = true;
+      s.flags[`magnetoDefeat:${m.id}`] = true;
+      add(
+        s,
+        ...effects,
+        E("finishDefeat", {
+          id: m.id,
+          source,
+          attack,
+          enemyAttack,
+          valkyrieReceipts: receipts,
+        }),
+      );
+      return true;
+    }
+  }
   const tracers = allInPlay(s).filter(
     (a) =>
       rulesCode(a) === "01007" && a.attachedTo === m.id && !isTextBlank(s, a),
@@ -3035,6 +3103,7 @@ function defeatCharacter(
       }),
     );
   delete s.flags[`acolytesDefeat:${m.id}`];
+  delete s.flags[`magnetoDefeat:${m.id}`];
   log(s, `${name} is defeated.`, "good");
   if (minion) {
     if (
@@ -3183,6 +3252,36 @@ function advanceVillain(
     );
     return;
   }
+  if (s.villainId === "magneto") {
+    const next = s.magneto?.villainDeck?.shift();
+    if (!next) {
+      endGame(s, true, "Magneto is defeated. Asteroid M is safe.");
+      return;
+    }
+    const old = s.villain;
+    Object.assign(next, {
+      hp: card(next).health! * s.playerCount,
+      maxHp: card(next).health! * s.playerCount,
+      stage: old.stage + 1,
+      stunned: old.stunned,
+      confused: old.confused,
+      tough: old.tough,
+      stunCards: old.stunCards,
+      confuseCards: old.confuseCards,
+      toughCards: old.toughCards,
+    });
+    s.villain = next as GameState["villain"];
+    if (s.attack?.attacker === old.id) s.attack.attacker = next.id;
+    if (s.scheming?.attacker === old.id) s.scheming.attacker = next.id;
+    for (const p of [...s.attachments, ...allInPlay(s)])
+      if (p.attachedTo === old.id) p.attachedTo = next.id;
+    s.removed.push(resetPiece(old));
+    if (keyword(s.villain, "Toughness", s))
+      giveCharacterStatus(s, s.villain, "tough");
+    syncNebulaIdentityStatuses(s);
+    villainSetup(s);
+    return;
+  }
   const previousTitle = card(s.villain).name;
   const last = s.difficulty === "expert" ? 3 : 2;
   if (s.villain.stage === last) {
@@ -3231,6 +3330,7 @@ function advanceVillain(
   villainSetup(s);
 }
 function villainSetup(s: GameState) {
+  add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
     s,
     ...(wideawake.projectWideawakeReveal(s, s.villain, { isTextBlank }) || []),
@@ -3352,6 +3452,30 @@ function threat(
             E("clearMainCompletion"),
           );
         }
+        return;
+      }
+      if (s.villainId === "magneto") {
+        if (s.pendingMainCompletion) return;
+        const next = s.magneto?.mainDeck?.shift();
+        if (!next) {
+          endGame(s, false, "Rule of Magnus is complete. The players lose.");
+          return;
+        }
+        s.pendingMainCompletion = true;
+        discardMainAttachments(s);
+        if (s.magneto?.currentMain)
+          s.removed.push(resetPiece(s.magneto.currentMain));
+        s.magneto!.currentMain = next;
+        s.magneto!.magnetCounters = 0;
+        s.scheme.index++;
+        s.scheme.code = next.code;
+        s.scheme.threat = 0;
+        magneto.magnetoMainChanged(s, s.scheme.code);
+        add(
+          s,
+          ...magneto.magnetoMainRevealed(s, next.code),
+          E("magneto-native:main-back", { actorId: s.firstPlayerId }),
+        );
         return;
       }
       if (s.villainId === "master_mold") {
@@ -3479,6 +3603,11 @@ function thwart(
   }
 }
 function defeatScheme(s: GameState, p: Piece, source = "hero") {
+  if (
+    p.pendingDefeat &&
+    ["32144a", "32144b", "32145a", "32158"].includes(p.code)
+  )
+    return;
   if (p.counters || !s.sideSchemes.some((x) => x.id === p.id)) return;
   if (zeroTolerance.zeroToleranceIsPermanent(s, p)) return;
   log(s, `${card(p).name} is defeated.`, "good");
@@ -3527,6 +3656,17 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
     s.activePlayerId,
     { isTextBlank },
   );
+  const magneticDefeat = magneto.magnetoSideSchemeDefeated(
+    s,
+    p,
+    s.activePlayerId,
+    { isTextBlank },
+  );
+  if (
+    magneticDefeat?.length &&
+    ["32144a", "32144b", "32145a", "32158"].includes(p.code)
+  )
+    p.pendingDefeat = true;
   const mansionDefeat = mansionAttack.mansionAttackSideSchemeDefeated(
     s,
     p,
@@ -3536,9 +3676,20 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
   const victory =
     ["32071", "32100", "32120"].includes(p.code) && !isTextBlank(s, p);
   const retainFind =
-    ["32065a", "32088a"].includes(p.code) && !isTextBlank(s, p);
+    ["32065a", "32088a", "32144a", "32144b", "32145a", "32158"].includes(
+      p.code,
+    ) && !isTextBlank(s, p);
   if (!victory && !retainFind) discardPiece(s, p.id);
   const responses = [
+    ...(magneticDefeat?.length
+      ? [
+          {
+            id: `${p.id}:magneto-defeated`,
+            title: card(p).name,
+            effects: magneticDefeat,
+          },
+        ]
+      : []),
     ...(mansionDefeat?.length
       ? [
           {
@@ -4076,7 +4227,8 @@ function attackAction(
     return;
   if (
     source === "hero" &&
-    (!valkyrie.valkyrieCanAttackTarget(s, target) ||
+    (magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank }) ||
+      !valkyrie.valkyrieCanAttackTarget(s, target) ||
       !vision.visionCanAttack(s) ||
       !shadowcat.shadowcatCanAttack(s))
   )
@@ -4161,6 +4313,11 @@ function thwartAction(
 ) {
   const p = source === "hero" ? s.player : find(s, source);
   if (!p) return;
+  if (
+    source === "hero" &&
+    magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
+  )
+    return;
   if (
     !sentinels.sentinelsCanThwart(s, target, s.activePlayerId, sentinelsPorts)
   )
@@ -5428,7 +5585,8 @@ export function newGame(config: {
                           ].includes(c.set_code || "")
                         ? "gob"
                         : "core")) ||
-          (c.set_code === v.id && c.pack_code === scenarioPack) ||
+          (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
+            c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
             c.pack_code === scenarioPack) ||
           (c.set_code === "standard" && c.pack_code === "core") ||
@@ -5437,6 +5595,7 @@ export function newGame(config: {
             c.pack_code === "core")) &&
           !["villain", "main_scheme"].includes(c.type_code) &&
           c.code !== "32088b" &&
+          !(v.id === "magneto" && ["32144b", "32145b"].includes(c.code)) &&
           (c.type_code !== "environment" ||
             selectedModules.includes(c.set_code || ""))) ||
           (team.some(
@@ -5451,7 +5610,41 @@ export function newGame(config: {
       Array.from({ length: c.quantity }, () => makePiece(s, c.code)),
     ),
   );
-  if (v.id === "mansion_attack") {
+  if (v.id === "magneto") {
+    const boarding = s.encounter.deck.find((p) => p.code === "32144a");
+    const orbital = s.encounter.deck.find((p) => p.code === "32145a");
+    need(
+      boarding && orbital,
+      "Magneto requires its original progress side schemes.",
+    );
+    s.encounter.deck = s.encounter.deck.filter(
+      (p) => p.id !== boarding!.id && p.id !== orbital!.id,
+    );
+    const data = magneto.magnetoInitialize(s);
+    data.mainDeck = ["32142a", "32143a"].map((code) => makePiece(s, code));
+    data.currentMain = makePiece(s, "32141b");
+    data.mainCode = "32141b";
+    const active = makePiece(s, v.codes[stage - 1]);
+    s.villain = Object.assign(active, { hp, maxHp: hp, stage });
+    data.villainDeck = [makePiece(s, v.codes[stage])];
+    s.scheme.threat = s.playerCount;
+    magneto.magnetoSetup(
+      s,
+      { boarding: boarding!, orbital: orbital! },
+      magnetoPorts,
+    );
+    s.queue.push(
+      effectContext(
+        s,
+        E("magneto-native:setup-stage", { actorId: s.firstPlayerId }),
+      ),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "mansion_attack") {
     mansionAttack.mansionAttackSetup(
       s,
       {
@@ -5638,6 +5831,12 @@ const reactionCards = [
 ];
 export function playable(s: GameState, p: Piece): string | null {
   const c = card(p);
+  if (
+    c.type_code === "event" &&
+    /\([^)]*\b(?:attack|thwart|defense|recover)\b/i.test(c.text || "") &&
+    magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
+  )
+    return "Wrapped in Metal prevents this identity from attacking, thwarting, defending or recovering.";
   const npcRestriction = npcPlayerPlayRestriction(s, p);
   if (npcRestriction) return npcRestriction;
   if (
@@ -7113,6 +7312,12 @@ export function abilityOptions(
   if (p.id === sabretooth.sabretoothKelly(s)?.id) return [];
   const c = card(p);
   if (
+    c.type_code !== "ally" &&
+    /\([^)]*\b(?:attack|thwart|defense|recover)\b/i.test(c.text || "") &&
+    magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
+  )
+    return [];
+  if (
     Object.values(spectrum.SPECTRUM_FORM_CODES).some((code) => code === p.code)
   )
     return [];
@@ -7139,6 +7344,7 @@ export function abilityOptions(
     ...(c.type_code !== "ally"
       ? wideawake.projectWideawakeActionOptions(s, p.id, wideawakePorts)
       : []),
+    ...magneto.magnetoActionOptions(s, p.id, magnetoPorts),
     ...sentinels.sentinelsAbilityOptions(s, p.id, sentinelsPorts),
     ...zzzax.zzzaxActions(s, p, zzzaxPorts),
     ...goblinModuleAttachmentActions(s, p),
@@ -7350,6 +7556,27 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   );
 }
 function ability(s: GameState, id: string, action = "special") {
+  const magneticActions = magneto.magnetoActionOptions(s, id, magnetoPorts);
+  const magneticSelected =
+    action === "special"
+      ? magneticActions[0]
+      : magneticActions.find((o) => o.id === action);
+  if (magneticSelected) {
+    add(s, ...magneticSelected.effects);
+    return;
+  }
+  const actionSource = find(s, id);
+  need(
+    !(
+      actionSource &&
+      card(actionSource).type_code !== "ally" &&
+      /\([^)]*\b(?:attack|thwart|defense|recover)\b/i.test(
+        card(actionSource).text || "",
+      ) &&
+      magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
+    ),
+    "Wrapped in Metal prevents this identity from using this ability.",
+  );
   if (!["attack", "thwart"].includes(action)) {
     const native = wideawake.projectWideawakeActionOptions(
       s,
@@ -11478,6 +11705,11 @@ function wideawakePhysicalZones(s: GameState): Piece[][] {
     s.attachments,
     s.environments || [],
     s.projectWideawake?.setAsideCaptives || [],
+    s.encounter.storedBoosts || [],
+    s.magneto?.mainDeck || [],
+    s.magneto?.villainDeck || [],
+    ...(s.magneto?.currentMain ? [[s.magneto.currentMain]] : []),
+    ...(s.magneto?.orbital ? [[s.magneto.orbital]] : []),
     s.attack?.pendingBoosts || [],
     s.scheming?.pendingBoosts || [],
   ];
@@ -12134,6 +12366,299 @@ function resolveMansionAttackNativeEffect(s: GameState, e: Effect): boolean {
   }
   return true;
 }
+/** All Magneto ports move the existing source instance through native zones. */
+const magnetoPorts: magneto.MagnetoPorts = {
+  queue: add,
+  choose,
+  isTextBlank,
+  hasTrait: captainPackHasTrait,
+  findPiece: (s, id) =>
+    id === s.villain.id ? s.villain : wideawakePhysicalPiece(s, id),
+  revealEncounter: (s, p, playerId, after) => {
+    const actual = takeWideawakePiece(s, p.id) || p;
+    removeEncounterInstance(s, p.id);
+    beginResolution(s, actual);
+    add(s, E("reveal", { piece: actual, actorId: playerId }), ...after);
+  },
+  revealSide: (s, p, playerId, after) => {
+    const actual = takeWideawakePiece(s, p.id) || p;
+    if (s.magneto?.orbital?.id === p.id) delete s.magneto.orbital;
+    delete actual.pendingDefeat;
+    actual.counters = 0;
+    beginResolution(s, actual);
+    add(s, E("reveal", { piece: actual, actorId: playerId }), ...after);
+  },
+  attach: (s, p, targetId) => {
+    const actual = takeWideawakePiece(s, p.id) || p;
+    delete actual.pendingDefeat;
+    mutagenPorts.attach(s, actual, targetId);
+    syncNebulaIdentityStatuses(s);
+  },
+  addToVictory: (s, p) => {
+    const actual = takeWideawakePiece(s, p.id) || p;
+    delete actual.pendingDefeat;
+    (s.victoryDisplay ||= []).push(resetPiece(actual));
+  },
+  discardPiece,
+  discardTop: (s, after) => {
+    const before = new Set(s.queue);
+    const result = mutagenPorts.discardTop(s);
+    if (after) {
+      const generated = s.queue.filter((effect) => !before.has(effect));
+      s.queue = s.queue.filter((effect) => before.has(effect));
+      add(s, ...generated, {
+        ...after,
+        id: result.piece?.id,
+        code: result.piece?.code,
+        emptied: result.emptied,
+      });
+    }
+    return result;
+  },
+  searchAndReveal: (s, kind, playerId, after) => {
+    const matches = [...s.encounter.deck, ...s.encounter.discard].filter((p) =>
+      kind === "sentinel"
+        ? p.code === "32146"
+        : card(p).type_code === "attachment" &&
+          /\bMagnetic\./i.test(card(p).traits || ""),
+    );
+    if (!matches.length) {
+      mutagenPorts.shuffleEncounter(s);
+      add(s, ...after);
+      return;
+    }
+    const options = matches.map((p) =>
+      option(
+        p.id,
+        card(p).name,
+        [
+          E("magneto-native:searched-reveal", {
+            id: p.id,
+            playerId,
+            after,
+            actorId: playerId,
+          }),
+        ],
+        undefined,
+        p.code,
+      ),
+    );
+    if (options.length === 1) add(s, ...options[0].effects);
+    else
+      choose(
+        s,
+        "Search encounter deck and discard",
+        "Choose the original encounter card to reveal.",
+        options,
+      );
+  },
+  dealEncounter,
+  giveTough: (s, id) => {
+    const p = find(s, id);
+    return !!p && giveCharacterStatus(s, p, "tough");
+  },
+  giveFacedownBoost: (s, p) => {
+    const actual = p ? takeWideawakePiece(s, p.id) || p : drawEncounter(s);
+    if (actual) {
+      removeEncounterInstance(s, actual.id);
+      const activation = s.scheming || s.attack;
+      if (
+        activation?.attacker === s.villain.id &&
+        !("completionRecorded" in activation && activation.completionRecorded)
+      )
+        (activation.pendingBoosts ||= []).push(resetPiece(actual));
+      else (s.encounter.storedBoosts ||= []).push(resetPiece(actual));
+    }
+  },
+  activateEnemy: (s, enemyId, playerId, kind, sourceId, after) =>
+    add(
+      s,
+      E("magneto-native:activate", {
+        enemyId,
+        playerId,
+        kind,
+        sourceId,
+        after,
+        actorId: playerId,
+      }),
+    ),
+  damageBatch: (s, targets, sourceId, playerId) =>
+    wideawakePorts.damageBatch(s, targets, sourceId, playerId),
+  status: (s, targetId, status, sourceId) =>
+    add(s, E("status", { target: targetId, status, source: sourceId })),
+  addMainThreat: (s, amount, sourceId) =>
+    add(s, E("threat", { target: "main", amount, source: sourceId })),
+  exhaustIdentity: (s, playerId) => {
+    seatView(s, playerId).player.exhausted = true;
+  },
+  exhaustControlled: (s, playerId, kind) => {
+    for (const p of seatView(s, playerId).player.inPlay)
+      if (
+        kind === "ally"
+          ? card(p).type_code === "ally"
+          : ["upgrade", "support"].includes(card(p).type_code)
+      )
+        p.exhausted = true;
+  },
+  defeatMinion: (s, id, playerId, after) => {
+    const p = s.minions.find((p) => p.id === id);
+    const before = new Set(s.queue);
+    if (p) defeatCharacter(s, p, `hero:${playerId}`);
+    const generated = s.queue.filter((effect) => !before.has(effect));
+    s.queue = s.queue.filter((effect) => before.has(effect));
+    add(s, ...generated, ...after);
+  },
+  discardPlayerTopUnder: (s, playerId, count, schemeId, after) =>
+    add(
+      s,
+      E("magneto-native:store-player-top", {
+        playerId,
+        count,
+        schemeId,
+        after,
+        actorId: playerId,
+      }),
+    ),
+  discardStoredCards: (s, schemeId) => {
+    const p = wideawakePhysicalPiece(s, schemeId);
+    for (const stored of p?.storedCards?.splice(0) || []) {
+      const owner = s.players.find((seat) => seat.id === stored.ownerId);
+      if (!owner || owner.eliminated) s.removed.push(resetPiece(stored));
+      else seatView(s, owner).player.discard.push(resetPiece(stored));
+    }
+  },
+  discardHandCard: (s, playerId, id) => discardHand(seatView(s, playerId), id),
+  canPay,
+  pay: (s, title, cost, requirements, after, sourceId, exhaustPlayerId) => {
+    const source = find(s, sourceId);
+    need(source, "The original Magneto attachment is unavailable.");
+    add(
+      s,
+      E("payRequest", {
+        title,
+        cost,
+        requirements,
+        after,
+        piece: source,
+        abilityCost: true,
+        cancelable: true,
+        cancellationQueue: [...s.queue],
+        paymentCommit: exhaustPlayerId
+          ? [E("exhaust", { id: "hero", actorId: exhaustPlayerId })]
+          : undefined,
+      }),
+    );
+  },
+  canExhaustIdentity: (s, playerId) => !seatView(s, playerId).player.exhausted,
+  registerAllyDefeatBoost: (s, sourceId, attackId) => {
+    const attack = s.attack;
+    if (attack?.id === attackId) {
+      const ids = (attack.magnetoAllyDefeatBoostIds ||= []);
+      if (!ids.includes(sourceId)) ids.push(sourceId);
+    }
+  },
+};
+function resolveMagnetoNativeEffect(s: GameState, e: Effect): boolean {
+  if (!e.type.startsWith("magneto-native:")) return false;
+  switch (e.type) {
+    case "magneto-native:after":
+      add(s, ...(e.after || []));
+      break;
+    case "magneto-native:setup-stage":
+      villainSetup(s);
+      break;
+    case "magneto-native:main-back": {
+      const p = s.magneto?.currentMain;
+      need(
+        p && p.code.endsWith("a"),
+        "The original Magneto main front must resolve before its back.",
+      );
+      p!.code = p!.code.replace(/a$/, "b");
+      s.scheme.code = p!.code;
+      s.scheme.threat = (card(p!).base_threat || 0) * s.playerCount;
+      delete s.pendingMainCompletion;
+      add(s, ...(e.after || []));
+      break;
+    }
+    case "magneto-native:searched-reveal": {
+      const p = takeWideawakePiece(s, e.id);
+      mutagenPorts.shuffleEncounter(s);
+      if (p) magnetoPorts.revealEncounter(s, p, e.playerId, e.after || []);
+      else add(s, ...(e.after || []));
+      break;
+    }
+    case "magneto-native:store-player-top": {
+      const previous = s.activePlayerId;
+      activateSeat(s, e.playerId);
+      const scheme = s.sideSchemes.find((p) => p.id === e.schemeId);
+      const before = new Set(s.queue);
+      if (scheme) {
+        // Place the actual top-card cohort together. This is not a discard
+        // effect or six sequential draws; empty-deck reset follows the move.
+        const pieces = s.player.deck.splice(0, e.count);
+        (scheme.storedCards ||= []).push(...pieces);
+        if (pieces.length) revealHidden(s);
+        recyclePlayer(s);
+      }
+      const generated = s.queue.filter((effect) => !before.has(effect));
+      s.queue = s.queue.filter((effect) => before.has(effect));
+      activateSeat(s, previous);
+      add(s, ...generated, ...(e.after || []));
+      break;
+    }
+    case "magneto-native:activate": {
+      if (!find(s, e.enemyId)) break;
+      // RRG 1.8: an activation initiated during an activation waits until the
+      // first activation and its triggered abilities have completely finished.
+      if (s.attack || s.scheming) {
+        const boundary = s.queue.findIndex((q) =>
+          ["defenseResponses", "endScheme"].includes(q.type),
+        );
+        if (boundary >= 0) {
+          s.queue.splice(boundary + 1, 0, effectContext(s, e));
+          break;
+        }
+        // During boost resolution, completion effects have not been queued
+        // yet. The retained continuation will encounter their real boundary.
+        const activation = s.scheming || s.attack;
+        (activation!.afterActivation ||= []).push(effectContext(s, e));
+        break;
+      }
+      const request: MutagenActivation = {
+        enemyId: e.enemyId,
+        playerId: e.playerId,
+        kind: e.kind,
+        modifier: 0,
+        after: E("magneto-native:after", {
+          after: e.after || [],
+          actorId: e.playerId,
+        }),
+      };
+      if (e.kind === "attack") enemyAttack(s, e.enemyId, undefined, request);
+      else enemyScheme(s, e.enemyId, undefined, request);
+      break;
+    }
+    case "magneto-native:basic-response": {
+      const options = magneto.magnetoBasicAttackResponseOptions(
+        s,
+        e.receipt,
+        magnetoPorts,
+      );
+      if (options.length)
+        choose(
+          s,
+          "After your basic attack",
+          "Spend energy, mental and physical resources to discard an attachment?",
+          [...options, option("continue", "Continue", [])],
+        );
+      break;
+    }
+    default:
+      throw Error(`Unknown Magneto native effect: ${e.type}`);
+  }
+  return true;
+}
+
 const masterMoldPorts: masterMold.MasterMoldPorts = {
   queue: add,
   choose,
@@ -15410,7 +15935,8 @@ function declareDefense(s: GameState) {
       view.player.form === "hero" &&
       !view.player.exhausted &&
       vision.visionCanDefend(view) &&
-      shadowcat.shadowcatCanDefend(view)
+      shadowcat.shadowcatCanDefend(view) &&
+      !magneto.magnetoIdentityRestricted(s, seat.id, { isTextBlank })
     )
       opts.push(
         option(
@@ -15455,6 +15981,7 @@ function declareDefense(s: GameState) {
 }
 function boostEffects(s: GameState, p: Piece) {
   const mutantScenarioBoost =
+    magneto.magnetoBoost(s, p) ??
     acolytes.acolytesBoost(s, p) ??
     mansionAttack.mansionAttackBoost(s, p) ??
     masterMold.masterMoldBoost(s, p) ??
@@ -16274,6 +16801,17 @@ function finishAttackAfterDamage(
     { isTextBlank },
   );
   const mansionAfter = mansionAttackEnemyAttackAfter(s, a, target, recipientId);
+  const magneticAfter = magneto.magnetoAfterEnemyAttack(
+    s,
+    {
+      token: a.id!,
+      enemyId: a.attacker,
+      enemyCode: a.attackerSnapshot?.code || p?.code || "",
+      playerId: recipientId,
+      performed: !!a.completionRecorded,
+    },
+    { isTextBlank },
+  );
   const zeroReceipt: zeroTolerance.ZeroToleranceAttackReceipt = {
     token: a.id!,
     attackerId: a.attacker,
@@ -16380,6 +16918,11 @@ function finishAttackAfterDamage(
       {
         receipt: zeroReceipt,
         responses: [
+          ...magneticAfter.map((effect, index) => ({
+            id: `${a.id}:magneto-after:${index}`,
+            title: "Magneto",
+            effects: [effect],
+          })),
           ...mansionAfter.map((effect, index) => ({
             id: `${a.id}:mansion-after:${index}`,
             sourceId: a.attacker,
@@ -16873,6 +17416,7 @@ function reveal(
     } else if (c.type_code === "side_scheme") {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       p.counters =
+        magneto.magnetoSideSchemeBaseThreat(s, p) ??
         mansionAttack.mansionAttackSideSchemeBaseThreat(s, p) ??
         (c.base_threat || 0) * (c.base_threat_fixed ? 1 : s.playerCount);
       s.sideSchemes.push(p);
@@ -16920,11 +17464,17 @@ function reveal(
       "32107",
       "32115",
       "32116",
+      "32145b",
+      "32147",
+      "32148",
+      "32149",
+      "32150",
     ].includes(p.code)
   ) {
     add(
       s,
-      ...((masterMold.masterMoldReveal(s, p, { isTextBlank }) ??
+      ...((magneto.magnetoReveal(s, p, { isTextBlank }) ??
+        masterMold.masterMoldReveal(s, p, { isTextBlank }) ??
         wideawake.projectWideawakeReveal(s, p, { isTextBlank }) ??
         zeroTolerance.zeroToleranceReveal(s, p, zeroTolerancePorts) ??
         sentinels.sentinelsReveal(s, p, sentinelsPorts) ??
@@ -16937,7 +17487,8 @@ function reveal(
   }
   if (
     !repeat &&
-    (acolytes.ACOLYTES_SCRIPT_CODES.some((code) => code === p.code) ||
+    (magneto.MAGNETO_SCRIPT_CODES.some((code) => code === p.code) ||
+      acolytes.ACOLYTES_SCRIPT_CODES.some((code) => code === p.code) ||
       mansionAttack.MANSION_ATTACK_SCRIPT_CODES.some(
         (code) => code === p.code,
       ) ||
@@ -16964,6 +17515,7 @@ function reveal(
     } else if (c.type_code === "side_scheme") {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       p.counters =
+        magneto.magnetoSideSchemeBaseThreat(s, p) ??
         mansionAttack.mansionAttackSideSchemeBaseThreat(s, p) ??
         (c.base_threat || 0) * (c.base_threat_fixed ? 1 : s.playerCount);
       s.sideSchemes.push(p);
@@ -17124,6 +17676,7 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    magneto.magnetoReveal(s, p, { isTextBlank }) ??
     acolytes.acolytesReveal(s, p) ??
     mansionAttack.mansionAttackReveal(s, p, { isTextBlank }) ??
     masterMold.masterMoldReveal(s, p, { isTextBlank }) ??
@@ -17881,9 +18434,17 @@ function resolve(s: GameState, e: Effect) {
   )
     return;
   // Capture the canonical alias as the current original-source villain ID.
-  if (s.villainId === "mansion_attack") {
+  if (["mansion_attack", "magneto"].includes(s.villainId)) {
     for (const key of ["target", "targetId", "enemyId", "attacker"])
-      if (e[key] === "villain") e[key] = s.villain.id;
+      if (
+        e[key] === "villain" ||
+        (s.villainId === "magneto" &&
+          s.removed.some(
+            (p) =>
+              p.id === e[key] && ["32138", "32139", "32140"].includes(p.code),
+          ))
+      )
+        e[key] = s.villain.id;
   }
   if (e.type === "acolytes-native:order") {
     choose(
@@ -17894,6 +18455,8 @@ function resolve(s: GameState, e: Effect) {
     );
     return;
   }
+  if (resolveMagnetoNativeEffect(s, e)) return;
+  if (magneto.resolveMagnetoEffect(s, e, magnetoPorts)) return;
   if (acolytes.resolveAcolytesEffect(s, e, acolytesPorts)) return;
   if (resolveMansionAttackNativeEffect(s, e)) return;
   if (mansionAttack.resolveMansionAttackEffect(s, e, mansionAttackPorts))
@@ -18010,6 +18573,7 @@ function resolve(s: GameState, e: Effect) {
         const previous = state.currentRevealWindowId;
         state.currentRevealWindowId = windowId;
         const effects =
+          magneto.magnetoReveal(state, piece, { isTextBlank }) ??
           acolytes.acolytesReveal(state, piece) ??
           mansionAttack.mansionAttackReveal(state, piece, { isTextBlank }) ??
           masterMold.masterMoldReveal(state, piece, { isTextBlank }) ??
@@ -19668,6 +20232,19 @@ function resolve(s: GameState, e: Effect) {
           actorId: s.activePlayerId,
         }).map((x) => ({ ...x, mandatory: false })),
         ...(e.draxBasicAttack ? drax.draxAfterBasicAttack(s, draxPorts) : []),
+        ...(e.draxBasicAttack
+          ? [
+              E("magneto-native:basic-response", {
+                receipt: {
+                  token: `magneto-basic:${s.nextId++}`,
+                  playerId: s.activePlayerId,
+                  targetId: e.target,
+                  targetCode: e.defeatedCode,
+                  performed: true,
+                },
+              }),
+            ]
+          : []),
       );
       break;
     case "attackAftermathOrder": {
@@ -20630,9 +21207,13 @@ function resolve(s: GameState, e: Effect) {
         !s.player.tough &&
         e.amount > 0
       ) {
-        const captainOptions = captainShieldBlockOptions(s, [
-          { ...e, amount: 0, skip: true },
-        ]);
+        const captainOptions = magneto.magnetoIdentityRestricted(
+          s,
+          s.activePlayerId,
+          { isTextBlank },
+        )
+          ? []
+          : captainShieldBlockOptions(s, [{ ...e, amount: 0, skip: true }]);
         if (captainOptions.length) {
           choose(
             s,
@@ -20648,7 +21229,13 @@ function resolve(s: GameState, e: Effect) {
           break;
         }
         const flight = s.player.inPlay.find((p) => rulesCode(p) === "01017");
-        if (flight && s.player.form === "hero") {
+        if (
+          flight &&
+          s.player.form === "hero" &&
+          !magneto.magnetoIdentityRestricted(s, s.activePlayerId, {
+            isTextBlank,
+          })
+        ) {
           choose(
             s,
             "Incoming damage",
@@ -23207,6 +23794,12 @@ function resolve(s: GameState, e: Effect) {
             : `${e.id === "hero" ? heroCard(s).name : card(find(s, e.id)!).name} defends the attack.`,
         );
         if (e.id === "hero") {
+          need(
+            !magneto.magnetoIdentityRestricted(s, s.activePlayerId, {
+              isTextBlank,
+            }),
+            "Wrapped in Metal prevents this identity from defending.",
+          );
           s.attack.basicDefense = true;
           s.player.exhausted = true;
           s.attack.defense =
@@ -24185,7 +24778,13 @@ function resolve(s: GameState, e: Effect) {
             ),
           );
         const flight = s.player.inPlay.find((p) => rulesCode(p) === "01017");
-        if (flight && s.player.form === "hero")
+        if (
+          flight &&
+          s.player.form === "hero" &&
+          !magneto.magnetoIdentityRestricted(s, s.activePlayerId, {
+            isTextBlank,
+          })
+        )
           opts.unshift(
             option(
               "flight",
@@ -24957,9 +25556,12 @@ function resolve(s: GameState, e: Effect) {
     case "stageSetup":
       if (
         s.difficulty === "expert" &&
-        !["mutagen_formula", "project_wideawake", "mansion_attack"].includes(
-          s.villainId,
-        )
+        ![
+          "mutagen_formula",
+          "project_wideawake",
+          "mansion_attack",
+          "magneto",
+        ].includes(s.villainId)
       )
         villainSetup(s);
       break;
@@ -25594,6 +26196,8 @@ function run(s: GameState) {
       e.type.startsWith("mastermold-native:") ||
       e.type.startsWith("zero-tolerance:") ||
       e.type.startsWith("sentinels:") ||
+      e.type.startsWith("magneto:") ||
+      e.type.startsWith("magneto-native:") ||
       e.type.startsWith("acolytes:") ||
       e.type.startsWith("acolytes-native:") ||
       e.type === "mystique-native:activation-finish";
@@ -25817,6 +26421,12 @@ export function dispatch(state: GameState, command: Command): GameState {
         if (command.type === "FLIP") flip(s, true, command.target);
         else if (command.type === "BASIC") {
           need(!s.player.exhausted, "Your identity is exhausted.");
+          need(
+            !magneto.magnetoIdentityRestricted(s, s.activePlayerId, {
+              isTextBlank,
+            }),
+            "Wrapped in Metal prevents basic attacks, thwarts, defenses and recoveries.",
+          );
           if (command.action === "thwart")
             need(
               !captainThwartBlocked(s),
@@ -25884,6 +26494,7 @@ export function dispatch(state: GameState, command: Command): GameState {
                 p.id,
                 wideawakePorts,
               ),
+              ...magneto.magnetoActionOptions(s, p.id, magnetoPorts),
               ...sentinels.sentinelsAbilityOptions(s, p.id, sentinelsPorts),
               ...sabretooth.sabretoothActionOptions(s, p.id, sabretoothPorts),
               ...zzzax.zzzaxActions(s, p, zzzaxPorts),
