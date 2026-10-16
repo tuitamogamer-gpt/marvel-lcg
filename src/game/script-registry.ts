@@ -6,6 +6,7 @@ import { compileCardScript } from "./scripts/compiler.js";
 import { staticModifierValue } from "./scripts/runtime.js";
 import type { StaticModifier } from "./scripts/types.js";
 import { EXPLICIT_CARD_SCRIPTS } from "./engine-support.js";
+import { rulesCode } from "./rules-code.js";
 import { isTextBlank } from "./card-text.js";
 
 const originals = [...players, ...encounters] as Card[];
@@ -53,7 +54,7 @@ export function scriptedModifier(
               script.implementation !== "script" ||
               // These native handlers enforce form/recipient timing themselves.
               ["05023", "05033", "09009", "09010", "09026"].includes(
-                source.code,
+                rulesCode(source),
               ) ||
               entries.get(source.code)?.name === "Team Training"
             )

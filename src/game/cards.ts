@@ -61,6 +61,7 @@ import { spiderHamStats, spiderHamTraits } from "./spider-ham.js";
 import { spiderHamPackCharacterModifiers } from "./spider-ham-pack.js";
 import { spdrPackCharacterModifiers } from "./spdr-pack.js";
 import { ironspiderSinisterHealthBonus } from "./ironspider-sinister.js";
+import { phoenixStats, phoenixAllyModifiers } from "./phoenix.js";
 import { colossusStats } from "./colossus.js";
 import { brotherhoodModifiers } from "./brotherhood.js";
 import { masterMoldModifiers } from "./master-mold.js";
@@ -134,6 +135,16 @@ DB.drone = {
 };
 export const card = (piece: Piece | string): Card => {
   const printed = DB[typeof piece === "string" ? piece : piece.code];
+  if (typeof piece !== "string" && piece.treatedAsAlly)
+    return {
+      ...printed,
+      type_code: "ally",
+      text: "",
+      traits: `${printed.traits || ""} Controlled.`,
+      thwart: printed.scheme || 0,
+      attack_cost: 1,
+      thwart_cost: 1,
+    };
   return typeof piece !== "string" && piece.treatedAsMinion
     ? {
         ...printed,
@@ -156,6 +167,8 @@ const coreImageCodes = new Set(CARDS.map((c) => c.code));
 const identityImageCodes: Readonly<Record<string, string>> = {
   "33001a": "33001b",
   "33001b": "33001a",
+  "34001a": "34001b",
+  "34001b": "34001a",
   "32001a": "32001b",
   "32001b": "32001a",
   "32030a": "32030b",
@@ -705,6 +718,20 @@ export const HEROES = [
     style: "Mass forms · Aggression",
     complexity: 3,
   },
+  {
+    id: "phoenix",
+    code: "34001a",
+    alter: "34001b",
+    name: "Phoenix",
+    identity: "Jean Grey",
+    aspect: "justice" as Aspect,
+    color: "#c57935",
+    tag: "Power beyond restraint.",
+    description:
+      "Channel Phoenix Force into resources, then unleash your psionic power while holding Dark Phoenix at bay.",
+    style: "Phoenix Force · Justice",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -997,6 +1024,7 @@ export function deckCodes(
       (hero === "cyclops" && aspect === "leadership") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
+      (hero === "phoenix" && aspect === "justice") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
         pair.length === 2 &&
@@ -1020,6 +1048,7 @@ export function deckCodes(
         (!c.permanent ||
           hero === "spectrum" ||
           (hero === "shadowcat" && c.code === "32031a") ||
+          (hero === "phoenix" && c.code === "34002a") ||
           (hero === "vision" && c.code === "26002")),
     )
     .flatMap((c) => Array(c.quantity).fill(c.code)) as string[];
@@ -1196,6 +1225,7 @@ export function heroStats(s: GameState) {
       spiderHamPackCharacterModifiers(s, "hero").attack +
       spdrPackCharacterModifiers(s, "hero").attack +
       colossusStats(s, { isTextBlank }).attack +
+      phoenixStats(s).attack +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
@@ -1226,6 +1256,7 @@ export function heroStats(s: GameState) {
       spiderHamStats(s, { isTextBlank }).thwart +
       spdrPackCharacterModifiers(s, "hero").thwart +
       colossusStats(s, { isTextBlank }).thwart +
+      phoenixStats(s).thwart +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
@@ -1323,6 +1354,7 @@ export function pieceHP(s: GameState, p: Piece) {
     ).length *
       3 +
     scriptedModifier(s, "health", p) +
+    phoenixAllyModifiers(s, p).health +
     hawkeyeAllyMaxHP(s, p) +
     antManPackAllyHP(s, p) +
     waspPackAllyHP(s, p) +

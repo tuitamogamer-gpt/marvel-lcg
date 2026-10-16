@@ -12,6 +12,8 @@ export function isTextBlank(
   s: GameState,
   p: (Pick<Piece, "code"> & { id?: string }) | string,
 ) {
+  if (typeof p !== "string" && "treatedAsAlly" in p && p.treatedAsAlly)
+    return true;
   const printedCode = typeof p === "string" ? p : p.code;
   const kelly = s.sabretooth?.kelly;
   if (

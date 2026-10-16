@@ -1,4 +1,5 @@
 import { cyclopsResourceSources } from "./cyclops.js";
+import { phoenixResourceSources } from "./phoenix.js";
 import { colossusResourceSources } from "./colossus.js";
 import { shadowcatResourceSources } from "./shadowcat.js";
 import { mutantGenesisPlayerPackResourceSources } from "./mutant-genesis-player-pack.js";
@@ -183,6 +184,7 @@ function localPaymentSources(
     }),
   );
   sources.push(...spdrResourceSources(s, { isTextBlank }));
+  sources.push(...phoenixResourceSources(s));
   sources.push(
     ...spdrPackResourceSources(s, {
       isTextBlank,

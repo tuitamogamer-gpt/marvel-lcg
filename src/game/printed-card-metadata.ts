@@ -15,6 +15,13 @@ type PrintedMetadata = Readonly<
  * https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/<code>.jpg
  */
 const printedMetadata: Readonly<Record<string, PrintedMetadata>> = {
+  // Original scans public/cards/catalog/34028.webp and 34031.webp.
+  "34028": {
+    text: "Give to the Jean Grey player.\n<b>When Revealed</b>: If you have the [[UNLEASHED]] trait, search the encounter deck, discard pile, and set-aside area for Dark Phoenix and reveal her. Then, remove Burning Hunger from the game. If you have the [[RESTRAINED]] trait, remove 1 power counter from Phoenix Force and this card gains surge. Discard this card.",
+  },
+  "34031": {
+    text: "Peril.\n<b>When Revealed</b>: If Dark Phoenix is in play, she activates against you. If Dark Phoenix is not in play, place 1 threat on Consume the World and this card gains surge.",
+  },
   // public/cards/catalog/32153.webp: printed instruction names a magnet counter.
   "32153": {
     text: "<b>When Revealed</b>: Exhaust each upgrade and support you control. Place 1 magnet counter on the main scheme.\n<hr />\n[star] <b>Boost</b>: Exhaust your identity.",

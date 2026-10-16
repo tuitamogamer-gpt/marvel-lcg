@@ -67,6 +67,10 @@ export interface MissionStats {
 export interface Piece {
   /** Beguiled changes the actual ally's current type without changing its face. */
   treatedAsMinion?: boolean;
+  /** Mind Control changes the same physical minion into a blank Controlled ally. */
+  treatedAsAlly?: boolean;
+  /** Timestamp on the actual control-changing attachment; latest applies. */
+  controlOrder?: number;
   /** Actual owned cards tucked beneath this instance; faces stay private. */
   storedCards?: Piece[];
   /** Physical facedown boosts assigned to this enemy; consumed only on activation. */

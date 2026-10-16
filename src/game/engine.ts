@@ -30,6 +30,7 @@ import * as ghostSpider from "./ghost-spider.js";
 import * as nova from "./nova.js";
 import * as ironheart from "./ironheart.js";
 import * as ironspider from "./ironspider-sinister.js";
+import * as phoenix from "./phoenix.js";
 import * as spdr from "./spdr.js";
 import * as spdrPack from "./spdr-pack.js";
 import * as spiderHam from "./spider-ham.js";
@@ -595,6 +596,7 @@ function giveCharacterStatus(
             vision.visionStalwart(identity),
           toughLimit: colossus.colossusToughLimit(identity, colossusPorts),
           steady:
+            phoenix.phoenixSuit(identity).steady ||
             spdrPack.spdrPackCharacterSteady(identity, "hero", {
               isTextBlank,
             }) ||
@@ -625,10 +627,11 @@ function syncNebulaIdentityStatuses(s: GameState) {
       vision.visionStalwart(view)
     )
       syncStatuses(view.player, heroCard(view), { stalwart: true });
-    else if (s.villainId === "mansion_attack") {
+    else if (s.villainId === "mansion_attack" || view.heroId === "phoenix") {
       const steady =
         mansionAttack.mansionAttackModifiers(view, "hero", { isTextBlank })
           .steady ||
+        phoenix.phoenixSuit(view).steady ||
         spdrPack.spdrPackCharacterSteady(view, "hero", { isTextBlank });
       if (!steady && !printedKeyword(heroCard(view), "Steady")) {
         view.player.stunCards = Math.min(
@@ -697,7 +700,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         ? 1
         : 0) +
       (name === "Retaliate"
-        ? captainStats(s).retaliate +
+        ? phoenix.phoenixSuit(s).retaliate +
+          captainStats(s).retaliate +
           mansionAttack.mansionAttackModifiers(s, "hero", { isTextBlank })
             .retaliate +
           hulkStats(s).retaliate +
@@ -1394,7 +1398,9 @@ function movePieceFromPlay(
   const removedSource = find(s, id);
   if (removedSource) cyclops.cyclopsCardLeft(s, removedSource);
   need(
-    !removedSource || !zeroTolerance.zeroToleranceIsPermanent(s, removedSource),
+    !removedSource ||
+      (!isPermanent(card(removedSource)) &&
+        !zeroTolerance.zeroToleranceIsPermanent(s, removedSource)),
     "Permanent cards cannot leave play.",
   );
   if (removedSource && removedSource.id === sabretooth.sabretoothKelly(s)?.id) {
@@ -1482,6 +1488,7 @@ function movePieceFromPlay(
       return;
     }
   }
+  if (removedSource) add(s, ...phoenix.phoenixCardLeft(s, removedSource));
   if (removedSource) mgPack.mutantGenesisPlayerPackCardLeft(s, id);
   const leaveReceipt =
     removedSource && controlling && card(removedSource).type_code === "ally"
@@ -1726,8 +1733,12 @@ function nativeIdentityDamageSource(s: GameState, source: string) {
   return event?.ownerId ? `hero:${event.ownerId}` : undefined;
 }
 function syncValkyrieConvertedCards(s: GameState) {
+  phoenix.phoenixSyncControlled(s);
   for (const p of [...s.minions]) {
-    if (valkyrie.valkyrieBeguiledEnemy(s, p)) {
+    if (
+      valkyrie.valkyrieBeguiledEnemy(s, p) &&
+      phoenix.phoenixLatestControl(s, p)?.code !== "34009"
+    ) {
       p.treatedAsMinion = true;
       continue;
     }
@@ -1755,7 +1766,11 @@ function syncValkyrieConvertedCards(s: GameState) {
     seatView(s, seat).player.inPlay.push(p);
   }
   for (const p of allInPlay(s)) {
-    if (!valkyrie.valkyrieBeguiledEnemy(s, p)) continue;
+    if (
+      !valkyrie.valkyrieBeguiledEnemy(s, p) ||
+      phoenix.phoenixLatestControl(s, p)?.code === "34009"
+    )
+      continue;
     const controlling = controller(s, p.id);
     const seat = s.players.find(
       (seat) =>
@@ -1901,7 +1916,11 @@ function check(s: GameState) {
     seat.player.hp = Math.max(0, seat.player.hp);
     if (seat.player.hp > 0 || seat.eliminated || s.phase === "won") continue;
     const view = seatView(s, seat);
-    if (view.flags.captainHelmetPending || view.flags.draxStubbornPending)
+    if (
+      view.flags.captainHelmetPending ||
+      view.flags.draxStubbornPending ||
+      view.flags.phoenixDefeatPending
+    )
       continue;
     if (!view.flags.captainHelmetDeclined) {
       const choices = captainHelmetOptions(view, [
@@ -1938,6 +1957,24 @@ function check(s: GameState) {
             option("defeat", "Let Drax be defeated", [
               E("draxAllowDefeat", { actorId: seat.id }),
             ]),
+          ],
+        );
+        return;
+      }
+    }
+    if (!view.flags.phoenixDefeatDeclined) {
+      const choices = phoenix.phoenixDefeatOptions(view);
+      if (choices.length) {
+        if (s.prompt) continue;
+        activateSeat(s, seat.id);
+        s.flags.phoenixDefeatPending = true;
+        choose(
+          s,
+          "Rise from the Ashes",
+          "Your identity would be defeated. Restore it instead?",
+          [
+            ...choices,
+            option("defeat", "Allow defeat", [E("phoenix:allow-defeat")]),
           ],
         );
         return;
@@ -3592,6 +3629,7 @@ function threat(
     if (p) {
       p.counters += n;
       track(s, "threatPlaced", n);
+      phoenix.phoenixThreatPlaced(s, p, phoenixPorts);
     }
   }
 }
@@ -3602,6 +3640,9 @@ function thwart(
   ignoreCrisis = false,
   source = "hero",
 ) {
+  if (n > 0 && !s.flags.additionalThwartPacket) {
+    n += phoenix.phoenixThwartBonus(s);
+  }
   if (n > 0 && !s.flags.additionalThwartPacket)
     n += msMarvelEventAmountModifier(s, s.currentEventId, "thwart");
   if (
@@ -3643,7 +3684,11 @@ function thwart(
     log(s, `Remove ${removed} threat from ${card(p).name}.`, "good");
     if (removed > 0 && !p.counters)
       niNativeAchievement(s, source, "last-threat", p.id);
-    if (!p.counters && !zeroTolerance.zeroToleranceIsPermanent(s, p)) {
+    if (
+      !p.counters &&
+      !isPermanent(card(p)) &&
+      !zeroTolerance.zeroToleranceIsPermanent(s, p)
+    ) {
       add(
         s,
         ...(goblinModuleDefeated(s, p) || []),
@@ -3662,7 +3707,8 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
   )
     return;
   if (p.counters || !s.sideSchemes.some((x) => x.id === p.id)) return;
-  if (zeroTolerance.zeroToleranceIsPermanent(s, p)) return;
+  if (isPermanent(card(p)) || zeroTolerance.zeroToleranceIsPermanent(s, p))
+    return;
   log(s, `${card(p).name} is defeated.`, "good");
   if (rulesCode(p) === "01166" && p.captured && !isTextBlank(s, p))
     for (const x of p.captured.splice(0)) {
@@ -4013,6 +4059,11 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
         s,
         physical || ({ code: c.code } as Piece),
       ) -
+      (c.code === "34021" &&
+      (sinisterNativeHasTrait(s, "hero", "Mutant") ||
+        sinisterNativeHasTrait(s, "hero", "X-Men"))
+        ? 1
+        : 0) -
       captainAllyDiscount(s, c) -
       captainPackDiscount(s, c) -
       msMarvelDiscount(s) -
@@ -5234,6 +5285,8 @@ function pay(
         delete seatView(s, paymentActor).flags[
           `spdrClarityCommitted:${info.id}`
         ];
+      } else if (phoenix.phoenixResourceSpent(s, id)) {
+        // The actual Phoenix Force counter pays this phase-limited resource.
       } else if (spdr.spdrResourceSpent(s, id)) {
         // Sync Ratio exhausts the actual selected Interface card.
       } else if (cyclops.cyclopsResourceSpent(s, id, p.paymentTarget)) {
@@ -5250,6 +5303,7 @@ function pay(
         // Counter resources are validated together and spent individually.
       } else if (s.player.hand.some((x) => x.id === id)) {
         const spent = discardHand(s, id);
+        phoenix.phoenixPayment(seatView(s, paymentActor), spent, p.card);
         spentResponses.push(
           ...cyclops.cyclopsResourceCardSpent(
             s,
@@ -5625,6 +5679,7 @@ export function newGame(config: {
     miles.milesInitializeNemesis(s, { makePiece });
     ghostSpider.ghostSpiderInitializeNemesis(s, { makePiece });
     nova.novaInitializeNemesis(s, { makePiece });
+    phoenix.phoenixInitialize(s, { makePiece });
     spdr.spdrInitialize(s, { makePiece });
     spdr.spdrInitializeNemesis(s, { makePiece });
     spiderHam.spiderHamInitializeIdentity(s, { makePiece });
@@ -6021,6 +6076,7 @@ export function playable(s: GameState, p: Piece): string | null {
     miles.milesPlayRestriction(s, p, milesPorts) ||
     ghostSpider.ghostSpiderPlayRestriction(s, p) ||
     nova.novaPlayRestriction(s, p, novaPorts) ||
+    phoenix.phoenixPlayRestriction(s, p, phoenixPorts) ||
     spdr.spdrPlayRestriction(s, p, spdrPorts) ||
     spdrPack.spdrPackPlayRestriction(s, p, spdrPackPorts) ||
     spiderHam.spiderHamPlayRestriction(s, p, spiderHamPorts) ||
@@ -6219,7 +6275,11 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
     return;
   }
   const allyTargets = allyUpgradeTargets(s, p!);
-  if (allyTargets.length && maximumAllyUpgradeDiscount(s, p!) > 0) {
+  if (
+    allyTargets.length &&
+    (maximumAllyUpgradeDiscount(s, p!) > 0 ||
+      phoenix.phoenixAttachmentTargets(s, p, phoenixPorts) !== null)
+  ) {
     choose(
       s,
       card(p!).name,
@@ -6564,6 +6624,7 @@ function play(
     add(
       s,
       ...cyclops.cyclopsCardEntered(s, p),
+      ...phoenix.phoenixCardEntered(s, p),
       ...colossus.colossusCardEntered(s, p),
       ...antMan.antManCardEntered(s, p, antManPorts),
       ...antPack.antManPackCardEntered(s, p),
@@ -6737,6 +6798,7 @@ function allyEnter(
     return;
   }
   const spdrAlly =
+    phoenix.phoenixAllyEntered(s, p) ??
     spdr.spdrAllyEntered(s, p, { syncPaid }) ??
     spdrPack.spdrPackAllyEntered(s, p, fromHand, spdrPackPorts);
   if (spdrAlly !== null) {
@@ -6975,6 +7037,7 @@ function event(
     miles.milesEvent(s, p, { paid, paidForCard, playToken }) ??
     ghostSpider.ghostSpiderEvent(s, p) ??
     nova.novaEvent(s, p, { paidForCard, generatedForCard, playToken }) ??
+    phoenix.phoenixEvent(s, p) ??
     spdr.spdrEvent(s, p, { syncPaid }) ??
     spdrPack.spdrPackEvent(s, p) ??
     spiderHam.spiderHamEvent(s, p) ??
@@ -7340,6 +7403,7 @@ function flip(
   }
   if (counts) s.player.flipped = true;
   spdr.spdrChangedForm(s, previousForm, s.player.form);
+  add(s, ...phoenix.phoenixFormChanged(s));
   if (s.player.spiderHamIdentity)
     s.player.spiderHamIdentity.code =
       s.player.form === "hero" ? "30001a" : "30001b";
@@ -7578,12 +7642,14 @@ export function abilityOptions(
   ];
 }
 function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
+  const phoenixBonus = phoenix.phoenixAllyModifiers(s, p);
   const noir = spdrPack.spdrPackAllyStats(s, p, spdrPackPorts);
   return (
     cyclops.cyclopsCharacterModifiers(s, p.id)[kind] +
     (p.code === "31003" && !isTextBlank(s, p) ? p.counters : 0) +
     (noir ? noir[kind] - (card(p)[kind] || 0) : 0) +
     (card(p)[kind] || 0) +
+    phoenixBonus[kind] +
     (kind === "attack"
       ? mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).attack
       : 0) +
@@ -7765,6 +7831,11 @@ function ability(s: GameState, id: string, action = "special") {
   );
   if (colossusAbility !== null) {
     add(s, ...colossusAbility);
+    return;
+  }
+  const phoenixAbility = phoenix.phoenixAbility(s, id, action, phoenixPorts);
+  if (phoenixAbility !== null) {
+    add(s, ...phoenixAbility);
     return;
   }
   const spdrAbility = spdr.spdrAbility(
@@ -8660,7 +8731,9 @@ function activationAmplify(s: GameState): number {
       ...s.attachments,
       ...(s.environments || []),
     ]
-      .filter((p) => !isTextBlank(s, p))
+      .filter(
+        (p) => !isTextBlank(s, p) && !(p.code === "34030" && p.counters === 0),
+      )
       .map(card),
   ];
   return definitions.filter(
@@ -8898,6 +8971,8 @@ function allyUpgradeTargets(s: GameState, p: Piece) {
   );
 }
 function rawAllyUpgradeTargets(s: GameState, p: Piece) {
+  const phoenixTargets = phoenix.phoenixAttachmentTargets(s, p, phoenixPorts);
+  if (phoenixTargets !== null) return phoenixTargets;
   const mutantTargets = mgPack.mutantGenesisPlayerPackAttachmentTargets(
     s,
     p,
@@ -10772,6 +10847,7 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...(find(s, id)
       ? ironspider.ironspiderSinisterActions(s, find(s, id)!, ironspiderPorts)
       : []),
+    ...phoenix.phoenixAbilityOptions(s, id, phoenixPorts),
     ...spdr.spdrAbilityOptions(s, id, spdrPorts),
     ...mgPack.mutantGenesisPlayerPackAbilityOptions(
       s,
@@ -11131,6 +11207,80 @@ const ironspiderPorts: ironspider.IronspiderSinisterPorts = {
   },
 };
 
+const phoenixPorts: phoenix.PhoenixPorts = {
+  queue: add,
+  choose,
+  makePiece,
+  enemyTargets: (s, attack) => targets(s, "enemy", attack),
+  schemeTargets: (s, thwart) => targets(s, "scheme", false, thwart),
+  characterTargets: (s) => spdrPackPorts.characterTargets(s),
+  hasTrait: sinisterNativeHasTrait,
+  allyStat,
+  heroThwart: (s) => heroStats(s).thwart,
+  canReady: (s, id) =>
+    id === "hero" || id.startsWith("hero:")
+      ? canReadyIdentity(id === "hero" ? s : seatView(s, id.slice(5))) &&
+        (id === "hero" ? s : seatView(s, id.slice(5))).player.exhausted
+      : !!find(s, id)?.exhausted,
+  discard: discardPiece,
+  remove: (s, id) => movePieceFromPlay(s, id, true),
+  shufflePlayer: (s) => {
+    revealHidden(s);
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  shuffleEncounter: (s) => {
+    revealHidden(s);
+    mutagenPorts.shuffleEncounter(s);
+  },
+  canPay: (s, p) => canPay(s, cardCost(s, card(p), p), [], p.id, p.code),
+  playReaction: (s, p, after) =>
+    add(
+      s,
+      E("payRequest", {
+        title: card(p).name,
+        cost: cardCost(s, card(p), p),
+        piece: p,
+        cancelable: true,
+        after: [
+          E("resolveHandEvent", {
+            id: p.id,
+            after: phoenix.phoenixEvent(s, p) || [],
+            continuation: after,
+          }),
+        ],
+        cancellationQueue: after,
+      }),
+    ),
+  preventDamage: (s, p, amount) => spdrPackPorts.preventDamage(s, p, amount),
+  declareDefense: (s) => {
+    if (s.attack) {
+      s.attack.defender = "hero";
+      s.attack.targetPlayerId = s.activePlayerId;
+      s.attack.basicDefense = false;
+      s.attack.defense = 0;
+      s.attack.eventDefense = true;
+    }
+  },
+  moveThreat: (s, from, to, n) => {
+    const source = s.sideSchemes.find((p) => p.id === from);
+    const amount = Math.min(
+      n,
+      from === "main" ? s.scheme.threat : source?.counters || 0,
+    );
+    if (from === "main") s.scheme.threat -= amount;
+    else if (source) source.counters -= amount;
+    threat(s, to, amount);
+    if (source && !source.counters && !isPermanent(card(source)))
+      add(s, E("defeatScheme", { id: source.id }));
+  },
+  maxHP,
+  revealHidden,
+  printedHP: (s) => heroCard(s).health || 0,
+  lose: (s, reason) => endGame(s, false, reason),
+  reveal: (s, p) => add(s, E("reveal", { piece: p })),
+  removeEncounter: (s, p) => milesPorts.removeEncounter(s, p),
+  discardEncounter: (s, p) => milesPorts.discardEncounter(s, p),
+};
 const spdrPorts: spdr.SpdrPorts = {
   queue: add,
   choose,
@@ -13470,7 +13620,9 @@ function sinisterNativeHasTrait(s: GameState, id: string, trait: string) {
     : card(find(s, id)!);
   return (
     (trait === "S.H.I.E.L.D." && !!printed.traits?.includes(trait)) ||
-    captainPackHasTrait(s, id, trait)
+    captainPackHasTrait(s, id, trait) ||
+    (!!identityId &&
+      phoenix.phoenixTraits(seatView(s, identityId)).includes(trait))
   );
 }
 function sinisterNativePiece(s: GameState, id: string) {
@@ -15764,6 +15916,7 @@ function enemyAttack(
   colossusActivationHandled = false,
   colossusActivationReceipt?: colossus.ColossusActivationReceipt,
 ) {
+  if (!phoenix.phoenixCanActivate(s, id)) return;
   if (colossusActivationReceipt)
     delete seatView(s, colossusActivationReceipt.playerId).flags[
       `colossusActivation:${colossusActivationReceipt.token}`
@@ -16387,6 +16540,7 @@ function enemyScheme(
   colossusActivationHandled = false,
   colossusActivationReceipt?: colossus.ColossusActivationReceipt,
 ) {
+  if (!phoenix.phoenixCanActivate(s, id)) return;
   if (colossusActivationReceipt)
     delete seatView(s, colossusActivationReceipt.playerId).flags[
       `colossusActivation:${colossusActivationReceipt.token}`
@@ -16483,6 +16637,7 @@ function enemyScheme(
   };
   add(
     s,
+    E("phoenixSchemeInterrupt", { id, activationId: moldReceipt.token }),
     ...masterMold.masterMoldBeforeScheme(s, moldReceipt, { isTextBlank }),
     E(pendingBoosts.length ? "revealSchemeBoost" : "finishScheme"),
   );
@@ -16562,7 +16717,14 @@ function finishScheme(s: GameState) {
   log(s, `${card(p).name} schemes for ${amount} threat.`, "bad");
   activation.threatBefore = s.stats?.threatPlaced || 0;
   const after = [
-    E("threat", { target: "main", amount }),
+    E(s.flags[`phoenixManipulation:${activation.id}`] ? "thwart" : "threat", {
+      target: phoenix.phoenixSchemeTarget(s, p),
+      amount:
+        amount +
+        Number(s.flags[`phoenixManipulationBonus:${activation.id}`] || 0),
+      additional: !!s.flags[`phoenixManipulation:${activation.id}`],
+      ignoreCrisis: true,
+    }),
     ...(extra === "rage" ? [E("mill", { amount })] : []),
     ...(id === s.villain.id && villainAt(s, "01141").length
       ? s.sideSchemes.map((p) => E("threat", { target: p.id, amount: 1 }))
@@ -16758,6 +16920,15 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
       add(s, ...forced);
       return;
     }
+  }
+  const phoenixShield = phoenix.phoenixForcedDamage(
+    s,
+    { ...effect, target, amount: damage, kind: "attack" },
+    phoenixPorts,
+  );
+  if (phoenixShield) {
+    add(s, ...phoenixShield);
+    return;
   }
   const receiving = target === "hero" ? s.player : find(s, target);
   const prohibited = damageProhibition(s, target, false);
@@ -17783,6 +17954,7 @@ function reveal(
       ...warMachine.WAR_MACHINE_SCRIPT_CODES,
       ...valkyrie.VALKYRIE_SCRIPT_CODES,
       ...vision.VISION_SCRIPT_CODES,
+      ...phoenix.PHOENIX_SCRIPT_CODES,
       ...spdr.SPDR_SCRIPT_CODES,
       ...spiderHam.SPIDER_HAM_SCRIPT_CODES,
       ...cyclops.CYCLOPS_SCRIPT_CODES,
@@ -17907,6 +18079,7 @@ function reveal(
     nova.novaEncounterReveal(s, p) ??
     cyclops.cyclopsEncounterReveal(s, p) ??
     colossus.colossusEncounterReveal(s, p) ??
+    phoenix.phoenixEncounterReveal(s, p) ??
     spdr.spdrEncounterReveal(s, p) ??
     spiderHam.spiderHamEncounterReveal(s, p) ??
     ironheart.ironheartEncounterReveal(s, p) ??
@@ -18492,6 +18665,11 @@ function treachery(s: GameState, p: Piece) {
         add(s, ...cyclopsNemesis);
         break;
       }
+      const phoenixNemesis = phoenix.phoenixShadowOfPast(s);
+      if (phoenixNemesis !== null) {
+        add(s, ...phoenixNemesis);
+        break;
+      }
       const colossusNemesis = colossus.colossusShadowOfPast(s);
       if (colossusNemesis !== null) {
         add(s, ...colossusNemesis);
@@ -18708,6 +18886,7 @@ function resolve(s: GameState, e: Effect) {
   if (mgPack.resolveMutantGenesisPlayerPackEffect(s, e, mutantGenesisPackPorts))
     return;
   if (ironspider.resolveIronspiderSinisterEffect(s, e, ironspiderPorts)) return;
+  if (phoenix.resolvePhoenixEffect(s, e, phoenixPorts)) return;
   if (spdr.resolveSpdrEffect(s, e, spdrPorts)) return;
   if (spdrPack.resolveSpdrPackEffect(s, e, spdrPackPorts)) return;
   if (spiderHam.resolveSpiderHamEffect(s, e, spiderHamPorts)) return;
@@ -18830,6 +19009,7 @@ function resolve(s: GameState, e: Effect) {
           nova.novaEncounterReveal(state, piece) ??
           cyclops.cyclopsEncounterReveal(state, piece) ??
           colossus.colossusEncounterReveal(state, piece) ??
+          phoenix.phoenixEncounterReveal(state, piece) ??
           spdr.spdrEncounterReveal(state, piece) ??
           spiderHam.spiderHamEncounterReveal(state, piece) ??
           ironheart.ironheartEncounterReveal(state, piece) ??
@@ -21264,6 +21444,13 @@ function resolve(s: GameState, e: Effect) {
         );
         break;
       }
+      {
+        const shield = phoenix.phoenixForcedDamage(s, e, phoenixPorts);
+        if (shield) {
+          add(s, ...shield);
+          break;
+        }
+      }
       if (e.attack && shadowcatNativeIgnoreWindow(s, e, "attack")) break;
       if (e.basic && !e.colossusRageHandled) {
         const next = { ...e, colossusRageHandled: true };
@@ -22665,6 +22852,11 @@ function resolve(s: GameState, e: Effect) {
         ]);
         break;
       }
+      const phoenixBefore = phoenix.phoenixBeforeAlly(s, p, e);
+      if (phoenixBefore) {
+        add(s, ...phoenixBefore);
+        break;
+      }
       if (!e.nebulaPackCosmoHandled && !(attack ? p.stunned : p.confused)) {
         const packet = {
           ...e,
@@ -23039,6 +23231,7 @@ function resolve(s: GameState, e: Effect) {
           key: defeatKey,
           attackedEnemy: attackedEnemySnapshot,
         }),
+        ...phoenix.phoenixAllyUsed(s, p, attack ? "attack" : "thwart"),
         ...spdrPack.spdrPackAllyUsed(
           s,
           p,
@@ -23477,6 +23670,28 @@ function resolve(s: GameState, e: Effect) {
             : effect,
         ),
       );
+      break;
+    }
+    case "phoenixSchemeInterrupt": {
+      if (
+        e.id !== s.villain.id ||
+        !s.scheming ||
+        s.scheming.id !== e.activationId
+      )
+        break;
+      const choices = phoenix.phoenixReactionOptions(
+        s,
+        "scheme",
+        [],
+        phoenixPorts,
+      );
+      if (choices.length)
+        choose(
+          s,
+          "Villain schemes",
+          "Play Psychic Manipulation before revealing boosts?",
+          [...choices, option("pass", "Continue", [])],
+        );
       break;
     }
     case "schemeWindow":
@@ -24056,6 +24271,9 @@ function resolve(s: GameState, e: Effect) {
             ...firstHit,
             ...subdue,
             ...identity,
+            ...(againstPlayer && seat.id === e.playerId
+              ? phoenix.phoenixReactionOptions(view, "attack", [], phoenixPorts)
+              : []),
             ...shieldmaiden,
             ...pip,
           ]),
@@ -24408,7 +24626,38 @@ function resolve(s: GameState, e: Effect) {
         add(s, E("finishAttack"));
         break;
       }
+      const redirect = s.flags[`phoenixMisdirection:${a.id}`];
+      if (typeof redirect === "string") {
+        delete s.flags[`phoenixMisdirection:${a.id}`];
+        const amount = Math.max(0, a.base - a.defense - a.prevented);
+        a.prevented += amount;
+        add(
+          s,
+          E("damage", {
+            target: redirect,
+            amount,
+            source: a.attacker,
+            enemyAttack: true,
+          }),
+          { ...e },
+        );
+        break;
+      }
       const damageTarget = enemyAttackDamageTarget(s, a);
+      const shield = phoenix.phoenixForcedDamage(
+        s,
+        {
+          ...e,
+          target: damageTarget,
+          kind: "attack",
+          amount: Math.max(0, a.base - a.defense - a.prevented),
+        },
+        phoenixPorts,
+      );
+      if (shield) {
+        add(s, ...shield);
+        break;
+      }
       const kellyReplacement =
         damageTarget === sabretooth.sabretoothKelly(s)?.id &&
         (!a.defender || a.defender === "none");
@@ -26760,6 +27009,7 @@ export function dispatch(state: GameState, command: Command): GameState {
             need(s.player.hp < maxHP(s), "You are at full health.");
             s.player.exhausted = true;
             heal(s, "hero", stats.recover);
+            add(s, ...phoenix.phoenixRecovered(s));
             add(
               s,
               ...spiderHam.spiderHamAfterBasicRecover(

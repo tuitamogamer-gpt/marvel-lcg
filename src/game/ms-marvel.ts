@@ -243,7 +243,7 @@ export function msMarvelStats(s: GameState) {
     health: s.player.inPlay.filter((p) => p.code === "05023").length * 3,
     recover:
       s.player.form === "alter"
-        ? s.player.inPlay.filter((p) => p.code === "05033").length * 2
+        ? s.player.inPlay.filter((p) => rulesCode(p) === "05033").length * 2
         : 0,
   };
 }
@@ -283,7 +283,7 @@ export function msMarvelPlayRestriction(s: GameState, p: Piece): string | null {
     return "Available when your identity would take damage.";
   if (p.code === "05014")
     return "Available when a villain attack boost card is turned face up.";
-  if (["05023", "05033"].includes(p.code) && !recipients(s, p).length)
+  if (["05023", "05033"].includes(rulesCode(p)) && !recipients(s, p).length)
     return "Each player already controls this upgrade.";
   if (
     p.code === "05032" &&
@@ -352,7 +352,7 @@ export function msMarvelAllyEnter(s: GameState, p: Piece): Effect[] | null {
 }
 export function msMarvelCardEntered(s: GameState, p: Piece): Effect[] {
   if (["05017", "05024"].includes(rulesCode(p))) p.counters = 3;
-  if (["05023", "05033"].includes(p.code))
+  if (["05023", "05033"].includes(rulesCode(p)))
     return [M("recipient", { id: p.id })];
   return [];
 }
