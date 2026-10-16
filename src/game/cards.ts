@@ -63,6 +63,7 @@ import { spdrPackCharacterModifiers } from "./spdr-pack.js";
 import { ironspiderSinisterHealthBonus } from "./ironspider-sinister.js";
 import { phoenixStats, phoenixAllyModifiers } from "./phoenix.js";
 import { wolverineStats } from "./wolverine.js";
+import { stormGlobal, stormStats, stormAllyHP } from "./storm.js";
 import { colossusStats } from "./colossus.js";
 import { brotherhoodModifiers } from "./brotherhood.js";
 import { masterMoldModifiers } from "./master-mold.js";
@@ -152,7 +153,7 @@ export const card = (piece: Piece | string): Card => {
         type_code: "minion",
         text: "",
         scheme: printed.thwart || 0,
-        traits: `${printed.traits || ""} Enthralled.`,
+        traits: `${printed.traits || ""} ${piece.stormControlled ? "Controlled" : "Enthralled"}.`,
       }
     : printed;
 };
@@ -172,6 +173,8 @@ const identityImageCodes: Readonly<Record<string, string>> = {
   "34001b": "34001a",
   "35001a": "35001b",
   "35001b": "35001a",
+  "36001a": "36001b",
+  "36001b": "36001a",
   "32001a": "32001b",
   "32001b": "32001a",
   "32030a": "32030b",
@@ -749,6 +752,20 @@ export const HEROES = [
     style: "Claws and healing · Aggression",
     complexity: 2,
   },
+  {
+    id: "storm",
+    code: "36001a",
+    alter: "36001b",
+    name: "Storm",
+    identity: "Ororo Munroe",
+    aspect: "leadership" as Aspect,
+    color: "#6c85a4",
+    tag: "The elements answer your call.",
+    description:
+      "Change the weather for every character, unleash powerful Specials, and lead your X-Men allies.",
+    style: "Weather control · Leadership",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -911,6 +928,7 @@ export const MODULES = [
   { id: "sentinels", name: "Sentinels", difficulty: 3 },
   { id: "acolytes", name: "Acolytes", difficulty: 4 },
   { id: "deathstrike", name: "Lady Deathstrike", difficulty: 3 },
+  { id: "shadow_king", name: "Shadow King", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -1040,6 +1058,7 @@ export function deckCodes(
       (hero === "spiderham" && aspect === "justice") ||
       (hero === "spdr" && aspect === "protection") ||
       (hero === "cyclops" && aspect === "leadership") ||
+      (hero === "storm" && aspect === "leadership") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
       (hero === "phoenix" && aspect === "justice") ||
@@ -1186,6 +1205,7 @@ export function aerial(s: GameState) {
   return (
     (s.player.form === "hero" &&
       (has(s, "01017") || !!s.flags.aerial || thorStats(s).aerial)) ||
+    stormStats(s).aerial ||
     doctorStrangeTraits(s).includes("Aerial") ||
     spiderWomanHasAerial(s) ||
     rocketHeroTraits(s).includes("Aerial") ||
@@ -1212,6 +1232,7 @@ export function heroStats(s: GameState) {
   return {
     attack:
       h.attack! +
+      stormGlobal(s).attack +
       s.attachments
         .filter(
           (p) =>
@@ -1256,6 +1277,7 @@ export function heroStats(s: GameState) {
       mansionAttackModifiers(s, "hero", { isTextBlank }).attack,
     thwart:
       h.thwart! +
+      stormStats(s).thwart +
       (has(s, "01065") ? 1 : 0) +
       Number(s.flags.lead || 0) +
       captainStats(s).thw +
@@ -1286,6 +1308,7 @@ export function heroStats(s: GameState) {
       captainPackStats(s).thwart,
     defense:
       h.defense! +
+      stormStats(s).defense +
       (has(s, "01081") ? 1 : 0) +
       (has(s, "01016") ? (aerial(s) ? 2 : 1) : 0) +
       captainStats(s).def +
@@ -1377,6 +1400,7 @@ export function pieceHP(s: GameState, p: Piece) {
       3 +
     scriptedModifier(s, "health", p) +
     phoenixAllyModifiers(s, p).health +
+    stormAllyHP(s, p) +
     hawkeyeAllyMaxHP(s, p) +
     antManPackAllyHP(s, p) +
     waspPackAllyHP(s, p) +

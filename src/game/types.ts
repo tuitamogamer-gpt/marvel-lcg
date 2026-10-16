@@ -69,7 +69,9 @@ export interface Piece {
   treatedAsMinion?: boolean;
   /** Mind Control changes the same physical minion into a blank Controlled ally. */
   treatedAsAlly?: boolean;
-  /** Timestamp on the actual control-changing attachment; latest applies. */
+  /** Possessed turns this physical ally into a Controlled minion. */
+  stormControlled?: boolean;
+  /** Monotonic entry order of a physical control-changing attachment. */
   controlOrder?: number;
   /** Actual owned cards tucked beneath this instance; faces stay private. */
   storedCards?: Piece[];

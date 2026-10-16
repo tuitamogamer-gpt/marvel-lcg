@@ -15,6 +15,18 @@ export function isTextBlank(
   if (typeof p !== "string" && "treatedAsAlly" in p && p.treatedAsAlly)
     return true;
   const printedCode = typeof p === "string" ? p : p.code;
+  if (
+    typeof p !== "string" &&
+    p.id &&
+    s.minions.some((m) => m.id === p.id) &&
+    s.players.some(
+      (seat) =>
+        (seat.id === s.activePlayerId ? s.flags : seat.flags)[
+          `stormBlank:${p.id}`
+        ] === s.round,
+    )
+  )
+    return true;
   const kelly = s.sabretooth?.kelly;
   if (
     printedCode === "32066" &&

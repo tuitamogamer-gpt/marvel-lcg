@@ -1,5 +1,6 @@
 import { cyclopsResourceSources } from "./cyclops.js";
 import { phoenixResourceSources } from "./phoenix.js";
+import { stormResourceSources } from "./storm.js";
 import { colossusResourceSources } from "./colossus.js";
 import { shadowcatResourceSources } from "./shadowcat.js";
 import { mutantGenesisPlayerPackResourceSources } from "./mutant-genesis-player-pack.js";
@@ -145,6 +146,7 @@ function localPaymentSources(
         kind: "ability",
       });
   }
+  sources.push(...stormResourceSources(s));
   sources.push(...thorResourceSources(s));
   sources.push(...waspPackResourceSources(s));
   sources.push(...quicksilverResourceSources(s));

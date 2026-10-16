@@ -452,7 +452,7 @@ export function mutantGenesisPlayerPackResourceSources(
   return allInPlay(s)
     .filter(
       (p) =>
-        p.code === "32020" &&
+        ["32020", "36023"].includes(p.code) &&
         !p.exhausted &&
         !ports.isTextBlank(seatView(s, controller(s, p.id)!), p),
     )
@@ -694,7 +694,9 @@ export function mutantGenesisPlayerPackAbilityOptions(
   id: string,
   ports: MutantGenesisPlayerPackPorts,
 ): Option[] {
-  const p = allInPlay(s).find((p) => p.id === id && p.code === "32049");
+  const p = allInPlay(s).find(
+    (p) => p.id === id && ["32049", "36025"].includes(p.code),
+  );
   if (
     !p ||
     p.exhausted ||
