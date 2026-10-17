@@ -120,12 +120,12 @@ export const SCRIPTED_HERO_IDS = new Set([
   "cyclops",
   "colossus",
   "shadowcat",
-  "rogue",
   "phoenix",
   "wolverine",
   "storm",
-  "psylocke",
   "gambit",
+  "rogue",
+  "psylocke",
   "angel",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([

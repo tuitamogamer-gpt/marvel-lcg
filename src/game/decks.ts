@@ -49,6 +49,7 @@ export function deckOptions(
       c.code !== "26002b" &&
       c.code !== "32031b" &&
       c.code !== "34002b" &&
+      c.code !== "41002b" &&
       !identityCodes.has(c.code) &&
       !identityMatch(heroId, c) &&
       (hasExecutableScript(c) ||

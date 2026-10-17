@@ -159,7 +159,10 @@ export function captainPackHasTrait(
               ? "12001c"
               : view.heroId === "wsp" && view.player.heroForm === "giant"
                 ? "13001c"
-                : hero.code
+                : view.heroId === "angel" &&
+                    view.player.angelForm === "archangel"
+                  ? "42001c"
+                  : hero.code
             : hero.alter,
         )
       : cards.get(inPlay(s, target)?.code || "");
