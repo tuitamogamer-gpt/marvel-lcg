@@ -53,9 +53,14 @@ export function deckOptions(
       !identityMatch(heroId, c) &&
       (hasExecutableScript(c) ||
         (CAPTAIN_AMERICA_SCRIPT_CODES as readonly string[]).includes(c.code)) &&
-      ["ally", "event", "resource", "support", "upgrade"].includes(
-        c.type_code,
-      ) &&
+      [
+        "ally",
+        "event",
+        "resource",
+        "support",
+        "upgrade",
+        "player_side_scheme",
+      ].includes(c.type_code) &&
       (((c.faction_code === "hero" ||
         Object.hasOwn(heroRequiredCards(heroId), c.code)) &&
         c.set_code === heroId &&

@@ -1,4 +1,14 @@
 import * as cyclops from "./cyclops.js";
+import * as psylocke from "./psylocke.js";
+import * as angel from "./angel.js";
+import {
+  beginPlayerSideSchemeDefeat,
+  enterPlayerSideScheme,
+  isPlayerSideScheme,
+  playerSideSchemeHasVictory,
+  playerSideSchemeLimit,
+  playerSideSchemes,
+} from "./player-side-schemes.js";
 import * as acolytes from "./acolytes.js";
 import * as armadillo from "./armadillo.js";
 import * as inheritors from "./inheritors.js";
@@ -1628,6 +1638,8 @@ function movePieceFromPlay(
     s.removed.push(resetPiece(p));
   else if (p.code === "32172b" && victory)
     (s.victoryDisplay ||= []).push(resetPiece(p));
+  else if (isPlayerSideScheme(p) && victory)
+    (s.victoryDisplay ||= []).push(resetPiece(p));
   else if (
     card(p).faction_code === "encounter" &&
     !(wideawakeCaptive(p) && p.ownerId)
@@ -2177,6 +2189,10 @@ function check(s: GameState) {
           }
       }
     }
+    for (const scheme of playerSideSchemes(s).filter(
+      (p) => p.ownerId === seat.id,
+    ))
+      movePieceFromPlay(s, scheme.id, true);
     s.encounter.discard.push(
       ...s.encounter.dealt.filter((p) => p.dealtTo === seat.id),
     );
@@ -3816,7 +3832,12 @@ function thwart(
     return removed;
   }
 }
-function defeatScheme(s: GameState, p: Piece, source = "hero") {
+function defeatScheme(
+  s: GameState,
+  p: Piece,
+  source = "hero",
+  playerSchemeRewardHandled = false,
+) {
   if (
     p.pendingDefeat &&
     ["32144a", "32144b", "32145a", "32158"].includes(p.code)
@@ -3825,6 +3846,10 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
   if (p.counters || !s.sideSchemes.some((x) => x.id === p.id)) return;
   if (isPermanent(card(p)) || zeroTolerance.zeroToleranceIsPermanent(s, p))
     return;
+  if (isPlayerSideScheme(p) && !playerSchemeRewardHandled) {
+    add(s, ...beginPlayerSideSchemeDefeat(s, p, source));
+    return;
+  }
   log(s, `${card(p).name} is defeated.`, "good");
   if (rulesCode(p) === "01166" && p.captured && !isTextBlank(s, p))
     for (const x of p.captured.splice(0)) {
@@ -3891,7 +3916,9 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
     { isTextBlank },
   );
   const victory =
-    ["32071", "32100", "32120"].includes(p.code) && !isTextBlank(s, p);
+    (["32071", "32100", "32120"].includes(p.code) ||
+      (isPlayerSideScheme(p) && playerSideSchemeHasVictory(p))) &&
+    !isTextBlank(s, p);
   const retainFind =
     ["32065a", "32088a", "32144a", "32144b", "32145a", "32158"].includes(
       p.code,
@@ -3950,7 +3977,11 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
       ? [
           {
             id: `${p.id}:victory`,
-            title: p.code === "32100" ? "Victory 2" : "Victory 1",
+            title: isPlayerSideScheme(p)
+              ? "Victory 0"
+              : p.code === "32100"
+                ? "Victory 2"
+                : "Victory 1",
             effects: [E("encounterVictory", { id: p.id })],
           },
         ]
@@ -6764,6 +6795,9 @@ function play(
         niPlayed,
       }),
     );
+  } else if (isPlayerSideScheme(p)) {
+    Object.assign(p, resetPiece(p, true));
+    add(s, ...enterPlayerSideScheme(s, p));
   } else {
     const healthBefore = maxHP(s);
     Object.assign(p, resetPiece(p, true));
@@ -21558,6 +21592,58 @@ function resolve(s: GameState, e: Effect) {
     case "encounterVictory":
       movePieceFromPlay(s, e.id, false, undefined, true);
       break;
+    case "playerSideSchemeLimit": {
+      const schemes = playerSideSchemes(s);
+      const limit = playerSideSchemeLimit(s);
+      if (schemes.length <= limit) break;
+      choose(
+        s,
+        "Player side scheme limit",
+        `Choose a player side scheme to discard. The shared limit is ${limit}. Discarding it does not defeat it.`,
+        schemes.map((p) =>
+          option(
+            p.id,
+            `Discard ${card(p).name}`,
+            [
+              E("playerSideSchemeDiscard", { id: p.id }),
+              E("playerSideSchemeLimit"),
+            ],
+            undefined,
+            p.code,
+          ),
+        ),
+      );
+      break;
+    }
+    case "playerSideSchemeDiscard": {
+      const p = playerSideSchemes(s).find((p) => p.id === e.id);
+      need(p, "The selected player side scheme is no longer in play.");
+      discardPiece(s, p!.id);
+      break;
+    }
+    case "playerSideSchemeCheckDefeat": {
+      const p = playerSideSchemes(s).find((p) => p.id === e.id);
+      if (p && !p.counters) add(s, E("defeatScheme", { id: p.id }));
+      break;
+    }
+    case "playerSideSchemeReward": {
+      const p = playerSideSchemes(s).find((p) => p.id === e.id);
+      if (!p || !p.pendingDefeat || isTextBlank(s, p)) break;
+      add(
+        s,
+        ...psylocke.psylockeSideSchemeDefeated(s, p, s.activePlayerId),
+        ...angel.angelPlayerSideSchemeDefeated(s, p),
+      );
+      break;
+    }
+    case "playerSideSchemeFinishDefeat": {
+      const p = playerSideSchemes(s).find((p) => p.id === e.id);
+      if (p?.pendingDefeat) {
+        delete p.pendingDefeat;
+        defeatScheme(s, p, e.source, true);
+      }
+      break;
+    }
     case "defeatScheme": {
       const p = s.sideSchemes.find((x) => x.id === e.id);
       if (p && zeroTolerance.zeroToleranceIsPermanent(s, p)) break;

@@ -63,6 +63,11 @@ export function controlledNPCs(
     : [];
 }
 export function controller(s: GameState, id: string) {
+  const scheme = s.sideSchemes.find(
+    (p) => p.id === id && p.playerSideSchemeController,
+  );
+  if (scheme)
+    return s.players.find((p) => p.id === scheme.playerSideSchemeController);
   return s.players.find((p) =>
     [
       ...(p.id === s.activePlayerId ? s.player : p.player).inPlay,

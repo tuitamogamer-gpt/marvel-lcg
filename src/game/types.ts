@@ -65,6 +65,8 @@ export interface MissionStats {
   enemiesDefeated: number;
 }
 export interface Piece {
+  /** Player side schemes live in the common scheme area under owner control. */
+  playerSideSchemeController?: string;
   /** Beguiled changes the actual ally's current type without changing its face. */
   treatedAsMinion?: boolean;
   /** Mind Control changes the same physical minion into a blank Controlled ally. */
