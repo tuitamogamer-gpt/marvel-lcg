@@ -1,5 +1,4 @@
 import * as cyclops from "./cyclops.js";
-import * as psylocke from "./psylocke.js";
 import * as angel from "./angel.js";
 import {
   beginPlayerSideSchemeDefeat,
