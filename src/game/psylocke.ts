@@ -403,7 +403,11 @@ export function psylockeDamageBonus(
   const victim = enemy(s, target);
   if (!victim?.confused) return 0;
   const owner =
-    source === "hero" ? s.activePlayerId : controller(s, source)?.id;
+    source === "hero"
+      ? s.activePlayerId
+      : source.startsWith("hero:")
+        ? source.slice(5)
+        : controller(s, source)?.id;
   return owner && live(seatView(s, owner), "41017").length ? 1 : 0;
 }
 export function psylockeAttackOptions(

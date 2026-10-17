@@ -13,12 +13,15 @@ import {
   reload,
 } from "./dv-test-helpers.js";
 
-function base(count = 1) {
-  const heroes = ["spider_man", "captain_marvel", "black_panther", "she_hulk"]
+function base(
+  count = 1,
+  identities = ["spider_man", "captain_marvel", "black_panther", "she_hulk"],
+) {
+  const heroes = identities
     .slice(0, count)
     .map((heroId) => ({ heroId, aspect: "justice" as const }));
   let s = newGame({
-    heroId: "spider_man",
+    heroId: heroes[0].heroId,
     aspect: "justice",
     heroes,
     villainId: "rhino",
@@ -26,7 +29,9 @@ function base(count = 1) {
     pacing: "expert",
   });
   for (let n = 0; n < count; n++) s = command(s, { type: "MULLIGAN", ids: [] });
-  s = finish(s);
+  s = finish(s, (v) =>
+    v.prompt?.title === "Foresight" ? v.prompt.options[0].id : undefined,
+  );
   for (const seat of s.players) {
     const p = seatView(s, seat).player;
     p.deck.push(...p.hand.splice(0));
@@ -209,5 +214,50 @@ describe("Player side schemes use one common physical zone", () => {
     expect(result.sideSchemes.filter((p) => p.code === "42017")).toHaveLength(
       1,
     );
+  });
+  it("Rocket does not draw from Lay the Trap's player-sourced excess damage", () => {
+    let s = base(1, ["rocket"]),
+      p: Piece;
+    [s, p] = playScheme(s, "41016");
+    s = finish(s);
+    s.villain.hp = 2;
+    const beforeHand = s.player.hand.map((q) => q.id);
+    const oldStage = s.villain.code;
+    s = native(reload(s), {
+      type: "thwart",
+      target: p.id,
+      amount: 3,
+      source: "hero",
+    });
+    expect(s.prompt?.title || "").not.toMatch(/Murdered You/i);
+    s = settle(s);
+    expect(s.villain.code).not.toBe(oldStage);
+    expect(s.player.hand.map((q) => q.id)).toEqual(beforeHand);
+    expect(s.victoryDisplay?.some((q) => q.id === p.id)).toBe(true);
+    expect(occurrence(s, p.id)).toHaveLength(1);
+  });
+
+  it("the actual teammate defeating another player's Lay the Trap receives damage attribution", () => {
+    let s = base(2),
+      p: Piece;
+    [s, p] = playScheme(s, "41016");
+    s = finish(s);
+    s = finish(
+      native(s, { type: "thwart", target: p.id, amount: 4, source: "hero" }),
+    );
+    s = finish(command(s, { type: "END_TURN" }));
+    expect(s.activePlayerId).toBe("p2");
+    expect(controller(s, p.id)?.id).toBe("p1");
+    s = command(reload(s), { type: "BASIC", action: "thwart" });
+    s = settle(choose(s, p.id));
+    expect(s.villain.hp).toBe(90);
+    expect(
+      s.log.some((entry) =>
+        /Captain Marvel.*Rhino takes 10 damage/.test(entry.text),
+      ),
+    ).toBe(true);
+    expect(s.activePlayerId).toBe("p2");
+    expect(s.victoryDisplay?.find((q) => q.id === p.id)?.ownerId).toBe("p1");
+    expect(occurrence(s, p.id)).toHaveLength(1);
   });
 });

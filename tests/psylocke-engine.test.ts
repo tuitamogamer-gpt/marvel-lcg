@@ -21,6 +21,7 @@ import {
   psiEnergy,
   psylockeSideSchemeDefeated,
   psylockeMentalIcons,
+  psylockeDamageBonus,
   PSYLOCKE_SCRIPT_CODES,
 } from "../src/game/psylocke.js";
 import {
@@ -670,5 +671,50 @@ describe("Psylocke printed rules edge cases", () => {
     s = resolve(choose(s, "wild"), "hero");
     expect(s.player.confused).toBe(true);
     expect(s.encounter.discard.some((p) => p.id === illusion.id)).toBe(true);
+  });
+  it("playing the same physical attack event again reopens Illusion for its repeated enemy target", () => {
+    let s = base();
+    const illusion = attach(s, "41028", "hero:p1");
+    let [event, a, b] = hand(s, "01054", "01089", "01090");
+    const originalEventId = event.id;
+    top(s, "01088");
+    s = play(s, event, [a, b]);
+    if (s.prompt?.options.some((o) => o.id === s.villain.id))
+      s = choose(s, s.villain.id);
+    expect(s.prompt?.title).toBe("Psionic Illusion");
+    s = resolve(choose(s, "energy"));
+    expect(s.villain.hp).toBe(45);
+    expect(s.attachments.some((p) => p.id === illusion.id)).toBe(true);
+    [event, a, b] = hand(s, "01054", "01089", "01090");
+    expect(event.id).toBe(originalEventId);
+    top(s, "01088");
+    s = play(s, event, [a, b]);
+    if (s.prompt?.options.some((o) => o.id === s.villain.id))
+      s = choose(s, s.villain.id);
+    expect(s.prompt?.title).toBe("Psionic Illusion");
+    s = resolve(choose(s, "energy"));
+    expect(s.villain.hp).toBe(40);
+    expect(s.attachments.some((p) => p.id === illusion.id)).toBe(true);
+  });
+  it("Float Like a Butterfly follows an explicit teammate hero source and that controller's native attack", () => {
+    let s = base("hero", true);
+    put(s, "41017", "p2");
+    seatView(s, "p2").player.form = "hero";
+    s.villain.confused = true;
+    expect(s.activePlayerId).toBe("p1");
+    expect(psylockeDamageBonus(s, "hero:p2", s.villain.id)).toBe(1);
+    expect(psylockeDamageBonus(s, "hero:p1", s.villain.id)).toBe(0);
+    s = resolve(
+      native(s, {
+        type: "damage",
+        target: s.villain.id,
+        amount: 2,
+        attack: true,
+        source: "hero",
+        actorId: "p2",
+      }),
+    );
+    expect(s.villain.hp).toBe(47);
+    expect(s.activePlayerId).toBe("p1");
   });
 });
