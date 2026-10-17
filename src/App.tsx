@@ -1,3 +1,4 @@
+import { rogueTouched } from "./game/rogue";
 import { gambitCharges } from "./game/gambit";
 import { cyclopsCanAttack } from "./game/cyclops";
 import { wolverineRecoverOptions } from "./game/wolverine";
@@ -4317,6 +4318,20 @@ function Tabletop({
       : PLAYMATS.find((mat) => mat.id === playmatId)!;
   const v = VILLAINS.find((v) => v.id === s.villainId)!;
   const stats = heroStats(s);
+  const touched = rogueTouched(s);
+  const touchedIdentity = s.players.find(
+    (seat) => touched?.attachedTo === `hero:${seat.id}`,
+  );
+  const touchedHost = [
+    s.villain,
+    ...s.minions,
+    ...s.players.flatMap((seat) => seatView(s, seat).player.inPlay),
+  ].find((piece) => piece.id === touched?.attachedTo);
+  const touchedHostName = touchedIdentity
+    ? heroCard(seatView(s, touchedIdentity)).name
+    : touchedHost
+      ? card(touchedHost).name
+      : "a character";
   const wrappedInMetal = magnetoIdentityRestricted(s, s.activePlayerId, {
     isTextBlank,
   });
@@ -5240,6 +5255,7 @@ function Tabletop({
                   {s.heroId === "gambit" && (
                     <div
                       className="identity-stats stat-row"
+                      role="group"
                       aria-label="Charge counters"
                     >
                       <StatToken
@@ -5248,6 +5264,34 @@ function Tabletop({
                         label="CHARGE"
                         compact
                       />
+                    </div>
+                  )}
+                  {touched && (
+                    <div
+                      className="identity-stats stat-row"
+                      role="group"
+                      aria-label="Touched status"
+                      data-touched-id={touched.id}
+                    >
+                      <button
+                        className="text-button"
+                        data-card-preview={touched.code}
+                        aria-label="Inspect Touched"
+                        onClick={() =>
+                          inspect({ code: touched.code, piece: touched })
+                        }
+                      >
+                        Touched
+                      </button>
+                      <span>
+                        {touched.attachedTo
+                          ? `Attached to ${touchedHostName}`
+                          : s.player.setAside?.some(
+                                (piece) => piece.id === touched.id,
+                              )
+                            ? "Set aside"
+                            : "Not attached"}
+                      </span>
                     </div>
                   )}
                   {s.heroId === "spiderham" && (

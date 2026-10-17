@@ -604,6 +604,23 @@ async function publicSource(source, width) {
     assert.equal(knives.length, 2, "Two physical Psi-Knives start face up");
     assert.notEqual(knives[0].id, knives[1].id);
   }
+  if (source.id === "rogue") {
+    const touched = state.player.setAside.find(
+      (piece) => piece.code === "38002",
+    );
+    const status = page.getByRole("group", {
+      name: "Touched status",
+      exact: true,
+    });
+    assert.match(await status.innerText(), /Touched\s+Set aside/);
+    assert.equal(await status.getAttribute("data-touched-id"), touched.id);
+    assert.equal(
+      await status
+        .getByRole("button", { name: "Inspect Touched", exact: true })
+        .count(),
+      1,
+    );
+  }
   await checkpoint(`${source.id}-native-setup`, width, source, initial);
   await reload();
 
@@ -617,6 +634,19 @@ async function publicSource(source, width) {
     false,
     "Changing form leaves the hero ready",
   );
+  if (source.id === "gambit") {
+    await page.getByRole("button", { name: /^Charge de Card/ }).click();
+    state = await finishChoices(source);
+    assert.equal(
+      state.flags.gambitCharges,
+      1,
+      "Actual Charge de Card places one counter",
+    );
+    assert.match(
+      await page.getByRole("group", { name: "Charge counters" }).innerText(),
+      /1/,
+    );
+  }
   await checkpoint(`${source.id}-hero-form`, width, source, initial);
   if (source.id === "angel") {
     assert.equal(
