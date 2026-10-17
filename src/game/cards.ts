@@ -64,6 +64,7 @@ import { spdrPackCharacterModifiers } from "./spdr-pack.js";
 import { ironspiderSinisterHealthBonus } from "./ironspider-sinister.js";
 import { phoenixStats, phoenixAllyModifiers } from "./phoenix.js";
 import { wolverineStats } from "./wolverine.js";
+import { angelIdentityCode, angelRecruitBonus } from "./angel.js";
 import { stormGlobal, stormStats, stormAllyHP } from "./storm.js";
 import { colossusStats } from "./colossus.js";
 import { brotherhoodModifiers } from "./brotherhood.js";
@@ -696,6 +697,20 @@ export const HEROES = [
     complexity: 3,
   },
   {
+    id: "angel",
+    code: "42001a",
+    alter: "42001b",
+    name: "Angel",
+    identity: "Warren Worthington III",
+    aspect: "protection" as Aspect,
+    color: "#5684b2",
+    tag: "Choose the wings of life or death.",
+    description:
+      "Change between Angel, Archangel and Warren, then combine Aerial events with powerful flight responses.",
+    style: "Three forms and Aerial events · Protection",
+    complexity: 3,
+  },
+  {
     id: "storm",
     code: "36001a",
     alter: "36001b",
@@ -1017,6 +1032,7 @@ export function deckCodes(
       (hero === "spdr" && aspect === "protection") ||
       (hero === "cyclops" && aspect === "leadership") ||
       (hero === "storm" && aspect === "leadership") ||
+      (hero === "angel" && aspect === "protection") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
       (hero === "phoenix" && aspect === "justice") ||
@@ -1095,7 +1111,10 @@ export function resources(c: Card, target?: Card): Resource[] {
   for (const k of ["energy", "mental", "physical", "wild"] as Resource[])
     r.push(...Array(c[`resource_${k}`] || 0).fill(k));
   if (
-    (c.name.startsWith("The Power of ") &&
+    (c.code === "42022" &&
+      !!target?.traits?.toLowerCase().includes("aerial.")) ||
+    (c.code !== "42022" &&
+      c.name.startsWith("The Power of ") &&
       target?.faction_code === c.faction_code) ||
     (c.name === "The Power in All of Us" && target?.faction_code === "basic")
   )
@@ -1103,6 +1122,7 @@ export function resources(c: Card, target?: Card): Resource[] {
   return r;
 }
 export function heroCard(s: GameState) {
+  if (s.heroId === "angel") return card(angelIdentityCode(s));
   const h = HEROES.find((h) => h.id === s.heroId)!;
   if (s.heroId === "ant" && s.player.form === "hero")
     return card(s.player.heroForm === "giant" ? "12001c" : "12001a");
@@ -1151,6 +1171,7 @@ export function maxHP(s: GameState) {
       0,
     ) +
     scriptedModifier(s, "health") +
+    angelRecruitBonus(s, "hero") +
     cyclopsCharacterModifiers(s, "hero").health +
     wolverineStats(s).health +
     hulkStats(s).health +
@@ -1168,6 +1189,7 @@ export function aerial(s: GameState) {
   return (
     (s.player.form === "hero" &&
       (has(s, "01017") || !!s.flags.aerial || thorStats(s).aerial)) ||
+    (s.heroId === "angel" && s.player.form === "hero") ||
     stormStats(s).aerial ||
     doctorStrangeTraits(s).includes("Aerial") ||
     spiderWomanHasAerial(s) ||
@@ -1188,7 +1210,7 @@ export function heroStats(s: GameState) {
   const h =
     s.heroId === "ironheart"
       ? card(ironheartIdentityCode(s, "hero"))
-      : ["ant", "wsp"].includes(s.heroId) && s.player.form === "hero"
+      : ["ant", "wsp", "angel"].includes(s.heroId) && s.player.form === "hero"
         ? heroCard(s)
         : card(HEROES.find((h) => h.id === s.heroId)!.code);
   s = textActiveState(s);
@@ -1365,6 +1387,7 @@ export function pieceHP(s: GameState, p: Piece) {
     ).length *
       3 +
     scriptedModifier(s, "health", p) +
+    angelRecruitBonus(s, p.id) +
     phoenixAllyModifiers(s, p).health +
     stormAllyHP(s, p) +
     hawkeyeAllyMaxHP(s, p) +

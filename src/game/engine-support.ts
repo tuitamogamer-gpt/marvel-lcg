@@ -5,6 +5,7 @@ import {
   CYCLOPS_SHARED_SCRIPT_CODES,
 } from "./cyclops.js";
 import { WOLVERINE_SCRIPT_CODES } from "./wolverine.js";
+import { ANGEL_SCRIPT_CODES } from "./angel.js";
 import { STORM_SCRIPT_CODES } from "./storm.js";
 import { MAGNETO_SCRIPT_CODES } from "./magneto.js";
 import { ACOLYTES_SCRIPT_CODES } from "./acolytes.js";
@@ -123,6 +124,7 @@ export const SCRIPTED_HERO_IDS = new Set([
   "storm",
   "psylocke",
   "gambit",
+  "angel",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...CYCLOPS_SCRIPT_CODES,
@@ -130,6 +132,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...PSYLOCKE_SCRIPT_CODES,
   ...WOLVERINE_SCRIPT_CODES,
   ...STORM_SCRIPT_CODES,
+  ...ANGEL_SCRIPT_CODES,
   ...MAGNETO_SCRIPT_CODES,
   ...ACOLYTES_SCRIPT_CODES,
   ...MASTER_MOLD_SCRIPT_CODES,
