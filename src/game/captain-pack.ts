@@ -142,11 +142,13 @@ export function captainPackHasTrait(
   s: GameState,
   target: string,
   name: string,
-) {
+  visited: string[] = [],
+): boolean {
   const seatId = heroId(s, target);
   const seat = seatId
     ? s.players.find((seat) => seat.id === seatId)
     : undefined;
+  if (seat?.eliminated) return false;
   const view = seat ? seatView(s, seat) : undefined;
   const hero = view ? heroProfile(view.heroId) : undefined;
   const c =
@@ -163,6 +165,16 @@ export function captainPackHasTrait(
       : cards.get(inPlay(s, target)?.code || "");
   return (
     hasPrintedTrait(c, name) ||
+    (!!view &&
+      view.heroId === "rogue" &&
+      !visited.includes(view.activePlayerId) &&
+      Number(view.flags.rogueTraitsRound) === s.round &&
+      String(view.flags.rogueTraitTargets || "")
+        .split(",")
+        .filter(Boolean)
+        .some((id) =>
+          captainPackHasTrait(s, id, name, [...visited, view.activePlayerId]),
+        )) ||
     (!view &&
       inPlay(s, target) &&
       !isTextBlank(s, inPlay(s, target)!) &&

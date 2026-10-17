@@ -64,8 +64,8 @@ export const card = (piece: Piece | string): Card => {
       text: "",
       traits: `${printed.traits || ""} Controlled.`,
       thwart: printed.scheme || 0,
-      attack_cost: 1,
-      thwart_cost: 1,
+      attack_cost: piece.controlConsequential || 1,
+      thwart_cost: piece.controlConsequential || 1,
     };
   return typeof piece !== "string" && piece.treatedAsMinion
     ? {

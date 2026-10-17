@@ -1,3 +1,4 @@
+import { rulesCode } from "./rules-code.js";
 import { eventPlaySources, isTextBlank } from "./card-text.js";
 import { defenseEventSources } from "./card-text.js";
 import { printedCardMetadata } from "./printed-card-metadata.js";
@@ -433,7 +434,7 @@ export function doctorStrangePlayRestriction(
   if (p.code === "09026" && !trait(identityCode(s, s.activePlayerId), "Mystic"))
     return "The Sorcerer Supreme requires the Mystic trait.";
   if (
-    p.code === "09020" &&
+    rulesCode(p) === "09020" &&
     playerOrder(s).every((seat) =>
       seatView(s, seat).player.inPlay.some(
         (u) => cards.get(u.code)?.name === "Unflappable",
@@ -508,7 +509,7 @@ export function doctorStrangeAllyEnter(
 export function doctorStrangeCardEntered(_s: GameState, p: Piece): Effect[] {
   if (p.code === "09014") p.counters = 2;
   if (p.code === "09019") p.counters = 3;
-  return ["09010", "09020"].includes(p.code)
+  return ["09010", "09020"].includes(rulesCode(p))
     ? [D("recipient", { id: p.id })]
     : [];
 }
@@ -740,7 +741,7 @@ export function doctorStrangeAfterDefense(
   }
   if (snapshot.heroDefended && snapshot.heroDamage === 0)
     for (const p of s.player.inPlay.filter(
-      (p) => p.code === "09020" && !p.exhausted,
+      (p) => rulesCode(p) === "09020" && !p.exhausted,
     ))
       effects.push(
         E("optional", {
@@ -1465,7 +1466,7 @@ export function resolveDoctorStrangeEffect(
       if (!p) break;
       const seats = playerOrder(s).filter(
         (seat) =>
-          p!.code !== "09020" ||
+          rulesCode(p) !== "09020" ||
           !seatView(s, seat).player.inPlay.some(
             (u) => u.id !== p!.id && cards.get(u.code)?.name === "Unflappable",
           ),
@@ -1495,7 +1496,7 @@ export function resolveDoctorStrangeEffect(
       need(
         p &&
           seat &&
-          (p!.code !== "09020" ||
+          (rulesCode(p) !== "09020" ||
             !seatView(s, seat!).player.inPlay.some(
               (u) =>
                 u.id !== p!.id && cards.get(u.code)?.name === "Unflappable",

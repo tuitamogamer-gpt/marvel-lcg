@@ -39,6 +39,7 @@ import * as ghostSpider from "./ghost-spider.js";
 import * as nova from "./nova.js";
 import * as ironheart from "./ironheart.js";
 import * as ironspider from "./ironspider-sinister.js";
+import * as rogue from "./rogue.js";
 import * as phoenix from "./phoenix.js";
 import * as spdr from "./spdr.js";
 import * as spdrPack from "./spdr-pack.js";
@@ -605,6 +606,7 @@ function giveCharacterStatus(
     identity
       ? {
           stalwart:
+            rogue.rogueModifiers(identity).stalwart ||
             storm.stormGlobal(s).stalwart ||
             !!printedKeyword(heroCard(identity), "Stalwart") ||
             nebula.nebulaAttackKeywords(identity).stalwart ||
@@ -638,6 +640,7 @@ function syncNebulaIdentityStatuses(s: GameState) {
   for (const seat of playerOrder(s)) {
     const view = seatView(s, seat);
     if (
+      rogue.rogueModifiers(view).stalwart ||
       storm.stormGlobal(s).stalwart ||
       nebula.nebulaAttackKeywords(view).stalwart ||
       vision.visionStalwart(view)
@@ -706,7 +709,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
       printedKeyword(heroCard(s), name) +
       Number(
         name === "Stalwart" &&
-          (storm.stormGlobal(s).stalwart ||
+          (rogue.rogueModifiers(s).stalwart ||
+            storm.stormGlobal(s).stalwart ||
             nebula.nebulaAttackKeywords(s).stalwart ||
             vision.visionStalwart(s)),
       ) +
@@ -724,6 +728,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           (s.attack?.angelRetaliatePlayerId === s.activePlayerId
             ? s.attack.angelRetaliate || 0
             : 0) +
+          rogue.rogueModifiers(s).retaliate +
           phoenix.phoenixSuit(s).retaliate +
           storm.stormGlobal(s).retaliate +
           captainStats(s).retaliate +
@@ -1147,7 +1152,7 @@ function mystiqueNativeSeedHands(s: GameState): void {
     s.players.map((seat) => [
       seat.id,
       seatView(s, seat)
-        .player.hand.filter((p) => ["32082", "32083"].includes(p.code))
+        .player.hand.filter((p) => ["32082", "32083", "38027"].includes(p.code))
         .map((p) => p.id),
     ]),
   );
@@ -1189,7 +1194,7 @@ function mystiqueNativeObserveHands(s: GameState): Effect[] {
       before = s.mystiqueHandPresence![seat.id] || [];
     let currentIds: string[] | undefined;
     for (const p of view.player.hand) {
-      if (p.code !== "32082" && p.code !== "32083") continue;
+      if (!["32082", "32083", "38027"].includes(p.code)) continue;
       (currentIds ||= []).push(p.id);
       if (!before.includes(p.id)) {
         const receipt: mystique.MystiqueHandEntryReceipt = {
@@ -1199,18 +1204,19 @@ function mystiqueNativeObserveHands(s: GameState): Effect[] {
           code: p.code,
         };
         effects.push(
-          ...mystique
-            .mystiqueHandEntered(s, receipt, mystiquePorts)
-            .map((e) => ({
-              ...e,
-              mandatory: true,
-              after: [
-                E("mystique-native:return-actor", {
-                  playerId: returnActor,
-                  actorId: returnActor,
-                }),
-              ],
-            })),
+          ...(p.code === "38027"
+            ? [{ type: "rogue:misled-hand", actorId: seat.id }]
+            : mystique.mystiqueHandEntered(s, receipt, mystiquePorts)
+          ).map((e) => ({
+            ...e,
+            mandatory: true,
+            after: [
+              E("mystique-native:return-actor", {
+                playerId: returnActor,
+                actorId: returnActor,
+              }),
+            ],
+          })),
         );
       }
     }
@@ -1252,7 +1258,11 @@ function discardHand(s: GameState, id: string) {
   const [p] = s.player.hand.splice(i, 1);
   if (mystique.mystiqueDiscardFromPlayerZone(p, "hand"))
     s.encounter.discard.push(p);
-  else s.player.discard.push(p);
+  else {
+    const owner = s.players.find((seat) => seat.id === p.ownerId);
+    if (owner?.eliminated) s.removed.push(p);
+    else (owner ? seatView(s, owner) : s).player.discard.push(p);
+  }
   if (s.mystiqueHandPresence?.[s.activePlayerId])
     s.mystiqueHandPresence[s.activePlayerId] = s.mystiqueHandPresence[
       s.activePlayerId
@@ -1567,6 +1577,7 @@ function movePieceFromPlay(
     }
   }
   if (!p) return;
+  rogue.rogueCardLeft(s, id);
   wideawake.projectWideawakeEnemyLeftPlay(s, id);
   if (
     rulesCode(p) === "01127" &&
@@ -1799,7 +1810,8 @@ function syncValkyrieConvertedCards(s: GameState) {
       const remainingControl = storm.stormLatestControl(s, p);
       if (
         remainingControl === "25031" ||
-        (card(p.code).type_code === "minion" && remainingControl !== "34009")
+        (card(p.code).type_code === "minion" &&
+          !["34009", "38011"].includes(remainingControl || ""))
       ) {
         if (remainingControl === "25031") p.treatedAsMinion = true;
         for (const seat of s.players)
@@ -1824,7 +1836,9 @@ function syncValkyrieConvertedCards(s: GameState) {
     }
     if (
       valkyrie.valkyrieBeguiledEnemy(s, p) &&
-      phoenix.phoenixLatestControl(s, p)?.code !== "34009"
+      !["34009", "38011"].includes(
+        phoenix.phoenixLatestControl(s, p)?.code || "",
+      )
     ) {
       p.treatedAsMinion = true;
       continue;
@@ -1869,7 +1883,9 @@ function syncValkyrieConvertedCards(s: GameState) {
     }
     if (
       !valkyrie.valkyrieBeguiledEnemy(s, p) ||
-      phoenix.phoenixLatestControl(s, p)?.code === "34009"
+      ["34009", "38011"].includes(
+        phoenix.phoenixLatestControl(s, p)?.code || "",
+      )
     )
       continue;
     const controlling = controller(s, p.id);
@@ -2179,6 +2195,7 @@ function check(s: GameState) {
             { isTextBlank },
           ),
         );
+        add(s, ...rogue.rogueMinionEngaged(s, m));
         add(s, ...spiderHam.spiderHamMinionEngaged(s, m, next.id));
         add(
           s,
@@ -2440,6 +2457,8 @@ function zeroToleranceNativePresent(s: GameState) {
   );
 }
 function damageProhibition(s: GameState, target: string, panther: boolean) {
+  if (rogue.rogueProtected(s, target))
+    return "Cybernetic Enhancements prevents damage.";
   const shadowKing = s.minions.find((p) => p.id === target);
   if (shadowKing && storm.stormProtected(s, shadowKing))
     return "The Shadow King is protected by a Controlled minion.";
@@ -3318,6 +3337,7 @@ function defeatCharacter(
   if (!minion && ["32088b", "32172b"].includes(m.code) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
   else discardPiece(s, m.id);
+  if (!minion) add(s, ...rogue.rogueAllyDefeated(s, m, source, allyController));
   if (!minion && enemyAttack && sabretoothDefeat?.attackerId === source) {
     delete (m as SabretoothAttackDefeatPiece).sabretoothAttackDefeatReceipt;
     add(
@@ -3901,6 +3921,7 @@ function defeatScheme(
   add(s, ...spectrum.spectrumSideSchemeDefeated(s, p, spectrumPorts));
   add(s, ...storm.stormSideDefeated(s, p));
   if (!isTextBlank(s, p)) add(s, ...gambit.gambitSchemeDefeated(s, p));
+  add(s, ...rogue.rogueSchemeDefeated(s, p));
   add(s, ...warMachine.warMachineSchemeDefeated(s, p));
   add(
     s,
@@ -4349,6 +4370,9 @@ function captainPackHasTrait(
     const view = seatView(s, identityId);
     return (
       (trait.toLowerCase() === "aerial" && aerial(view)) ||
+      rogue
+        .rogueTraits(view, rogueNativeTraits)
+        .some((t) => t.toLowerCase() === trait.toLowerCase()) ||
       spiderHam
         .spiderHamTraits(view)
         .some((value) => value.toLowerCase() === trait.toLowerCase()) ||
@@ -4540,6 +4564,11 @@ function attackAction(
     n += wolverine.wolverineBasicBonus(s, source, target);
   if (source === "hero" && traits.basic && psylocke.psylockeStats(s).piercing)
     traits.piercing = true;
+  if (
+    (source === "hero" || source === `hero:${s.activePlayerId}`) &&
+    rogue.rogueModifiers(s).overkill
+  )
+    overkill = true;
   if (source === "hero" && traits.basic && wolverine.wolverineStats(s).piercing)
     traits.piercing = true;
   if (
@@ -5504,6 +5533,8 @@ function pay(
         ];
       } else if (psylocke.psylockeIsResource(s, id)) {
         spentResponses.push(...psylocke.psylockeResourceSpent(s, id));
+      } else if (rogue.rogueSpendResource(s, id)) {
+        // The physical X-Gene exhausts only when payment commits.
       } else if (phoenix.phoenixResourceSpent(s, id)) {
         // The actual Phoenix Force counter pays this phase-limited resource.
       } else if (spdr.spdrResourceSpent(s, id)) {
@@ -5905,6 +5936,7 @@ export function newGame(config: {
     ghostSpider.ghostSpiderInitializeNemesis(s, { makePiece });
     nova.novaInitializeNemesis(s, { makePiece });
     phoenix.phoenixInitialize(s, { makePiece });
+    rogue.rogueInitialize(s, { makePiece });
     spdr.spdrInitialize(s, { makePiece });
     spdr.spdrInitializeNemesis(s, { makePiece });
     spiderHam.spiderHamInitializeIdentity(s, { makePiece });
@@ -5938,26 +5970,28 @@ export function newGame(config: {
               ? "mut_gen"
               : c.set_code === "exodus"
                 ? "gambit"
-                : c.set_code === "deathstrike"
-                  ? "wolv"
-                  : c.set_code === "shadow_king"
-                    ? "storm"
-                    : c.set_code === "ironspider_sinister"
-                      ? "spdr"
-                      : c.set_code === "inheritors"
-                        ? "spiderham"
-                        : c.set_code === "zzzax"
-                          ? "ironheart"
-                          : c.set_code === "armadillo"
-                            ? "nova"
-                            : [
-                                  "goblin_gimmicks",
-                                  "a_mess_of_things",
-                                  "power_drain",
-                                  "running_interference",
-                                ].includes(c.set_code || "")
-                              ? "gob"
-                              : "core")) ||
+                : c.set_code === "reavers"
+                  ? "rogue"
+                  : c.set_code === "deathstrike"
+                    ? "wolv"
+                    : c.set_code === "shadow_king"
+                      ? "storm"
+                      : c.set_code === "ironspider_sinister"
+                        ? "spdr"
+                        : c.set_code === "inheritors"
+                          ? "spiderham"
+                          : c.set_code === "zzzax"
+                            ? "ironheart"
+                            : c.set_code === "armadillo"
+                              ? "nova"
+                              : [
+                                    "goblin_gimmicks",
+                                    "a_mess_of_things",
+                                    "power_drain",
+                                    "running_interference",
+                                  ].includes(c.set_code || "")
+                                ? "gob"
+                                : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -6131,6 +6165,9 @@ function initialSetup(s: GameState) {
   const setup: Effect[] = [];
   for (const seat of playerOrder(s))
     setup.push(
+      ...rogue
+        .rogueSetup(seatView(s, seat))
+        .map((e) => ({ ...e, actorId: seat.id })),
       ...vision
         .visionSetup(seatView(s, seat), { makePiece })
         .map((e) => ({ ...e, actorId: seat.id })),
@@ -6308,6 +6345,7 @@ export function playable(s: GameState, p: Piece): string | null {
     gambit.gambitPlayRestriction(s, p, gambitPorts) ||
     cyclops.cyclopsPlayRestriction(s, p, cyclopsPorts) ||
     psylocke.psylockePlayRestriction(s, p, psylockePorts) ||
+    rogue.roguePlayRestriction(s, p, roguePorts) ||
     wolverine.wolverinePlayRestriction(s, p, wolverinePorts) ||
     angel.angelPlayRestriction(s, p, angelPorts) ||
     storm.stormPlayRestriction(s, p, stormPorts) ||
@@ -6882,6 +6920,7 @@ function play(
     cyclops.cyclopsEffectiveLeadership(s, p);
     if (p.code === "36019") p.counters = 3;
     if (p.code === "37013") p.counters = 3;
+    rogue.rogueCardEntered(s, p, false);
     miles.milesCardEntered(s, p);
     add(s, ...ghostSpider.ghostSpiderCardEntered(s, p));
     if (attachedTarget && ["22032", "22035", "23035"].includes(p.code))
@@ -6899,6 +6938,7 @@ function play(
       ...angel.angelCardEntered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
       ...phoenix.phoenixCardEntered(s, p),
+      ...rogue.rogueCardEntered(s, p, fromHand),
       ...wolverine
         .wolverineCardEntered(s, p, false)
         .filter(() => !["35003", "35014"].includes(p.code)),
@@ -7335,6 +7375,7 @@ function event(
     psylocke.psylockeEvent(s, p, paid) ??
     gambit.gambitEvent(s, p) ??
     cyclops.cyclopsEvent(s, p) ??
+    rogue.rogueEvent(s, p) ??
     wolverine.wolverineEvent(s, p) ??
     angel.angelEvent(s, p) ??
     storm.stormEvent(s, p) ??
@@ -7671,6 +7712,8 @@ function flip(
   target?: "alter" | "tiny" | "giant" | "angel" | "archangel",
 ) {
   const previousForm = s.player.form;
+  const wasMutant =
+    previousForm === "alter" && captainPackHasTrait(s, "hero", "Mutant");
   if (!canChangeIdentityForm(s, target)) {
     need(
       !counts,
@@ -7768,6 +7811,7 @@ function flip(
   if (counts) s.player.flipped = true;
   spdr.spdrChangedForm(s, previousForm, s.player.form);
   add(s, ...phoenix.phoenixFormChanged(s));
+  add(s, ...rogue.rogueFormChanged(s, wasMutant));
   if (s.player.spiderHamIdentity)
     s.player.spiderHamIdentity.code =
       s.player.form === "hero" ? "30001a" : "30001b";
@@ -8246,6 +8290,13 @@ function ability(s: GameState, id: string, action = "special") {
   );
   if (colossusAbility !== null) {
     add(s, ...colossusAbility);
+    return;
+  }
+  const rogueOption = rogue
+    .rogueAbilityOptions(s, id, roguePorts)
+    .find((o) => o.id === action);
+  if (rogueOption) {
+    add(s, ...rogueOption.effects);
     return;
   }
   const phoenixAbility = phoenix.phoenixAbility(s, id, action, phoenixPorts);
@@ -10507,6 +10558,7 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
     Object.assign(p, resetPiece(p, true));
     s.player.inPlay.push(p);
     s.player.hp += maxHP(s) - before;
+    rogue.rogueCardEntered(s, p, false);
     miles.milesCardEntered(s, p);
     add(s, ...ghostSpider.ghostSpiderCardEntered(s, p));
     add(
@@ -10796,7 +10848,10 @@ const mtsPlayerPackPorts: mtsPlayerPack.MtsPlayerPackPorts = {
       const view = seatView(s, id);
       return [
         ...new Set([
-          ...(heroCard(view).traits || "").split(/\.\s*/).filter(Boolean),
+          ...(heroCard(view).traits || "")
+            .replace(/\.$/, "")
+            .split(/\.\s+/)
+            .filter(Boolean),
           ...starLord.starLordHeroTraits(view),
           ...(aerial(view) ? ["Aerial"] : []),
         ]),
@@ -11273,6 +11328,7 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...(find(s, id)
       ? ironspider.ironspiderSinisterActions(s, find(s, id)!, ironspiderPorts)
       : []),
+    ...rogue.rogueAbilityOptions(s, id, roguePorts),
     ...phoenix.phoenixAbilityOptions(s, id, phoenixPorts),
     ...spdr.spdrAbilityOptions(s, id, spdrPorts),
     ...mgPack.mutantGenesisPlayerPackAbilityOptions(
@@ -11357,6 +11413,7 @@ const thorPorts: ThorEnginePorts = {
         { token: `engagement:${s.nextId++}`, minionId: p.id, playerId },
         { isTextBlank },
       ),
+      ...rogue.rogueMinionEngaged(s, p),
       ...spiderHam.spiderHamMinionEngaged(s, p, playerId),
       ...ironspider.ironspiderSinisterEngagementResponses(s, p, playerId),
       E("valkPackEngagementWindow", { id: p.id, actorId: playerId }),
@@ -11631,6 +11688,111 @@ const ironspiderPorts: ironspider.IronspiderSinisterPorts = {
       }),
     );
   },
+};
+
+function rogueNativeTraits(
+  s: GameState,
+  id: string,
+  visited: string[] = [],
+): string[] {
+  const seatId =
+    id === "hero"
+      ? s.activePlayerId
+      : id.startsWith("hero:")
+        ? id.slice(5)
+        : undefined;
+  if (seatId) {
+    const seat = s.players.find((p) => p.id === seatId && !p.eliminated);
+    if (!seat) return [];
+    const view = seatView(s, seat);
+    return [
+      ...new Set([
+        ...(heroCard(view).traits || "")
+          .replace(/\.$/, "")
+          .split(/\.\s+/)
+          .filter(Boolean),
+        ...(aerial(view, visited) ? ["Aerial"] : []),
+        ...rogue.rogueTraits(view, rogueNativeTraits, visited),
+      ]),
+    ];
+  }
+  const p = find(s, id);
+  return p ? sinisterNativeTraits(s, p) : [];
+}
+const roguePorts: rogue.RoguePorts = {
+  queue: add,
+  choose,
+  makePiece,
+  targets: (s, kind, action) =>
+    kind === "character"
+      ? [...spdrPackPorts.characterTargets(s), ...targets(s, "enemy")]
+      : targets(
+          s,
+          kind,
+          kind === "enemy" && !!action,
+          kind === "scheme" && !!action,
+        ),
+  traits: rogueNativeTraits,
+  hasTrait: sinisterNativeHasTrait,
+  keyword: (s, name) => sourceKeyword(s, "hero", name as PrintedKeyword),
+  canPay: (s, p) => canPay(s, cardCost(s, card(p), p), [], p.id, p.code),
+  playReaction: (s, p, effects, after) =>
+    add(
+      s,
+      E("payRequest", {
+        title: card(p).name,
+        cost: cardCost(s, card(p), p),
+        piece: p,
+        cancelable: true,
+        after: [
+          E("resolveHandEvent", {
+            id: p.id,
+            after: effects,
+            continuation: after,
+          }),
+        ],
+        cancellationQueue: after,
+      }),
+    ),
+  discard: discardPiece,
+  shufflePlayer: (s) => {
+    revealHidden(s);
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  revealHidden,
+  damageCost: (s, id, amount) => {
+    dealDamage(s, id, amount, "38007");
+    return true;
+  },
+  claimDefense: (s) => {
+    if (s.attack) {
+      s.attack.defender = "hero";
+      s.attack.targetPlayerId = s.activePlayerId;
+      s.attack.basicDefense = false;
+      s.attack.defense = 0;
+      s.attack.eventDefense = true;
+    }
+  },
+  playStored: (s, lab, p) => {
+    const restriction = playable(s, p);
+    need(!restriction, restriction || "The stored ally cannot be played.");
+    add(
+      s,
+      E("payRequest", {
+        title: "Med Lab",
+        cost: cardCost(s, card(p), p),
+        piece: p,
+        cancelable: true,
+        commit: [{ type: "rogue:med-commit", id: lab.id }],
+        after: [{ type: "rogueNativeMedPlay", id: p.id, labId: lab.id }],
+      }),
+    );
+  },
+  activate: (s, id, playerId) =>
+    mystiquePorts.activateMystique(s, id, playerId, []),
+  discardUntil: (s, trait, after) =>
+    brotherhoodPorts.discardUntilMinion(s, trait, after),
 };
 
 const phoenixPorts: phoenix.PhoenixPorts = {
@@ -13947,6 +14109,7 @@ function minionEntered(s: GameState, p: Piece) {
       },
       { isTextBlank },
     ),
+    ...rogue.rogueMinionEntered(s, p),
     ...acolytes.acolytesEngaged(s, p),
     ...ironspider.ironspiderSinisterEngagementResponses(s, p),
     ...spiderHam.spiderHamMinionEngaged(s, p),
@@ -14049,7 +14212,10 @@ function sinisterNativeHasTrait(s: GameState, id: string, trait: string) {
     (trait === "S.H.I.E.L.D." && !!printed.traits?.includes(trait)) ||
     captainPackHasTrait(s, id, trait) ||
     (!!identityId &&
-      phoenix.phoenixTraits(seatView(s, identityId)).includes(trait))
+      (phoenix.phoenixTraits(seatView(s, identityId)).includes(trait) ||
+        rogue
+          .rogueTraits(seatView(s, identityId), rogueNativeTraits)
+          .includes(trait)))
   );
 }
 function sinisterNativePiece(s: GameState, id: string) {
@@ -16668,6 +16834,7 @@ function mutantGenesisAttackOptions(
     if (stage === "attacks")
       opts.push(
         ...angel.angelDefenseOptions(view, after, angelPorts),
+        ...rogue.rogueDefenseOptions(view, "attacks", after, roguePorts),
         ...storm.stormDefenseOptions(view, after, stormPorts),
         ...shadowcat.shadowcatDefenseOptions(view, [], after, shadowcatPorts),
       );
@@ -17881,6 +18048,12 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
       return;
     }
   }
+  if (
+    s.flags[`rogueBelle:${a.id}`] &&
+    a.base > a.defense &&
+    (a.piercing || sourceKeyword(s, a.attacker, "Piercing"))
+  )
+    colossusNativeDiscardTough(s, [{ targetId: target, amount: 1 }], [], true);
   const phoenixShield = phoenix.phoenixForcedDamage(
     s,
     { ...effect, target, amount: damage, kind: "attack" },
@@ -18428,6 +18601,7 @@ function finishAttackAfterDamage(
         actorId: s.firstPlayerId,
       },
     ),
+    ...rogue.rogueAfterEnemyAttack(s, a.attacker),
     ...a.boostEffects,
     ...(a.boostIds || []).map((id) => E("finishResolution", { id })),
     E("scarletEnemyActivated", {
@@ -18860,7 +19034,10 @@ function reveal(
   }
   if (
     !repeat &&
-    (magneto.MAGNETO_SCRIPT_CODES.some((code) => code === p.code) ||
+    ((rogue.REAVERS_SCRIPT_CODES.includes(p.code) &&
+      c.type_code !== "attachment") ||
+      ["38025", "38026"].includes(p.code) ||
+      magneto.MAGNETO_SCRIPT_CODES.some((code) => code === p.code) ||
       acolytes.ACOLYTES_SCRIPT_CODES.some((code) => code === p.code) ||
       mansionAttack.MANSION_ATTACK_SCRIPT_CODES.some(
         (code) => code === p.code,
@@ -18956,6 +19133,7 @@ function reveal(
       ...warMachine.WAR_MACHINE_SCRIPT_CODES,
       ...valkyrie.VALKYRIE_SCRIPT_CODES,
       ...vision.VISION_SCRIPT_CODES,
+      ...rogue.ROGUE_SCRIPT_CODES,
       ...phoenix.PHOENIX_SCRIPT_CODES,
       ...spdr.SPDR_SCRIPT_CODES,
       ...spiderHam.SPIDER_HAM_SCRIPT_CODES,
@@ -19002,6 +19180,7 @@ function reveal(
       "35030",
       "35036",
       "41028",
+      "38035",
       "36033",
       "37034",
       "42027",
@@ -19024,6 +19203,7 @@ function reveal(
       psylocke.psylockeEncounterReveal(s, p) ??
       wolverine.wolverineEncounterReveal(s, p) ??
       angel.angelEncounter(s, p) ??
+      rogue.rogueEncounterReveal(s, p) ??
       storm.stormEncounterReveal(s, p) ??
       colossus.colossusEncounterReveal(s, p) ??
       spiderHam.spiderHamEncounterReveal(s, p);
@@ -19071,6 +19251,7 @@ function reveal(
   const rise =
     psylocke.psylockeEncounterReveal(s, p) ??
     angel.angelEncounter(s, p) ??
+    rogue.rogueEncounterReveal(s, p) ??
     storm.stormEncounterReveal(s, p) ??
     magneto.magnetoReveal(s, p, { isTextBlank }) ??
     acolytes.acolytesReveal(s, p) ??
@@ -19729,6 +19910,11 @@ function treachery(s: GameState, p: Piece) {
         add(s, ...gambitNemesis);
         break;
       }
+      const rogueNemesis = rogue.rogueShadows(s);
+      if (rogueNemesis !== null) {
+        add(s, ...rogueNemesis);
+        break;
+      }
       const cyclopsNemesis = cyclops.cyclopsShadowOfPast(s);
       if (cyclopsNemesis !== null) {
         add(s, ...cyclopsNemesis);
@@ -19980,6 +20166,7 @@ function resolve(s: GameState, e: Effect) {
   if (mgPack.resolveMutantGenesisPlayerPackEffect(s, e, mutantGenesisPackPorts))
     return;
   if (ironspider.resolveIronspiderSinisterEffect(s, e, ironspiderPorts)) return;
+  if (rogue.resolveRogueEffect(s, e, roguePorts)) return;
   if (phoenix.resolvePhoenixEffect(s, e, phoenixPorts)) return;
   if (spdr.resolveSpdrEffect(s, e, spdrPorts)) return;
   if (spdrPack.resolveSpdrPackEffect(s, e, spdrPackPorts)) return;
@@ -20108,6 +20295,7 @@ function resolve(s: GameState, e: Effect) {
           angel.angelEncounter(state, piece) ??
           storm.stormEncounterReveal(state, piece) ??
           colossus.colossusEncounterReveal(state, piece) ??
+          rogue.rogueEncounterReveal(state, piece) ??
           phoenix.phoenixEncounterReveal(state, piece) ??
           spdr.spdrEncounterReveal(state, piece) ??
           spiderHam.spiderHamEncounterReveal(state, piece) ??
@@ -24198,6 +24386,11 @@ function resolve(s: GameState, e: Effect) {
         add(s, ...gambitBefore);
         break;
       }
+      const rogueBefore = rogue.rogueBeforeAlly(s, p, e);
+      if (rogueBefore) {
+        add(s, ...rogueBefore);
+        break;
+      }
       const phoenixBefore = phoenix.phoenixBeforeAlly(s, p, e);
       if (phoenixBefore) {
         add(s, ...phoenixBefore);
@@ -25105,6 +25298,17 @@ function resolve(s: GameState, e: Effect) {
       );
       break;
     }
+    case "rogueNativeMedPlay": {
+      const lab = find(s, e.labId),
+        p = lab?.storedCards?.find((p) => p.id === e.id);
+      if (p) {
+        lab!.storedCards = lab!.storedCards!.filter((q) => q.id !== p.id);
+        s.player.hand.push(p);
+        play(s, p, []);
+        add(s, { type: "rogue:med-exhaust", id: p.id });
+      }
+      break;
+    }
     case "phoenixSchemeInterrupt": {
       if (
         e.id !== s.villain.id ||
@@ -25889,6 +26093,12 @@ function resolve(s: GameState, e: Effect) {
             s,
             [E("boostAttack")],
             quicksilverPackPorts,
+          ),
+          ...rogue.rogueDefenseOptions(
+            s,
+            "defends",
+            [E("boostAttack")],
+            roguePorts,
           ),
           ...doctorStrangeDefenseOptions(s, [E("boostAttack")], dsPorts),
           ...captainPackExpertDefenseOptions(s, [E("boostAttack")]),
@@ -26930,6 +27140,13 @@ function resolve(s: GameState, e: Effect) {
         );
         break;
       }
+      if (!e.rogueAfterHandled) {
+        add(s, ...rogue.rogueAfterAttack(s, e.snapshot || {}), {
+          ...e,
+          rogueAfterHandled: true,
+        });
+        break;
+      }
       if (!e.shadowcatCompletionHandled && e.snapshot?.heroDefended) {
         const completion = shadowcatNativeCompletion(s, "defense", true);
         const receipt = completion[0]?.receipt as
@@ -27664,6 +27881,8 @@ function resolve(s: GameState, e: Effect) {
         villainSetup(s);
       break;
     case "wolverinePlayerPhase":
+      for (const seat of playerOrder(s))
+        rogue.roguePhaseBegan(seatView(s, seat));
       add(
         s,
         ...playerOrder(s).flatMap((seat) =>

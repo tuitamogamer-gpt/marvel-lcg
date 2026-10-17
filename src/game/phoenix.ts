@@ -384,12 +384,12 @@ export function phoenixLatestControl(
   s: GameState,
   p: Piece,
 ): Piece | undefined {
-  return [...allInPlay(s), ...s.attachments]
+  return [...allInPlay(s), ...s.attachments, ...s.minions]
     .filter(
       (a) =>
-        a.attachedTo === p.id &&
-        ["34009", "36038", "25031"].includes(a.code) &&
-        !isTextBlank(s, a),
+        (a.attachedTo === p.id || a.controlTargetId === p.id) &&
+        ["34009", "36038", "25031", "38011"].includes(a.code) &&
+        (a.code === "38011" || !isTextBlank(s, a)),
     )
     .sort((a, b) => (b.controlOrder || 0) - (a.controlOrder || 0))[0];
 }
@@ -403,8 +403,11 @@ export function phoenixSyncControlled(s: GameState) {
       a.controlOrder = s.nextId++;
   for (const p of [...allInPlay(s), ...s.minions]) {
     const latest = phoenixLatestControl(s, p);
-    if (latest?.code === "34009") {
-      const seat = controller(s, latest.id);
+    if (latest && ["34009", "38011"].includes(latest.code)) {
+      const seat =
+        latest.code === "38011"
+          ? s.players.find((p) => p.id === latest.karmaControllerId)
+          : controller(s, latest.id);
       if (!seat || seat.eliminated) continue;
       const current = controller(s, p.id);
       if (current?.id !== seat.id) {
@@ -416,10 +419,12 @@ export function phoenixSyncControlled(s: GameState) {
         seatView(s, seat).player.inPlay.push(p);
       }
       p.treatedAsAlly = true;
+      p.controlConsequential = latest.code === "38011" ? 2 : 1;
       delete p.treatedAsMinion;
       delete (p as Piece & { stormControlled?: boolean }).stormControlled;
     } else if (p.treatedAsAlly) {
       delete p.treatedAsAlly;
+      delete p.controlConsequential;
       if (card(p).type_code === "minion") {
         const seat = controller(s, p.id);
         if (seat) {

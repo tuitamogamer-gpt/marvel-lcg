@@ -1,5 +1,6 @@
 import { PSYLOCKE_SCRIPT_CODES } from "./psylocke.js";
 import { GAMBIT_SCRIPT_CODES } from "./gambit.js";
+import { ROGUE_SCRIPT_CODES } from "./rogue.js";
 import {
   CYCLOPS_SCRIPT_CODES,
   CYCLOPS_SHARED_SCRIPT_CODES,
@@ -119,6 +120,7 @@ export const SCRIPTED_HERO_IDS = new Set([
   "cyclops",
   "colossus",
   "shadowcat",
+  "rogue",
   "phoenix",
   "wolverine",
   "storm",
@@ -141,6 +143,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ZERO_TOLERANCE_SCRIPT_CODES,
   ...SENTINELS_SCRIPT_CODES,
   ...COLOSSUS_SCRIPT_CODES,
+  ...ROGUE_SCRIPT_CODES,
   ...PHOENIX_SCRIPT_CODES,
   ...GAMBIT_SCRIPT_CODES,
   ...SHADOWCAT_SCRIPT_CODES,

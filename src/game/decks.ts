@@ -119,6 +119,7 @@ export function deckErrors(
       "cyclops",
       "colossus",
       "shadowcat",
+      "rogue",
       "wolverine",
       "psylocke",
       "gambit",

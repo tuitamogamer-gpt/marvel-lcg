@@ -182,7 +182,7 @@ export function mystiqueDiscardFromPlayerZone(
   p: Piece,
   from: "hand" | "deck" | "discard",
 ): boolean {
-  return from !== "discard" && (p.code === "32082" || p.code === "32083");
+  return from !== "discard" && ["32082", "32083", "38027"].includes(p.code);
 }
 const discardTargets = (s: GameState, ports: MystiquePorts) =>
   ports

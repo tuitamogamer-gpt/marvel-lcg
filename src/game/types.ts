@@ -75,6 +75,10 @@ export interface Piece {
   stormControlled?: boolean;
   /** Monotonic entry order of a physical control-changing attachment. */
   controlOrder?: number;
+  /** Karma is a continuing control source, not an attached upgrade. */
+  controlTargetId?: string;
+  karmaControllerId?: string;
+  controlConsequential?: number;
   /** Actual owned cards tucked beneath this instance; faces stay private. */
   storedCards?: Piece[];
   /** Physical facedown boosts assigned to this enemy; consumed only on activation. */

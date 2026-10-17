@@ -1,4 +1,5 @@
 import { psylockeStats, psylockePowerOfMind } from "./psylocke.js";
+import { rogueModifiers, rogueTraits } from "./rogue.js";
 import { CARDS, CATALOG_CARDS, card } from "./card-definitions.js";
 export { CARDS, CATALOG_CARDS, DB, card } from "./card-definitions.js";
 import { cyclopsCharacterModifiers } from "./cyclops.js";
@@ -80,7 +81,11 @@ import { identityMatch, uniqueMatches } from "./unique.js";
 import { rulesCode } from "./rules-code.js";
 import { captainStats } from "./captain-america.js";
 import { hulkStats } from "./hulk.js";
-import { captainPackModifiers, captainPackStats } from "./captain-pack.js";
+import {
+  captainPackModifiers,
+  captainPackStats,
+  captainPackHasTrait,
+} from "./captain-pack.js";
 import { scriptedModifier } from "./script-registry.js";
 import catalogImages from "../data/catalog-images.json" with { type: "json" };
 import sourceDecks from "../data/catalog-decks.json" with { type: "json" };
@@ -99,6 +104,8 @@ const identityImageCodes: Readonly<Record<string, string>> = {
   "37001b": "37001a",
   "33001a": "33001b",
   "33001b": "33001a",
+  "38001a": "38001b",
+  "38001b": "38001a",
   "34001a": "34001b",
   "34001b": "34001a",
   "35001a": "35001b",
@@ -738,6 +745,20 @@ export const HEROES = [
     style: "Charged attacks and theft · Justice",
     complexity: 3,
   },
+  {
+    id: "rogue",
+    code: "38001a",
+    alter: "38001b",
+    name: "Rogue",
+    identity: "Anna Marie",
+    aspect: "protection" as Aspect,
+    color: "#c69b37",
+    tag: "Your power is my power.",
+    description:
+      "Borrow traits with Touched, absorb powers, and protect your team.",
+    style: "Borrowed powers · Protection",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -902,6 +923,13 @@ export const MODULES = [
   { id: "deathstrike", name: "Lady Deathstrike", difficulty: 3 },
   { id: "shadow_king", name: "Shadow King", difficulty: 3 },
   { id: "exodus", name: "Exodus", difficulty: 3 },
+  {
+    id: "reavers",
+    name: "Reavers",
+    difficulty: 4,
+    description:
+      "Cybernetic mercenaries coordinate attacks and reinforce each other.",
+  },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -1035,6 +1063,7 @@ export function deckCodes(
       (hero === "angel" && aspect === "protection") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
+      (hero === "rogue" && aspect === "protection") ||
       (hero === "phoenix" && aspect === "justice") ||
       (hero === "psylocke" && aspect === "justice") ||
       (hero === "gambit" && aspect === "justice") ||
@@ -1185,11 +1214,28 @@ export function maxHP(s: GameState) {
     captainPackModifiers(s, "hero").hp
   );
 }
-export function aerial(s: GameState) {
+export function aerial(s: GameState, visited: string[] = []): boolean {
   return (
     (s.player.form === "hero" &&
       (has(s, "01017") || !!s.flags.aerial || thorStats(s).aerial)) ||
     (s.heroId === "angel" && s.player.form === "hero") ||
+    rogueModifiers(s).aerial ||
+    rogueTraits(
+      s,
+      (state, id, seen) => {
+        const seatId =
+          id === "hero"
+            ? state.activePlayerId
+            : id.startsWith("hero:")
+              ? id.slice(5)
+              : undefined;
+        const seat =
+          seatId && state.players.find((p) => p.id === seatId && !p.eliminated);
+        if (seat) return aerial(seatView(state, seat), seen) ? ["Aerial"] : [];
+        return captainPackHasTrait(state, id, "Aerial") ? ["Aerial"] : [];
+      },
+      visited,
+    ).includes("Aerial") ||
     stormStats(s).aerial ||
     doctorStrangeTraits(s).includes("Aerial") ||
     spiderWomanHasAerial(s) ||
@@ -1252,6 +1298,7 @@ export function heroStats(s: GameState) {
       spiderHamPackCharacterModifiers(s, "hero").attack +
       spdrPackCharacterModifiers(s, "hero").attack +
       colossusStats(s, { isTextBlank }).attack +
+      rogueModifiers(s).attack +
       phoenixStats(s).attack +
       wolverineStats(s).attack +
       psylockeStats(s).attack +
@@ -1286,6 +1333,7 @@ export function heroStats(s: GameState) {
       spiderHamStats(s, { isTextBlank }).thwart +
       spdrPackCharacterModifiers(s, "hero").thwart +
       colossusStats(s, { isTextBlank }).thwart +
+      rogueModifiers(s).thwart +
       phoenixStats(s).thwart +
       psylockeStats(s).thwart +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
