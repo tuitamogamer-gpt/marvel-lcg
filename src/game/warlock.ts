@@ -39,6 +39,7 @@ const aspects: readonly Aspect[] = [
   "justice",
   "protection",
   "leadership",
+  "pool",
 ];
 const aspect = (p: Piece): Aspect | undefined =>
   aspects.find((a) => definition(p)?.faction_code === a);

@@ -966,6 +966,13 @@ export const ASPECTS: {
     color: "#72b27d",
     description: "Stay standing. Protect your hero.",
   },
+  {
+    id: "pool",
+    name: "'Pool",
+    color: "#ed8cb3",
+    description:
+      "Take risks and bend the fourth wall. Adds Crisis of Infinite Deadpools to the encounter deck.",
+  },
 ];
 const basics: Record<string, number> = {
   "01083": 1,
@@ -981,6 +988,16 @@ const basics: Record<string, number> = {
   "01093": 1,
 };
 const aspects: Record<Aspect, Record<string, number>> = {
+  pool: {
+    "44017": 3,
+    "44021": 3,
+    "44025": 1,
+    "44026": 1,
+    "44027": 1,
+    "44029": 3,
+    "44030": 1,
+    "44048": 1,
+  },
   aggression: {
     "01050": 1,
     "01051": 1,
@@ -1035,6 +1052,32 @@ export function deckCodes(
     aspect,
     aspect === "aggression" ? "justice" : "aggression",
   ];
+  if (hero === "warlock" && sourceStarter) {
+    const selected =
+      chosenAspects ||
+      (aspect === "pool"
+        ? ["pool", "justice", "leadership", "protection"]
+        : ["aggression", "justice", "leadership", "protection"]);
+    if (
+      selected.length !== 4 ||
+      new Set(selected).size !== 4 ||
+      selected.some((value) => !ASPECTS.some((a) => a.id === value))
+    )
+      throw Error("Adam Warlock must choose four distinct aspects.");
+    const codes = Object.entries(sourceStarter.cards).flatMap(
+      ([code, quantity]) => Array<string>(quantity).fill(code),
+    );
+    if (!selected.includes("pool")) return codes;
+    const pool = ["44017", "44021", "44025", "44026", "44027", "44029"];
+    let replacement = 0;
+    return codes.map((code) => {
+      const faction = card(code).faction_code;
+      return ASPECTS.some((a) => a.id === faction) &&
+        !selected.includes(faction as Aspect)
+        ? pool[replacement++]
+        : code;
+    });
+  }
   if (
     sourceStarter &&
     (((hero === "hawkeye" || hero === "ant") && aspect === "leadership") ||

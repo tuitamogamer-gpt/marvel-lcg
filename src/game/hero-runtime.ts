@@ -220,8 +220,22 @@ export function heroDeckAspects(
   primary?: string,
 ): HeroAspect[] {
   const hero = heroRuntime(idOrCode);
-  if (hero?.deckRule.aspects === "four-equal-singleton")
-    return [...fourAspects];
+  if (hero?.deckRule.aspects === "four-equal-singleton") {
+    const present = new Set(
+      codes.flatMap((code) => {
+        const c = byCode.get(code);
+        return c && HERO_ASPECTS.includes(c.faction_code as HeroAspect)
+          ? [c.faction_code as HeroAspect]
+          : [];
+      }),
+    );
+    if (present.size === 4) return HERO_ASPECTS.filter((a) => present.has(a));
+    // An empty/all-Basic custom list cannot identify its four chosen aspects.
+    // The primary 'Pool choice replaces Aggression in the default starter.
+    return primary === "pool"
+      ? ["pool", "justice", "leadership", "protection"]
+      : [...fourAspects];
+  }
   if (!hero || hero.deckRule.aspects !== "two-equal")
     return primary && HERO_ASPECTS.includes(primary as HeroAspect)
       ? [primary as HeroAspect]
@@ -326,11 +340,8 @@ export function validateHeroDeck(
     errors.push("Choose exactly one aspect for this hero.");
   if (rule.aspects === "two-equal" && aspects.length !== 2)
     errors.push("Spider-Woman must choose exactly two aspects.");
-  if (
-    rule.aspects === "four-equal-singleton" &&
-    (aspects.length !== 4 || !fourAspects.every((a) => aspects.includes(a)))
-  )
-    errors.push("Adam Warlock must use all four standard aspects.");
+  if (rule.aspects === "four-equal-singleton" && aspects.length !== 4)
+    errors.push("Adam Warlock must choose exactly four distinct aspects.");
 
   const counts = new Map<string, number>();
   for (const code of codes) counts.set(code, (counts.get(code) || 0) + 1);

@@ -1,4 +1,5 @@
-export type Aspect = "justice" | "aggression" | "leadership" | "protection";
+export type Aspect =
+  "justice" | "aggression" | "leadership" | "protection" | "pool";
 export type Resource = "energy" | "mental" | "physical" | "wild";
 /** How often guided play pauses for Proceed. Decisions always pause. */
 export type Pacing = "guided" | "brisk" | "expert";

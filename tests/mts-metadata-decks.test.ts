@@ -195,7 +195,7 @@ describe("Mad Titan's Shadow identity metadata and native deck composition", () 
         code,
       ).toBe(true);
     const markup = editor("warlock", "aggression");
-    expect(markup).toContain("All four aspects");
+    expect(markup).toContain("Four chosen aspects");
     expect(markup).not.toContain('aria-label="Second aspect"');
     expect(markup).not.toContain('aria-label="Aspect"');
     expect(markup).toContain("Aggression 6");
