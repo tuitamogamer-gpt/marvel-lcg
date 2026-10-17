@@ -348,7 +348,7 @@ export function rogueAbilityOptions(
   ports: RoguePorts,
 ): Option[] {
   if (
-    id === "hero" &&
+    ["hero", "identity"].includes(id) &&
     active(s) &&
     s.player.form === "hero" &&
     s.flags.rogueSkinRound !== s.round &&

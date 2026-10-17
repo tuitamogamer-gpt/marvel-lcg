@@ -158,6 +158,34 @@ function zeroBoost(s: GameState) {
 }
 
 describe("Rogue original source, setup and Touched", () => {
+  it("exposes Skin Contact through the public default identity ability and dispatches that same alias", () => {
+    let s = base();
+    const touched = rogueTouched(s)!;
+    expect(
+      nativeHeroAbilityOptions(s).some(
+        (option) => option.id === "skin-contact",
+      ),
+    ).toBe(true);
+    s = command(s, { type: "ABILITY", id: "identity", action: "skin-contact" });
+    s = settle(choose(reload(s), s.villain.id));
+    expect(rogueTouched(s)).toMatchObject({
+      id: touched.id,
+      attachedTo: s.villain.id,
+    });
+    expect(rogueModifiers(s).retaliate).toBe(1);
+    expect(
+      nativeHeroAbilityOptions(reload(s)).some(
+        (option) => option.id === "skin-contact",
+      ),
+    ).toBe(false);
+    expect(
+      nativeHeroAbilityOptions(reload(s), "hero").some(
+        (option) => option.id === "skin-contact",
+      ),
+    ).toBe(false);
+    exact(s, [touched.id]);
+  });
+
   it.each(["aggression", "justice", "leadership", "protection"] as Aspect[])(
     "all original signatures and actual41-card %s deck are legal",
     (aspect) => {

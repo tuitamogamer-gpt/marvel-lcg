@@ -247,6 +247,33 @@ describe("Gambit original sources and native rules", () => {
       expect(gambitCharges(s)).toBe(1);
     },
   );
+  it("nonphysical Tackle spends Throw de Card charges without creating damage from Float Like a Butterfly, and retains stun and Retaliate", () => {
+    let s = charge(base(), 2);
+    s.villain.confused = true;
+    put(s, "41017");
+    attach(s, "01119", s.villain.id);
+    const [tackle, genius, education] = hand(s, "05015", "37023", "37021");
+    const hp = s.player.hp;
+    const enemyHp = s.villain.hp;
+    s = command(s, { type: "PLAY", id: tackle.id });
+    s = pay(s, [genius, education]);
+    expect(s.prompt?.title).toBe("Throw de Card");
+    s = choose(reload(s), "2");
+    s = finish(target(s, s.villain.id));
+    expect(s.villain.hp).toBe(enemyHp);
+    expect(s.villain.stunned).toBe(true);
+    expect(s.villain.confused).toBe(true);
+    expect(s.player.hp).toBe(hp - 1);
+    expect(gambitCharges(s)).toBe(0);
+    expect(s.player.discard.filter((p) => p.id === tackle.id)).toHaveLength(1);
+    expect(s.player.discard.filter((p) => p.id === genius.id)).toHaveLength(1);
+    expect(s.player.discard.filter((p) => p.id === education.id)).toHaveLength(
+      1,
+    );
+    const saved = reload(s);
+    expect(saved.villain.hp).toBe(enemyHp);
+    expect(saved.player.hp).toBe(hp - 1);
+  });
   it("Honed Technique does not modify Royal Flush, even when Mental pays for the event", () => {
     let s = charge(base(), 1);
     put(s, "28017");
