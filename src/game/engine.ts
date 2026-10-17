@@ -2369,6 +2369,8 @@ function npcPlayerPlayRestriction(s: GameState, p: Piece): string | null {
   return null;
 }
 interface DamageTraits {
+  /** An attack can lack a damage instruction while retaining its aftermath. */
+  noDamageInstance?: boolean;
   /** Original dealt amount, before damage-taken prevention. */
   damageDealt?: number;
   /** Overkill is attack damage, but is not a new attack on its recipient. */
@@ -2502,6 +2504,7 @@ function damageProhibition(s: GameState, target: string, panther: boolean) {
   return undefined;
 }
 function attackExcess(s: GameState, packet: Effect): number {
+  if (packet.noDamageInstance) return 0;
   const target = find(s, packet.target);
   if (!target || !packet.attack) return 0;
   const source = packet.source || "hero";
@@ -2574,8 +2577,10 @@ function dealDamage(
   panther = false,
   traits: DamageTraits = {},
 ): DamageResult {
+  if (traits.noDamageInstance) n = 0;
   if (
     attack &&
+    !traits.noDamageInstance &&
     !traits.mutantGenesisBonusApplied &&
     (source === "hero" || source === `hero:${s.activePlayerId}`) &&
     target !== "hero" &&
@@ -2585,9 +2590,11 @@ function dealDamage(
       msMarvelEventAmountModifier(s, s.currentEventId, "damage") +
       Number(s.flags[`niHoned:${s.currentEventId}`] || 0) +
       mgPack.mutantGenesisPlayerPackAttackEventBonus(s, s.currentEventId || "");
-  if (attack) n += psylocke.psylockeDamageBonus(s, source, target);
+  if (attack && !traits.noDamageInstance)
+    n += psylocke.psylockeDamageBonus(s, source, target);
   if (
     attack &&
+    !traits.noDamageInstance &&
     !traits.mutantGenesisBonusApplied &&
     (source === "hero" || source === `hero:${s.activePlayerId}`) &&
     target !== "hero" &&
@@ -2595,11 +2602,14 @@ function dealDamage(
   )
     n += gambit.gambitDamageBonus(s);
   const original = find(s, target);
-  const dealt = Math.max(0, traits.damageDealt ?? n);
+  const dealt = traits.noDamageInstance
+    ? 0
+    : Math.max(0, traits.damageDealt ?? n);
   // Exploit Weakness modifies damage TAKEN. Preserve the original dealt amount
   // for replacement effects such as Armored Rhino Suit and dealt-damage receipts.
   if (
     attack &&
+    !traits.noDamageInstance &&
     (target === s.villain.id || s.minions.some((p) => p.id === target))
   )
     n += cyclops.cyclopsAttackModifiers(s, target).damage;
@@ -4544,6 +4554,7 @@ function attackAction(
   overkill = false,
   panther = false,
   traits: {
+    noDamageInstance?: boolean;
     basic?: boolean;
     piercing?: boolean;
     ranged?: boolean;
@@ -23344,6 +23355,7 @@ function resolve(s: GameState, e: Effect) {
             excessToMain: e.excessToMain,
             excessBonus: e.excessBonus,
             initiated: e.attackInitiated || e.attackAlreadyInitiated,
+            noDamageInstance: e.noDamageInstance,
             mutantGenesisBonusApplied: e.mutantGenesisBonusApplied,
           },
         );

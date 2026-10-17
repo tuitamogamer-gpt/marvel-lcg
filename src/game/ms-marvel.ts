@@ -923,6 +923,7 @@ export function resolveMsMarvelEffect(
         E("damage", {
           target: e.target,
           amount: e.physical ? 3 : 0,
+          noDamageInstance: !e.physical,
           attack: true,
           source: "hero",
           eventId: e.eventId,
