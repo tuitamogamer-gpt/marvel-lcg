@@ -612,7 +612,7 @@ async function publicSource(source, width) {
       name: "Touched status",
       exact: true,
     });
-    assert.match(await status.innerText(), /Touched\s+Set aside/);
+    assert.match(await status.innerText(), /Touched · Set aside/);
     assert.equal(await status.getAttribute("data-touched-id"), touched.id);
     assert.equal(
       await status

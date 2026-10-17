@@ -5271,6 +5271,7 @@ function Tabletop({
                       className="identity-stats stat-row"
                       role="group"
                       aria-label="Touched status"
+                      style={{ gridColumn: "1 / -1" }}
                       data-touched-id={touched.id}
                     >
                       <button
@@ -5281,17 +5282,16 @@ function Tabletop({
                           inspect({ code: touched.code, piece: touched })
                         }
                       >
-                        Touched
+                        {`Touched · ${
+                          touched.attachedTo
+                            ? `Attached to ${touchedHostName}`
+                            : s.player.setAside?.some(
+                                  (piece) => piece.id === touched.id,
+                                )
+                              ? "Set aside"
+                              : "Not attached"
+                        }`}
                       </button>
-                      <span>
-                        {touched.attachedTo
-                          ? `Attached to ${touchedHostName}`
-                          : s.player.setAside?.some(
-                                (piece) => piece.id === touched.id,
-                              )
-                            ? "Set aside"
-                            : "Not attached"}
-                      </span>
                     </div>
                   )}
                   {s.heroId === "spiderham" && (
