@@ -7822,7 +7822,7 @@ function flip(
   if (counts) s.player.flipped = true;
   spdr.spdrChangedForm(s, previousForm, s.player.form);
   add(s, ...phoenix.phoenixFormChanged(s));
-  add(s, ...rogue.rogueFormChanged(s, wasMutant));
+  add(s, ...rogue.rogueFormChanged(s, wasMutant, roguePorts));
   if (s.player.spiderHamIdentity)
     s.player.spiderHamIdentity.code =
       s.player.form === "hero" ? "30001a" : "30001b";
@@ -11730,6 +11730,97 @@ function rogueNativeTraits(
   const p = find(s, id);
   return p ? sinisterNativeTraits(s, p) : [];
 }
+/** FIND includes facedown player cards beneath scenario cards and Ultron drones,
+ * but never the victory display or removed-from-game area (RRG 1.8, p.19).
+ * Only canonical physical zones are searched, not effect/receipt snapshots. */
+function rogueTouchedLocation(s: GameState) {
+  type Location = {
+    piece: Piece;
+    zone?: Piece[];
+    deck?: Piece[];
+    inPlay?: boolean;
+    drone?: Piece;
+  };
+  const zones: { zone: Piece[]; deck?: Piece[]; inPlay?: boolean }[] = [];
+  for (const seat of s.players) {
+    const p = seatView(s, seat).player;
+    zones.push(
+      { zone: p.inPlay, inPlay: true },
+      { zone: p.setAside || [] },
+      { zone: p.hand },
+      { zone: p.discard },
+      { zone: p.deck, deck: p.deck },
+      { zone: p.invocationDeck || [], deck: p.invocationDeck },
+      { zone: p.invocationDiscard || [] },
+    );
+  }
+  zones.push(
+    { zone: s.minions, inPlay: true },
+    { zone: s.sideSchemes, inPlay: true },
+    { zone: s.attachments, inPlay: true },
+    { zone: s.environments || [], inPlay: true },
+    { zone: s.resolving },
+    { zone: s.encounter.discard },
+    { zone: s.encounter.dealt },
+    { zone: s.encounter.storedBoosts || [] },
+    { zone: s.attack?.pendingBoosts || [] },
+    { zone: s.scheming?.pendingBoosts || [] },
+    { zone: s.encounter.deck, deck: s.encounter.deck },
+    { zone: s.projectWideawake?.setAsideCaptives || [] },
+    { zone: [s.villain] },
+  );
+  const matches = (p: Piece) =>
+    p.code === "38002" && p.ownerId === s.activePlayerId;
+  const search = (
+    location: Omit<Location, "piece"> & { zone: Piece[] },
+  ): Location | undefined => {
+    for (const p of location.zone) {
+      if (matches(p)) return { ...location, piece: p };
+      if (p.droneCard && matches(p.droneCard))
+        return { piece: p.droneCard, drone: p };
+      for (const zone of [p.storedCards, p.captured, p.inheritorBoosts]) {
+        const nested = zone && search({ zone });
+        if (nested) return nested;
+      }
+    }
+  };
+  for (const location of zones) {
+    const found = search(location);
+    if (found) return found;
+  }
+}
+function rogueFindTouched(s: GameState): Piece | undefined {
+  const found = rogueTouchedLocation(s);
+  if (!found) return;
+  const { piece, zone, deck, inPlay, drone } = found;
+  if (zone === s.player.setAside) return piece;
+  if (inPlay) {
+    movePieceFromPlay(s, piece.id, false, s.activePlayerId);
+    return s.player.setAside?.find((p) => p.id === piece.id);
+  }
+  if (drone) {
+    // The recovered player card is not discarded with its synthetic wrapper.
+    // Ordinary leave-play cleanup still removes attachments and trait grants;
+    // this is not a defeat and awards no defeat response or mission credit.
+    delete drone.droneCard;
+    movePieceFromPlay(s, drone.id, false);
+    if (find(s, drone.id)) {
+      drone.droneCard = piece;
+      return;
+    }
+  } else
+    zone!.splice(
+      zone!.findIndex((p) => p.id === piece.id),
+      1,
+    );
+  if (deck) {
+    revealHidden(s);
+    shuffle(s, deck);
+  }
+  const recovered = resetPiece(piece);
+  (s.player.setAside ||= []).push(recovered);
+  return recovered;
+}
 const roguePorts: rogue.RoguePorts = {
   queue: add,
   choose,
@@ -11766,6 +11857,23 @@ const roguePorts: rogue.RoguePorts = {
       }),
     ),
   discard: discardPiece,
+  findTouched: rogueFindTouched,
+  canFindTouched: (s, asCost) => {
+    const location = rogueTouchedLocation(s);
+    if (!location) return false;
+    // Energy Transfer must actually attach Touched to pay its arrow cost.
+    // A mandatory Psionic Shield replacement prevents that move from a drone.
+    return (
+      !asCost ||
+      !location.drone ||
+      !s.attachments.some(
+        (p) =>
+          p.code === "37034" &&
+          p.attachedTo === location.drone!.id &&
+          !isTextBlank(s, p),
+      )
+    );
+  },
   shufflePlayer: (s) => {
     revealHidden(s);
     s.player.deck = shuffle(s, s.player.deck);
@@ -27893,10 +28001,13 @@ function resolve(s: GameState, e: Effect) {
         villainSetup(s);
       break;
     case "wolverinePlayerPhase":
-      for (const seat of playerOrder(s))
-        rogue.roguePhaseBegan(seatView(s, seat));
       add(
         s,
+        ...playerOrder(s).flatMap((seat) =>
+          rogue
+            .roguePhaseBegan(seatView(s, seat))
+            .map((e) => ({ ...e, actorId: seat.id })),
+        ),
         ...playerOrder(s).flatMap((seat) =>
           wolverine
             .wolverinePhaseBegan(seatView(s, seat), wolverinePorts)

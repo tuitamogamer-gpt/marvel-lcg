@@ -66,6 +66,8 @@ export interface RoguePorts {
     after: Effect[],
   ): void;
   discard(s: GameState, id: string): void;
+  findTouched(s: GameState): Piece | undefined;
+  canFindTouched(s: GameState, asCost?: boolean): boolean;
   shufflePlayer(s: GameState): void;
   shuffleEncounter(s: GameState): void;
   revealHidden(s: GameState): void;
@@ -86,23 +88,6 @@ export function rogueTouched(s: GameState): Piece | undefined {
     ...s.resolving,
   ].find((p) => p.code === "38002" && p.ownerId === s.activePlayerId);
 }
-export function rogueSetAside(s: GameState) {
-  const p = rogueTouched(s);
-  if (!p) return;
-  for (const zone of [
-    s.player.inPlay,
-    s.player.hand,
-    s.player.deck,
-    s.player.discard,
-    s.player.setAside || [],
-    s.resolving,
-  ]) {
-    const i = zone.findIndex((q) => q.id === p.id);
-    if (i >= 0) zone.splice(i, 1);
-  }
-  delete p.attachedTo;
-  (s.player.setAside ||= []).push(p);
-}
 export function rogueInitialize(
   s: GameState,
   ports: Pick<RoguePorts, "makePiece">,
@@ -115,8 +100,8 @@ export function rogueInitialize(
   }
 }
 export const rogueSetup = (s: GameState) => (active(s) ? [R("set-aside")] : []);
-export function roguePhaseBegan(s: GameState) {
-  if (active(s) && s.player.form === "hero") rogueSetAside(s);
+export function roguePhaseBegan(s: GameState): Effect[] {
+  return active(s) && s.player.form === "hero" ? [R("set-aside")] : [];
 }
 export function rogueTouchedTarget(s: GameState) {
   const p = rogueTouched(s);
@@ -200,13 +185,24 @@ function touchedTargets(s: GameState, ports: RoguePorts, moving = false) {
     .filter(
       (t) =>
         normalized(s, t.id) !== `hero:${s.activePlayerId}` &&
+        !s.minions.some(
+          (p) =>
+            p.id === t.id &&
+            p.droneCard?.code === "38002" &&
+            p.droneCard.ownerId === s.activePlayerId,
+        ) &&
         (!moving || normalized(s, t.id) !== rogueTouched(s)?.attachedTo),
     );
 }
-function attachTouched(s: GameState, target: string) {
-  const p = rogueTouched(s);
-  need(p, "The original Touched upgrade is unavailable.");
-  rogueSetAside(s);
+function attachTouched(s: GameState, target: string, ports: RoguePorts) {
+  const p = ports.findTouched(s);
+  if (
+    !p ||
+    !ports
+      .targets(s, "character")
+      .some((t) => normalized(s, t.id) === normalized(s, target))
+  )
+    return false;
   const i = s.player.setAside!.findIndex((q) => q.id === p!.id);
   s.player.setAside!.splice(i, 1);
   p!.attachedTo = normalized(s, target);
@@ -222,9 +218,14 @@ function attachTouched(s: GameState, target: string) {
       p!.attachedTo!,
     ]),
   ].join(",");
+  return true;
 }
-export function rogueFormChanged(s: GameState, wasMutant: boolean): Effect[] {
-  if (active(s) && s.player.form === "alter") rogueSetAside(s);
+export function rogueFormChanged(
+  s: GameState,
+  wasMutant: boolean,
+  ports: RoguePorts,
+): Effect[] {
+  if (active(s) && s.player.form === "alter") ports.findTouched(s);
   if (!wasMutant || s.player.form !== "hero") return [];
   return allInPlay(s)
     .filter((p) => p.code === "38018" && !p.exhausted && !isTextBlank(s, p))
@@ -290,6 +291,8 @@ export function roguePlayRestriction(
     return "Play this Defense event at its printed interrupt window.";
   if (p.code === "38009" && !adaptation(s).length)
     return "Touched must be attached to a friendly character with a matching event in its owner's discard pile.";
+  if (p.code === "38007" && !ports.canFindTouched(s, true))
+    return "The original Touched upgrade cannot be found and moved to pay the cost.";
   if (p.code === "38007" && !touchedTargets(s, ports, true).length)
     return "Move Touched to another character.";
   if (p.code === "38012" && !ports.hasTrait(s, "hero", "X-Men"))
@@ -352,6 +355,7 @@ export function rogueAbilityOptions(
     active(s) &&
     s.player.form === "hero" &&
     s.flags.rogueSkinRound !== s.round &&
+    ports.canFindTouched(s) &&
     touchedTargets(s, ports).length
   )
     return [O("skin-contact", "Skin Contact · attach Touched", [R("skin")])];
@@ -635,7 +639,7 @@ export function resolveRogueEffect(s: GameState, e: Effect, ports: RoguePorts) {
       );
       break;
     case "rogue:set-aside":
-      rogueSetAside(s);
+      ports.findTouched(s);
       break;
     case "rogue:skin":
       need(
@@ -651,7 +655,7 @@ export function resolveRogueEffect(s: GameState, e: Effect, ports: RoguePorts) {
       );
       break;
     case "rogue:touch":
-      attachTouched(s, e.target);
+      attachTouched(s, e.target, ports);
       if (e.skin) s.flags.rogueSkinRound = s.round;
       break;
     case "rogue:gambit": {
@@ -829,7 +833,7 @@ export function resolveRogueEffect(s: GameState, e: Effect, ports: RoguePorts) {
         rogueTouched(s)?.attachedTo !== normalized(s, e.target),
         "Energy Transfer must move Touched.",
       );
-      attachTouched(s, e.target);
+      if (!attachTouched(s, e.target, ports)) break;
       if (ports.damageCost(s, e.target, 2))
         ports.queue(
           s,

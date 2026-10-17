@@ -123,6 +123,8 @@ function pieces(s: GameState): Piece[] {
   const walk = (p: Piece): Piece[] => [
     p,
     ...(p.storedCards || []).flatMap(walk),
+    ...(p.captured || []).flatMap(walk),
+    ...(p.inheritorBoosts || []).flatMap(walk),
     ...(p.droneCard ? walk(p.droneCard) : []),
   ];
   return [
@@ -141,6 +143,7 @@ function pieces(s: GameState): Piece[] {
     ...s.attachments,
     ...s.resolving,
     ...s.removed,
+    ...(s.victoryDisplay || []),
     ...s.encounter.deck,
     ...s.encounter.discard,
     ...s.encounter.dealt,
@@ -156,6 +159,243 @@ function exact(s: GameState, ids: string[]) {
 function zeroBoost(s: GameState) {
   s.encounter.deck.unshift(makePiece(s, "01104"));
 }
+
+describe("Rogue Touched FIND across physical zones", () => {
+  it.each(["hand", "discard", "deck", "captured", "stored"] as const)(
+    "Skin Contact finds its same owned card in %s and shuffles only a searched deck",
+    (zone) => {
+      let s = base(
+        zone === "stored" ? "leadership" : "protection",
+        "spider_man",
+        zone === "stored" ? "38028" : undefined,
+      );
+      const touched = rogueTouched(s)!;
+      s.player.setAside!.splice(s.player.setAside!.indexOf(touched), 1);
+      let holder: Piece | undefined;
+      if (zone === "captured") {
+        holder = makePiece(s, "32104");
+        holder.captured = [touched];
+        s.sideSchemes.push(holder);
+      } else if (zone === "stored") {
+        holder = take(s, "38028", "inPlay");
+        s.player.inPlay.splice(s.player.inPlay.indexOf(holder), 1);
+        seatView(s, "p2").player.inPlay.push(holder);
+        holder.storedCards = [touched];
+      } else s.player[zone].push(touched);
+      const ids = pieces(s).map((p) => p.id);
+      const beforeSeed = s.seed;
+      const beforeDeck = s.player.deck
+        .filter((p) => p.id !== touched.id)
+        .map((p) => p.id);
+      const teammateDeck = seatView(s, "p2").player.deck.map((p) => p.id);
+      s = touch(reload(s), s.villain.id);
+      expect(rogueTouched(s)).toMatchObject({
+        id: touched.id,
+        ownerId: "p1",
+        attachedTo: s.villain.id,
+      });
+      expect(s.player.deck.map((p) => p.id).sort()).toEqual(
+        [...beforeDeck].sort(),
+      );
+      if (zone === "deck") {
+        expect(s.seed).not.toBe(beforeSeed);
+        expect(s.player.deck.map((p) => p.id)).not.toEqual(beforeDeck);
+      } else {
+        expect(s.seed).toBe(beforeSeed);
+        expect(s.player.deck.map((p) => p.id)).toEqual(beforeDeck);
+      }
+      expect(seatView(s, "p2").player.deck.map((p) => p.id)).toEqual(
+        teammateDeck,
+      );
+      if (holder) {
+        const actual = pieces(s).find((p) => p.id === holder!.id)!;
+        expect([
+          ...(actual.captured || []),
+          ...(actual.storedCards || []),
+        ]).toEqual([]);
+      }
+      exact(reload(s), ids);
+    },
+  );
+
+  it.each(["withdrawn", "player-phase"] as const)(
+    "%s finds the original captured Touched without drawing or recapturing a replacement",
+    (trigger) => {
+      let s = base();
+      const touched = rogueTouched(s)!;
+      s.player.setAside!.splice(s.player.setAside!.indexOf(touched), 1);
+      const holder = makePiece(s, "32104");
+      holder.captured = [touched];
+      s.sideSchemes.push(holder);
+      const before = {
+        seed: s.seed,
+        hand: s.player.hand.map((p) => p.id),
+        deck: s.player.deck.map((p) => p.id),
+      };
+      s =
+        trigger === "withdrawn"
+          ? settle(command(s, { type: "FLIP" }))
+          : settle(native(s, { type: "wolverinePlayerPhase" }));
+      expect(s.player.setAside?.find((p) => p.id === touched.id)).toMatchObject(
+        { ownerId: "p1", code: "38002" },
+      );
+      expect(s.sideSchemes.find((p) => p.id === holder.id)?.captured).toEqual(
+        [],
+      );
+      expect({
+        seed: s.seed,
+        hand: s.player.hand.map((p) => p.id),
+        deck: s.player.deck.map((p) => p.id),
+      }).toEqual(before);
+      exact(reload(s), [touched.id]);
+    },
+  );
+
+  it("extracts an Ultron drone's actual Touched and performs leave-play cleanup without a defeat", () => {
+    let s = base();
+    const touched = rogueTouched(s)!;
+    s.player.setAside!.splice(s.player.setAside!.indexOf(touched), 1);
+    s.player.deck.unshift(touched);
+    s = settle(native(s, { type: "drone" }));
+    const drone = s.minions.find((p) => p.droneCard?.id === touched.id)!;
+    expect(drone).toBeTruthy();
+    const attachment = take(s, "38004", "inPlay");
+    attachment.attachedTo = drone.id;
+    s.flags.rogueTraitsRound = s.round;
+    s.flags.rogueTraitTargets = drone.id;
+    const ids = pieces(s)
+      .filter((p) => p.id !== drone.id)
+      .map((p) => p.id);
+    const defeated = s.stats!.enemiesDefeated;
+    const beforeSeed = s.seed;
+    s = command(reload(s), {
+      type: "ABILITY",
+      id: "identity",
+      action: "skin-contact",
+    });
+    expect(s.prompt?.options.some((o) => o.id === drone.id)).toBe(false);
+    s = settle(choose(reload(s), s.villain.id));
+    expect(s.minions.some((p) => p.id === drone.id)).toBe(false);
+    expect(pieces(s).some((p) => p.id === drone.id)).toBe(false);
+    expect(rogueTouched(s)).toMatchObject({
+      id: touched.id,
+      ownerId: "p1",
+      attachedTo: s.villain.id,
+    });
+    expect(s.player.discard.find((p) => p.id === attachment.id)).toMatchObject({
+      ownerId: "p1",
+    });
+    expect(s.player.discard.some((p) => p.id === touched.id)).toBe(false);
+    expect(String(s.flags.rogueTraitTargets)).not.toContain(drone.id);
+    expect(s.stats!.enemiesDefeated).toBe(defeated);
+    expect(s.seed).toBe(beforeSeed);
+    exact(reload(s), ids);
+  });
+
+  it("a deck search with one remaining card invalidates hidden-information undo without advancing the RNG", () => {
+    let s = base();
+    const touched = rogueTouched(s)!;
+    s.player.setAside!.splice(s.player.setAside!.indexOf(touched), 1);
+    const remaining = s.player.deck.shift()!;
+    s.player.discard.push(...s.player.deck.splice(0));
+    s.player.deck.push(touched, remaining);
+    const seed = s.seed;
+    const hidden = s.hiddenInfo || 0;
+    const dealt = s.encounter.dealt.map((p) => p.id);
+    s = touch(s, s.villain.id);
+    expect(s.hiddenInfo).toBeGreaterThan(hidden);
+    expect(s.seed).toBe(seed);
+    expect(s.player.deck.map((p) => p.id)).toEqual([remaining.id]);
+    expect(s.encounter.dealt.map((p) => p.id)).toEqual(dealt);
+    exact(s, [touched.id]);
+  });
+
+  it.each(["deck", "drone"] as const)(
+    "the non-active Rogue's phase-begin FIND updates canonical %s state across saves",
+    (zone) => {
+      let s = base("protection", "spider_man");
+      const touched = rogueTouched(s)!;
+      s.player.setAside!.splice(s.player.setAside!.indexOf(touched), 1);
+      s.player.deck.unshift(touched);
+      if (zone === "drone") s = settle(native(s, { type: "drone" }));
+      const drone = s.minions.find((p) => p.droneCard?.id === touched.id);
+      const seed = s.seed;
+      const ids = pieces(s)
+        .filter((p) => p.id !== drone?.id)
+        .map((p) => p.id);
+      activateSeat(s, "p2");
+      s = settle(native(reload(s), { type: "wolverinePlayerPhase" }));
+      expect(
+        seatView(s, "p1").player.setAside?.find((p) => p.id === touched.id),
+      ).toMatchObject({ ownerId: "p1" });
+      expect(
+        seatView(s, "p2").player.setAside?.some((p) => p.id === touched.id),
+      ).not.toBe(true);
+      if (zone === "deck") expect(s.seed).not.toBe(seed);
+      else {
+        expect(s.seed).toBe(seed);
+        expect(s.minions.some((p) => p.id === drone!.id)).toBe(false);
+      }
+      exact(reload(s), ids);
+    },
+  );
+
+  it("a prevented drone leave retains its same backing Touched instead of an empty or duplicated wrapper", () => {
+    let s = base();
+    const touched = rogueTouched(s)!;
+    s.player.setAside!.splice(s.player.setAside!.indexOf(touched), 1);
+    s.player.deck.unshift(touched);
+    s = settle(native(s, { type: "drone" }));
+    const drone = s.minions.find((p) => p.droneCard?.id === touched.id)!;
+    const shield = makePiece(s, "37034");
+    shield.attachedTo = drone.id;
+    s.attachments.push(shield);
+    const transfer = take(s, "38007");
+    const payment = resources(s, 2);
+    expect(playable(s, transfer)).toMatch(/cannot be found and moved/);
+    s = touch(s, s.villain.id);
+    expect(s.flags.rogueSkinRound).toBe(s.round);
+    expect(s.minions.find((p) => p.id === drone.id)?.droneCard).toMatchObject({
+      id: touched.id,
+      ownerId: "p1",
+    });
+    expect(s.encounter.discard.some((p) => p.id === shield.id)).toBe(true);
+    expect(rogueTouched(s)).toBeUndefined();
+    exact(reload(s), [touched.id, shield.id]);
+    expect(
+      playable(
+        s,
+        s.player.hand.find((p) => p.id === transfer.id)!,
+      ),
+    ).toBeNull();
+    s = play(s, transfer, payment);
+    s = settle(choose(s, s.villain.id));
+    expect(s.minions.some((p) => p.id === drone.id)).toBe(false);
+    expect(rogueTouched(s)?.id).toBe(touched.id);
+    exact(reload(s), [touched.id, shield.id]);
+  });
+
+  it.each(["removed", "victoryDisplay"] as const)(
+    "FIND cannot recover Touched from %s or manufacture a replacement",
+    (zone) => {
+      let s = base();
+      const touched = rogueTouched(s)!;
+      s.player.setAside!.splice(s.player.setAside!.indexOf(touched), 1);
+      (s[zone] ||= []).push(touched);
+      const transfer = take(s, "38007");
+      expect(
+        nativeHeroAbilityOptions(s).some((o) => o.id === "skin-contact"),
+      ).toBe(false);
+      expect(playable(s, transfer)).toMatch(/Touched.*cannot be found/);
+      s = settle(native(s, { type: "rogue:set-aside" }));
+      expect(s[zone]?.find((p) => p.id === touched.id)).toMatchObject({
+        ownerId: "p1",
+      });
+      expect(rogueTouched(s)).toBeUndefined();
+      exact(reload(s), [touched.id]);
+    },
+  );
+});
 
 describe("Rogue original source, setup and Touched", () => {
   it("exposes Skin Contact through the public default identity ability and dispatches that same alias", () => {
