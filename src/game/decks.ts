@@ -121,6 +121,7 @@ export function deckErrors(
       "shadowcat",
       "wolverine",
       "psylocke",
+      "gambit",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

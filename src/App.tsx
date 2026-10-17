@@ -1,3 +1,4 @@
+import { gambitCharges } from "./game/gambit";
 import { cyclopsCanAttack } from "./game/cyclops";
 import { wolverineRecoverOptions } from "./game/wolverine";
 import { visionCanAttack } from "./game/vision";
@@ -5232,6 +5233,19 @@ function Tabletop({
                         kind="counter"
                         value={ironheartProgress(s)}
                         label="PROGRESS"
+                        compact
+                      />
+                    </div>
+                  )}
+                  {s.heroId === "gambit" && (
+                    <div
+                      className="identity-stats stat-row"
+                      aria-label="Charge counters"
+                    >
+                      <StatToken
+                        kind="counter"
+                        value={gambitCharges(s)}
+                        label="CHARGE"
                         compact
                       />
                     </div>

@@ -159,6 +159,14 @@ export function boardSnapshot(s: GameState) {
     put(`${seat.id}:hand`, `${name} hand`, p.hand.length, "cards");
     put(`${seat.id}:deck`, `${name} deck`, p.deck.length, "cards");
     put(`${seat.id}:discard`, `${name} discard`, p.discard.length, "cards");
+    if (seat.heroId === "gambit")
+      put(
+        `${seat.id}:gambitCharges`,
+        `${name} charge counters`,
+        Number(v.flags.gambitCharges || 0),
+        "status",
+      );
+
     if (p.spiderHamIdentity)
       put(
         `${p.spiderHamIdentity.id}:counters`,

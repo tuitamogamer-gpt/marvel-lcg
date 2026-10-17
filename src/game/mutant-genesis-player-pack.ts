@@ -31,7 +31,11 @@ const need = (yes: unknown, message: string) => {
   if (!yes) throw Error(message);
 };
 const own = (s: GameState, id: string, code?: string) =>
-  s.player.inPlay.find((p) => p.id === id && (!code || p.code === code));
+  s.player.inPlay.find(
+    (p) =>
+      p.id === id &&
+      (!code || p.code === code || (code === "32019" && p.code === "37017")),
+  );
 const normalize = (s: GameState, id: string) =>
   id === "hero" ? `hero:${s.activePlayerId}` : id;
 const responseKey = (token: string, id: string) =>
@@ -381,7 +385,7 @@ export function mutantGenesisPlayerPackAllyEntered(
 ): Effect[] | null {
   if (ports.isTextBlank(s, p)) return null;
   if (p.code === "32012") return [P("polaris-window", { id: p.id, after })];
-  if (p.code === "32019")
+  if (["32019", "37017"].includes(p.code))
     return [P("professor", { id: p.id, after, mandatory: true, forced: true })];
   if (
     p.code === "32042" &&
@@ -416,7 +420,7 @@ export function mutantGenesisPlayerPackRoundEnded(s: GameState): Effect[] {
   return allInPlay(s).flatMap((p) => {
     const seat = controller(s, p.id)!;
     const v = seatView(s, seat);
-    return p.code === "32019" &&
+    return ["32019", "37017"].includes(p.code) &&
       v.flags[professorKey(p.id)] !== undefined &&
       Number(v.flags[professorKey(p.id)]) <= s.round
       ? [
@@ -695,7 +699,7 @@ export function mutantGenesisPlayerPackAbilityOptions(
   ports: MutantGenesisPlayerPackPorts,
 ): Option[] {
   const p = allInPlay(s).find(
-    (p) => p.id === id && ["32049", "36025"].includes(p.code),
+    (p) => p.id === id && ["32049", "36025", "37018"].includes(p.code),
   );
   if (
     !p ||

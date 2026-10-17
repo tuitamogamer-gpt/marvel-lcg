@@ -537,7 +537,7 @@ export function phoenixEvent(s: GameState, p: Piece): Effect[] | null {
 }
 export function phoenixPayment(s: GameState, spent: Piece, event?: Piece) {
   if (
-    spent.code === "34020" &&
+    ["34020", "37016"].includes(spent.code) &&
     event &&
     card(event).traits?.includes("Thwart.")
   )

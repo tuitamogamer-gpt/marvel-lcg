@@ -94,6 +94,8 @@ const coreImageCodes = new Set(CARDS.map((c) => c.code));
 // These scans label the physical alter-ego side A and hero side B, while the
 // pinned catalog gives the hero an "a" code. Retain the original scans/data.
 const identityImageCodes: Readonly<Record<string, string>> = {
+  "37001a": "37001b",
+  "37001b": "37001a",
   "33001a": "33001b",
   "33001b": "33001a",
   "34001a": "34001b",
@@ -707,6 +709,20 @@ export const HEROES = [
     style: "Weather control · Leadership",
     complexity: 3,
   },
+  {
+    id: "gambit",
+    code: "37001a",
+    alter: "37001b",
+    name: "Gambit",
+    identity: "Remy LeBeau",
+    aspect: "justice" as Aspect,
+    color: "#a6408d",
+    tag: "Play your cards right.",
+    description:
+      "Build charge counters, throw explosive cards, and outwit enemies as the master thief Remy LeBeau.",
+    style: "Charged attacks and theft · Justice",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -870,6 +886,7 @@ export const MODULES = [
   { id: "acolytes", name: "Acolytes", difficulty: 4 },
   { id: "deathstrike", name: "Lady Deathstrike", difficulty: 3 },
   { id: "shadow_king", name: "Shadow King", difficulty: 3 },
+  { id: "exodus", name: "Exodus", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -1004,6 +1021,7 @@ export function deckCodes(
       (hero === "shadowcat" && aspect === "aggression") ||
       (hero === "phoenix" && aspect === "justice") ||
       (hero === "psylocke" && aspect === "justice") ||
+      (hero === "gambit" && aspect === "justice") ||
       (hero === "wolverine" && aspect === "aggression") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
