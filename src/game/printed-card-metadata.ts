@@ -4,7 +4,14 @@ type PrintedMetadata = Readonly<
   Partial<
     Pick<
       Card,
-      "name" | "attack" | "boost" | "health" | "is_unique" | "subname" | "text"
+      | "name"
+      | "attack"
+      | "boost"
+      | "health"
+      | "is_unique"
+      | "subname"
+      | "text"
+      | "resource_mental"
     >
   >
 >;
@@ -15,6 +22,8 @@ type PrintedMetadata = Readonly<
  * https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/<code>.jpg
  */
 const printedMetadata: Readonly<Record<string, PrintedMetadata>> = {
+  // public/cards/catalog/43016.webp: one printed Mental resource at bottom left.
+  "43016": { resource_mental: 1 },
   // Original scans public/cards/catalog/34028.webp and 34031.webp.
   "34028": {
     text: "Give to the Jean Grey player.\n<b>When Revealed</b>: If you have the [[UNLEASHED]] trait, search the encounter deck, discard pile, and set-aside area for Dark Phoenix and reveal her. Then, remove Burning Hunger from the game. If you have the [[RESTRAINED]] trait, remove 1 power counter from Phoenix Force and this card gains surge. Discard this card.",
