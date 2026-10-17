@@ -510,7 +510,7 @@ export function DeckEditor({
           {fourAspects &&
             " Choose any four aspects with equal card totals, and only one copy of each other card. Your signature cards stay fixed."}
           {aspects.includes("pool") &&
-            " Choosing 'Pool adds your copy of Crisis of Infinite Deadpools to the encounter deck."}
+            " Choosing 'Pool adds Crisis of Infinite Deadpools to the encounter deck."}
           {heroId === "cable" &&
             " Cable may include player side schemes from every aspect. Off-aspect cards do not change your chosen aspect."}
           {setupCount > 0 &&

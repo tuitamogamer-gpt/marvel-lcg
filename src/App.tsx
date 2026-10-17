@@ -4431,12 +4431,13 @@ function Tabletop({
       img.src = imageFor(code);
     }
   }, [s.round, s.activePlayerId, s.player.hand.length]);
-  const importedIdentityAbility = [
+  const importedIdentityAbilities = [
     ...nativeHeroAbilityOptions(s),
     ...doctorStrangeAbilityOptions(s, "identity"),
     ...thorAbilityOptions(s, "identity"),
     ...msMarvelAbilityOptions(s, "identity"),
-  ][0];
+  ];
+  const importedIdentityAbility = importedIdentityAbilities[0];
   const visibleInvocation = doctorStrangeTopInvocation(s);
   const spellUnavailable =
     importedIdentityAbility?.id === "spell" &&
@@ -5433,6 +5434,22 @@ function Tabletop({
                                   : "Use Commander"}
                     </button>
                   )}
+                  {importedIdentityAbilities.slice(1).map((ability) => (
+                    <button
+                      key={ability.id}
+                      className="ability-button"
+                      disabled={!canUseAction}
+                      onClick={() =>
+                        sendAction({
+                          type: "ABILITY",
+                          id: "identity",
+                          action: ability.id,
+                        })
+                      }
+                    >
+                      <Sparkle size={13} /> {ability.label}
+                    </button>
+                  ))}
                   <button
                     className="flip-button hero-form-button"
                     data-form={s.player.form}
