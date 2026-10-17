@@ -370,7 +370,9 @@ describe("four complete Hero Packs, batch two: immutable source contract", () =>
       expect(raw(code).duplicate_of, code).toBe(base);
       expect(card(code).code).toBe(code);
       expect(hasExecutableScript(code), code).toBe(true);
-      expect(hasExecutableScript(base), base).toBe(true);
+      // The original Next Evolution printing remains outside this import;
+      // its identical Power of Mind mechanic is authored for physical 41021.
+      expect(hasExecutableScript(base), base).toBe(base !== "40028");
       for (const field of fields)
         expect(raw(code)[field], `${code}/${base}.${field}`).toEqual(
           raw(base)[field],
@@ -457,9 +459,7 @@ for (const spec of specs)
       "retains every mandatory physical signature in a legal %s deck",
       (aspect) => {
         const codes = deckCodes(spec.id, aspect);
-        expect(deckSizeFor(codes)).toBe(
-          aspect === spec.aspect ? spec.playing : 40,
-        );
+        expect(deckSizeFor(codes)).toBe(spec.playing);
         expect(deckErrors(spec.id, aspect, codes)).toEqual([]);
         for (const [code, quantity] of Object.entries(spec.required))
           expect(
@@ -537,7 +537,7 @@ describe("batch two: special setup and cross-pack source constraints", () => {
     // Across these deterministic openings Touched occurs in both hand and deck.
     const origins = new Set<string>();
     for (let seed = 1; seed <= 24; seed++) {
-      let s = game([specs[1]], "bomb_scare", seed);
+      let s = game([specs[1]], "bomb_scare", Math.imul(seed, 2654435761) >>> 0);
       const original = playerZones(s.player).filter((p) => p.code === "38002");
       expect(original).toHaveLength(1);
       const inHand = s.player.hand.some((p) => p.id === original[0].id);

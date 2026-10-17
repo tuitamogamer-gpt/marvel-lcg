@@ -49,7 +49,7 @@ describe("imported hero definitions and printed starter legality", () => {
   it("imported identities stay unautomated until their full runtime is installed", () => {
     expect(
       HERO_RUNTIME.filter((h) => h.scripted).map((h) => h.id),
-    ).toHaveLength(41);
+    ).toHaveLength(45);
     expect(heroRuntime("captain_america")?.scripted).toBe(true);
     expect(heroRuntime("wsp")?.scripted).toBe(true);
     expect(heroRuntime("qsv")?.scripted).toBe(true);
@@ -67,7 +67,16 @@ describe("imported hero definitions and printed starter legality", () => {
     expect(heroRuntime("spdr")?.scripted).toBe(true);
     expect(heroRuntime("colossus")?.scripted).toBe(true);
     expect(heroRuntime("shadowcat")?.scripted).toBe(true);
-    for (const id of ["cyclops", "phoenix", "wolverine", "storm"])
+    for (const id of [
+      "cyclops",
+      "phoenix",
+      "wolverine",
+      "storm",
+      "gambit",
+      "rogue",
+      "psylocke",
+      "angel",
+    ])
       expect(heroRuntime(id)?.scripted).toBe(true);
     expect(heroRuntime("daredevil")?.scripted).toBe(false);
   });
