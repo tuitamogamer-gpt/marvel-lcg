@@ -62,7 +62,7 @@ import * as magneto from "./magneto.js";
 import * as mansionAttack from "./mansion-attack.js";
 import * as zeroTolerance from "./zero-tolerance.js";
 import * as nebula from "./nebula.js";
-import { isPermanent } from "./hero-runtime.js";
+import { heroDeckAspects, isPermanent } from "./hero-runtime.js";
 import * as venomPack from "./venom-pack.js";
 import * as mtsPlayerPack from "./mts-player-pack.js";
 import * as nebulaPack from "./nebula-pack.js";
@@ -5927,9 +5927,10 @@ export function newGame(config: {
   s.startSeed = s.seed;
   for (const seat of players) {
     activateSeat(s, seat.id);
-    s.player.deck = (seat.deckCards || deckCodes(seat.heroId, seat.aspect)).map(
-      (c) => makePiece(s, c),
-    );
+    const codes =
+      seat.deckCards || deckCodes(seat.heroId, seat.aspect, seat.deckAspects);
+    seat.deckAspects ||= heroDeckAspects(seat.heroId, codes, seat.aspect);
+    s.player.deck = codes.map((c) => makePiece(s, c));
     valkyrie.valkyrieSetup(s);
     vision.visionInitializeMass(s, { makePiece });
     shadowcat.shadowcatInitializeMass(s, { makePiece });
