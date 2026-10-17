@@ -293,11 +293,19 @@ function conserved(state, source, initial, label) {
         `${label}: each original Permanent enters play`,
       );
     if (source.id === "rogue") {
-      assert.equal(
-        state.player.setAside.filter((piece) => piece.code === "38002").length,
-        1,
-        `${label}: the counted Touched card is set aside by printed setup`,
-      );
+      const touched = pieces.find((piece) => piece.code === "38002");
+      assert.ok(touched, `${label}: the counted Touched card is conserved`);
+      if (touched.attachedTo) {
+        assert.equal(touched.attachedTo, state.villain.id);
+        assert.ok(state.player.inPlay.some((piece) => piece.id === touched.id));
+      } else {
+        assert.equal(
+          state.player.setAside.filter((piece) => piece.code === "38002")
+            .length,
+          1,
+          `${label}: the counted Touched card is set aside by printed setup`,
+        );
+      }
       assert.ok(drawZones.every((piece) => piece.code !== "38002"));
     }
   }
@@ -645,6 +653,32 @@ async function publicSource(source, width) {
     assert.match(
       await page.getByRole("group", { name: "Charge counters" }).innerText(),
       /1/,
+    );
+  }
+  if (source.id === "rogue") {
+    await page.getByRole("button", { name: /^Skin Contact/ }).click();
+    state = await finishChoices(source);
+    const touched = state.player.inPlay.find((piece) => piece.code === "38002");
+    assert.equal(
+      touched?.id,
+      initial.sourceCards.find((piece) => piece.code === "38002").id,
+      "Actual Skin Contact moves the original counted Touched card",
+    );
+    assert.equal(touched.attachedTo, state.villain.id);
+    assert.equal(
+      await page
+        .getByRole("group", { name: "Touched status", exact: true })
+        .innerText(),
+      "Touched · Attached to Rhino",
+    );
+    assert.equal(
+      await page
+        .getByRole("button", {
+          name: "Inspect Touched, attached to Rhino",
+          exact: true,
+        })
+        .count(),
+      1,
     );
   }
   await checkpoint(`${source.id}-hero-form`, width, source, initial);
