@@ -20,7 +20,11 @@ export function enterPlayerSideScheme(s: GameState, p: Piece): Effect[] {
     (card(p).base_threat_fixed ? 1 : s.playerCount);
   s.sideSchemes.push(p);
   return [
-    { type: "playerSideSchemeLimit", actorId: s.activePlayerId },
+    {
+      type: "playerSideSchemeLimit",
+      actorId: s.activePlayerId,
+      playerId: s.activePlayerId,
+    },
     { type: "playerSideSchemeCheckDefeat", id: p.id },
   ];
 }

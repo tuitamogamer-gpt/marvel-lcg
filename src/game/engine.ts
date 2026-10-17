@@ -21596,6 +21596,8 @@ function resolve(s: GameState, e: Effect) {
       const schemes = playerSideSchemes(s);
       const limit = playerSideSchemeLimit(s);
       if (schemes.length <= limit) break;
+      const chooserId = e.playerId || s.firstPlayerId;
+      activateSeat(s, chooserId);
       choose(
         s,
         "Player side scheme limit",
@@ -21606,7 +21608,7 @@ function resolve(s: GameState, e: Effect) {
             `Discard ${card(p).name}`,
             [
               E("playerSideSchemeDiscard", { id: p.id }),
-              E("playerSideSchemeLimit"),
+              E("playerSideSchemeLimit", { playerId: chooserId }),
             ],
             undefined,
             p.code,
