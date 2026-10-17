@@ -234,6 +234,40 @@ describe("Gambit original sources and native rules", () => {
     expect(s.villain.hp).toBe(41);
     expect(gambitCharges(s)).toBe(1);
   });
+  it.each([0, 1])(
+    "Royal Flush stacks Float Like a Butterfly with %i Throw de Card charges on every instance",
+    (charges) => {
+      let s = charge(base(), charges);
+      s.villain.confused = true;
+      put(s, "41017");
+      s = playAttack(s, "37007", charges);
+      s = target(s, s.villain.id);
+      s = finish(target(s, s.villain.id));
+      expect(s.villain.hp).toBe(50 - 3 * (charges + 1));
+      expect(gambitCharges(s)).toBe(1);
+    },
+  );
+  it("Honed Technique does not modify Royal Flush, even when Mental pays for the event", () => {
+    let s = charge(base(), 1);
+    put(s, "28017");
+    s = paid(s, "37007", ["37023", "37016"]);
+    s = target(choose(s, "1"), s.villain.id);
+    s = target(s, s.villain.id);
+    s = finish(target(s, s.villain.id));
+    expect(s.villain.hp).toBe(47);
+    expect(gambitCharges(s)).toBe(1);
+    expect(s.player.discard.some((p) => p.code === "37023")).toBe(true);
+  });
+  it("Throw de Card stacks with Honed Technique on a qualifying paid Aggression attack", () => {
+    let s = charge(base(), 2);
+    put(s, "28017");
+    s = paid(s, "01054", ["37023", "37016"]);
+    s = finish(target(choose(s, "2"), s.villain.id));
+    // Uppercut: printed 5 damage + printed cost 3 from Honed + 2 charges.
+    expect(s.villain.hp).toBe(40);
+    expect(gambitCharges(s)).toBe(0);
+    expect(s.player.discard.some((p) => p.code === "01054")).toBe(true);
+  });
   it("Royal Flush is one attack, with sequential Tough and one Retaliate per enemy", () => {
     let s = charge(base(), 1);
     const m = minion(s, "01184");
