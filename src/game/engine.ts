@@ -6791,7 +6791,8 @@ function play(
           `psylockeDirectedBonus:${p.id}`,
           `psylockeIllusionChecked:${p.id}`,
           `psylockeIllusionTarget:${p.id}`,
-        ].includes(key)
+        ].includes(key) ||
+        key.startsWith(`psylockeIllusionChecked:${p.id}:`)
       )
         delete s.flags[key];
     delete s.flags[`wolverineWarriorBonus:${p.id}`];
