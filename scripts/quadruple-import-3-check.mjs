@@ -251,7 +251,7 @@ function snapshot(state, source) {
           Array(definition.quantity).fill(definition.code),
         )
         .sort(),
-      "One Pool player brings the exact original Dreadpool dependency set",
+      "A Pool source brings one shared original Dreadpool dependency set per game",
     );
     assert.equal(
       state.encounter.deck.filter((piece) => piece.code === "44037").length,

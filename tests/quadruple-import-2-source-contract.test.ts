@@ -412,9 +412,9 @@ describe("four complete Hero Packs, batch two: immutable source contract", () =>
       expect(raw(code).duplicate_of, code).toBe(base);
       expect(card(code).code).toBe(code);
       expect(hasExecutableScript(code), code).toBe(true);
-      // The original Next Evolution printing remains outside this import;
-      // its identical Power of Mind mechanic is authored for physical 41021.
-      expect(hasExecutableScript(base), base).toBe(base !== "40028");
+      // The subsequent Cable import installs the original Power of the Mind
+      // printing as well as the already supported physical Psylocke reprint.
+      expect(hasExecutableScript(base), base).toBe(true);
       for (const field of fields)
         expect(raw(code)[field], `${code}/${base}.${field}`).toEqual(
           raw(base)[field],
