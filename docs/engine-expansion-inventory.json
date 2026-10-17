@@ -264790,7 +264790,7 @@
     "src/data/catalog-decks.json": "6d75a9c883223b59a9b9d950696de7b6876f8921ffe025d40e352495c1a2b886",
     "src/data/core-player.json": "451c26f5ca50fd7b9c4bfc167675a23031b411c291bc546ad011c608603bbfa2",
     "src/data/core-encounter.json": "db9ec82bf2b9aa6b00bc813bc6b64aac3d0237996e3393f47d8dbd3645ddd2da",
-    "src/game/engine.ts": "d0d7a382a47f4eb2cfdae21a9eeb4dbfce209aa03df9195ec456ffadf4cf69b7",
+    "src/game/engine.ts": "8a8f4aa8aa202c51033aec38eb4f8c063ca8f43b91351189728da68110ba41dd",
     "src/data/catalog-provenance.json": "8dddd4de54508b44039d4cf196a98550503486efdaf2ac9771de55992a77b7e4",
     "src/game/scripts/compiler.ts": "33feb608b78cc98fa23bfca85926b8213dd82b4a056d419fa459e6bef5363e87",
     "src/game/scripts/runtime.ts": "60ed7040b44d97589d6eb3e0583e6153680757c1de50fe8788c5dd48d1c355ac",
@@ -264865,7 +264865,7 @@
     "src/game/wolverine.ts": "e2081a8f2bf967fff0362c66fd5c575a479ce702e50ecfc0ddec8225d92962bb",
     "src/game/storm.ts": "7e08beb4e5ec788d3b05c7fb0ec25866b0458a04a14319fa08bc386b343342ed",
     "src/game/gambit.ts": "9ed0bc5dc9fb6a872de4cd2d154ba127e252abefda48046ba5784117d5fb9a07",
-    "src/game/rogue.ts": "6c62a28ff2645634f14aebeacb82aef7a2efcb959d641ee2755981670df07a02",
+    "src/game/rogue.ts": "3b1316c69bd62aff1e3fb6b2bb073c07a726081d4f104b43d4825946f007d265",
     "src/game/psylocke.ts": "d86e7d3e7b8ca75b7b419f51fb59fe081291522a85413ce52c37cdedc9899bf5",
     "src/game/angel.ts": "26556c32ed7f29cda805641b067697efaf4c712b979d96946a4775f56cfbb5a9",
     "src/game/player-side-schemes.ts": "48b569f59b51b484060fd2f7819096e3bb3470569be659b09aaee9fc977a013d",
@@ -264882,7 +264882,7 @@
     "src/game/magneto.ts": "323e95d4175844913104cef8465ca23057a5da115c5c9243c242d16e818fe143",
     "src/game/printed-card-metadata.ts": "041dd2b11a48f52dd04e16d9f6037969051df5d2dd2dae4323915310bf880042",
     "src/game/card-text.ts": "fb4320682d6ad93b904c0268e6d601acdeb6ce7c2f1f9e2feadf313780b79ead",
-    "src/game/expansion-errata.ts": "4bf752bea91bffb90f41a7a8ef61792c02595d407265c0433d4ffc13d006e246",
+    "src/game/expansion-errata.ts": "b7827934c963717903c70b4e00c1e1f8c845d3dcb8652b15c2e378a7e608083a",
     "src/game/types.ts": "9d489f165118084c1373c7b15f4dac9155280327d6c4fa2b82e7f050feaa026f",
     "src/game/payment.ts": "fa51ac426ea423359a56cb6c1901e5797e335b28b7ded704e9690ae44b8a4396",
     "src/game/team.ts": "acbcd72f2bee4dcc3657008fdb3a60fadd42ba2072575e30c611089330550200",
@@ -265028,6 +265028,34 @@
       "runtimeText": "Peril. When Revealed: If Dark Phoenix is in play, she activates against you. If Dark Phoenix is not in play, place 1 threat on Consume the World and this card gains surge.",
       "reference": "Original English card scan",
       "url": "https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/34031.jpg"
+    },
+    {
+      "code": "38001a",
+      "importedText": "Skin Contact − Action: Attach Touched to another character. You gain each of the attached character's TRAITS until the end of the round. (Limit once per round.) Forced Response: After the player phase begins, find Touched and set it aside.",
+      "runtimeText": "Skin Contact − Action: Find Touched and attach it to another character. You gain each of the attached character's TRAITS until the end of the round. (Limit once per round.) Forced Response: After the player phase begins, find Touched and set it aside.",
+      "reference": "FFG Rules Reference 1.8, p. 69",
+      "url": "https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf#page=69"
+    },
+    {
+      "code": "38001b",
+      "importedText": "Setup: Set your Touched upgrade aside. Withdrawn − Forced Response: After you change to this form, set Touched aside.",
+      "runtimeText": "Setup: Find your Touched upgrade and set it aside. Withdrawn − Forced Response: After you change to this form, find Touched and set it aside.",
+      "reference": "FFG Rules Reference 1.8, p. 69",
+      "url": "https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf#page=69"
+    },
+    {
+      "code": "38007",
+      "importedText": "Hero Action: Attach Touched to a character other than Rogue and deal 2 damage to that character → heal 2 damage from Rogue and ready her. You gain each of the attached character's TRAITS until the end of the round.",
+      "runtimeText": "Hero Action: Find Touched and attach it to a character other than Rogue and deal 2 damage to that character → heal 2 damage from Rogue and ready her. You gain each of the attached character's TRAITS until the end of the round.",
+      "reference": "FFG Rules Reference 1.8, p. 69",
+      "url": "https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf#page=69"
+    },
+    {
+      "code": "38026",
+      "importedText": "When Defeated: Search the encounter deck and discard pile for a copy of the Misled treachery and shuffle it into your deck.",
+      "runtimeText": "When Defeated: The defeating player searches the encounter deck and discard pile for a copy of the Misled treachery and shuffles it into their deck.",
+      "reference": "FFG Rules Reference 1.8, p. 69",
+      "url": "https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf#page=69"
     }
   ],
   "runtimeMetadataCorrections": [
