@@ -69,7 +69,7 @@ export interface AngelPorts {
   ): void;
   playAction(s: GameState, p: Piece): void;
   canPlayAction(s: GameState, p: Piece): boolean;
-  flip(s: GameState, target: AngelForm): void;
+  flip(s: GameState, target?: AngelForm): void;
   attack(s: GameState, id: string, after: Effect[], taunt?: boolean): void;
   batch(s: GameState, ids: string[], amount: number, source: string): void;
   attach(s: GameState, p: Piece, id: string): void;
@@ -81,6 +81,8 @@ export interface AngelPorts {
 export function angelForm(s: GameState): AngelForm {
   return s.player.form === "alter" ? "alter" : s.player.angelForm || "angel";
 }
+const namedForm = (s: GameState, form: AngelForm) =>
+  s.heroId === "angel" && angelForm(s) === form;
 export function angelIdentityCode(s: GameState) {
   return angelForm(s) === "alter"
     ? "42001b"
@@ -111,7 +113,7 @@ export function angelInitialize(
   );
 }
 export function angelEventAction(s: GameState, p: Piece) {
-  return p.code === "42003"
+  return p.code === "42003" && s.heroId === "angel"
     ? angelForm(s) === "archangel"
       ? "attack"
       : "thwart"
@@ -230,6 +232,7 @@ export function angelAbilityOptions(
     ];
   if (
     p.code === "42010" &&
+    s.heroId === "angel" &&
     s.player.form === "hero" &&
     (angelForm(s) === "archangel" || ports.canReady(s, "hero"))
   )
@@ -250,6 +253,8 @@ export function angelPlayRestriction(
   p: Piece,
   ports: AngelPorts,
 ): string | null {
+  if (p.code === "42003" && s.heroId !== "angel")
+    return "Adaptive Plumage requires Angel or Archangel form.";
   if (["42004", "42014"].includes(p.code))
     return "Play this event during its attack interrupt window.";
   if (
@@ -399,6 +404,7 @@ export function angelDefenseOptions(
 ): Option[] {
   if (
     !s.attack ||
+    s.heroId !== "angel" ||
     s.player.form !== "hero" ||
     (s.attack.angelTauntPlayerId &&
       s.attack.angelTauntPlayerId !== s.activePlayerId)
@@ -658,8 +664,8 @@ export function resolveAngelEffect(
         "Techno-Organic Wings is unavailable.",
       );
       p.exhausted = true;
-      if (angelForm(s) === "angel") ports.ready(s, "hero");
-      else {
+      if (namedForm(s, "angel")) ports.ready(s, "hero");
+      else if (namedForm(s, "archangel")) {
         const previous =
           s.flags.angelWingsPhase === phase(s)
             ? Number(s.flags.angelWingsDiscount || 0)
@@ -670,7 +676,7 @@ export function resolveAngelEffect(
       break;
     }
     case "angel:plumage":
-      if (angelForm(s) === "archangel")
+      if (namedForm(s, "archangel"))
         select(
           s,
           "Adaptive Plumage",
@@ -678,7 +684,7 @@ export function resolveAngelEffect(
           A("plumage-hit"),
           ports,
         );
-      else {
+      else if (namedForm(s, "angel")) {
         select(
           s,
           "Adaptive Plumage",
@@ -711,6 +717,10 @@ export function resolveAngelEffect(
       );
       break;
     case "angel:metamorphosis": {
+      if (s.heroId !== "angel") {
+        ports.flip(s);
+        break;
+      }
       const current = angelForm(s);
       ports.choose(
         s,
@@ -735,7 +745,7 @@ export function resolveAngelEffect(
     }
     case "angel:metamorphosis-change":
       ports.flip(s, e.form);
-      if (angelForm(s) !== e.form) break;
+      if (!namedForm(s, e.form)) break;
       if (e.form === "alter") ports.queue(s, E("draw", { amount: 1 }));
       else if (e.form === "angel")
         select(
@@ -758,13 +768,13 @@ export function resolveAngelEffect(
       select(
         s,
         "Natural Flight",
-        ports.schemes(s, true, angelForm(s) === "angel"),
+        ports.schemes(s, true, namedForm(s, "angel")),
         E("thwart", {
           amount: 4,
           source: "hero",
           thwart: true,
-          ignoreCrisis: angelForm(s) === "angel",
-          ignorePatrol: angelForm(s) === "angel",
+          ignoreCrisis: namedForm(s, "angel"),
+          ignorePatrol: namedForm(s, "angel"),
         }),
         ports,
       );
@@ -778,8 +788,8 @@ export function resolveAngelEffect(
           amount: 6,
           source: "hero",
           attack: true,
-          overkill: angelForm(s) === "archangel",
-          piercing: angelForm(s) === "archangel",
+          overkill: namedForm(s, "archangel"),
+          piercing: namedForm(s, "archangel"),
         }),
         ports,
       );
@@ -792,8 +802,8 @@ export function resolveAngelEffect(
     }
     case "angel:agility":
       if (s.attack) {
-        if (angelForm(s) === "angel") s.attack.angelIgnoreBoosts = true;
-        else {
+        if (namedForm(s, "angel")) s.attack.angelIgnoreBoosts = true;
+        else if (namedForm(s, "archangel")) {
           s.attack.angelRetaliatePlayerId = s.activePlayerId;
           s.attack.angelRetaliate = Number(s.attack.angelRetaliate || 0) + 1;
           ports.queue(s, E("status", { target: "hero", status: "tough" }));

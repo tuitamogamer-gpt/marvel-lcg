@@ -91,6 +91,37 @@ function reveal(s: GameState, code: string) {
 function yes(s: GameState, title: RegExp) {
   return respond(s, title);
 }
+function borrowedEvent(code: string, ...paymentCodes: string[]) {
+  let s = newGame({
+    heroId: "gambit",
+    aspect: "justice",
+    villainId: "rhino",
+    module: "bomb_scare",
+    pacing: "expert",
+    seed: 42009,
+    heroes: [
+      { heroId: "gambit", aspect: "justice" },
+      { heroId: "angel", aspect: "protection" },
+    ],
+  });
+  for (const _ of s.players) s = command(s, { type: "MULLIGAN", ids: [] });
+  s = finish(command(finish(s), { type: "FLIP" }));
+  s.player.deck.push(...s.player.hand.splice(0));
+  s.villain.hp = s.villain.maxHp = 60;
+  s.scheme.threat = 10;
+  const payments = hand(s, ...paymentCodes);
+  const owner = seatView(s, "p2").player;
+  const zone = [owner.deck, owner.hand, owner.discard].find((cards) =>
+    cards.some((p) => p.code === code),
+  )!;
+  const event = zone.splice(
+    zone.findIndex((p) => p.code === code),
+    1,
+  )[0];
+  expect(event.ownerId).toBe("p2");
+  s.player.hand.push(event);
+  return { s, event, payments };
+}
 
 describe("Angel source and three identity forms", () => {
   it("registers the complete 34 faces with original40, five physical nemesis cards and no invented reserves", () => {
@@ -210,8 +241,8 @@ describe("Angel signatures and play timing", () => {
   });
   it("Natural Flight ignores both crisis and patrol only as Angel", () => {
     let s = base();
-    side(s, "01107", 3);
-    minion(s, "25029");
+    side(s, "01108", 3);
+    minion(s, "16119");
     s = cast(s, "42006", "42022");
     expect(s.prompt?.options.some((o) => o.id === "main")).toBe(true);
     s = finish(target(s, "main"));
@@ -267,6 +298,63 @@ describe("Angel signatures and play timing", () => {
     expect(s.villain.hp).toBe(59);
     s = finish(native(s, { type: "enemyAttack", id: s.villain.id }));
     expect(s.villain.hp).toBe(59);
+  });
+});
+
+describe("Angel events borrowed by another identity", () => {
+  it.each(["crisis", "patrol"] as const)(
+    "Natural Flight keeps its base thwart but does not bypass %s for a different identity",
+    (blocker) => {
+      let { s, event, payments } = borrowedEvent("42006", "01088");
+      const scheme = side(s, blocker === "crisis" ? "01108" : "01109", 8);
+      if (blocker === "patrol") minion(s, "16119");
+      s = play(s, event, payments);
+      expect(s.prompt?.options.some((o) => o.id === "main")).toBe(false);
+      s = finish(target(reload(s), scheme.id));
+      expect(s.sideSchemes.find((p) => p.id === scheme.id)?.counters).toBe(4);
+      expect(s.scheme.threat).toBe(10);
+      expect(s.player.hand).toHaveLength(0);
+      expect(
+        seatView(s, "p2").player.discard.some((p) => p.id === event.id),
+      ).toBe(true);
+    },
+  );
+  it("Metamorphosis changes the borrower's actual form without named identity rewards", () => {
+    let { s, event, payments } = borrowedEvent("42005", "01088");
+    const teammateHand = seatView(s, "p2").player.hand.length;
+    s = finish(play(reload(s), event, payments));
+    expect(heroCard(s).code).toBe("37001b");
+    expect(s.player.form).toBe("alter");
+    expect(s.player.flipped).toBe(true);
+    expect(s.player.angelForm).toBeUndefined();
+    expect(s.player.hand).toHaveLength(0);
+    expect(s.scheme.threat).toBe(10);
+    expect(s.villain.hp).toBe(60);
+    expect(seatView(s, "p2").player.form).toBe("alter");
+    expect(seatView(s, "p2").player.hand).toHaveLength(teammateHand);
+    expect(
+      seatView(s, "p2").player.discard.some((p) => p.id === event.id),
+    ).toBe(true);
+  });
+  it("Adaptive Plumage requires one of its printed named forms", () => {
+    const { s, event } = borrowedEvent("42003", "01088", "01089");
+    expect(playable(s, event)).toMatch(/Angel or Archangel form/);
+    expect(s.player.hand.some((p) => p.id === event.id)).toBe(true);
+  });
+  it("borrowed Aerial Agility does not offer a defense mode to another identity", () => {
+    let { s, event } = borrowedEvent("42004", "01088");
+    s.encounter.deck = Array.from({ length: 5 }, () => makePiece(s, "01104"));
+    const hp = s.player.hp;
+    const seen: string[] = [];
+    s = finish(native(s, { type: "enemyAttack", id: s.villain.id }), (q) => {
+      seen.push(...(q.prompt?.options.map((o) => o.image || "") || []));
+      return q.prompt?.options.find(
+        (o) => o.id === "take" || o.id === "resolve",
+      )?.id;
+    });
+    expect(seen).not.toContain("42004");
+    expect(s.player.hand.some((p) => p.id === event.id)).toBe(true);
+    expect(s.player.hp).toBeLessThan(hp);
   });
 });
 
