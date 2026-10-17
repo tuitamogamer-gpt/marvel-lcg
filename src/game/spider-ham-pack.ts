@@ -1,3 +1,4 @@
+import { rulesCode } from "./rules-code.js";
 import raw from "../data/catalog-cards.json" with { type: "json" };
 import core from "../data/core-player.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
@@ -31,7 +32,7 @@ const need = (condition: unknown, message: string) => {
   if (!condition) throw Error(message);
 };
 const own = (s: GameState, id: string, code?: string) =>
-  s.player.inPlay.find((p) => p.id === id && (!code || p.code === code));
+  s.player.inPlay.find((p) => p.id === id && (!code || rulesCode(p) === code));
 const normalize = (s: GameState, id: string) =>
   id === "hero" ? `hero:${s.activePlayerId}` : id;
 const windowKey = (token: string, id: string) =>
@@ -233,7 +234,7 @@ function trigger(
 }
 
 export function spiderHamPackRequirements(p: Piece): Resource[] {
-  return p.code === "30014" ? ["energy"] : [];
+  return rulesCode(p) === "30014" ? ["energy"] : [];
 }
 export function spiderHamPackCostReduction(
   s: GameState,
@@ -263,7 +264,7 @@ export function spiderHamPackPlayRestriction(
   )
     return "One Way or Another needs hero form, an unused maximum and a side scheme in the encounter deck.";
   if (
-    p.code === "30014" &&
+    rulesCode(p) === "30014" &&
     (s.player.form !== "hero" ||
       !ports
         .schemeTargets(s, true)
@@ -273,7 +274,7 @@ export function spiderHamPackPlayRestriction(
   if (p.code === "30016")
     return "Making an Entrance is played in a native basic thwart interrupt.";
   if (
-    ["30018", "30019", "30029"].includes(p.code) &&
+    ["30018", "30019", "30029"].includes(rulesCode(p)) &&
     !spiderHamPackAttachmentTargets(s, p, ports)?.length
   )
     return "This upgrade needs a legal attachment target without another copy.";
@@ -296,7 +297,7 @@ export function spiderHamPackAttachmentTargets(
     return s.sideSchemes
       .filter((t) => !namedAttachments(s, t.id, card(p).name, p.id).length)
       .map((t) => ({ id: t.id, label: card(t).name, code: t.code }));
-  if (p.code === "30019")
+  if (rulesCode(p) === "30019")
     return [
       {
         id: "main",
@@ -312,7 +313,7 @@ export function spiderHamPackAttachmentTargets(
   return null;
 }
 export function spiderHamPackCardEntered(_s: GameState, p: Piece): Effect[] {
-  return ["30018", "30019", "30029"].includes(p.code) && !p.attachedTo
+  return ["30018", "30019", "30029"].includes(rulesCode(p)) && !p.attachedTo
     ? [P("attach", { id: p.id })]
     : [];
 }
@@ -377,7 +378,7 @@ export function spiderHamPackBeforeEvent(
   return p.code === "30017" ? [P("one-way-cost", { after })] : null;
 }
 export function spiderHamPackEvent(_s: GameState, p: Piece): Effect[] | null {
-  if (p.code === "30014") return [P("odds", { id: p.id })];
+  if (rulesCode(p) === "30014") return [P("odds", { id: p.id })];
   if (p.code === "30017") return [E("draw", { amount: 3 }), P("shuffle")];
   return null;
 }
@@ -449,7 +450,7 @@ export function spiderHamPackSchemeThwarting(
   return allInPlay(s)
     .filter(
       (p) =>
-        p.code === "30019" &&
+        rulesCode(p) === "30019" &&
         p.attachedTo === receipt.target &&
         !ports.isTextBlank(s, p),
     )
@@ -622,7 +623,7 @@ export function resolveSpiderHamPackEffect(
     case "spider-ham-pack:attach": {
       const p = own(s, e.id);
       need(
-        p && ["30018", "30019", "30029"].includes(p.code),
+        p && ["30018", "30019", "30029"].includes(rulesCode(p)),
         "The actual attachment is unavailable.",
       );
       chooseTarget(

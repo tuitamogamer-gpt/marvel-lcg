@@ -732,6 +732,20 @@ export const HEROES = [
     complexity: 3,
   },
   {
+    id: "domino",
+    code: "40037a",
+    alter: "40037b",
+    name: "Domino",
+    identity: "Neena Thurman",
+    aspect: "justice" as Aspect,
+    color: "#8ad2bc",
+    tag: "Make your own luck.",
+    description:
+      "Swap and discard cards to shape your luck, lead the Posse, and turn printed resources into powerful effects.",
+    style: "Top-deck luck · Justice",
+    complexity: 3,
+  },
+  {
     id: "psylocke",
     code: "41001a",
     alter: "41001b",
@@ -1110,6 +1124,7 @@ export function deckCodes(
       (hero === "phoenix" && aspect === "justice") ||
       (hero === "psylocke" && aspect === "justice") ||
       (hero === "gambit" && aspect === "justice") ||
+      (hero === "domino" && aspect === "justice") ||
       (hero === "wolverine" && aspect === "aggression") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
@@ -1477,6 +1492,7 @@ export function pieceHP(s: GameState, p: Piece) {
         a.attachedTo === p.id && rulesCode(a) === "01163" && !isTextBlank(s, a),
     ).length *
       3 +
+    (p.code === "40068" && !isTextBlank(s, p) ? p.counters : 0) +
     scriptedModifier(s, "health", p) +
     angelRecruitBonus(s, p.id) +
     phoenixAllyModifiers(s, p).health +

@@ -7,6 +7,11 @@ const definitions = new Map(
   ([...catalog, ...players] as Card[]).map((c) => [c.code, c]),
 );
 
+const seatViewForBlank = (s: GameState, id: string) =>
+  id === s.activePlayerId
+    ? s.player
+    : s.players.find((seat) => seat.id === id)!.player;
+
 /** Tech Theft blanks printed text, while retaining stats, traits and icons. */
 export function isTextBlank(
   s: GameState,
@@ -15,6 +20,19 @@ export function isTextBlank(
   if (typeof p !== "string" && "treatedAsAlly" in p && p.treatedAsAlly)
     return true;
   const printedCode = typeof p === "string" ? p : p.code;
+  if (["40037a", "40037b"].includes(printedCode)) {
+    const id = typeof p === "string" ? undefined : p.id;
+    const owner = s.players.find(
+      (seat) =>
+        seat.heroId === "domino" &&
+        (!id || id === "hero" || id === `hero:${seat.id}`),
+    );
+    if (
+      owner &&
+      seatViewForBlank(s, owner.id).inPlay.some((q) => q.code === "40065")
+    )
+      return true;
+  }
   if (
     typeof p !== "string" &&
     p.id &&

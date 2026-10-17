@@ -124,6 +124,7 @@ export function deckErrors(
       "wolverine",
       "psylocke",
       "gambit",
+      "domino",
       "angel",
     ].includes(heroId)
   ) {

@@ -1,3 +1,4 @@
+import * as domino from "./domino.js";
 import * as gambit from "./gambit.js";
 import * as cyclops from "./cyclops.js";
 import {
@@ -926,6 +927,12 @@ function finishResolution(s: GameState, id: string) {
   if (index < 0) return;
   const [p] = s.resolving.splice(index, 1);
   if (
+    card(p).type_code === "event" &&
+    card(p).set_code === s.heroId &&
+    !s.flags[`ghostCancelled:${p.id}`]
+  )
+    add(s, ...domino.dominoFeedback(s));
+  if (
     card(p).faction_code === "encounter" ||
     mtsPlayerPack.mtsIsCosmicEntity(p)
   )
@@ -1373,6 +1380,7 @@ function mill(s: GameState, n: number) {
     }
   }
   recyclePlayer(s);
+  add(s, ...domino.dominoDiscardedTop(s, a));
   return a;
 }
 function recycleEncounter(s: GameState) {
@@ -5956,6 +5964,7 @@ export function newGame(config: {
     cyclops.cyclopsInitializeNemesis(s, { makePiece });
     storm.stormInitialize(s, { makePiece });
     gambit.gambitInitialize(s, makePiece);
+    domino.dominoInitialize(s, makePiece);
     angel.angelInitialize(s, { makePiece });
     colossus.colossusInitializeNemesis(s, { makePiece });
     ironheart.ironheartInitialize(s, { makePiece });
@@ -6354,6 +6363,7 @@ export function playable(s: GameState, p: Piece): string | null {
     starLord.starLordPlayRestriction(s, p) ||
     gamora.gamoraPlayRestriction(s, p, gamoraPorts) ||
     drax.draxPlayRestriction(s, p, draxPorts) ||
+    domino.dominoPlayRestriction(s, p, dominoPorts) ||
     gambit.gambitPlayRestriction(s, p, gambitPorts) ||
     cyclops.cyclopsPlayRestriction(s, p, cyclopsPorts) ||
     psylocke.psylockePlayRestriction(s, p, psylockePorts) ||
@@ -7385,6 +7395,7 @@ function event(
 ) {
   const ant =
     psylocke.psylockeEvent(s, p, paid) ??
+    domino.dominoEvent(s, p) ??
     gambit.gambitEvent(s, p) ??
     cyclops.cyclopsEvent(s, p) ??
     rogue.rogueEvent(s, p) ??
@@ -8254,6 +8265,16 @@ function ability(s: GameState, id: string, action = "special") {
   if (ghostSpider.ghostSpiderAbility(s, id, ghostSpiderPorts, action)) return;
   if (id === "identity" && nova.novaHeroAbility(s, novaPorts, action)) return;
   if (nova.novaAbility(s, id, novaPorts, action)) return;
+  const dominoAbility = domino.dominoAbility(
+    s,
+    id,
+    action === "special" ? undefined : action,
+    dominoPorts,
+  );
+  if (dominoAbility !== null) {
+    add(s, ...dominoAbility);
+    return;
+  }
   const gambitAbility = gambit.gambitAbility(
     s,
     id,
@@ -11331,6 +11352,7 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...ghostSpider.ghostSpiderAbilityOptions(s, id, ghostSpiderPorts),
     ...(id === "identity" ? nova.novaHeroAbilityOptions(s, novaPorts) : []),
     ...nova.novaAbilityOptions(s, id, novaPorts),
+    ...domino.dominoAbilityOptions(s, id, dominoPorts),
     ...gambit.gambitAbilityOptions(s, id, gambitPorts),
     ...cyclops.cyclopsAbilityOptions(s, id, cyclopsPorts),
     ...psylocke.psylockeAbilityOptions(s, id, psylockePorts),
@@ -15859,6 +15881,85 @@ function colossusNativeDiscardTough(
   );
 }
 
+const dominoPorts: domino.DominoPorts = {
+  queue: add,
+  choose,
+  enemies: (s, attack) => targets(s, "enemy", attack),
+  schemes: (s, thwart) => targets(s, "scheme", false, thwart),
+  characters: (s) => targets(s, "friendly"),
+  hasTrait: sinisterNativeHasTrait,
+  hidden: revealHidden,
+  mill: (s, after) => {
+    const before = s.queue.length;
+    const piece = mill(s, 1)[0];
+    const resources = domino.dominoResources(s, piece);
+    const responses = s.queue.splice(0, s.queue.length - before);
+    add(s, ...responses, { ...after, piece, resources });
+  },
+  shuffle: (s) => {
+    revealHidden(s);
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  discard: discardPiece,
+  discardHand,
+  makePiece,
+  canPut: (s, p) =>
+    !uniqueConflict(s, card(p)) &&
+    !domino.dominoPlayRestriction(s, p, dominoPorts),
+  put: (s, p) => {
+    Object.assign(p, resetPiece(p, true));
+    s.player.inPlay.push(p);
+    add(
+      s,
+      E("allyLimit"),
+      ...(card(p).type_code === "ally" ? [E("allyEnter", { id: p.id })] : []),
+      ...gambit.gambitEntered(s, p),
+    );
+  },
+  canDamage: (s, p) =>
+    !p.tough &&
+    pieceHP(s, p) - p.damage >= 1 &&
+    !niPack.novaIronheartPackCannotTakeDamage(s, p.id, niPackPorts),
+  damageCost: (s, p, after) => {
+    const before = s.queue.length;
+    dealDamage(s, p.id, 1, p.id);
+    const generated = s.queue.splice(0, s.queue.length - before);
+    add(s, ...generated, ...after);
+  },
+  attach: (s, p, target) => {
+    removeEncounterInstance(s, p.id);
+    mutagenPorts.attach(s, p, target);
+  },
+  keepObligation: (s, p) =>
+    spectrumPorts.giveObligation(s, p, s.activePlayerId),
+  cancelReveal: (s, p) => angelPorts.cancelReveal(s, p),
+  cancelBoost: (s, id) => {
+    bwPorts.cancelBoostIcons(s, id);
+    bwPorts.cancelBoostAbility(s, id);
+  },
+  additionalBoost: (s) => {
+    const p = drawEncounter(s);
+    if (p && s.attack) (s.attack.pendingBoosts ||= []).push(p);
+  },
+  drawEncounter,
+  claimDefense: (s) =>
+    gamoraPorts.claimDefense(s, {
+      type: "damage",
+      kind: "attack",
+      target: "hero",
+    }),
+  maxHP,
+  canReady: (s, id) =>
+    id === "hero"
+      ? canReadyIdentity(s)
+      : id.startsWith("hero:")
+        ? canReadyIdentity(seatView(s, id.slice(5)))
+        : !!find(s, id)?.exhausted &&
+          nova.novaCanReadyPiece(s, find(s, id)!, { isTextBlank }),
+  attack: niAttackProgram,
+};
+
 const gambitPorts: gambit.GambitPorts = {
   queue: add,
   choose,
@@ -18844,6 +18945,7 @@ function reveal(
       [E("reveal", { piece: p, skip: true, fromEncounterDeck, knifeSurge })],
       psylockePorts,
     );
+    opts.push(...domino.dominoRevealOptions(s, p));
     opts.push(...angel.angelRevealOptions(s, p, angelPorts));
     const revealing = s.activePlayerId;
     for (const seat of playerOrder(s))
@@ -19304,6 +19406,7 @@ function reveal(
       "36033",
       "37034",
       "42027",
+      "40069",
     ].some((code) => code === p.code)
   ) {
     const window = beginRevealWindow(
@@ -19318,6 +19421,7 @@ function reveal(
       mutagenEncounterReveal(s, p) ??
       armadillo.armadilloReveal(s, p) ??
       zzzax.zzzaxReveal(s, p) ??
+      domino.dominoEncounter(s, p) ??
       gambit.gambitEncounter(s, p) ??
       cyclops.cyclopsEncounterReveal(s, p) ??
       psylocke.psylockeEncounterReveal(s, p) ??
@@ -19369,6 +19473,7 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    domino.dominoEncounter(s, p) ??
     psylocke.psylockeEncounterReveal(s, p) ??
     angel.angelEncounter(s, p) ??
     rogue.rogueEncounterReveal(s, p) ??
@@ -19670,6 +19775,10 @@ function obligation(s: GameState, p: Piece) {
   activateSeat(s, owner.id);
   if (p.code === "41025") {
     add(s, ...psylocke.psylockeEncounterReveal(s, p)!);
+    return;
+  }
+  if (p.code === "40065") {
+    add(s, ...domino.dominoEncounter(s, p)!);
     return;
   }
   if (p.code === "37025") {
@@ -20025,6 +20134,11 @@ function treachery(s: GameState, p: Piece) {
       else surge();
       break;
     case "01190": {
+      const dominoNemesis = domino.dominoShadows(s);
+      if (dominoNemesis !== null) {
+        add(s, ...dominoNemesis);
+        break;
+      }
       const gambitNemesis = gambit.gambitShadows(s);
       if (gambitNemesis !== null) {
         add(s, ...gambitNemesis);
@@ -20275,6 +20389,7 @@ function resolve(s: GameState, e: Effect) {
     advanceVillain(s, e.source, e.attack, e.captured);
     return;
   }
+  if (domino.resolveDominoEffect(s, e, dominoPorts)) return;
   if (gambit.resolveGambitEffect(s, e, gambitPorts)) return;
   if (cyclops.resolveCyclopsEffect(s, e, cyclopsPorts)) return;
   if (psylocke.resolvePsylockeEffect(s, e, psylockePorts)) return;
@@ -21404,6 +21519,22 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "basicPower": {
+      if (!(e.power === "attack" ? s.player.stunned : s.player.confused)) {
+        const packet = {
+          ...e,
+          amount: e.amount ?? heroStats(s)[e.power as "attack" | "thwart"],
+        };
+        const options = domino.dominoBasicOptions(s, packet);
+        if (options.length) {
+          choose(s, "Probability Field", "Boost this basic power?", [
+            ...options,
+            option("continue", "Continue", [
+              { ...packet, dominoProbabilityHandled: true },
+            ]),
+          ]);
+          break;
+        }
+      }
       if (
         !e.angelAcrobaticsHandled &&
         !(e.power === "attack" ? s.player.stunned : s.player.confused)
@@ -22583,6 +22714,7 @@ function resolve(s: GameState, e: Effect) {
       if (!p || !p.pendingDefeat || isTextBlank(s, p)) break;
       add(
         s,
+        ...domino.dominoSideSchemeDefeated(s, p),
         ...psylocke.psylockeSideSchemeDefeated(s, p, s.activePlayerId),
         ...angel.angelPlayerSideSchemeDefeated(s, p),
       );
@@ -22966,6 +23098,21 @@ function resolve(s: GameState, e: Effect) {
       add(s, { ...e, type: "damage", attack: true });
       break;
     case "damage":
+      if (!s.player.stunned) {
+        const options = domino.dominoRangedOptions(s, {
+          ...e,
+          ranged: e.ranged ?? !!sourceKeyword(s, e.source || "hero", "Ranged"),
+        });
+        if (options.length) {
+          choose(s, "Sharpshooter", "Boost this ranged attack?", [
+            ...options,
+            option("continue", "Continue", [
+              { ...e, dominoSharpHandled: true },
+            ]),
+          ]);
+          break;
+        }
+      }
       if (e.attack) {
         e.psylockeToken ||=
           s.currentAttackProgramId ||
@@ -24502,6 +24649,14 @@ function resolve(s: GameState, e: Effect) {
         ]);
         break;
       }
+      const dominoBefore = domino.dominoBeforeAlly(s, p, {
+        ...e,
+        amount: e.amount ?? allyStat(s, p, attack ? "attack" : "thwart"),
+      });
+      if (dominoBefore) {
+        add(s, ...dominoBefore);
+        break;
+      }
       const gambitBefore = gambit.gambitBeforeAlly(s, p, e);
       if (gambitBefore) {
         add(s, ...gambitBefore);
@@ -24941,6 +25096,7 @@ function resolve(s: GameState, e: Effect) {
         ...psylocke.psylockeAllyUsed(s, p),
         ...gambit.gambitAfterAlly(s, p, e.target, attack && !!minionTarget),
         ...angel.angelAllyUsed(s, p, attack),
+        ...domino.dominoAfterAlly(s, p, attack),
         ...phoenix.phoenixAllyUsed(s, p, attack ? "attack" : "thwart"),
         E("wolverine:ally-after", {
           piece: { ...p },
@@ -26081,6 +26237,19 @@ function resolve(s: GameState, e: Effect) {
       );
       break;
     case "defender":
+      if (e.id === "hero") {
+        const packet = { ...e, amount: e.amount ?? heroStats(s).defense };
+        const opts = domino.dominoBasicOptions(s, packet);
+        if (opts.length) {
+          choose(s, "Probability Field", "Boost this basic defense?", [
+            ...opts,
+            option("continue", "Continue", [
+              { ...packet, dominoProbabilityHandled: true },
+            ]),
+          ]);
+          break;
+        }
+      }
       if (e.id === "hero" && !e.psylockeBasicHandled) {
         const opts = psylocke.psylockeBasicOptions(s, e);
         if (opts.length) {
@@ -26122,8 +26291,12 @@ function resolve(s: GameState, e: Effect) {
           );
           s.attack.basicDefense = true;
           s.player.exhausted = true;
+          s.attack.defenseBonus =
+            (s.attack.defenseBonus || 0) +
+            (e.amount === undefined ? 0 : e.amount - heroStats(s).defense);
           s.attack.defense =
             heroStats(s).defense +
+            (s.attack.defenseBonus || 0) +
             valkyrie.valkyrieDefenseBonusForAttacker(s, s.attack.attacker);
         } else if (e.id !== "none") {
           const p = find(s, e.id);
@@ -26304,6 +26477,7 @@ function resolve(s: GameState, e: Effect) {
         after,
         bwPorts,
       );
+      if (!e.scheme) options.push(...domino.dominoBoostOptions(s, e.piece));
       options.push(
         ...playerOrder(s).flatMap((seat) =>
           nebulaPack
@@ -28948,7 +29122,19 @@ export function dispatch(state: GameState, command: Command): GameState {
                   ]),
                 ],
               );
-            else heal(s, "hero", stats.recover);
+            else {
+              const packet = E("heal", {
+                target: "hero",
+                amount: stats.recover,
+              });
+              const opts = domino.dominoBasicOptions(s, packet);
+              if (opts.length)
+                choose(s, "Probability Field", "Boost this basic recovery?", [
+                  ...opts,
+                  option("continue", "Continue", [packet]),
+                ]);
+              else heal(s, "hero", stats.recover);
+            }
             add(s, ...phoenix.phoenixRecovered(s));
             add(
               s,
@@ -29001,6 +29187,7 @@ export function dispatch(state: GameState, command: Command): GameState {
           if (s.attachments.some((p) => p.id === command.id)) {
             const p = find(s, command.id)!;
             const custom = [
+              ...domino.dominoAbilityOptions(s, p.id, dominoPorts),
               ...wolverine.wolverineAbilityOptions(s, p.id, wolverinePorts),
               ...wideawake.projectWideawakeActionOptions(
                 s,
@@ -29062,7 +29249,19 @@ export function dispatch(state: GameState, command: Command): GameState {
                 true,
               );
             }
-          } else ability(s, command.id, command.action);
+          } else {
+            const source = find(s, command.id);
+            const identity = ["identity", "hero"].includes(command.id);
+            const affected =
+              !["attack", "thwart"].includes(command.action || "") &&
+              (identity || (!!source && card(source).set_code === s.heroId));
+            const before = s.queue.length;
+            ability(s, command.id, command.action);
+            if (affected && domino.dominoFeedback(s).length) {
+              const generated = s.queue.splice(0, s.queue.length - before);
+              add(s, ...generated, E("domino:feedback"));
+            }
+          }
         } else if (command.type === "END_TURN") {
           if (command.discard)
             need(
