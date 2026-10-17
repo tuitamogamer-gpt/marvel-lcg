@@ -1,5 +1,6 @@
 import { cableResourceSources } from "./cable.js";
 import { x23ResourceSources } from "./x23.js";
+import { deadpoolResources, deadpoolTriggeredBlocked } from "./deadpool.js";
 import { psylockeResourceSources } from "./psylocke.js";
 import { rogueResourceSources } from "./rogue.js";
 import { cyclopsResourceSources } from "./cyclops.js";
@@ -41,7 +42,7 @@ import { blackWidowResourceSources } from "./black-widow.js";
 import { doctorStrangeResourceSources } from "./doctor-strange.js";
 import { msMarvelResourceSources } from "./ms-marvel.js";
 import { rulesCode } from "./rules-code.js";
-import { CARDS, card, heroCard, resources } from "./cards.js";
+import { CARDS, card, heroCard, resources, maxHP } from "./cards.js";
 import { allInPlay, playerOrder, seatView } from "./team.js";
 import { captainResourceSources } from "./captain-america.js";
 import { hulkResourceSources, hulkCanSpendCard } from "./hulk.js";
@@ -86,7 +87,8 @@ export function resourcesFor(
   p: Piece,
   target?: Card,
 ): Resource[] {
-  const generated = mtsPlayerPackCardResources(s, p);
+  const generated =
+    deadpoolResources(s, p, maxHP(s)) ?? mtsPlayerPackCardResources(s, p);
   return generated ?? zzzaxHandResources(s, p, resources(card(p), target));
 }
 

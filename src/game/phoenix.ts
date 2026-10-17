@@ -388,7 +388,7 @@ export function phoenixLatestControl(
     .filter(
       (a) =>
         (a.attachedTo === p.id || a.controlTargetId === p.id) &&
-        ["34009", "36038", "25031", "38011"].includes(a.code) &&
+        ["34009", "36038", "25031", "38011", "44041"].includes(a.code) &&
         (a.code === "38011" || !isTextBlank(s, a)),
     )
     .sort((a, b) => (b.controlOrder || 0) - (a.controlOrder || 0))[0];
@@ -396,7 +396,7 @@ export function phoenixLatestControl(
 export function phoenixSyncControlled(s: GameState) {
   for (const a of [...allInPlay(s), ...s.attachments])
     if (
-      ["34009", "36038", "25031"].includes(a.code) &&
+      ["34009", "36038", "25031", "44041"].includes(a.code) &&
       a.attachedTo &&
       a.controlOrder === undefined
     )

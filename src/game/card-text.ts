@@ -33,6 +33,32 @@ export function isTextBlank(
     )
       return true;
   }
+  const dpTarget = typeof p !== "string" ? p.id : undefined;
+  if (
+    dpTarget &&
+    s.attachments.some((a) => a.code === "44035" && a.attachedTo === dpTarget)
+  )
+    return true;
+  if (
+    dpTarget &&
+    s.attack &&
+    s.attachments.some(
+      (a) => a.code === "44040" && a.attachedTo === s.attack!.attacker,
+    )
+  ) {
+    const target =
+      s.attack.defender && s.attack.defender !== "none"
+        ? s.attack.defender
+        : s.attack.originalTarget ||
+          `hero:${s.attack.targetPlayerId || s.activePlayerId}`;
+    if (
+      dpTarget ===
+      (target === "hero"
+        ? `hero:${s.attack.targetPlayerId || s.activePlayerId}`
+        : target)
+    )
+      return true;
+  }
   if (
     typeof p !== "string" &&
     p.id &&

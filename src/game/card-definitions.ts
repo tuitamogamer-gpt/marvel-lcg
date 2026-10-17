@@ -73,7 +73,7 @@ export const card = (piece: Piece | string): Card => {
         type_code: "minion",
         text: "",
         scheme: printed.thwart || 0,
-        traits: `${printed.traits || ""} ${piece.stormControlled ? "Controlled" : "Enthralled"}.`,
+        traits: `${printed.traits || ""} ${piece.deadpoolMinion ? "Pool" : piece.stormControlled ? "Controlled" : "Enthralled"}.`,
       }
     : printed;
 };

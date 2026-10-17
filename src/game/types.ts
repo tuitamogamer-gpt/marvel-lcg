@@ -40,6 +40,7 @@ export interface Card {
   threat?: number;
   escalation_threat?: number;
   scheme_crisis?: number;
+  scheme_amplify?: number;
   scheme_hazard?: number;
   scheme_acceleration?: number;
   resource_energy?: number;
@@ -66,6 +67,9 @@ export interface MissionStats {
   enemiesDefeated: number;
 }
 export interface Piece {
+  deadpoolSpaces?: number[];
+  deadpoolMinion?: boolean;
+  deadpoolController?: string;
   /** Player side schemes live in the common scheme area under owner control. */
   playerSideSchemeController?: string;
   /** Beguiled changes the actual ally's current type without changing its face. */
@@ -277,6 +281,7 @@ export interface GameState {
   accountMission?: { id: string; startedAt: string };
   /** Presentation events from the latest command; never used by the rules. */
   combatEvents?: CombatEvent[];
+  deadpool?: { poolSetAside: Piece[]; initializedPoolSeats: string[] };
   version: 1;
   seed: number;
   /** The seed the mission started with; `seed` itself advances with every shuffle. */

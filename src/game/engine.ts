@@ -1,6 +1,7 @@
 import * as domino from "./domino.js";
 import * as cable from "./cable.js";
 import * as x23 from "./x23.js";
+import * as deadpool from "./deadpool.js";
 import * as gambit from "./gambit.js";
 import * as cyclops from "./cyclops.js";
 import {
@@ -752,6 +753,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     );
   const p = find(s, source);
   if (!p) return 0;
+  if (name === "Piercing" && p.code === "44015" && !isTextBlank(s, p)) return 1;
   const wideawakeKeywords = wideawake.projectWideawakeModifiers(s, p, {
     isTextBlank,
   });
@@ -1813,6 +1815,28 @@ function nativeIdentityDamageSource(s: GameState, source: string) {
 function syncValkyrieConvertedCards(s: GameState) {
   phoenix.phoenixSyncControlled(s);
   for (const p of [...s.minions]) {
+    const poolized = phoenix.phoenixLatestControl(s, p)?.code === "44041";
+    if (poolized) {
+      p.treatedAsMinion = true;
+      p.deadpoolMinion = true;
+      delete p.treatedAsAlly;
+      continue;
+    }
+    if (p.deadpoolMinion) {
+      delete p.deadpoolMinion;
+      delete p.treatedAsMinion;
+      if (!phoenix.phoenixLatestControl(s, p)) {
+        const owner = s.players.find(
+          (seat) => seat.id === (p.ownerId || p.deadpoolController),
+        );
+        if (owner) {
+          s.minions.splice(s.minions.indexOf(p), 1);
+          delete p.engagedWith;
+          seatView(s, owner).player.inPlay.push(p);
+          continue;
+        }
+      }
+    }
     const possessed = storm.stormLatestControl(s, p) === "36038";
     if (possessed) {
       p.treatedAsMinion = true;
@@ -1883,6 +1907,22 @@ function syncValkyrieConvertedCards(s: GameState) {
     seatView(s, seat).player.inPlay.push(p);
   }
   for (const p of allInPlay(s)) {
+    if (phoenix.phoenixLatestControl(s, p)?.code === "44041") {
+      const seat = controller(s, p.id);
+      if (seat) {
+        seatView(s, seat).player.inPlay.splice(
+          seatView(s, seat).player.inPlay.indexOf(p),
+          1,
+        );
+        p.engagedWith = seat.id;
+        p.deadpoolController = seat.id;
+        p.deadpoolMinion = true;
+        p.treatedAsMinion = true;
+        delete p.treatedAsAlly;
+        s.minions.push(p);
+      }
+      continue;
+    }
     if (storm.stormLatestControl(s, p) === "36038") {
       const seat = controller(s, p.id);
       if (seat) {
@@ -2076,6 +2116,7 @@ function check(s: GameState) {
     seat.player.hp = Math.max(0, seat.player.hp);
     if (seat.player.hp > 0 || seat.eliminated || s.phase === "won") continue;
     const view = seatView(s, seat);
+    if (deadpool.deadpoolRescue(view, deadpoolPorts)) continue;
     if (
       view.flags.captainHelmetPending ||
       view.flags.draxStubbornPending ||
@@ -2268,11 +2309,13 @@ export function schemeLimit(s: GameState) {
   if (sabretoothLimit === 0) return 0;
   const value = riskySchemeValues(s) || mutagenSchemeValues(s);
   const surveillance =
+    deadpool.deadpoolSchemeBonus(s) +
     allInPlay(s).filter(
       (p) =>
         p.code === "06031" &&
         ["main", `main:${s.scheme.code}`].includes(p.attachedTo || ""),
-    ).length * 4;
+    ).length *
+      4;
   if (mansionLimit !== undefined) return mansionLimit + surveillance;
   if (value) return value.threshold + surveillance;
   return (
@@ -3030,6 +3073,7 @@ function applyDamage(
     if (!traits.grootHandled) n -= groot.grootPreventDamage(s, "hero", n);
     if (n <= 0) return none;
     s.player.hp -= n;
+    deadpool.deadpoolDamageTaken(s);
     if (s.player.hp <= 0 && traits.enemyAttack)
       s.flags.wolverineLethalAttack = true;
     if (s.player.hp <= 0)
@@ -3418,6 +3462,8 @@ function defeatCharacter(
   if (!minion && ["32088b", "32172b"].includes(m.code) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
   else discardPiece(s, m.id);
+  if (!textWasBlank)
+    add(s, ...deadpool.deadpoolDefeated(s, m, source, allyController));
   if (!minion) add(s, ...rogue.rogueAllyDefeated(s, m, source, allyController));
   if (!minion && enemyAttack && sabretoothDefeat?.attackerId === source) {
     delete (m as SabretoothAttackDefeatPiece).sabretoothAttackDefeatReceipt;
@@ -3931,7 +3977,8 @@ function thwart(
     if (
       (!ignoreCrisis &&
         !nebula.nebulaIgnoresRestrictions(s).crisis &&
-        s.sideSchemes.some((p) => card(p).scheme_crisis)) ||
+        (deadpool.deadpoolPlayerIcons(s, "scheme_crisis") > 0 ||
+          s.sideSchemes.some((p) => card(p).scheme_crisis))) ||
       rulesCode(s.scheme) === "01139b"
     ) {
       log(s, "Threat cannot be removed from the main scheme.");
@@ -3986,6 +4033,14 @@ function defeatScheme(
   if (isPlayerSideScheme(p) && !playerSchemeRewardHandled) {
     add(s, ...beginPlayerSideSchemeDefeat(s, p, source));
     return;
+  }
+  if (!s.flags[`deadpoolAmbush:${p.id}`]) {
+    const ambush = deadpool.deadpoolSchemeDefeating(s, p);
+    if (ambush.length) {
+      s.flags[`deadpoolAmbush:${p.id}`] = true;
+      add(s, ...ambush, E("defeatScheme", { id: p.id, source }));
+      return;
+    }
   }
   log(s, `${card(p).name} is defeated.`, "good");
   if (rulesCode(p) === "01166" && p.captured && !isTextBlank(s, p))
@@ -4180,7 +4235,10 @@ export function targets(
       }));
     case "scheme":
       return [
-        ...((!s.sideSchemes.some((p) => card(p).scheme_crisis) ||
+        ...((!(
+          deadpool.deadpoolPlayerIcons(s, "scheme_crisis") > 0 ||
+          s.sideSchemes.some((p) => card(p).scheme_crisis)
+        ) ||
           nebula.nebulaIgnoresRestrictions(s).crisis ||
           shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts)) &&
         !(
@@ -4361,6 +4419,7 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
         : 0) -
       wolverine.wolverineCostReduction(s, physical || c, wolverinePorts) -
       cable.cableDiscount(s, physical || c, cablePorts) -
+      deadpool.deadpoolDiscount(s, physical || c) -
       angel.angelDiscount(s, physical || c) -
       storm.stormDiscount(
         s,
@@ -6043,6 +6102,7 @@ export function newGame(config: {
     domino.dominoInitialize(s, makePiece);
     angel.angelInitialize(s, { makePiece });
     cable.cableInitialize(s, { makePiece });
+    deadpool.deadpoolInitialize(s, makePiece);
     colossus.colossusInitializeNemesis(s, { makePiece });
     ironheart.ironheartInitialize(s, { makePiece });
     // Extract the SAME three source-composition IDs before drawing an opening
@@ -6333,6 +6393,10 @@ function initialSetup(s: GameState) {
   );
 }
 const reactionCards = [
+  "44005",
+  "44017",
+  "44022",
+  "44047",
   "32014",
   "32017",
   "32021",
@@ -6354,6 +6418,10 @@ const reactionCards = [
   "09038",
 ];
 export function playable(s: GameState, p: Piece): string | null {
+  if (deadpool.deadpoolTriggeredBlocked(s))
+    return "The Merc with the Mouth prevents another player’s triggered card abilities during this turn.";
+  const deadpoolRestriction = deadpool.deadpoolPlayRestriction(s, p);
+  if (deadpoolRestriction) return deadpoolRestriction;
   const c = card(p);
   if (
     c.type_code === "event" &&
@@ -6808,6 +6876,7 @@ function nativeCardPlayCommitted(s: GameState, p: Piece) {
   add(s, ...cable.cablePlayed(s, p));
   angel.angelCardPlayed(s, p);
   add(s, ...x23.x23Played(s, p));
+  deadpool.deadpoolCardPlayed(s);
   const playToken = `play:${s.nextId++}`;
   miles.milesCardPlayCommitted(s, p, playToken);
   nova.novaCardPlayCommitted(s, p, playToken);
@@ -7050,6 +7119,7 @@ function play(
       ...angel.angelCardEntered(s, p),
 
       ...x23.x23Entered(s, p),
+      ...deadpool.deadpoolCardEntered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
       ...phoenix.phoenixCardEntered(s, p),
       ...rogue.rogueCardEntered(s, p, fromHand),
@@ -7503,6 +7573,7 @@ function event(
     rogue.rogueEvent(s, p) ??
     wolverine.wolverineEvent(s, p) ??
     cable.cableEvent(s, p) ??
+    deadpool.deadpoolEvent(s, p) ??
     angel.angelEvent(s, p) ??
     storm.stormEvent(s, p) ??
     colossus.colossusEvent(s, p) ??
@@ -8181,6 +8252,7 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   const noir = spdrPack.spdrPackAllyStats(s, p, spdrPackPorts);
   return (
     (kind === "thwart" && cable.cableXForceTeam(s, cablePorts) ? 1 : 0) +
+    deadpool.deadpoolAllyBonus(s, p) +
     gambit.gambitAllyBonus(s, p, kind) +
     cyclops.cyclopsCharacterModifiers(s, p.id)[kind] +
     (kind === "attack" ? storm.stormGlobal(s).attack : 0) +
@@ -8251,6 +8323,19 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   );
 }
 function ability(s: GameState, id: string, action = "special") {
+  need(
+    !deadpool.deadpoolTriggeredBlocked(s),
+    "The Merc with the Mouth prevents another player’s triggered card abilities during this turn.",
+  );
+  const deadpoolOptions = deadpool.deadpoolAbilityOptions(s, id, deadpoolPorts);
+  const deadpoolSelected =
+    action === "special"
+      ? deadpoolOptions[0]
+      : deadpoolOptions.find((o) => o.id === action);
+  if (deadpoolSelected) {
+    add(s, ...deadpoolSelected.effects);
+    return;
+  }
   const cableOptions = cable.cableAbilityOptions(s, id, cablePorts);
   const cableSelected =
     action === undefined
@@ -9357,9 +9442,12 @@ function activationAmplify(s: GameState): number {
       )
       .map(card),
   ];
-  return definitions.filter(
-    (c) => (c as Card & { scheme_amplify?: boolean }).scheme_amplify,
-  ).length;
+  return (
+    deadpool.deadpoolPlayerIcons(s, "scheme_amplify") +
+    definitions.filter(
+      (c) => (c as Card & { scheme_amplify?: boolean }).scheme_amplify,
+    ).length
+  );
 }
 function activationBoostValue(s: GameState, id: string, code?: string): number {
   if (!s.scheming && s.attack?.angelIgnoreBoosts) return 0;
@@ -10713,6 +10801,7 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
       ...angel.angelCardEntered(s, p),
       ...cable.cableCardEntered(s, p),
       ...x23.x23Entered(s, p),
+      ...deadpool.deadpoolCardEntered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
       ...wolverine
         .wolverineCardEntered(s, p, false)
@@ -11412,7 +11501,10 @@ const gmwPorts: gmwPack.GmwPlayerPackPorts = {
   transferControl: hulkPackPorts.transferControl,
   canRemoveMainThreat: (s) =>
     s.scheme.threat > 0 &&
-    !s.sideSchemes.some((p) => card(p).scheme_crisis) &&
+    !(
+      deadpool.deadpoolPlayerIcons(s, "scheme_crisis") > 0 ||
+      s.sideSchemes.some((p) => card(p).scheme_crisis)
+    ) &&
     rulesCode(s.scheme) !== "01139b" &&
     !hulkThreatLocked(s, "main"),
   canReady: (s, target) =>
@@ -11435,9 +11527,11 @@ const gmwPorts: gmwPack.GmwPlayerPackPorts = {
   attackExcess: (s, packet) => attackExcess(s, packet),
 };
 export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
+  if (deadpool.deadpoolTriggeredBlocked(s)) return [];
   return [
     ...cable.cableAbilityOptions(s, id, cablePorts),
     ...x23.x23AbilityOptions(s, id, x23Ports),
+    ...deadpool.deadpoolAbilityOptions(s, id, deadpoolPorts),
     ...angel.angelAbilityOptions(s, id, angelPorts),
     ...storm.stormAbilityOptions(s, id, stormPorts),
     ...antMan.antManAbilityOptions(s, id, antManPorts),
@@ -15692,7 +15786,10 @@ const visionPorts: vision.VisionPorts = {
     const ordinary = targets(s, "scheme", false, thwarting);
     if (
       !ordinary.some((p) => p.id === "main") &&
-      (!s.sideSchemes.some((p) => card(p).scheme_crisis) ||
+      (!(
+        deadpool.deadpoolPlayerIcons(s, "scheme_crisis") > 0 ||
+        s.sideSchemes.some((p) => card(p).scheme_crisis)
+      ) ||
         ignoreCrisis ||
         nebula.nebulaIgnoresRestrictions(s).crisis) &&
       (!thwarting ||
@@ -15893,6 +15990,7 @@ const nebulaPorts: nebula.NebulaPorts = {
         ...angel.angelCardEntered(s, p),
         ...cable.cableCardEntered(s, p),
         ...x23.x23Entered(s, p),
+        ...deadpool.deadpoolCardEntered(s, p),
         ...cyclops.cyclopsCardEntered(s, p),
         ...wolverine
           .wolverineCardEntered(s, p, false)
@@ -16564,6 +16662,122 @@ const cablePorts: cable.CablePorts = {
   dealEncounter,
   damage: (s, id) =>
     id === "hero" ? maxHP(s) - s.player.hp : find(s, id)?.damage || 0,
+};
+
+const deadpoolPorts: deadpool.DeadpoolPorts = {
+  queue: add,
+  choose,
+  makePiece,
+  maxHP,
+  handSize,
+  heal,
+  discard: discardPiece,
+  remove: removePlayerCard,
+  discardHand,
+  enemies: (s, a) => targets(s, "enemy", a),
+  schemes: (s, t, i) =>
+    i
+      ? [
+          { id: "main", label: card(s.scheme.code).name },
+          ...s.sideSchemes.map((p) => ({
+            id: p.id,
+            label: card(p).name,
+            code: p.code,
+          })),
+        ]
+      : targets(s, "scheme", false, t),
+  friendly: (s) => targets(s, "friendly"),
+  canReady: (s, id) => angelPorts.canReady(s, id),
+  ready: (s, id) => angelPorts.ready(s, id),
+  damage: (s, id, n, source) =>
+    dealDamage(s, id, n, source, false).actualDamage,
+  shuffle: (s) => {
+    s.player.deck = shuffle(s, s.player.deck);
+    revealHidden(s);
+  },
+  shuffleEncounter: (s) => {
+    s.encounter.deck = shuffle(s, s.encounter.deck);
+  },
+  drawEncounter,
+  discardPlayerTop: (s) => angelPorts.discardPlayerTop(s),
+  dealEncounter,
+  attach: (s, p, id) => angelPorts.attach(s, p, id),
+  reveal: (s, p) => angelPorts.reveal(s, p),
+  cancelReveal: (s, p, onlyWhenRevealed) => {
+    s.queue = s.queue.filter(
+      (e) => !(e.type === "reveal" && e.piece?.id === p.id),
+    );
+    if (onlyWhenRevealed) {
+      const window = beginRevealWindow(
+        s,
+        p,
+        card(p),
+        p.dealtTo || s.activePlayerId,
+        1 + goblinWhenRevealedCopies(s),
+      );
+      s.revealWindows![p.id].pending = s.revealWindows![p.id].pending.filter(
+        (id) => id !== "text",
+      );
+      add(s, ...window);
+    } else {
+      removeEncounterInstance(s, p.id);
+      s.encounter.discard.push(resetPiece(p));
+    }
+  },
+  pay: (s, title, cost, after, requirements = [], commit = []) =>
+    requestPayment(
+      s,
+      title,
+      cost,
+      after,
+      requirements,
+      undefined,
+      true,
+      undefined,
+      commit.length > 0,
+      commit,
+    ),
+  canPay: (s, p) => canPay(s, cardCost(s, card(p), p), [], p.id, p.code),
+  reaction: (s, p, effects, after) =>
+    angelPorts.playReaction(s, p, effects, after),
+  collectionWeapons: (s) =>
+    CATALOG_CARDS.filter(
+      (c) =>
+        c.type_code === "upgrade" &&
+        c.traits?.includes("Weapon.") &&
+        ["aggression", "justice", "leadership", "protection", "pool"].includes(
+          c.faction_code,
+        ) &&
+        hasExecutableScript(c.code) &&
+        !s.removed.some((p) => p.code === c.code),
+    ),
+  canEnter: (s, p) =>
+    !card(p).is_unique ||
+    !allInPlay(s).some((q) => card(q).name === card(p).name),
+  enterWeapon: (s, p) => {
+    p.exhausted = false;
+    p.counters = Number(/Uses\s*\(?(\d+)/i.exec(card(p).text || "")?.[1] || 0);
+    add(
+      s,
+      ...(rocket.rocketEnterPlay(s, p) || []),
+      ...venomPack.venomPackCardEntered(s, p),
+      ...valkPack.valkyriePackCardEntered(s, p),
+      ...spdrPack.spdrPackCardEntered(s, p),
+    );
+  },
+  putAlly: (s, p) => {
+    s.player.inPlay.push(p);
+    if (printedKeyword(card(p), "Toughness"))
+      giveCharacterStatus(s, p, "tough");
+    add(s, ...deadpool.deadpoolCardEntered(s, p), E("allyLimit"));
+  },
+  defeat: (s, id) => {
+    const p = find(s, id);
+    if (p) defeatCharacter(s, p, "hero");
+  },
+  hasTrait: sinisterNativeHasTrait,
+  attackEnemy: (s, id, target) =>
+    enemyAttack(s, id, undefined, undefined, target),
 };
 
 const angelPorts: angel.AngelPorts = {
@@ -17580,7 +17794,13 @@ function enemyAttack(
   colossusActivationHandled = false,
   colossusActivationReceipt?: colossus.ColossusActivationReceipt,
 ) {
-  if (!phoenix.phoenixCanActivate(s, id)) return;
+  if (
+    !phoenix.phoenixCanActivate(s, id) ||
+    allInPlay(s).some(
+      (p) => p.code === "44054" && p.attachedTo === id && !isTextBlank(s, p),
+    )
+  )
+    return;
   if (colossusActivationReceipt)
     delete seatView(s, colossusActivationReceipt.playerId).flags[
       `colossusActivation:${colossusActivationReceipt.token}`
@@ -18023,6 +18243,11 @@ function boostEffects(s: GameState, p: Piece) {
     add(s, ...xboost);
     return;
   }
+  const deadpoolBoost = deadpool.deadpoolBoost(s, p);
+  if (deadpoolBoost !== null) {
+    add(s, ...deadpoolBoost);
+    return;
+  }
   const angelBoost = angel.angelBoost(s, p);
   if (angelBoost !== null) {
     add(s, ...angelBoost);
@@ -18264,7 +18489,13 @@ function enemyScheme(
   colossusActivationHandled = false,
   colossusActivationReceipt?: colossus.ColossusActivationReceipt,
 ) {
-  if (!phoenix.phoenixCanActivate(s, id)) return;
+  if (
+    !phoenix.phoenixCanActivate(s, id) ||
+    allInPlay(s).some(
+      (p) => p.code === "44054" && p.attachedTo === id && !isTextBlank(s, p),
+    )
+  )
+    return;
   if (colossusActivationReceipt)
     delete seatView(s, colossusActivationReceipt.playerId).flags[
       `colossusActivation:${colossusActivationReceipt.token}`
@@ -18446,7 +18677,12 @@ function finishScheme(s: GameState) {
   activation.threatBefore = s.stats?.threatPlaced || 0;
   const after = [
     E(s.flags[`phoenixManipulation:${activation.id}`] ? "thwart" : "threat", {
-      target: phoenix.phoenixSchemeTarget(s, p),
+      target:
+        p.code === "44033" &&
+        !isTextBlank(s, p) &&
+        s.sideSchemes.some((q) => q.code === "44034")
+          ? s.sideSchemes.find((q) => q.code === "44034")!.id
+          : phoenix.phoenixSchemeTarget(s, p),
       amount:
         amount +
         Number(s.flags[`phoenixManipulationBonus:${activation.id}`] || 0),
@@ -18470,6 +18706,9 @@ function finishScheme(s: GameState) {
       kind: "scheme",
       performed: true,
     }),
+    ...(p.code === "44036" && !isTextBlank(s, p)
+      ? [E("heal", { target: p.id, amount: p.damage })]
+      : []),
     ...antMan.antManEnemyActivated(s, id),
     ...armadillo.armadilloActivationResponses(s, id).flatMap((r) => r.effects),
     ...spectrum.spectrumEnemyActivated(s, p, s.activePlayerId, spectrumPorts),
@@ -18589,6 +18828,16 @@ type SabretoothAttackDefeatPiece = Piece & {
   };
 };
 function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
+  if (
+    s.attack &&
+    Object.keys(s.flags).some((k) => k.startsWith("deadpoolFront:"))
+  ) {
+    s.flags.deadpoolOtherDefended =
+      !!s.attack.defender &&
+      s.attack.defender !== "none" &&
+      (s.attack.defender !== "hero" ||
+        s.attack.targetPlayerId !== s.attack.originalPlayerId);
+  }
   const a = s.attack!;
   if (!a) return;
   const p = nebulaNativeAttacker(s, a.attacker);
@@ -19067,6 +19316,21 @@ function finishAttackAfterDamage(
       {
         receipt: zeroReceipt,
         responses: [
+          ...(find(s, a.attacker)?.code === "44036" &&
+          !isTextBlank(s, find(s, a.attacker)!)
+            ? [
+                {
+                  id: `${a.id}:mutated`,
+                  title: "Mutated Soldier",
+                  effects: [
+                    E("heal", {
+                      target: a.attacker,
+                      amount: find(s, a.attacker)!.damage,
+                    }),
+                  ],
+                },
+              ]
+            : []),
           ...angel
             .angelAfterEnemyAttack(s, a.attacker)
             .map((effect, index) => ({
@@ -19347,6 +19611,21 @@ function reveal(
       psylockePorts,
     );
     opts.push(...domino.dominoRevealOptions(s, p));
+    for (const seat of playerOrder(s))
+      opts.push(
+        ...deadpool
+          .deadpoolRevealOptions(
+            seatView(s, seat),
+            p,
+            fromEncounterDeck,
+            deadpoolPorts,
+          )
+          .map((o) => ({
+            ...o,
+            id: `${seat.id}:${o.id}`,
+            effects: o.effects.map((e) => ({ ...e, actorId: seat.id })),
+          })),
+      );
     opts.push(...angel.angelRevealOptions(s, p, angelPorts));
     for (const seat of playerOrder(s))
       opts.push(
@@ -19789,6 +20068,7 @@ function reveal(
       ...psylocke.PSYLOCKE_SCRIPT_CODES,
       ...wolverine.WOLVERINE_SCRIPT_CODES,
       ...storm.STORM_SCRIPT_CODES,
+      ...deadpool.DEADPOOL_SCRIPT_CODES,
       ...angel.ANGEL_SCRIPT_CODES,
       ...cable.CABLE_SCRIPT_CODES,
       ...x23.X23_SCRIPT_CODES,
@@ -19856,6 +20136,7 @@ function reveal(
       wolverine.wolverineEncounterReveal(s, p) ??
       cable.cableEncounter(s, p) ??
       x23.x23Encounter(s, p) ??
+      deadpool.deadpoolEncounter(s, p) ??
       angel.angelEncounter(s, p) ??
       rogue.rogueEncounterReveal(s, p) ??
       storm.stormEncounterReveal(s, p) ??
@@ -19907,6 +20188,7 @@ function reveal(
     psylocke.psylockeEncounterReveal(s, p) ??
     cable.cableEncounter(s, p) ??
     x23.x23Encounter(s, p) ??
+    deadpool.deadpoolEncounter(s, p) ??
     angel.angelEncounter(s, p) ??
     rogue.rogueEncounterReveal(s, p) ??
     storm.stormEncounterReveal(s, p) ??
@@ -20184,6 +20466,10 @@ function obligation(s: GameState, p: Piece) {
     add(s, ...cable.cableEncounter(s, p)!);
     return;
   }
+  if (p.code === "44032") {
+    add(s, ...deadpool.deadpoolEncounter(s, p)!);
+    return;
+  }
   if (p.code === "42024") {
     add(s, ...angel.angelEncounter(s, p)!);
     return;
@@ -20274,6 +20560,11 @@ function obligation(s: GameState, p: Piece) {
   );
 }
 function treachery(s: GameState, p: Piece) {
+  const deadpoolReveal = deadpool.deadpoolEncounter(s, p);
+  if (deadpoolReveal !== null) {
+    add(s, ...deadpoolReveal);
+    return;
+  }
   const psy = psylocke.psylockeEncounterReveal(s, p);
   if (psy !== null) {
     add(s, ...psy);
@@ -20297,6 +20588,7 @@ function treachery(s: GameState, p: Piece) {
   const stormReveal =
     cable.cableEncounter(s, p) ??
     x23.x23Encounter(s, p) ??
+    deadpool.deadpoolEncounter(s, p) ??
     angel.angelEncounter(s, p) ??
     storm.stormEncounterReveal(s, p);
   if (stormReveal !== null) {
@@ -20583,6 +20875,11 @@ function treachery(s: GameState, p: Piece) {
         add(s, ...dominoNemesis);
         break;
       }
+      const deadpoolNemesis = deadpool.deadpoolShadows(s);
+      if (deadpoolNemesis !== null) {
+        add(s, ...deadpoolNemesis);
+        break;
+      }
       const gambitNemesis = gambit.gambitShadows(s);
       if (gambitNemesis !== null) {
         add(s, ...gambitNemesis);
@@ -20861,6 +21158,7 @@ function resolve(s: GameState, e: Effect) {
   }
   if (cable.resolveCableEffect(s, e, cablePorts)) return;
   if (x23.resolveX23Effect(s, e, x23Ports)) return;
+  if (deadpool.resolveDeadpoolEffect(s, e, deadpoolPorts)) return;
   if (angel.resolveAngelEffect(s, e, angelPorts)) return;
   if (storm.resolveStormEffect(s, e, stormPorts)) return;
   if (colossus.resolveColossusEffect(s, e, colossusPorts)) return;
@@ -20996,6 +21294,7 @@ function resolve(s: GameState, e: Effect) {
           cyclops.cyclopsEncounterReveal(state, piece) ??
           cable.cableEncounter(state, piece) ??
           x23.x23Encounter(state, piece) ??
+          deadpool.deadpoolEncounter(state, piece) ??
           angel.angelEncounter(state, piece) ??
           storm.stormEncounterReveal(state, piece) ??
           colossus.colossusEncounterReveal(state, piece) ??
@@ -23643,6 +23942,25 @@ function resolve(s: GameState, e: Effect) {
           break;
         }
       }
+      if (
+        !e.deadpoolHandled &&
+        (e.attack || e.damageFromAttack || e.enemyAttack)
+      ) {
+        const next = { ...e, deadpoolHandled: true };
+        const opts = deadpool.deadpoolDamageOptions(
+          s,
+          { ...next, attack: true },
+          [next],
+          deadpoolPorts,
+        );
+        if (opts.length) {
+          choose(s, "Attack damage", "Prevent damage with Barely a Scratch?", [
+            ...opts,
+            option("allow", "Take damage", [next]),
+          ]);
+          break;
+        }
+      }
       if (e.attack) {
         e.psylockeToken ||=
           s.currentAttackProgramId ||
@@ -24401,6 +24719,27 @@ function resolve(s: GameState, e: Effect) {
               "Temporal Leap",
               "Interrupt completion of the main scheme?",
               [...options, option("continue", "Continue", after)],
+            );
+            break;
+          }
+        }
+        if (!e.deadpoolHandled && e.amount > 0) {
+          const next = { ...e, deadpoolHandled: true };
+          const choices = playerOrder(s).flatMap((seat) =>
+            deadpool
+              .deadpoolThreatOptions(seatView(s, seat), next, deadpoolPorts)
+              .map((o) => ({
+                ...o,
+                id: `${seat.id}:${o.id}`,
+                effects: o.effects.map((q) => ({ ...q, actorId: seat.id })),
+              })),
+          );
+          if (choices.length) {
+            choose(
+              s,
+              "Threat would be placed",
+              "Replace this threat with damage?",
+              [...choices, option("allow", "Place the threat", [next])],
             );
             break;
           }
@@ -25753,6 +26092,23 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "allyResponse": {
+      const headpool = find(s, e.id);
+      if (
+        headpool?.code === "44014" &&
+        !isTextBlank(s, headpool) &&
+        e.attack &&
+        e.attackedMinion &&
+        s.minions.some((p) => p.id === e.attackedMinion.id) &&
+        e.damage > 0
+      )
+        add(
+          s,
+          E("optional", {
+            title: "Headpool",
+            text: "Have the damaged minion attack another enemy?",
+            effects: [E("deadpool:headpool", { id: e.attackedMinion.id })],
+          }),
+        );
       add(
         s,
         ...(niPack.novaIronheartPackPowerResponses(
@@ -27242,6 +27598,32 @@ function resolve(s: GameState, e: Effect) {
         break;
       }
       const damageTarget = enemyAttackDamageTarget(s, a);
+      if (
+        !e.deadpoolHandled &&
+        ["hero", `hero:${s.activePlayerId}`].includes(damageTarget)
+      ) {
+        const opts = deadpool.deadpoolDamageOptions(
+          s,
+          {
+            attack: true,
+            target: "hero",
+            amount: Math.max(0, a.base - a.defense - a.prevented),
+            attackWindow: true,
+            type: "damage",
+          },
+          [{ ...e, deadpoolHandled: true }],
+          deadpoolPorts,
+        );
+        if (opts.length) {
+          choose(s, "Attack damage", "Prevent damage with Barely a Scratch?", [
+            ...opts,
+            option("allow", "Continue attack", [
+              { ...e, deadpoolHandled: true },
+            ]),
+          ]);
+          break;
+        }
+      }
       const shield = phoenix.phoenixForcedDamage(
         s,
         {
@@ -28794,6 +29176,14 @@ function resolve(s: GameState, e: Effect) {
       add(
         s,
         ...playerOrder(s).flatMap((seat) =>
+          deadpool
+            .deadpoolPhaseBegan(seatView(s, seat))
+            .map((e) => ({ ...e, actorId: seat.id })),
+        ),
+      );
+      add(
+        s,
+        ...playerOrder(s).flatMap((seat) =>
           rogue
             .roguePhaseBegan(seatView(s, seat))
             .map((e) => ({ ...e, actorId: seat.id })),
@@ -28839,6 +29229,13 @@ function resolve(s: GameState, e: Effect) {
       log(s, `Discarded ${e.ids.length} card(s) before refilling.`);
       break;
     case "allReady":
+      if (!e.deadpoolEnded) {
+        const effects = deadpool.deadpoolPhaseEnded(s);
+        if (effects.length) {
+          add(s, ...effects, { ...e, deadpoolEnded: true });
+          break;
+        }
+      }
       if (!e.stormEnded) {
         const effects = storm.stormPhaseEnded(s);
         if (effects.length) {
@@ -28989,6 +29386,7 @@ function resolve(s: GameState, e: Effect) {
             s.attachments.filter(
               (p) => p.code === "40031" && !isTextBlank(s, p),
             ).length +
+            deadpool.deadpoolPlayerIcons(s, "scheme_acceleration") +
             s.sideSchemes.reduce(
               (n, p) =>
                 n +
@@ -29089,6 +29487,7 @@ function resolve(s: GameState, e: Effect) {
         allInPlay(s).filter((p) => p.code === "37025" && !isTextBlank(s, p))
           .length +
         angel.angelHazards(s) +
+        deadpool.deadpoolPlayerIcons(s, "scheme_hazard") +
         sinisterPlayerPack.sinisterPlayerPackHazards(s) +
         (card(s.scheme.code).scheme_hazard || 0) +
         s.sideSchemes.reduce(
@@ -29212,6 +29611,7 @@ function resolve(s: GameState, e: Effect) {
           ...Object.fromEntries(
             Object.entries(s.flags).filter(
               ([key]) =>
+                key.startsWith("deadpool") ||
                 key === "gambitCharges" ||
                 key === "cyclopsNemesisInitialized" ||
                 key.startsWith("stormController:") ||
@@ -29757,6 +30157,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               else heal(s, "hero", stats.recover);
             }
             add(s, ...phoenix.phoenixRecovered(s), ...x23.x23Recovered(s));
+            add(s, ...deadpool.deadpoolRecovered(s));
             add(
               s,
               ...spiderHam.spiderHamAfterBasicRecover(
@@ -29922,6 +30323,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               E("beginVillain", { actorId: s.firstPlayerId }),
             );
           }
+          add(s, ...deadpool.deadpoolTurnEnded(s));
           add(s, ...hulkTurnEnds(s));
           if (s.player.inPlay.some((p) => p.code === "32099"))
             add(

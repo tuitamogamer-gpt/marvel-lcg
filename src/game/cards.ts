@@ -1,4 +1,5 @@
 import { cableStatBonus } from "./cable.js";
+import { deadpoolAttackBonus, deadpoolHandBonus } from "./deadpool.js";
 import { psylockeStats, psylockePowerOfMind } from "./psylocke.js";
 import { rogueModifiers, rogueTraits } from "./rogue.js";
 import { CARDS, CATALOG_CARDS, card } from "./card-definitions.js";
@@ -803,6 +804,20 @@ export const HEROES = [
     style: "Living Weapon · Aggression",
     complexity: 3,
   },
+  {
+    id: "deadpool",
+    code: "44001a",
+    alter: "44001b",
+    name: "Deadpool",
+    identity: "Wade Wilson",
+    aspect: "pool" as Aspect,
+    color: "#c72026",
+    tag: "The Regeneratin’ Degenerate.",
+    description:
+      "Spend health for maximum effort, regenerate in alter-ego form, and manage the chaos of the Pool aspect.",
+    style: "Health and acceleration · Pool",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -1150,6 +1165,7 @@ export function deckCodes(
       (hero === "cable" && aspect === "leadership") ||
       (hero === "angel" && aspect === "protection") ||
       (hero === "x23" && aspect === "aggression") ||
+      (hero === "deadpool" && String(aspect) === "pool") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
       (hero === "rogue" && aspect === "protection") ||
@@ -1388,6 +1404,7 @@ export function heroStats(s: GameState) {
       spiderHamStats(s, { isTextBlank }).attack +
       spiderHamPackCharacterModifiers(s, "hero").attack +
       spdrPackCharacterModifiers(s, "hero").attack +
+      deadpoolAttackBonus(s) +
       colossusStats(s, { isTextBlank }).attack +
       rogueModifiers(s).attack +
       phoenixStats(s).attack +
@@ -1500,7 +1517,7 @@ export function handSize(s: GameState) {
         antManPackHandSize(s) +
         visionAlterStats(s).handSize +
         sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).handSize;
-  return novaHandSize(s, base, { isTextBlank });
+  return novaHandSize(s, base + deadpoolHandBonus(s), { isTextBlank });
 }
 /** Printed encounter attachment modifiers apply to their attached enemy.
  * Player cards attached as resources retain their physical printed values,
