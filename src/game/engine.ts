@@ -2558,7 +2558,6 @@ function dealDamage(
   if (
     attack &&
     !traits.mutantGenesisBonusApplied &&
-    n > 0 &&
     (source === "hero" || source === `hero:${s.activePlayerId}`) &&
     target !== "hero" &&
     !target.startsWith("hero:")
@@ -2567,7 +2566,7 @@ function dealDamage(
       msMarvelEventAmountModifier(s, s.currentEventId, "damage") +
       Number(s.flags[`niHoned:${s.currentEventId}`] || 0) +
       mgPack.mutantGenesisPlayerPackAttackEventBonus(s, s.currentEventId || "");
-  if (attack && n > 0) n += psylocke.psylockeDamageBonus(s, source, target);
+  if (attack) n += psylocke.psylockeDamageBonus(s, source, target);
   if (
     attack &&
     !traits.mutantGenesisBonusApplied &&
