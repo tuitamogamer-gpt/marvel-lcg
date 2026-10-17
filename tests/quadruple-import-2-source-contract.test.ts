@@ -345,6 +345,48 @@ describe("four complete Hero Packs, batch two: immutable source contract", () =>
         ).toEqual((imported as Record<string, unknown>)[field]);
   });
 
+  it.each([
+    [
+      "38001a",
+      "<b>Action</b>: Attach Touched to another character.",
+      "<b>Action</b>: Find Touched and attach it to another character.",
+    ],
+    [
+      "38001b",
+      "<b>Setup</b>: Set your Touched upgrade aside.",
+      "<b>Setup</b>: Find your Touched upgrade and set it aside.",
+    ],
+    [
+      "38007",
+      "<b>Hero Action</b>: Attach Touched to a character",
+      "<b>Hero Action</b>: Find Touched and attach it to a character",
+    ],
+    [
+      "38026",
+      "<b>When Defeated</b>: Search the encounter deck",
+      "<b>When Defeated</b>: The defeating player searches the encounter deck",
+    ],
+  ])(
+    "applies the current RRG 1.8 p69 text to %s while preserving its imported printing",
+    (code, importedClause, currentClause) => {
+      expect(raw(code).text).toContain(importedClause);
+      expect(card(code).text).toContain(currentClause);
+      expect(card(code).text).not.toContain(importedClause);
+      expect(card(code).errata).toMatchObject({
+        reference: "FFG Rules Reference 1.8, p. 69",
+      });
+      expect(card(code).errata?.url).toContain("#page=69");
+      if (code === "38001b")
+        expect(card(code).text).toContain(
+          "After you change to this form, find Touched and set it aside.",
+        );
+      if (code === "38001a")
+        expect(card(code).text).toContain(
+          "After the player phase begins, find Touched and set it aside.",
+        );
+    },
+  );
+
   it("keeps all nineteen reprint codes and their printed mechanics", () => {
     const fields: (keyof Card)[] = [
       "name",
