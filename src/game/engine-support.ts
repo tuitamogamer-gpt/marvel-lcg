@@ -1,4 +1,5 @@
 import { DOMINO_SCRIPT_CODES } from "./domino.js";
+import { CABLE_SCRIPT_CODES } from "./cable.js";
 import { PSYLOCKE_SCRIPT_CODES } from "./psylocke.js";
 import { GAMBIT_SCRIPT_CODES } from "./gambit.js";
 import { ROGUE_SCRIPT_CODES } from "./rogue.js";
@@ -129,6 +130,7 @@ export const SCRIPTED_HERO_IDS = new Set([
   "rogue",
   "psylocke",
   "angel",
+  "cable",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...CYCLOPS_SCRIPT_CODES,
@@ -137,6 +139,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...WOLVERINE_SCRIPT_CODES,
   ...STORM_SCRIPT_CODES,
   ...ANGEL_SCRIPT_CODES,
+  ...CABLE_SCRIPT_CODES,
   ...MAGNETO_SCRIPT_CODES,
   ...ACOLYTES_SCRIPT_CODES,
   ...MASTER_MOLD_SCRIPT_CODES,

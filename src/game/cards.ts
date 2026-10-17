@@ -1,3 +1,4 @@
+import { cableStatBonus } from "./cable.js";
 import { psylockeStats, psylockePowerOfMind } from "./psylocke.js";
 import { rogueModifiers, rogueTraits } from "./rogue.js";
 import { CARDS, CATALOG_CARDS, card } from "./card-definitions.js";
@@ -773,6 +774,20 @@ export const HEROES = [
     style: "Three forms and Aerial events · Protection",
     complexity: 3,
   },
+  {
+    id: "cable",
+    code: "40001a",
+    alter: "40001b",
+    name: "Cable",
+    identity: "Nathan Summers",
+    aspect: "leadership" as Aspect,
+    color: "#376779",
+    tag: "Change the future.",
+    description:
+      "Complete player side schemes, cure the technovirus, and build a victory display that powers your psionic abilities.",
+    style: "Player side schemes · Leadership",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -1117,6 +1132,7 @@ export function deckCodes(
       (hero === "spdr" && aspect === "protection") ||
       (hero === "cyclops" && aspect === "leadership") ||
       (hero === "storm" && aspect === "leadership") ||
+      (hero === "cable" && aspect === "leadership") ||
       (hero === "angel" && aspect === "protection") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
@@ -1360,6 +1376,7 @@ export function heroStats(s: GameState) {
       phoenixStats(s).attack +
       wolverineStats(s).attack +
       psylockeStats(s).attack +
+      cableStatBonus(s) +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
@@ -1394,6 +1411,7 @@ export function heroStats(s: GameState) {
       rogueModifiers(s).thwart +
       phoenixStats(s).thwart +
       psylockeStats(s).thwart +
+      cableStatBonus(s) +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
@@ -1403,6 +1421,7 @@ export function heroStats(s: GameState) {
       h.defense! +
       stormStats(s).defense +
       psylockeStats(s).defense +
+      cableStatBonus(s) +
       (has(s, "01081") ? 1 : 0) +
       (has(s, "01016") ? (aerial(s) ? 2 : 1) : 0) +
       captainStats(s).def +

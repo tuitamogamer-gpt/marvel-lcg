@@ -68,6 +68,9 @@ export function deckOptions(
         c.pack_code === heroPack) ||
         selectedAspects.includes(c.faction_code as Aspect) ||
         heroAllowsOffAspectEvent(heroId, c) ||
+        (heroId === "cable" &&
+          c.type_code === "player_side_scheme" &&
+          c.faction_code !== "hero") ||
         (heroId === "cyclops" &&
           c.type_code === "ally" &&
           (c.traits || "").split(/\.\s*/).includes("X-Men")) ||
@@ -126,6 +129,7 @@ export function deckErrors(
       "gambit",
       "domino",
       "angel",
+      "cable",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

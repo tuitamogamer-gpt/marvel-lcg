@@ -147,7 +147,9 @@ export function warMachinePackAllyModifiers(
 ) {
   const sidearms = allInPlay(s).filter(
     (a) =>
-      a.code === "23035" && a.attachedTo === p.id && !ports.isTextBlank(s, a),
+      ["23035", "40030"].includes(a.code) &&
+      a.attachedTo === p.id &&
+      !ports.isTextBlank(s, a),
   );
   return { attack: sidearms.length, ranged: sidearms.length > 0 };
 }
@@ -255,13 +257,14 @@ export function warMachinePackAttachmentTargets(
   s: GameState,
   p: Piece,
 ): AntManTarget[] | null {
-  return p.code === "23035"
+  return ["23035", "40030"].includes(p.code)
     ? allInPlay(s)
         .filter(
           (a) =>
             card(a)?.type_code === "ally" &&
             !allInPlay(s).some(
-              (x) => x.code === "23035" && x.attachedTo === a.id,
+              (x) =>
+                ["23035", "40030"].includes(x.code) && x.attachedTo === a.id,
             ),
         )
         .map((a) => ({ id: a.id, label: card(a).name, code: a.code }))
@@ -282,7 +285,10 @@ export function warMachinePackPlayRestriction(
     !ports.hasTrait(s, `hero:${s.activePlayerId}`, "Avenger")
   )
     return "Quincarrier requires the Avenger trait.";
-  if (p.code === "23035" && !warMachinePackAttachmentTargets(s, p)?.length)
+  if (
+    ["23035", "40030"].includes(p.code) &&
+    !warMachinePackAttachmentTargets(s, p)?.length
+  )
     return "Sidearm needs an ally without a Sidearm attached.";
   if (p.code === "23017") {
     const eligible = warMachinePackSneakAllies(s, ports);

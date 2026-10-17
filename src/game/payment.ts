@@ -1,3 +1,4 @@
+import { cableResourceSources } from "./cable.js";
 import { psylockeResourceSources } from "./psylocke.js";
 import { rogueResourceSources } from "./rogue.js";
 import { cyclopsResourceSources } from "./cyclops.js";
@@ -148,6 +149,7 @@ function localPaymentSources(
         kind: "ability",
       });
   }
+  sources.push(...cableResourceSources(s));
   sources.push(...psylockeResourceSources(s));
   sources.push(...stormResourceSources(s));
   sources.push(...thorResourceSources(s));
