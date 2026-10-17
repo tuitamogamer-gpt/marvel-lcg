@@ -427,7 +427,7 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
   it("Inconspicuous commits its entire distribution before any side-scheme defeat response", () => {
     let s = base();
     const a = scheme(s, "04055", 1),
-      b = scheme(s, "01110", 2);
+      b = scheme(s, "01107", 2);
     const investigator = put(s, "04047");
     const top = s.player.deck[0];
     const h = hand(s, "04038", "04050");
@@ -445,7 +445,34 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
     expect(
       s.player.inPlay.find((p) => p.id === investigator.id)?.exhausted,
     ).toBe(true);
-    if (s.prompt?.title === "Skilled Investigator") s = choose(s, "skip");
+    expect(s.player.hand.map((p) => p.id)).toEqual([top.id]);
+    expect(s.prompt).toBeNull();
+  });
+  it("Inconspicuous can decline the first defeat response and use the still-ready Investigator on the second", () => {
+    let s = base();
+    s.scheme.threat = 1;
+    const a = scheme(s, "04055", 1),
+      b = scheme(s, "01107", 1);
+    const investigator = put(s, "04047"),
+      top = s.player.deck[0];
+    const h = hand(s, "04038", "04050");
+    s = playPaid(s, h[0], [h[1].id]);
+    s = choose(reload(s), "main:1");
+    s = choose(reload(s), `${a.id}:1`);
+    s = choose(reload(s), `${b.id}:1`);
+    expect(s.prompt?.title).toBe("Skilled Investigator");
+    s = choose(reload(s), "skip");
+    expect(s.prompt?.title).toBe("Skilled Investigator");
+    expect(
+      s.player.inPlay.find((p) => p.id === investigator.id)?.exhausted,
+    ).toBe(false);
+    s = choose(reload(s), "yes");
+    expect(
+      s.player.inPlay.find((p) => p.id === investigator.id)?.exhausted,
+    ).toBe(true);
+    expect(s.player.hand.map((p) => p.id)).toEqual([top.id]);
+    expect(s.scheme.threat).toBe(0);
+    expect(s.sideSchemes).toHaveLength(0);
     expect(s.prompt).toBeNull();
   });
   it("Inconspicuous completes Followed's defeat interrupt before discarding schemes and opening Investigator responses", () => {

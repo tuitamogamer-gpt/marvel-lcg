@@ -1,5 +1,6 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { controller, playerOrder, seatView } from "./team.js";
+import { isTextBlank } from "./card-text.js";
 import { uniqueConflict } from "./unique.js";
 import type { PaymentSource } from "./payment.js";
 import type { Card, Effect, GameState, Option, Piece } from "./types.js";
@@ -31,6 +32,10 @@ const aspects = new Set([
 const aspect = (c: Card | undefined) => !!c && aspects.has(c.faction_code);
 const own = (s: GameState, id: string, code?: string) =>
   s.player.inPlay.find((p) => p.id === id && (!code || p.code === code));
+const investigatorAvailable = (s: GameState, id: string) => {
+  const p = own(s, id, "04047");
+  return !!p && !p.exhausted && s.player.form === "hero" && !isTextBlank(s, p);
+};
 const hasTrait = (p: Piece, name: string) =>
   (cards.get(p.code)?.traits || "").split(/\.\s*/).includes(name);
 const schemeThreat = (s: GameState, id: string) =>
@@ -374,13 +379,12 @@ export function spiderWomanSchemeDefeated(
     const view = seatView(s, seat);
     return view.player.form === "hero"
       ? view.player.inPlay
-          .filter((p) => p.code === "04047" && !p.exhausted)
+          .filter((p) => investigatorAvailable(view, p.id))
           .map((p) =>
-            E("optional", {
+            SW("investigator-window", {
+              id: p.id,
               actorId: seat.id,
-              title: "Skilled Investigator",
-              text: "Exhaust Skilled Investigator to draw 1 card?",
-              effects: [SW("investigator", { id: p.id, actorId: seat.id })],
+              mandatory: false,
             }),
           )
       : [];
@@ -729,10 +733,24 @@ export function resolveSpiderWomanEffect(
         }),
       );
       break;
+    case "sw:investigator-window":
+      // A simultaneous thwart may queue several defeat responses before any
+      // resolves. Each window must use the source's current readiness.
+      if (investigatorAvailable(s, e.id))
+        ports.choose(
+          s,
+          "Skilled Investigator",
+          "Exhaust Skilled Investigator to draw 1 card?",
+          [
+            option("yes", "Use ability", [SW("investigator", { id: e.id })]),
+            option("skip", "Pass", []),
+          ],
+        );
+      break;
     case "sw:investigator": {
       const p = own(s, e.id, "04047");
       need(
-        p && !p.exhausted && s.player.form === "hero",
+        investigatorAvailable(s, e.id),
         "Skilled Investigator is unavailable.",
       );
       p!.exhausted = true;
