@@ -133,6 +133,26 @@ describe("Player side schemes use one common physical zone", () => {
     expect(occurrence(s, p.id)).toHaveLength(1);
   });
 
+  it("an overflow outside card play belongs to the first player", () => {
+    let s = base(2),
+      p: Piece;
+    [s, p] = playScheme(s, "41016");
+    s = finish(s);
+    s = finish(command(s, { type: "END_TURN" }));
+    const added = makePiece(s, "42017");
+    added.ownerId = added.playerSideSchemeController = "p2";
+    added.counters = 6;
+    s.sideSchemes.push(added);
+    s = native(s, { type: "playerSideSchemeLimit" });
+    expect(s.activePlayerId).toBe(s.firstPlayerId);
+    expect(s.prompt?.title).toBe("Player side scheme limit");
+    s = finish(choose(reload(s), added.id));
+    expect(s.sideSchemes.map((q) => q.id)).toEqual([p.id]);
+    expect(
+      seatView(s, "p2").player.discard.some((q) => q.id === added.id),
+    ).toBe(true);
+  });
+
   it("Medical Aid remains in play through saved healing choices and gives each player their own five", () => {
     let s = base(2),
       p: Piece;
