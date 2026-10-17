@@ -87,6 +87,10 @@ const heroIds = [
   "rogue",
   "psylocke",
   "angel",
+  "cable",
+  "domino",
+  "x23",
+  "deadpool",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -538,8 +542,8 @@ describe("published expansion starters across every supported mission setting", 
     );
     expect(VILLAINS).toHaveLength(10);
     expect(MODULES).toHaveLength(22);
-    expect(heroIds).toHaveLength(40);
-    expect(missions).toHaveLength(17360);
+    expect(heroIds).toHaveLength(44);
+    expect(missions).toHaveLength(19096);
     const key = (mission: (typeof missions)[number]) =>
       [
         mission.heroId,
@@ -574,14 +578,23 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(previousImport).join("\n"))
         .digest("hex"),
     ).toBe("88a7dfa4ec824a10b054097804b59c33d9bafb5f1f15f3e35dde99edec2463b3");
-    expect(new Set(missions.map(key)).size).toBe(17360);
-    expect(new Set(combined.map(key)).size).toBe(17360);
+    const secondImport = missions.filter(
+      (mission) => heroIds.indexOf(mission.heroId) < 40,
+    );
+    expect(secondImport).toHaveLength(17360);
+    expect(
+      createHash("sha256")
+        .update(manifest(secondImport).join("\n"))
+        .digest("hex"),
+    ).toBe("81f2fa5fc4410fcd58139b13ade0c65cf7812111772eeb17299d72f9622ce255");
+    expect(new Set(missions.map(key)).size).toBe(19096);
+    expect(new Set(combined.map(key)).size).toBe(19096);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(4340);
-      expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(10);
+      expect(partition).toHaveLength(4774);
+      expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(11);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 4340 : 17360);
+    expect(selectedMissions).toHaveLength(isSharded ? 4774 : 19096);
   });
   for (const mission of selectedMissions)
     it(
