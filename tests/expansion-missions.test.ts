@@ -83,6 +83,10 @@ const heroIds = [
   "phoenix",
   "wolverine",
   "storm",
+  "gambit",
+  "rogue",
+  "psylocke",
+  "angel",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -148,6 +152,7 @@ function ownedPieces(s: GameState, originalIds: Set<string>): Piece[] {
     s.villain,
     ...s.minions,
     ...s.sideSchemes,
+    ...(s.victoryDisplay || []),
     ...s.attachments,
     ...(s.environments || []),
     ...s.resolving,
@@ -258,6 +263,16 @@ function runMission(config: (typeof missions)[number]) {
     ) as Aspect;
   expect(deckErrors(hero.id, aspect, codes)).toEqual([]);
   expect(deckSizeFor(codes)).toBe(deck.deckSize ?? 40);
+  const physicalSourceCounts: Record<string, number> = {
+    gambit: 40,
+    rogue: 41,
+    psylocke: 42,
+    angel: 40,
+  };
+  if (Object.hasOwn(physicalSourceCounts, hero.id)) {
+    expect(codes).toHaveLength(physicalSourceCounts[hero.id]);
+    expect(deckSizeFor(codes)).toBe(hero.id === "rogue" ? 41 : 40);
+  }
   let s = newGame({
     ...config,
     aspect,
@@ -522,9 +537,9 @@ describe("published expansion starters across every supported mission setting", 
         ),
     );
     expect(VILLAINS).toHaveLength(10);
-    expect(MODULES).toHaveLength(20);
-    expect(heroIds).toHaveLength(36);
-    expect(missions).toHaveLength(14184);
+    expect(MODULES).toHaveLength(22);
+    expect(heroIds).toHaveLength(40);
+    expect(missions).toHaveLength(17360);
     const key = (mission: (typeof missions)[number]) =>
       [
         mission.heroId,
@@ -540,20 +555,33 @@ describe("published expansion starters across every supported mission setting", 
     const retained = missions.filter(
       (mission) =>
         heroIds.indexOf(mission.heroId) < 32 &&
-        !["deathstrike", "shadow_king"].includes(mission.module),
+        !["deathstrike", "shadow_king", "exodus", "reavers"].includes(
+          mission.module,
+        ),
     );
     expect(retained).toHaveLength(11328);
     expect(
       createHash("sha256").update(manifest(retained).join("\n")).digest("hex"),
     ).toBe("8639244ce44d6832c10f3f51edb418a1435a42fa862f629f47a62b4016e519a0");
-    expect(new Set(missions.map(key)).size).toBe(14184);
-    expect(new Set(combined.map(key)).size).toBe(14184);
+    const previousImport = missions.filter(
+      (mission) =>
+        heroIds.indexOf(mission.heroId) < 36 &&
+        !["exodus", "reavers"].includes(mission.module),
+    );
+    expect(previousImport).toHaveLength(14184);
+    expect(
+      createHash("sha256")
+        .update(manifest(previousImport).join("\n"))
+        .digest("hex"),
+    ).toBe("88a7dfa4ec824a10b054097804b59c33d9bafb5f1f15f3e35dde99edec2463b3");
+    expect(new Set(missions.map(key)).size).toBe(17360);
+    expect(new Set(combined.map(key)).size).toBe(17360);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(3546);
-      expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(9);
+      expect(partition).toHaveLength(4340);
+      expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(10);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 3546 : 14184);
+    expect(selectedMissions).toHaveLength(isSharded ? 4340 : 17360);
   });
   for (const mission of selectedMissions)
     it(

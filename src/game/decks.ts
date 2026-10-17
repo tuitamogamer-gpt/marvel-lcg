@@ -49,13 +49,19 @@ export function deckOptions(
       c.code !== "26002b" &&
       c.code !== "32031b" &&
       c.code !== "34002b" &&
+      c.code !== "41002b" &&
       !identityCodes.has(c.code) &&
       !identityMatch(heroId, c) &&
       (hasExecutableScript(c) ||
         (CAPTAIN_AMERICA_SCRIPT_CODES as readonly string[]).includes(c.code)) &&
-      ["ally", "event", "resource", "support", "upgrade"].includes(
-        c.type_code,
-      ) &&
+      [
+        "ally",
+        "event",
+        "resource",
+        "support",
+        "upgrade",
+        "player_side_scheme",
+      ].includes(c.type_code) &&
       (((c.faction_code === "hero" ||
         Object.hasOwn(heroRequiredCards(heroId), c.code)) &&
         c.set_code === heroId &&
@@ -114,7 +120,11 @@ export function deckErrors(
       "cyclops",
       "colossus",
       "shadowcat",
+      "rogue",
       "wolverine",
+      "psylocke",
+      "gambit",
+      "angel",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

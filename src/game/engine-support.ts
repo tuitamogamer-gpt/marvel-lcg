@@ -1,8 +1,12 @@
+import { PSYLOCKE_SCRIPT_CODES } from "./psylocke.js";
+import { GAMBIT_SCRIPT_CODES } from "./gambit.js";
+import { ROGUE_SCRIPT_CODES } from "./rogue.js";
 import {
   CYCLOPS_SCRIPT_CODES,
   CYCLOPS_SHARED_SCRIPT_CODES,
 } from "./cyclops.js";
 import { WOLVERINE_SCRIPT_CODES } from "./wolverine.js";
+import { ANGEL_SCRIPT_CODES } from "./angel.js";
 import { STORM_SCRIPT_CODES } from "./storm.js";
 import { MAGNETO_SCRIPT_CODES } from "./magneto.js";
 import { ACOLYTES_SCRIPT_CODES } from "./acolytes.js";
@@ -119,12 +123,18 @@ export const SCRIPTED_HERO_IDS = new Set([
   "phoenix",
   "wolverine",
   "storm",
+  "gambit",
+  "rogue",
+  "psylocke",
+  "angel",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...CYCLOPS_SCRIPT_CODES,
   ...CYCLOPS_SHARED_SCRIPT_CODES,
+  ...PSYLOCKE_SCRIPT_CODES,
   ...WOLVERINE_SCRIPT_CODES,
   ...STORM_SCRIPT_CODES,
+  ...ANGEL_SCRIPT_CODES,
   ...MAGNETO_SCRIPT_CODES,
   ...ACOLYTES_SCRIPT_CODES,
   ...MASTER_MOLD_SCRIPT_CODES,
@@ -133,7 +143,9 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ZERO_TOLERANCE_SCRIPT_CODES,
   ...SENTINELS_SCRIPT_CODES,
   ...COLOSSUS_SCRIPT_CODES,
+  ...ROGUE_SCRIPT_CODES,
   ...PHOENIX_SCRIPT_CODES,
+  ...GAMBIT_SCRIPT_CODES,
   ...SHADOWCAT_SCRIPT_CODES,
   ...MUTANT_GENESIS_PLAYER_PACK_SCRIPT_CODES,
   ...ANT_MAN_SCRIPT_CODES,

@@ -281,7 +281,7 @@ const recipients = (s: GameState, p: Piece) =>
 export function msMarvelPlayRestriction(s: GameState, p: Piece): string | null {
   if (p.code === "05005")
     return "Available when your identity would take damage.";
-  if (p.code === "05014")
+  if (rulesCode(p) === "05014")
     return "Available when a villain attack boost card is turned face up.";
   if (["05023", "05033"].includes(rulesCode(p)) && !recipients(s, p).length)
     return "Each player already controls this upgrade.";
@@ -313,6 +313,7 @@ export function msMarvelEvent(
         }),
       ];
     case "05005":
+    case "38015":
     case "05014":
       return []; // Their native interrupt windows supply effects.
     case "05015":
@@ -566,7 +567,7 @@ export function msMarvelBoostOptions(
   return defenseEventSources(s)
     .filter(
       (p) =>
-        p.code === "05014" &&
+        rulesCode(p) === "05014" &&
         ports.canPay(s, ports.cardCost(s, p), p.id, p.code),
     )
     .map((p) =>
@@ -922,6 +923,7 @@ export function resolveMsMarvelEffect(
         E("damage", {
           target: e.target,
           amount: e.physical ? 3 : 0,
+          noDamageInstance: !e.physical,
           attack: true,
           source: "hero",
           eventId: e.eventId,
@@ -1072,7 +1074,7 @@ export function resolveMsMarvelEffect(
     }
     case "ms:preemptive-cost": {
       const p = defenseEventSources(s).find(
-        (p) => p.id === e.id && p.code === "05014",
+        (p) => p.id === e.id && rulesCode(p) === "05014",
       );
       need(
         p && s.player.form === "hero" && mayDefend(s) && s.attack?.isVillain,

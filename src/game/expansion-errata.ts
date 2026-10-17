@@ -5,6 +5,29 @@ const url =
 /** Keep imported printing text intact. Apply published rules corrections in the
  * playable database and card inspector, independently of module registration. */
 export function expansionErrata(c: Card): Card {
+  if (["38001a", "38001b", "38007", "38026"].includes(c.code)) {
+    // Printed face labels are reversed relative to these catalog codes:
+    // 38001a is Rogue and 38001b is Anna Marie. Keep the original import intact.
+    const text =
+      c.code === "38001b"
+        ? c.text
+            ?.replace(
+              "Set your Touched upgrade aside.",
+              "Find your Touched upgrade and set it aside.",
+            )
+            .replace("set Touched aside.", "find Touched and set it aside.")
+        : c.code === "38026"
+          ? "<b>When Defeated</b>: The defeating player searches the encounter deck and discard pile for a copy of the Misled treachery and shuffles it into their deck."
+          : c.text?.replace("Attach Touched", "Find Touched and attach it");
+    return {
+      ...c,
+      text,
+      errata: {
+        reference: "FFG Rules Reference 1.8, p. 69",
+        url: url.replace("#page=66", "#page=69"),
+      },
+    };
+  }
   if (["32141b", "32142b", "32143b"].includes(c.code))
     return {
       ...c,

@@ -65,6 +65,8 @@ export interface MissionStats {
   enemiesDefeated: number;
 }
 export interface Piece {
+  /** Player side schemes live in the common scheme area under owner control. */
+  playerSideSchemeController?: string;
   /** Beguiled changes the actual ally's current type without changing its face. */
   treatedAsMinion?: boolean;
   /** Mind Control changes the same physical minion into a blank Controlled ally. */
@@ -73,6 +75,10 @@ export interface Piece {
   stormControlled?: boolean;
   /** Monotonic entry order of a physical control-changing attachment. */
   controlOrder?: number;
+  /** Karma is a continuing control source, not an attached upgrade. */
+  controlTargetId?: string;
+  karmaControllerId?: string;
+  controlConsequential?: number;
   /** Actual owned cards tucked beneath this instance; faces stay private. */
   storedCards?: Piece[];
   /** Physical facedown boosts assigned to this enemy; consumed only on activation. */
@@ -149,6 +155,10 @@ export interface Prompt {
   selectAction?: Effect;
 }
 export interface Attack {
+  angelIgnoreBoosts?: boolean;
+  angelRetaliatePlayerId?: string;
+  angelRetaliate?: number;
+  angelTauntPlayerId?: string;
   primaryTargetControllerId?: string;
   /** Original owner survives the damaged ally leaving play (Lady Deathstrike). */
   primaryTargetOwnerId?: string;
@@ -302,6 +312,7 @@ export interface GameState {
     form: "hero" | "alter";
     /** Three-sided identities retain their selected hero face through saves. */
     heroForm?: "tiny" | "giant";
+    angelForm?: "angel" | "archangel";
     /** Ironheart's current physical identity. Its two other physical versions
      * remain set aside and swap with this instance without leaving play. */
     ironheartIdentity?: Piece;
@@ -472,7 +483,10 @@ export type Command =
   | { type: "PAY"; ids: string[]; wildAs?: Resource }
   | { type: "PLAY"; id: string; playerId?: string }
   | { type: "BASIC"; action: "attack" | "thwart" | "recover" }
-  | { type: "FLIP"; target?: "alter" | "tiny" | "giant" }
+  | {
+      type: "FLIP";
+      target?: "alter" | "tiny" | "giant" | "angel" | "archangel";
+    }
   | { type: "ABILITY"; id: string; action?: string; playerId?: string }
   | { type: "END_TURN"; discard?: string[] }
   | { type: "CANCEL" }

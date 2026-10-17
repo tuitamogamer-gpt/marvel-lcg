@@ -1,4 +1,13 @@
+import * as gambit from "./gambit.js";
 import * as cyclops from "./cyclops.js";
+import {
+  beginPlayerSideSchemeDefeat,
+  enterPlayerSideScheme,
+  isPlayerSideScheme,
+  playerSideSchemeHasVictory,
+  playerSideSchemeLimit,
+  playerSideSchemes,
+} from "./player-side-schemes.js";
 import * as acolytes from "./acolytes.js";
 import * as armadillo from "./armadillo.js";
 import * as inheritors from "./inheritors.js";
@@ -30,6 +39,7 @@ import * as ghostSpider from "./ghost-spider.js";
 import * as nova from "./nova.js";
 import * as ironheart from "./ironheart.js";
 import * as ironspider from "./ironspider-sinister.js";
+import * as rogue from "./rogue.js";
 import * as phoenix from "./phoenix.js";
 import * as spdr from "./spdr.js";
 import * as spdrPack from "./spdr-pack.js";
@@ -37,6 +47,8 @@ import * as spiderHam from "./spider-ham.js";
 import * as spiderHamPack from "./spider-ham-pack.js";
 import * as niPack from "./nova-ironheart-pack.js";
 import * as wolverine from "./wolverine.js";
+import * as psylocke from "./psylocke.js";
+import * as angel from "./angel.js";
 import * as storm from "./storm.js";
 import * as colossus from "./colossus.js";
 import * as shadowcat from "./shadowcat.js";
@@ -594,6 +606,7 @@ function giveCharacterStatus(
     identity
       ? {
           stalwart:
+            rogue.rogueModifiers(identity).stalwart ||
             storm.stormGlobal(s).stalwart ||
             !!printedKeyword(heroCard(identity), "Stalwart") ||
             nebula.nebulaAttackKeywords(identity).stalwart ||
@@ -627,6 +640,7 @@ function syncNebulaIdentityStatuses(s: GameState) {
   for (const seat of playerOrder(s)) {
     const view = seatView(s, seat);
     if (
+      rogue.rogueModifiers(view).stalwart ||
       storm.stormGlobal(s).stalwart ||
       nebula.nebulaAttackKeywords(view).stalwart ||
       vision.visionStalwart(view)
@@ -695,7 +709,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
       printedKeyword(heroCard(s), name) +
       Number(
         name === "Stalwart" &&
-          (storm.stormGlobal(s).stalwart ||
+          (rogue.rogueModifiers(s).stalwart ||
+            storm.stormGlobal(s).stalwart ||
             nebula.nebulaAttackKeywords(s).stalwart ||
             vision.visionStalwart(s)),
       ) +
@@ -709,7 +724,12 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         ? 1
         : 0) +
       (name === "Retaliate"
-        ? phoenix.phoenixSuit(s).retaliate +
+        ? psylocke.psylockeStats(s).retaliate +
+          (s.attack?.angelRetaliatePlayerId === s.activePlayerId
+            ? s.attack.angelRetaliate || 0
+            : 0) +
+          rogue.rogueModifiers(s).retaliate +
+          phoenix.phoenixSuit(s).retaliate +
           storm.stormGlobal(s).retaliate +
           captainStats(s).retaliate +
           mansionAttack.mansionAttackModifiers(s, "hero", { isTextBlank })
@@ -901,6 +921,7 @@ function beginResolution(s: GameState, p: Piece) {
 }
 function finishResolution(s: GameState, id: string) {
   phoenix.phoenixEventFinished(s, id);
+  gambit.gambitEventFinished(s, id);
   const index = s.resolving.findIndex((p) => p.id === id);
   if (index < 0) return;
   const [p] = s.resolving.splice(index, 1);
@@ -1131,7 +1152,7 @@ function mystiqueNativeSeedHands(s: GameState): void {
     s.players.map((seat) => [
       seat.id,
       seatView(s, seat)
-        .player.hand.filter((p) => ["32082", "32083"].includes(p.code))
+        .player.hand.filter((p) => ["32082", "32083", "38027"].includes(p.code))
         .map((p) => p.id),
     ]),
   );
@@ -1173,7 +1194,7 @@ function mystiqueNativeObserveHands(s: GameState): Effect[] {
       before = s.mystiqueHandPresence![seat.id] || [];
     let currentIds: string[] | undefined;
     for (const p of view.player.hand) {
-      if (p.code !== "32082" && p.code !== "32083") continue;
+      if (!["32082", "32083", "38027"].includes(p.code)) continue;
       (currentIds ||= []).push(p.id);
       if (!before.includes(p.id)) {
         const receipt: mystique.MystiqueHandEntryReceipt = {
@@ -1183,18 +1204,19 @@ function mystiqueNativeObserveHands(s: GameState): Effect[] {
           code: p.code,
         };
         effects.push(
-          ...mystique
-            .mystiqueHandEntered(s, receipt, mystiquePorts)
-            .map((e) => ({
-              ...e,
-              mandatory: true,
-              after: [
-                E("mystique-native:return-actor", {
-                  playerId: returnActor,
-                  actorId: returnActor,
-                }),
-              ],
-            })),
+          ...(p.code === "38027"
+            ? [{ type: "rogue:misled-hand", actorId: seat.id }]
+            : mystique.mystiqueHandEntered(s, receipt, mystiquePorts)
+          ).map((e) => ({
+            ...e,
+            mandatory: true,
+            after: [
+              E("mystique-native:return-actor", {
+                playerId: returnActor,
+                actorId: returnActor,
+              }),
+            ],
+          })),
         );
       }
     }
@@ -1236,7 +1258,11 @@ function discardHand(s: GameState, id: string) {
   const [p] = s.player.hand.splice(i, 1);
   if (mystique.mystiqueDiscardFromPlayerZone(p, "hand"))
     s.encounter.discard.push(p);
-  else s.player.discard.push(p);
+  else {
+    const owner = s.players.find((seat) => seat.id === p.ownerId);
+    if (owner?.eliminated) s.removed.push(p);
+    else (owner ? seatView(s, owner) : s).player.discard.push(p);
+  }
   if (s.mystiqueHandPresence?.[s.activePlayerId])
     s.mystiqueHandPresence[s.activePlayerId] = s.mystiqueHandPresence[
       s.activePlayerId
@@ -1414,6 +1440,17 @@ function movePieceFromPlay(
   const viewBefore = controlling ? seatView(s, controlling) : s;
   const healthBefore = maxHP(viewBefore);
   const removedSource = find(s, id);
+  if (
+    removedSource &&
+    gambit.gambitShield(s, removedSource, { discard: discardPiece })
+  )
+    return;
+  const angelHealthTarget =
+    removedSource?.code === "42032" &&
+    removedSource.attachedTo?.startsWith("hero:") &&
+    !isTextBlank(s, removedSource)
+      ? removedSource.attachedTo.slice(5)
+      : undefined;
   if (removedSource) cyclops.cyclopsCardLeft(s, removedSource);
   need(
     !removedSource ||
@@ -1540,6 +1577,7 @@ function movePieceFromPlay(
     }
   }
   if (!p) return;
+  rogue.rogueCardLeft(s, id);
   wideawake.projectWideawakeEnemyLeftPlay(s, id);
   if (
     rulesCode(p) === "01127" &&
@@ -1628,6 +1666,8 @@ function movePieceFromPlay(
     s.removed.push(resetPiece(p));
   else if (p.code === "32172b" && victory)
     (s.victoryDisplay ||= []).push(resetPiece(p));
+  else if (isPlayerSideScheme(p) && victory)
+    (s.victoryDisplay ||= []).push(resetPiece(p));
   else if (
     card(p).faction_code === "encounter" &&
     !(wideawakeCaptive(p) && p.ownerId)
@@ -1684,6 +1724,7 @@ function movePieceFromPlay(
       (p.code === "03025" && p.attachedTo?.startsWith("hero:"))
     )
       view.player.hp -= healthBefore - maxHP(view);
+    if (angelHealthTarget) seatView(s, angelHealthTarget).player.hp--;
     view.player.hp = Math.min(view.player.hp, maxHP(view));
   }
 }
@@ -1769,7 +1810,8 @@ function syncValkyrieConvertedCards(s: GameState) {
       const remainingControl = storm.stormLatestControl(s, p);
       if (
         remainingControl === "25031" ||
-        (card(p.code).type_code === "minion" && remainingControl !== "34009")
+        (card(p.code).type_code === "minion" &&
+          !["34009", "38011"].includes(remainingControl || ""))
       ) {
         if (remainingControl === "25031") p.treatedAsMinion = true;
         for (const seat of s.players)
@@ -1794,7 +1836,9 @@ function syncValkyrieConvertedCards(s: GameState) {
     }
     if (
       valkyrie.valkyrieBeguiledEnemy(s, p) &&
-      phoenix.phoenixLatestControl(s, p)?.code !== "34009"
+      !["34009", "38011"].includes(
+        phoenix.phoenixLatestControl(s, p)?.code || "",
+      )
     ) {
       p.treatedAsMinion = true;
       continue;
@@ -1839,7 +1883,9 @@ function syncValkyrieConvertedCards(s: GameState) {
     }
     if (
       !valkyrie.valkyrieBeguiledEnemy(s, p) ||
-      phoenix.phoenixLatestControl(s, p)?.code === "34009"
+      ["34009", "38011"].includes(
+        phoenix.phoenixLatestControl(s, p)?.code || "",
+      )
     )
       continue;
     const controlling = controller(s, p.id);
@@ -2149,6 +2195,7 @@ function check(s: GameState) {
             { isTextBlank },
           ),
         );
+        add(s, ...rogue.rogueMinionEngaged(s, m));
         add(s, ...spiderHam.spiderHamMinionEngaged(s, m, next.id));
         add(
           s,
@@ -2177,6 +2224,10 @@ function check(s: GameState) {
           }
       }
     }
+    for (const scheme of playerSideSchemes(s).filter(
+      (p) => p.ownerId === seat.id,
+    ))
+      movePieceFromPlay(s, scheme.id, true);
     s.encounter.discard.push(
       ...s.encounter.dealt.filter((p) => p.dealtTo === seat.id),
     );
@@ -2318,6 +2369,8 @@ function npcPlayerPlayRestriction(s: GameState, p: Piece): string | null {
   return null;
 }
 interface DamageTraits {
+  /** An attack can lack a damage instruction while retaining its aftermath. */
+  noDamageInstance?: boolean;
   /** Original dealt amount, before damage-taken prevention. */
   damageDealt?: number;
   /** Overkill is attack damage, but is not a new attack on its recipient. */
@@ -2406,6 +2459,8 @@ function zeroToleranceNativePresent(s: GameState) {
   );
 }
 function damageProhibition(s: GameState, target: string, panther: boolean) {
+  if (rogue.rogueProtected(s, target))
+    return "Cybernetic Enhancements prevents damage.";
   const shadowKing = s.minions.find((p) => p.id === target);
   if (shadowKing && storm.stormProtected(s, shadowKing))
     return "The Shadow King is protected by a Controlled minion.";
@@ -2449,6 +2504,7 @@ function damageProhibition(s: GameState, target: string, panther: boolean) {
   return undefined;
 }
 function attackExcess(s: GameState, packet: Effect): number {
+  if (packet.noDamageInstance) return 0;
   const target = find(s, packet.target);
   if (!target || !packet.attack) return 0;
   const source = packet.source || "hero";
@@ -2466,6 +2522,12 @@ function attackExcess(s: GameState, packet: Effect): number {
     ["hero", `hero:${s.activePlayerId}`].includes(source)
   )
     amount += msMarvelEventAmountModifier(s, s.currentEventId, "damage");
+  amount += psylocke.psylockeDamageBonus(s, source, target.id);
+  if (
+    !packet.mutantGenesisBonusApplied &&
+    ["hero", `hero:${s.activePlayerId}`].includes(source)
+  )
+    amount += gambit.gambitDamageBonus(s);
   amount += cyclops.cyclopsAttackModifiers(s, target.id).damage;
   const resistance = s.attachments.filter(
     (p) =>
@@ -2515,10 +2577,11 @@ function dealDamage(
   panther = false,
   traits: DamageTraits = {},
 ): DamageResult {
+  if (traits.noDamageInstance) n = 0;
   if (
     attack &&
+    !traits.noDamageInstance &&
     !traits.mutantGenesisBonusApplied &&
-    n > 0 &&
     (source === "hero" || source === `hero:${s.activePlayerId}`) &&
     target !== "hero" &&
     !target.startsWith("hero:")
@@ -2527,12 +2590,26 @@ function dealDamage(
       msMarvelEventAmountModifier(s, s.currentEventId, "damage") +
       Number(s.flags[`niHoned:${s.currentEventId}`] || 0) +
       mgPack.mutantGenesisPlayerPackAttackEventBonus(s, s.currentEventId || "");
+  if (attack && !traits.noDamageInstance)
+    n += psylocke.psylockeDamageBonus(s, source, target);
+  if (
+    attack &&
+    !traits.noDamageInstance &&
+    !traits.mutantGenesisBonusApplied &&
+    (source === "hero" || source === `hero:${s.activePlayerId}`) &&
+    target !== "hero" &&
+    !target.startsWith("hero:")
+  )
+    n += gambit.gambitDamageBonus(s);
   const original = find(s, target);
-  const dealt = Math.max(0, traits.damageDealt ?? n);
+  const dealt = traits.noDamageInstance
+    ? 0
+    : Math.max(0, traits.damageDealt ?? n);
   // Exploit Weakness modifies damage TAKEN. Preserve the original dealt amount
   // for replacement effects such as Armored Rhino Suit and dealt-damage receipts.
   if (
     attack &&
+    !traits.noDamageInstance &&
     (target === s.villain.id || s.minions.some((p) => p.id === target))
   )
     n += cyclops.cyclopsAttackModifiers(s, target).damage;
@@ -2671,6 +2748,7 @@ function dealDamage(
         wasMinion: card(original).type_code === "minion",
         defeatedCode: code,
         excessDamage: result.excessDamage,
+        actualDamage: result.actualDamage,
         mandatory: false,
         afterAttack: true,
       }),
@@ -3252,6 +3330,7 @@ function defeatCharacter(
       return true;
     }
   }
+  if (gambit.gambitShield(s, m, { discard: discardPiece })) return false;
   const tracers = allInPlay(s).filter(
     (a) =>
       rulesCode(a) === "01007" && a.attachedTo === m.id && !isTextBlank(s, a),
@@ -3268,6 +3347,7 @@ function defeatCharacter(
   if (!minion && ["32088b", "32172b"].includes(m.code) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
   else discardPiece(s, m.id);
+  if (!minion) add(s, ...rogue.rogueAllyDefeated(s, m, source, allyController));
   if (!minion && enemyAttack && sabretoothDefeat?.attackerId === source) {
     delete (m as SabretoothAttackDefeatPiece).sabretoothAttackDefeatReceipt;
     add(
@@ -3816,7 +3896,12 @@ function thwart(
     return removed;
   }
 }
-function defeatScheme(s: GameState, p: Piece, source = "hero") {
+function defeatScheme(
+  s: GameState,
+  p: Piece,
+  source = "hero",
+  playerSchemeRewardHandled = false,
+) {
   if (
     p.pendingDefeat &&
     ["32144a", "32144b", "32145a", "32158"].includes(p.code)
@@ -3825,6 +3910,10 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
   if (p.counters || !s.sideSchemes.some((x) => x.id === p.id)) return;
   if (isPermanent(card(p)) || zeroTolerance.zeroToleranceIsPermanent(s, p))
     return;
+  if (isPlayerSideScheme(p) && !playerSchemeRewardHandled) {
+    add(s, ...beginPlayerSideSchemeDefeat(s, p, source));
+    return;
+  }
   log(s, `${card(p).name} is defeated.`, "good");
   if (rulesCode(p) === "01166" && p.captured && !isTextBlank(s, p))
     for (const x of p.captured.splice(0)) {
@@ -3841,6 +3930,8 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
   if (!isTextBlank(s, p)) add(s, ...cyclops.cyclopsSideSchemeDefeated(s, p));
   add(s, ...spectrum.spectrumSideSchemeDefeated(s, p, spectrumPorts));
   add(s, ...storm.stormSideDefeated(s, p));
+  if (!isTextBlank(s, p)) add(s, ...gambit.gambitSchemeDefeated(s, p));
+  add(s, ...rogue.rogueSchemeDefeated(s, p));
   add(s, ...warMachine.warMachineSchemeDefeated(s, p));
   add(
     s,
@@ -3891,7 +3982,9 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
     { isTextBlank },
   );
   const victory =
-    ["32071", "32100", "32120"].includes(p.code) && !isTextBlank(s, p);
+    (["32071", "32100", "32120"].includes(p.code) ||
+      (isPlayerSideScheme(p) && playerSideSchemeHasVictory(p))) &&
+    !isTextBlank(s, p);
   const retainFind =
     ["32065a", "32088a", "32144a", "32144b", "32145a", "32158"].includes(
       p.code,
@@ -3950,7 +4043,11 @@ function defeatScheme(s: GameState, p: Piece, source = "hero") {
       ? [
           {
             id: `${p.id}:victory`,
-            title: p.code === "32100" ? "Victory 2" : "Victory 1",
+            title: isPlayerSideScheme(p)
+              ? "Victory 0"
+              : p.code === "32100"
+                ? "Victory 2"
+                : "Victory 1",
             effects: [E("encounterVictory", { id: p.id })],
           },
         ]
@@ -3973,6 +4070,7 @@ export function targets(
       return [
         ...(!attack ||
         nebula.nebulaIgnoresRestrictions(s).guard ||
+        psylocke.psylockeIgnoresGuardPatrol(s) ||
         shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts) ||
         !engaged(s).some((p) => keyword(p, "Guard", s))
           ? [
@@ -4009,6 +4107,7 @@ export function targets(
         !(
           thwarting &&
           !nebula.nebulaIgnoresRestrictions(s).patrol &&
+          !psylocke.psylockeIgnoresGuardPatrol(s) &&
           !shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts) &&
           engaged(s).some((p) => keyword(p, "Patrol", s))
         ) &&
@@ -4182,11 +4281,13 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
         ? 1
         : 0) -
       wolverine.wolverineCostReduction(s, physical || c, wolverinePorts) -
+      angel.angelDiscount(s, physical || c) -
       storm.stormDiscount(
         s,
         physical || ({ code: c.code } as Piece),
         stormPorts,
       ) -
+      gambit.gambitDiscount(s, c) -
       captainAllyDiscount(s, c) -
       captainPackDiscount(s, c) -
       msMarvelDiscount(s) -
@@ -4233,6 +4334,11 @@ function captainPackHasTrait(
   trait: string,
 ): boolean {
   if (
+    trait.toLowerCase() === "x-force" &&
+    angel.angelRecruitBonus(s, target) > 0
+  )
+    return true;
+  if (
     trait.toLowerCase() === "x-men" &&
     cyclops.cyclopsCharacterModifiers(s, target).xmen
   )
@@ -4274,6 +4380,9 @@ function captainPackHasTrait(
     const view = seatView(s, identityId);
     return (
       (trait.toLowerCase() === "aerial" && aerial(view)) ||
+      rogue
+        .rogueTraits(view, rogueNativeTraits)
+        .some((t) => t.toLowerCase() === trait.toLowerCase()) ||
       spiderHam
         .spiderHamTraits(view)
         .some((value) => value.toLowerCase() === trait.toLowerCase()) ||
@@ -4445,6 +4554,7 @@ function attackAction(
   overkill = false,
   panther = false,
   traits: {
+    noDamageInstance?: boolean;
     basic?: boolean;
     piercing?: boolean;
     ranged?: boolean;
@@ -4463,6 +4573,13 @@ function attackAction(
     (source !== "hero" && card(p as Piece)?.type_code === "ally")
   )
     n += wolverine.wolverineBasicBonus(s, source, target);
+  if (source === "hero" && traits.basic && psylocke.psylockeStats(s).piercing)
+    traits.piercing = true;
+  if (
+    (source === "hero" || source === `hero:${s.activePlayerId}`) &&
+    rogue.rogueModifiers(s).overkill
+  )
+    overkill = true;
   if (source === "hero" && traits.basic && wolverine.wolverineStats(s).piercing)
     traits.piercing = true;
   if (
@@ -5425,6 +5542,10 @@ function pay(
         delete seatView(s, paymentActor).flags[
           `spdrClarityCommitted:${info.id}`
         ];
+      } else if (psylocke.psylockeIsResource(s, id)) {
+        spentResponses.push(...psylocke.psylockeResourceSpent(s, id));
+      } else if (rogue.rogueSpendResource(s, id)) {
+        // The physical X-Gene exhausts only when payment commits.
       } else if (phoenix.phoenixResourceSpent(s, id)) {
         // The actual Phoenix Force counter pays this phase-limited resource.
       } else if (spdr.spdrResourceSpent(s, id)) {
@@ -5445,6 +5566,9 @@ function pay(
       } else if (s.player.hand.some((x) => x.id === id)) {
         const spent = discardHand(s, id);
         phoenix.phoenixPayment(seatView(s, paymentActor), spent, p.card);
+        spentResponses.push(...gambit.gambitPayment(s, spent));
+        if (!p.abilityCost)
+          spentResponses.push(...angel.angelResourceSpent(s, spent, p.card));
         spentResponses.push(
           ...cyclops.cyclopsResourceCardSpent(
             s,
@@ -5810,6 +5934,7 @@ export function newGame(config: {
     vision.visionInitializeMass(s, { makePiece });
     shadowcat.shadowcatInitializeMass(s, { makePiece });
     wolverine.wolverineInitialize(s, { makePiece });
+    psylocke.psylockeInitialize(s, { makePiece });
     s.player.deck = shuffle(s, s.player.deck);
     doctorStrangeSetup(s, dsPorts);
     venom.venomInitializeNemesis(s, { makePiece });
@@ -5822,12 +5947,15 @@ export function newGame(config: {
     ghostSpider.ghostSpiderInitializeNemesis(s, { makePiece });
     nova.novaInitializeNemesis(s, { makePiece });
     phoenix.phoenixInitialize(s, { makePiece });
+    rogue.rogueInitialize(s, { makePiece });
     spdr.spdrInitialize(s, { makePiece });
     spdr.spdrInitializeNemesis(s, { makePiece });
     spiderHam.spiderHamInitializeIdentity(s, { makePiece });
     spiderHam.spiderHamInitializeNemesis(s, { makePiece });
     cyclops.cyclopsInitializeNemesis(s, { makePiece });
     storm.stormInitialize(s, { makePiece });
+    gambit.gambitInitialize(s, makePiece);
+    angel.angelInitialize(s, { makePiece });
     colossus.colossusInitializeNemesis(s, { makePiece });
     ironheart.ironheartInitialize(s, { makePiece });
     // Extract the SAME three source-composition IDs before drawing an opening
@@ -5851,26 +5979,30 @@ export function newGame(config: {
               "acolytes",
             ].includes(c.set_code || "")
               ? "mut_gen"
-              : c.set_code === "deathstrike"
-                ? "wolv"
-                : c.set_code === "shadow_king"
-                  ? "storm"
-                  : c.set_code === "ironspider_sinister"
-                    ? "spdr"
-                    : c.set_code === "inheritors"
-                      ? "spiderham"
-                      : c.set_code === "zzzax"
-                        ? "ironheart"
-                        : c.set_code === "armadillo"
-                          ? "nova"
-                          : [
-                                "goblin_gimmicks",
-                                "a_mess_of_things",
-                                "power_drain",
-                                "running_interference",
-                              ].includes(c.set_code || "")
-                            ? "gob"
-                            : "core")) ||
+              : c.set_code === "exodus"
+                ? "gambit"
+                : c.set_code === "reavers"
+                  ? "rogue"
+                  : c.set_code === "deathstrike"
+                    ? "wolv"
+                    : c.set_code === "shadow_king"
+                      ? "storm"
+                      : c.set_code === "ironspider_sinister"
+                        ? "spdr"
+                        : c.set_code === "inheritors"
+                          ? "spiderham"
+                          : c.set_code === "zzzax"
+                            ? "ironheart"
+                            : c.set_code === "armadillo"
+                              ? "nova"
+                              : [
+                                    "goblin_gimmicks",
+                                    "a_mess_of_things",
+                                    "power_drain",
+                                    "running_interference",
+                                  ].includes(c.set_code || "")
+                                ? "gob"
+                                : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -6044,11 +6176,17 @@ function initialSetup(s: GameState) {
   const setup: Effect[] = [];
   for (const seat of playerOrder(s))
     setup.push(
+      ...rogue
+        .rogueSetup(seatView(s, seat))
+        .map((e) => ({ ...e, actorId: seat.id })),
       ...vision
         .visionSetup(seatView(s, seat), { makePiece })
         .map((e) => ({ ...e, actorId: seat.id })),
       ...shadowcat
         .shadowcatSetup(seatView(s, seat), { makePiece })
+        .map((e) => ({ ...e, actorId: seat.id })),
+      ...psylocke
+        .psylockeSetup(seatView(s, seat))
         .map((e) => ({ ...e, actorId: seat.id })),
       ...wolverine
         .wolverineSetup(seatView(s, seat))
@@ -6154,7 +6292,8 @@ export function playable(s: GameState, p: Piece): string | null {
   if (
     c.type_code === "event" &&
     c.text?.includes("(attack)") &&
-    vision.visionEventAction(s, p) !== "thwart" &&
+    (angel.angelEventAction(s, p) || vision.visionEventAction(s, p)) !==
+      "thwart" &&
     (!vision.visionCanAttack(s) ||
       !shadowcat.shadowcatCanAttack(s, shadowcatPorts) ||
       !cyclops.cyclopsCanAttack(s))
@@ -6214,8 +6353,12 @@ export function playable(s: GameState, p: Piece): string | null {
     starLord.starLordPlayRestriction(s, p) ||
     gamora.gamoraPlayRestriction(s, p, gamoraPorts) ||
     drax.draxPlayRestriction(s, p, draxPorts) ||
+    gambit.gambitPlayRestriction(s, p, gambitPorts) ||
     cyclops.cyclopsPlayRestriction(s, p, cyclopsPorts) ||
+    psylocke.psylockePlayRestriction(s, p, psylockePorts) ||
+    rogue.roguePlayRestriction(s, p, roguePorts) ||
     wolverine.wolverinePlayRestriction(s, p, wolverinePorts) ||
+    angel.angelPlayRestriction(s, p, angelPorts) ||
     storm.stormPlayRestriction(s, p, stormPorts) ||
     colossus.colossusPlayRestriction(s, p, colossusPorts) ||
     shadowcat.shadowcatPlayRestriction(s, p, shadowcatPorts) ||
@@ -6566,6 +6709,7 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
     ];
 }
 function nativeCardPlayCommitted(s: GameState, p: Piece) {
+  angel.angelCardPlayed(s, p);
   const playToken = `play:${s.nextId++}`;
   miles.milesCardPlayCommitted(s, p, playToken);
   nova.novaCardPlayCommitted(s, p, playToken);
@@ -6688,6 +6832,17 @@ function play(
     niPackPorts,
   );
   if (c.type_code === "event") {
+    for (const key of Object.keys(s.flags))
+      if (
+        [
+          `psylockeDirected:${p.id}`,
+          `psylockeDirectedBonus:${p.id}`,
+          `psylockeIllusionChecked:${p.id}`,
+          `psylockeIllusionTarget:${p.id}`,
+        ].includes(key) ||
+        key.startsWith(`psylockeIllusionChecked:${p.id}:`)
+      )
+        delete s.flags[key];
     delete s.flags[`wolverineWarriorBonus:${p.id}`];
     for (const key of Object.keys(s.flags))
       if (key.startsWith(`wolverineWarriorUsed:${p.id}:`)) delete s.flags[key];
@@ -6764,6 +6919,9 @@ function play(
         niPlayed,
       }),
     );
+  } else if (isPlayerSideScheme(p)) {
+    Object.assign(p, resetPiece(p, true));
+    add(s, ...enterPlayerSideScheme(s, p));
   } else {
     const healthBefore = maxHP(s);
     Object.assign(p, resetPiece(p, true));
@@ -6772,6 +6930,8 @@ function play(
     s.player.inPlay.push(p);
     cyclops.cyclopsEffectiveLeadership(s, p);
     if (p.code === "36019") p.counters = 3;
+    if (p.code === "37013") p.counters = 3;
+    rogue.rogueCardEntered(s, p, false);
     miles.milesCardEntered(s, p);
     add(s, ...ghostSpider.ghostSpiderCardEntered(s, p));
     if (attachedTarget && ["22032", "22035", "23035"].includes(p.code))
@@ -6785,8 +6945,11 @@ function play(
     );
     add(
       s,
+      ...psylocke.psylockeCardEntered(s, p),
+      ...angel.angelCardEntered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
       ...phoenix.phoenixCardEntered(s, p),
+      ...rogue.rogueCardEntered(s, p, fromHand),
       ...wolverine
         .wolverineCardEntered(s, p, false)
         .filter(() => !["35003", "35014"].includes(p.code)),
@@ -6873,6 +7036,18 @@ function play(
           starLordPackPorts,
         ),
       );
+    if (p.code === "42023" && s.playerCount > 1)
+      choosePlayer(
+        s,
+        c.name,
+        [E("transferUpgrade", { id: p.id })],
+        playerOrder(s).filter(
+          (seat) =>
+            !seatView(s, seat).player.inPlay.some(
+              (q) => q.code === p.code && q.id !== p.id,
+            ),
+        ),
+      );
     if (p.code === "36018" && s.playerCount > 1)
       choosePlayer(
         s,
@@ -6956,6 +7131,14 @@ function allyEnter(
   if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
     giveCharacterStatus(s, p, "tough");
   if (isTextBlank(s, p)) return;
+  if (p.code === "41003") {
+    add(s, ...psylocke.psylockeCardEntered(s, p, fromHand));
+    return;
+  }
+  if (p.code === "37012") {
+    add(s, ...gambit.gambitEntered(s, p));
+    return;
+  }
   if (["35003", "35014"].includes(p.code)) {
     add(s, ...wolverine.wolverineCardEntered(s, p, fromHand));
     return;
@@ -7200,8 +7383,12 @@ function event(
   syncPaid = 0,
 ) {
   const ant =
+    psylocke.psylockeEvent(s, p, paid) ??
+    gambit.gambitEvent(s, p) ??
     cyclops.cyclopsEvent(s, p) ??
+    rogue.rogueEvent(s, p) ??
     wolverine.wolverineEvent(s, p) ??
+    angel.angelEvent(s, p) ??
     storm.stormEvent(s, p) ??
     colossus.colossusEvent(s, p) ??
     shadowcat.shadowcatEvent(s, p) ??
@@ -7506,7 +7693,7 @@ function event(
 }
 export function canChangeIdentityForm(
   s: GameState,
-  target?: "alter" | "hero" | "tiny" | "giant",
+  target?: "alter" | "hero" | "tiny" | "giant" | "angel" | "archangel",
 ) {
   const to = target
     ? target === "alter"
@@ -7514,7 +7701,7 @@ export function canChangeIdentityForm(
       : "hero"
     : s.player.form === "alter"
       ? "hero"
-      : ["ant", "wsp"].includes(s.heroId)
+      : ["ant", "wsp", "angel"].includes(s.heroId)
         ? "hero"
         : "alter";
   return (
@@ -7533,9 +7720,11 @@ export function canChangeIdentityForm(
 function flip(
   s: GameState,
   counts = true,
-  target?: "alter" | "tiny" | "giant",
+  target?: "alter" | "tiny" | "giant" | "angel" | "archangel",
 ) {
   const previousForm = s.player.form;
+  const wasMutant =
+    previousForm === "alter" && captainPackHasTrait(s, "hero", "Mutant");
   if (!canChangeIdentityForm(s, target)) {
     need(
       !counts,
@@ -7550,7 +7739,44 @@ function flip(
     return;
   }
   if (counts) need(!s.player.flipped, "You already changed form this turn.");
-  if (["ant", "wsp"].includes(s.heroId)) {
+  if (s.heroId === "angel") {
+    const current = angel.angelForm(s);
+    if (!target) {
+      choose(
+        s,
+        "Change form",
+        "Choose Angel's next form.",
+        (["alter", "angel", "archangel"] as const)
+          .filter((form) => form !== current && canChangeIdentityForm(s, form))
+          .map((form) =>
+            option(
+              form,
+              form === "alter"
+                ? "Warren Worthington III"
+                : form === "angel"
+                  ? "Angel"
+                  : "Archangel",
+              [E("flip", { counts, target: form })],
+              undefined,
+              form === "alter"
+                ? "42001b"
+                : form === "angel"
+                  ? "42001a"
+                  : "42001c",
+            ),
+          ),
+        counts,
+      );
+      return;
+    }
+    need(
+      ["alter", "angel", "archangel"].includes(target) && target !== current,
+      "Choose a different Angel form.",
+    );
+    s.player.form = target === "alter" ? "alter" : "hero";
+    if (target === "angel" || target === "archangel")
+      s.player.angelForm = target;
+  } else if (["ant", "wsp"].includes(s.heroId)) {
     const profile = HEROES.find((h) => h.id === s.heroId)!;
     const giantCode = s.heroId === "ant" ? "12001c" : "13001c";
     const current =
@@ -7585,7 +7811,7 @@ function flip(
     if (!canChangeIdentityForm(s, target)) return;
     need(current !== target, "Choose a different form.");
     s.player.form = target === "alter" ? "alter" : "hero";
-    if (target !== "alter") s.player.heroForm = target;
+    if (target === "tiny" || target === "giant") s.player.heroForm = target;
   } else {
     need(
       !target || target === "alter",
@@ -7596,6 +7822,7 @@ function flip(
   if (counts) s.player.flipped = true;
   spdr.spdrChangedForm(s, previousForm, s.player.form);
   add(s, ...phoenix.phoenixFormChanged(s));
+  add(s, ...rogue.rogueFormChanged(s, wasMutant, roguePorts));
   if (s.player.spiderHamIdentity)
     s.player.spiderHamIdentity.code =
       s.player.form === "hero" ? "30001a" : "30001b";
@@ -7838,6 +8065,7 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   const phoenixBonus = phoenix.phoenixAllyModifiers(s, p);
   const noir = spdrPack.spdrPackAllyStats(s, p, spdrPackPorts);
   return (
+    gambit.gambitAllyBonus(s, p, kind) +
     cyclops.cyclopsCharacterModifiers(s, p.id)[kind] +
     (kind === "attack" ? storm.stormGlobal(s).attack : 0) +
     (p.code === "31003" && !isTextBlank(s, p) ? p.counters : 0) +
@@ -7907,6 +8135,15 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   );
 }
 function ability(s: GameState, id: string, action = "special") {
+  const angelOptions = angel.angelAbilityOptions(s, id, angelPorts);
+  const angelSelected =
+    action === "special"
+      ? angelOptions[0]
+      : angelOptions.find((o) => o.id === action);
+  if (angelSelected) {
+    add(s, ...angelSelected.effects);
+    return;
+  }
   const stormOptions = storm.stormAbilityOptions(s, id, stormPorts);
   const stormSelected =
     action === "special"
@@ -8016,6 +8253,16 @@ function ability(s: GameState, id: string, action = "special") {
   if (ghostSpider.ghostSpiderAbility(s, id, ghostSpiderPorts, action)) return;
   if (id === "identity" && nova.novaHeroAbility(s, novaPorts, action)) return;
   if (nova.novaAbility(s, id, novaPorts, action)) return;
+  const gambitAbility = gambit.gambitAbility(
+    s,
+    id,
+    action === "special" ? undefined : action,
+    gambitPorts,
+  );
+  if (gambitAbility !== null) {
+    add(s, ...gambitAbility);
+    return;
+  }
   const cyclopsAbility = cyclops.cyclopsAbility(
     s,
     id,
@@ -8024,6 +8271,16 @@ function ability(s: GameState, id: string, action = "special") {
   );
   if (cyclopsAbility !== null) {
     add(s, ...cyclopsAbility);
+    return;
+  }
+  const psylockeAbility = psylocke.psylockeAbility(
+    s,
+    id,
+    action,
+    psylockePorts,
+  );
+  if (psylockeAbility !== null) {
+    add(s, ...psylockeAbility);
     return;
   }
   const wolverineAbility = wolverine.wolverineAbility(
@@ -8044,6 +8301,13 @@ function ability(s: GameState, id: string, action = "special") {
   );
   if (colossusAbility !== null) {
     add(s, ...colossusAbility);
+    return;
+  }
+  const rogueOption = rogue
+    .rogueAbilityOptions(s, id, roguePorts)
+    .find((o) => o.id === action);
+  if (rogueOption) {
+    add(s, ...rogueOption.effects);
     return;
   }
   const phoenixAbility = phoenix.phoenixAbility(s, id, action, phoenixPorts);
@@ -8954,6 +9218,7 @@ function activationAmplify(s: GameState): number {
   ).length;
 }
 function activationBoostValue(s: GameState, id: string, code?: string): number {
+  if (!s.scheming && s.attack?.angelIgnoreBoosts) return 0;
   const activation = s.scheming || s.attack;
   const printedCode = code || s.resolving.find((p) => p.id === id)?.code;
   return (
@@ -10044,7 +10309,7 @@ const gamoraPackPorts: gamoraPack.GamoraPackPorts = {
   heroThwart: (s) => heroStats(s).thwart,
   enemyUnique: (s, target) =>
     !!card(target === s.villain.id ? s.villain : find(s, target) || "")
-      .is_unique,
+      ?.is_unique,
 };
 function discardNativePlayerTop(s: GameState) {
   const length = s.player.deck.length;
@@ -10304,10 +10569,13 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
     Object.assign(p, resetPiece(p, true));
     s.player.inPlay.push(p);
     s.player.hp += maxHP(s) - before;
+    rogue.rogueCardEntered(s, p, false);
     miles.milesCardEntered(s, p);
     add(s, ...ghostSpider.ghostSpiderCardEntered(s, p));
     add(
       s,
+      ...psylocke.psylockeCardEntered(s, p),
+      ...angel.angelCardEntered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
       ...wolverine
         .wolverineCardEntered(s, p, false)
@@ -10591,7 +10859,10 @@ const mtsPlayerPackPorts: mtsPlayerPack.MtsPlayerPackPorts = {
       const view = seatView(s, id);
       return [
         ...new Set([
-          ...(heroCard(view).traits || "").split(/\.\s*/).filter(Boolean),
+          ...(heroCard(view).traits || "")
+            .replace(/\.$/, "")
+            .split(/\.\s+/)
+            .filter(Boolean),
           ...starLord.starLordHeroTraits(view),
           ...(aerial(view) ? ["Aerial"] : []),
         ]),
@@ -11028,6 +11299,7 @@ const gmwPorts: gmwPack.GmwPlayerPackPorts = {
 };
 export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
   return [
+    ...angel.angelAbilityOptions(s, id, angelPorts),
     ...storm.stormAbilityOptions(s, id, stormPorts),
     ...antMan.antManAbilityOptions(s, id, antManPorts),
     ...antPack.antManPackAbilityOptions(s, id, antPackPorts),
@@ -11058,13 +11330,16 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...ghostSpider.ghostSpiderAbilityOptions(s, id, ghostSpiderPorts),
     ...(id === "identity" ? nova.novaHeroAbilityOptions(s, novaPorts) : []),
     ...nova.novaAbilityOptions(s, id, novaPorts),
+    ...gambit.gambitAbilityOptions(s, id, gambitPorts),
     ...cyclops.cyclopsAbilityOptions(s, id, cyclopsPorts),
+    ...psylocke.psylockeAbilityOptions(s, id, psylockePorts),
     ...wolverine.wolverineAbilityOptions(s, id, wolverinePorts),
     ...colossus.colossusAbilityOptions(s, id, colossusPorts),
     ...sabretooth.sabretoothActionOptions(s, id, sabretoothPorts),
     ...(find(s, id)
       ? ironspider.ironspiderSinisterActions(s, find(s, id)!, ironspiderPorts)
       : []),
+    ...rogue.rogueAbilityOptions(s, id, roguePorts),
     ...phoenix.phoenixAbilityOptions(s, id, phoenixPorts),
     ...spdr.spdrAbilityOptions(s, id, spdrPorts),
     ...mgPack.mutantGenesisPlayerPackAbilityOptions(
@@ -11149,6 +11424,7 @@ const thorPorts: ThorEnginePorts = {
         { token: `engagement:${s.nextId++}`, minionId: p.id, playerId },
         { isTextBlank },
       ),
+      ...rogue.rogueMinionEngaged(s, p),
       ...spiderHam.spiderHamMinionEngaged(s, p, playerId),
       ...ironspider.ironspiderSinisterEngagementResponses(s, p, playerId),
       E("valkPackEngagementWindow", { id: p.id, actorId: playerId }),
@@ -11423,6 +11699,219 @@ const ironspiderPorts: ironspider.IronspiderSinisterPorts = {
       }),
     );
   },
+};
+
+function rogueNativeTraits(
+  s: GameState,
+  id: string,
+  visited: string[] = [],
+): string[] {
+  const seatId =
+    id === "hero"
+      ? s.activePlayerId
+      : id.startsWith("hero:")
+        ? id.slice(5)
+        : undefined;
+  if (seatId) {
+    const seat = s.players.find((p) => p.id === seatId && !p.eliminated);
+    if (!seat) return [];
+    const view = seatView(s, seat);
+    return [
+      ...new Set([
+        ...(heroCard(view).traits || "")
+          .replace(/\.$/, "")
+          .split(/\.\s+/)
+          .filter(Boolean),
+        ...(aerial(view, visited) ? ["Aerial"] : []),
+        ...rogue.rogueTraits(view, rogueNativeTraits, visited),
+      ]),
+    ];
+  }
+  const p = find(s, id);
+  return p ? sinisterNativeTraits(s, p) : [];
+}
+/** FIND includes facedown player cards beneath scenario cards and Ultron drones,
+ * but never the victory display or removed-from-game area (RRG 1.8, p.19).
+ * Only canonical physical zones are searched, not effect/receipt snapshots. */
+function rogueTouchedLocation(s: GameState) {
+  type Location = {
+    piece: Piece;
+    zone?: Piece[];
+    deck?: Piece[];
+    inPlay?: boolean;
+    drone?: Piece;
+  };
+  const zones: { zone: Piece[]; deck?: Piece[]; inPlay?: boolean }[] = [];
+  for (const seat of s.players) {
+    const p = seatView(s, seat).player;
+    zones.push(
+      { zone: p.inPlay, inPlay: true },
+      { zone: p.setAside || [] },
+      { zone: p.hand },
+      { zone: p.discard },
+      { zone: p.deck, deck: p.deck },
+      { zone: p.invocationDeck || [], deck: p.invocationDeck },
+      { zone: p.invocationDiscard || [] },
+    );
+  }
+  zones.push(
+    { zone: s.minions, inPlay: true },
+    { zone: s.sideSchemes, inPlay: true },
+    { zone: s.attachments, inPlay: true },
+    { zone: s.environments || [], inPlay: true },
+    { zone: s.resolving },
+    { zone: s.encounter.discard },
+    { zone: s.encounter.dealt },
+    { zone: s.encounter.storedBoosts || [] },
+    { zone: s.attack?.pendingBoosts || [] },
+    { zone: s.scheming?.pendingBoosts || [] },
+    { zone: s.encounter.deck, deck: s.encounter.deck },
+    { zone: s.projectWideawake?.setAsideCaptives || [] },
+    { zone: [s.villain] },
+  );
+  const matches = (p: Piece) =>
+    p.code === "38002" && p.ownerId === s.activePlayerId;
+  const search = (
+    location: Omit<Location, "piece"> & { zone: Piece[] },
+  ): Location | undefined => {
+    for (const p of location.zone) {
+      if (matches(p)) return { ...location, piece: p };
+      if (p.droneCard && matches(p.droneCard))
+        return { piece: p.droneCard, drone: p };
+      for (const zone of [p.storedCards, p.captured, p.inheritorBoosts]) {
+        const nested = zone && search({ zone });
+        if (nested) return nested;
+      }
+    }
+  };
+  for (const location of zones) {
+    const found = search(location);
+    if (found) return found;
+  }
+}
+function rogueFindTouched(s: GameState): Piece | undefined {
+  const found = rogueTouchedLocation(s);
+  if (!found) return;
+  const { piece, zone, deck, inPlay, drone } = found;
+  if (zone === s.player.setAside) return piece;
+  if (inPlay) {
+    movePieceFromPlay(s, piece.id, false, s.activePlayerId);
+    return s.player.setAside?.find((p) => p.id === piece.id);
+  }
+  if (drone) {
+    // The recovered player card is not discarded with its synthetic wrapper.
+    // Ordinary leave-play cleanup still removes attachments and trait grants;
+    // this is not a defeat and awards no defeat response or mission credit.
+    delete drone.droneCard;
+    movePieceFromPlay(s, drone.id, false);
+    if (find(s, drone.id)) {
+      drone.droneCard = piece;
+      return;
+    }
+  } else
+    zone!.splice(
+      zone!.findIndex((p) => p.id === piece.id),
+      1,
+    );
+  if (deck) {
+    revealHidden(s);
+    shuffle(s, deck);
+  }
+  const recovered = resetPiece(piece);
+  (s.player.setAside ||= []).push(recovered);
+  return recovered;
+}
+const roguePorts: rogue.RoguePorts = {
+  queue: add,
+  choose,
+  makePiece,
+  targets: (s, kind, action) =>
+    kind === "character"
+      ? [...spdrPackPorts.characterTargets(s), ...targets(s, "enemy")]
+      : targets(
+          s,
+          kind,
+          kind === "enemy" && !!action,
+          kind === "scheme" && !!action,
+        ),
+  traits: rogueNativeTraits,
+  hasTrait: sinisterNativeHasTrait,
+  keyword: (s, name) => sourceKeyword(s, "hero", name as PrintedKeyword),
+  canPay: (s, p) => canPay(s, cardCost(s, card(p), p), [], p.id, p.code),
+  playReaction: (s, p, effects, after) =>
+    add(
+      s,
+      E("payRequest", {
+        title: card(p).name,
+        cost: cardCost(s, card(p), p),
+        piece: p,
+        cancelable: true,
+        after: [
+          E("resolveHandEvent", {
+            id: p.id,
+            after: effects,
+            continuation: after,
+          }),
+        ],
+        cancellationQueue: after,
+      }),
+    ),
+  discard: discardPiece,
+  findTouched: rogueFindTouched,
+  canFindTouched: (s, asCost) => {
+    const location = rogueTouchedLocation(s);
+    if (!location) return false;
+    // Energy Transfer must actually attach Touched to pay its arrow cost.
+    // A mandatory Psionic Shield replacement prevents that move from a drone.
+    return (
+      !asCost ||
+      !location.drone ||
+      !s.attachments.some(
+        (p) =>
+          p.code === "37034" &&
+          p.attachedTo === location.drone!.id &&
+          !isTextBlank(s, p),
+      )
+    );
+  },
+  shufflePlayer: (s) => {
+    revealHidden(s);
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  revealHidden,
+  damageCost: (s, id, amount) => {
+    dealDamage(s, id, amount, "38007");
+    return true;
+  },
+  claimDefense: (s) => {
+    if (s.attack) {
+      s.attack.defender = "hero";
+      s.attack.targetPlayerId = s.activePlayerId;
+      s.attack.basicDefense = false;
+      s.attack.defense = 0;
+      s.attack.eventDefense = true;
+    }
+  },
+  playStored: (s, lab, p) => {
+    const restriction = playable(s, p);
+    need(!restriction, restriction || "The stored ally cannot be played.");
+    add(
+      s,
+      E("payRequest", {
+        title: "Med Lab",
+        cost: cardCost(s, card(p), p),
+        piece: p,
+        cancelable: true,
+        commit: [{ type: "rogue:med-commit", id: lab.id }],
+        after: [{ type: "rogueNativeMedPlay", id: p.id, labId: lab.id }],
+      }),
+    );
+  },
+  activate: (s, id, playerId) =>
+    mystiquePorts.activateMystique(s, id, playerId, []),
+  discardUntil: (s, trait, after) =>
+    brotherhoodPorts.discardUntilMinion(s, trait, after),
 };
 
 const phoenixPorts: phoenix.PhoenixPorts = {
@@ -13739,6 +14228,7 @@ function minionEntered(s: GameState, p: Piece) {
       },
       { isTextBlank },
     ),
+    ...rogue.rogueMinionEntered(s, p),
     ...acolytes.acolytesEngaged(s, p),
     ...ironspider.ironspiderSinisterEngagementResponses(s, p),
     ...spiderHam.spiderHamMinionEngaged(s, p),
@@ -13837,10 +14327,14 @@ function sinisterNativeHasTrait(s: GameState, id: string, trait: string) {
     ? heroCard(seatView(s, identityId))
     : card(find(s, id)!);
   return (
+    (trait === "X-Force" && angel.angelRecruitBonus(s, id) > 0) ||
     (trait === "S.H.I.E.L.D." && !!printed.traits?.includes(trait)) ||
     captainPackHasTrait(s, id, trait) ||
     (!!identityId &&
-      phoenix.phoenixTraits(seatView(s, identityId)).includes(trait))
+      (phoenix.phoenixTraits(seatView(s, identityId)).includes(trait) ||
+        rogue
+          .rogueTraits(seatView(s, identityId), rogueNativeTraits)
+          .includes(trait)))
   );
 }
 function sinisterNativePiece(s: GameState, id: string) {
@@ -15259,6 +15753,8 @@ const nebulaPorts: nebula.NebulaPorts = {
       s.player.inPlay.push(p);
       add(
         s,
+        ...psylocke.psylockeCardEntered(s, p),
+        ...angel.angelCardEntered(s, p),
         ...cyclops.cyclopsCardEntered(s, p),
         ...wolverine
           .wolverineCardEntered(s, p, false)
@@ -15362,6 +15858,68 @@ function colossusNativeDiscardTough(
   );
 }
 
+const gambitPorts: gambit.GambitPorts = {
+  queue: add,
+  choose,
+  enemies: (s, attack) => targets(s, "enemy", attack),
+  schemes: (s, thwart) => targets(s, "scheme", false, thwart),
+  hasTrait: sinisterNativeHasTrait,
+  canReady: canReadyIdentity,
+  pay: (s, title, cost, after, requirements = [], commit = []) =>
+    requestPayment(
+      s,
+      title,
+      cost,
+      after,
+      requirements,
+      undefined,
+      true,
+      undefined,
+      false,
+      commit,
+    ),
+  canPay: (s, p) => canPay(s, cardCost(s, card(p), p), [], p.id, p.code),
+  reactionEvents: eventPlaySources,
+  reaction: (s, p, effects, after) => {
+    requestPayment(
+      s,
+      card(p).name,
+      cardCost(s, card(p), p),
+      [
+        E("resolveHandEvent", {
+          id: p.id,
+          after: effects,
+          continuation: after,
+        }),
+      ],
+      [],
+      p,
+      true,
+    );
+    if (s.prompt?.cancelable)
+      s.prompt.cancellationQueue = [...after, ...s.queue];
+  },
+  attack: niAttackProgram,
+  makePiece,
+  discard: discardPiece,
+  shufflePlayer: (s) => {
+    revealHidden(s);
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  hidden: revealHidden,
+  attach: (s, p, target) => {
+    removeEncounterInstance(s, p.id);
+    mutagenPorts.attach(s, p, target);
+  },
+  keepObligation: (s, p) =>
+    spectrumPorts.giveObligation(s, p, s.activePlayerId),
+  removeObligation: (s, p) => {
+    s.player.inPlay = s.player.inPlay.filter((q) => q.id !== p.id);
+    removeEncounterInstance(s, p.id);
+    s.removed.push(p);
+  },
+};
 const cyclopsPorts: cyclops.CyclopsPorts = {
   queue: add,
   choose,
@@ -15452,6 +16010,62 @@ const cyclopsPorts: cyclops.CyclopsPorts = {
   revealHidden,
 };
 
+const psylockePorts: psylocke.PsylockePorts = {
+  ...antManPorts,
+  attackProgram: niAttackProgram,
+  makePiece,
+  hasTrait: captainPackHasTrait,
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  pay: (s, title, cost, req, after) =>
+    requestPayment(s, title, cost, after, req, undefined, true),
+  playReaction: (s, p, effects, after) => {
+    requestPayment(
+      s,
+      card(p).name,
+      cardCost(s, card(p), p),
+      [
+        E("resolveHandEvent", {
+          id: p.id,
+          after: effects,
+          continuation: after,
+        }),
+      ],
+      [],
+      p,
+      true,
+    );
+    if (s.prompt?.cancelable)
+      s.prompt.cancellationQueue = [...after, ...s.queue];
+  },
+  shufflePlayer: warMachinePortsShufflePlayer,
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  discardTop: discardNativePlayerTop,
+  friendlyTargets: (s) => targets(s, "friendly"),
+  transferControl: venomPackPorts.transferControl,
+  dealEncounter,
+  indirect: (s, amount, source) =>
+    zzzaxPorts.indirect(s, {
+      playerId: s.activePlayerId,
+      amount,
+      sourceId: source,
+      sourceTitle: "Telekinetic Dragon",
+    }),
+  keyword: (s, id, name) => !!sourceKeyword(s, id, name as PrintedKeyword),
+  prevent: (s, p, amount) => {
+    if (p.kind === "attack" && s.attack) s.attack.prevented += amount;
+    else if (p.kind === "overkill" && s.attack)
+      s.attack.identityPrevented = (s.attack.identityPrevented || 0) + amount;
+    else p.amount = Math.max(0, p.amount - amount);
+  },
+  declareDefense: (s) => {
+    if (s.attack && (!s.attack.defender || s.attack.defender === "none")) {
+      s.attack.defender = "hero";
+      s.attack.targetPlayerId = s.activePlayerId;
+      s.attack.basicDefense = false;
+      s.attack.eventDefense = true;
+    }
+  },
+};
 const wolverinePorts: wolverine.WolverinePorts = {
   ...antManPorts,
   attackProgram: niAttackProgram,
@@ -15511,6 +16125,144 @@ const wolverinePorts: wolverine.WolverinePorts = {
   canDiscardAttachment: (s, p) =>
     visionPorts.canDiscardAttachment?.(s, p) ?? !isPermanent(card(p)),
   transferControl: venomPackPorts.transferControl,
+};
+
+const angelPorts: angel.AngelPorts = {
+  queue: add,
+  choose,
+  find,
+  makePiece,
+  hasTrait: sinisterNativeHasTrait,
+  identityBlank: (s) =>
+    isTextBlank(s, { code: heroCard(s).code, id: `hero:${s.activePlayerId}` }),
+  maxHP,
+  permanent: (s, p) =>
+    isPermanent(card(p)) || zeroTolerance.zeroToleranceIsPermanent(s, p),
+  friendly: (s) => targets(s, "friendly"),
+  controlled: (s) => targets(s, "controlled"),
+  enemies: (s, attack) => targets(s, "enemy", attack),
+  schemes: (s, thwart, ignore) =>
+    ignore
+      ? [
+          { id: "main", label: card(s.scheme.code).name },
+          ...s.sideSchemes.map((p) => ({
+            id: p.id,
+            label: card(p).name,
+            code: p.code,
+          })),
+        ]
+      : targets(s, "scheme", false, thwart),
+  damage: (s, id) =>
+    id === "hero"
+      ? maxHP(s) - s.player.hp
+      : id.startsWith("hero:")
+        ? maxHP(seatView(s, id.slice(5))) - seatView(s, id.slice(5)).player.hp
+        : find(s, id)?.damage || 0,
+  canReady: (s, id) =>
+    id === "hero"
+      ? s.player.exhausted && canReadyIdentity(s)
+      : id.startsWith("hero:")
+        ? seatView(s, id.slice(5)).player.exhausted &&
+          canReadyIdentity(seatView(s, id.slice(5)))
+        : !!find(s, id)?.exhausted &&
+          nova.novaCanReadyPiece(s, find(s, id)!, { isTextBlank }),
+  ready: (s, id) => {
+    if (id === "hero") readyIdentity(s);
+    else if (id.startsWith("hero:")) readyIdentity(seatView(s, id.slice(5)));
+    else {
+      const p = find(s, id);
+      if (p && nova.novaCanReadyPiece(s, p, { isTextBlank }))
+        p.exhausted = false;
+    }
+  },
+  exhaust: (s, id) => {
+    if (id === "hero") s.player.exhausted = true;
+    else if (id.startsWith("hero:"))
+      seatView(s, id.slice(5)).player.exhausted = true;
+    else {
+      const p = find(s, id);
+      need(p && !p.exhausted, "A ready character is required.");
+      p!.exhausted = true;
+    }
+  },
+  heal,
+  discard: discardPiece,
+  shuffle: (s) => {
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  shuffleEncounter: (s) => {
+    s.encounter.deck = shuffle(s, s.encounter.deck);
+  },
+  cost: (s, p) => cardCost(s, card(p), p),
+  canPay: (s, p) => canPay(s, cardCost(s, card(p), p), [], p.id, p.code),
+  playReaction: (s, p, effects, after) =>
+    add(
+      s,
+      E("payRequest", {
+        title: card(p).name,
+        cost: cardCost(s, card(p), p),
+        piece: p,
+        cancelable: true,
+        after: [
+          E("resolveHandEvent", {
+            id: p.id,
+            after: effects,
+            continuation: after,
+          }),
+        ],
+        cancellationQueue: after,
+      }),
+    ),
+  canPlayAction: (s, p) =>
+    !playable(
+      {
+        ...s,
+        phase: "player",
+        prompt: null,
+        review: null,
+        turnPlayerId: s.activePlayerId,
+      },
+      p,
+    ),
+  playAction: requestPlay,
+  flip: (s, form) => flip(s, false, form),
+  attack: (s, id, after, taunt) => {
+    enemyAttack(s, id, undefined, {
+      playerId: s.activePlayerId,
+      enemyId: id,
+      kind: "attack",
+      modifier: 0,
+      after: E("angelAttackEnd", { after }),
+    });
+    if (taunt && s.attack?.attacker === id)
+      s.attack.angelTauntPlayerId = s.activePlayerId;
+  },
+  batch: spectrumPorts.damageBatch,
+  attach: (s, p, target) => {
+    removeEncounterInstance(s, p.id);
+    mutagenPorts.attach(s, p, target);
+  },
+  reveal: (s, p) => {
+    removeEncounterInstance(s, p.id);
+    add(s, E("reveal", { piece: p }));
+  },
+  cancelReveal: (s, p) => {
+    removeEncounterInstance(s, p.id);
+    s.queue = s.queue.filter(
+      (e) => !(e.type === "reveal" && e.piece?.id === p.id),
+    );
+    s.encounter.discard.push(resetPiece(p));
+  },
+  discardPlayerTop: (s) => {
+    const p = s.player.deck.shift();
+    if (p) s.player.discard.push(resetPiece(p));
+    if (!s.player.deck.length && p) {
+      s.player.deck = shuffle(s, s.player.discard.splice(0));
+      dealEncounter(s);
+    }
+    return p;
+  },
+  dealEncounter,
 };
 
 const stormPorts: storm.StormPorts = {
@@ -15886,6 +16638,7 @@ const shadowcatPorts: shadowcat.ShadowcatPorts = {
 const mutantGenesisPackPorts: mgPack.MutantGenesisPlayerPackPorts = {
   queue: add,
   attackEventTotalBonus: (s, eventId) =>
+    Number(s.flags[`gambitEvent:${eventId}`] || 0) +
     mgPack.mutantGenesisPlayerPackAttackEventBonus(s, eventId) +
     Number(s.flags[`niHoned:${eventId}`] || 0) +
     msMarvelEventAmountModifier(s, eventId, "damage"),
@@ -16188,14 +16941,19 @@ function mutantGenesisAttackOptions(
   };
   return playerOrder(s).flatMap((seat) => {
     const view = seatView(s, seat);
-    const opts = mgPack.mutantGenesisPlayerPackAttackOptions(
-      view,
-      receipt,
-      after,
-      mutantGenesisPackPorts,
-    );
+    if (a.angelTauntPlayerId && a.angelTauntPlayerId !== seat.id) return [];
+    const opts = mgPack
+      .mutantGenesisPlayerPackAttackOptions(
+        view,
+        receipt,
+        after,
+        mutantGenesisPackPorts,
+      )
+      .filter((o) => !a.angelTauntPlayerId || o.image !== "32017");
     if (stage === "attacks")
       opts.push(
+        ...angel.angelDefenseOptions(view, after, angelPorts),
+        ...rogue.rogueDefenseOptions(view, "attacks", after, roguePorts),
         ...storm.stormDefenseOptions(view, after, stormPorts),
         ...shadowcat.shadowcatDefenseOptions(view, [], after, shadowcatPorts),
       );
@@ -16224,18 +16982,19 @@ function mutantGenesisDamageOptions(
     damageWindowId: a.id,
   };
   return playerOrder(s).flatMap((seat) =>
-    mgPack
-      .mutantGenesisPlayerPackDamageOptions(
+    [
+      ...angel.angelDamageOptions(seatView(s, seat), packet, after, angelPorts),
+      ...mgPack.mutantGenesisPlayerPackDamageOptions(
         seatView(s, seat),
         packet,
         after,
         mutantGenesisPackPorts,
-      )
-      .map((o) => ({
-        ...o,
-        id: `${seat.id}:${o.id}`,
-        effects: o.effects.map((e) => ({ ...e, actorId: seat.id })),
-      })),
+      ),
+    ].map((o) => ({
+      ...o,
+      id: `${seat.id}:${o.id}`,
+      effects: o.effects.map((e) => ({ ...e, actorId: seat.id })),
+    })),
   );
 }
 function mutantGenesisIncomingPiercing(
@@ -16470,7 +17229,10 @@ function enemyAttack(
       (isVillain && !!villainAt(s, "01099").length) ||
       (!!nebulaSource && !!sourceKeyword(s, id, "Overkill")),
     extra,
-    modifier: (activation?.modifier || 0) + novaModifiers.attack,
+    modifier:
+      (activation?.modifier || 0) +
+      novaModifiers.attack +
+      psylocke.psylockeActivationBonus(s, id),
     omitNormalBoost: activation?.omitNormalBoost,
     activationAfter: activation?.after,
     attackerSnapshot: structuredClone(p),
@@ -16533,6 +17295,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
   if (enemyDashPower(p, "attack")) return 0;
   if (riskyBlankPower(s, "attack", p.id)) return 0;
   const bonus =
+    angel.angelEnemyAttackModifier(s, p, angelPorts) +
     cyclops.cyclopsEnemyAttackModifier(s, p.id) +
     (p.bonusAtk || 0) +
     mutagenAttackModifiers(s, p).goblinNation +
@@ -16704,6 +17467,7 @@ function declareDefense(s: GameState) {
   for (const seat of playerOrder(s)) {
     if (armadillo.armadilloDefenseBlocked(s, a.attacker)) break;
     const view = seatView(s, seat);
+    if (a.angelTauntPlayerId && a.angelTauntPlayerId !== seat.id) continue;
     if (
       view.player.form === "hero" &&
       !view.player.exhausted &&
@@ -16723,7 +17487,9 @@ function declareDefense(s: GameState) {
           heroCard(view).code,
         ),
       );
-    for (const ally of friends(view).filter((p) => !p.exhausted))
+    for (const ally of friends(view).filter(
+      (p) => !p.exhausted && !a.angelTauntPlayerId,
+    ))
       opts.push(
         option(
           ally.id,
@@ -16753,6 +17519,12 @@ function declareDefense(s: GameState) {
   );
 }
 function boostEffects(s: GameState, p: Piece) {
+  if (!s.scheming && s.attack?.angelIgnoreBoosts) return;
+  const angelBoost = angel.angelBoost(s, p);
+  if (angelBoost !== null) {
+    add(s, ...angelBoost);
+    return;
+  }
   const mutantScenarioBoost =
     magneto.magnetoBoost(s, p) ??
     acolytes.acolytesBoost(s, p) ??
@@ -16776,9 +17548,19 @@ function boostEffects(s: GameState, p: Piece) {
     const activation = s.scheming || s.attack;
     if (activation) (activation.retainedBoostIds ||= []).push(p.id);
   }
+  const gambitBoost = gambit.gambitBoost(s, p);
+  if (gambitBoost !== null) {
+    add(s, ...gambitBoost);
+    return;
+  }
   const cyclopsBoost = cyclops.cyclopsBoost(s, p);
   if (cyclopsBoost !== null) {
     add(s, ...cyclopsBoost);
+    return;
+  }
+  const psylockeBoost = psylocke.psylockeBoost(s, p);
+  if (psylockeBoost !== null) {
+    add(s, ...psylockeBoost);
     return;
   }
   const wolverineBoost = wolverine.wolverineBoost(s, p);
@@ -17071,7 +17853,8 @@ function enemyScheme(
     boostIds: [],
     pendingBoosts,
     extra,
-    modifier: request?.modifier || 0,
+    modifier:
+      (request?.modifier || 0) + psylocke.psylockeActivationBonus(s, id),
     activationAfter: request?.after,
   };
   add(
@@ -17352,6 +18135,27 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
       : find(s, target)
         ? pieceHP(s, find(s, target)!) - find(s, target)!.damage
         : 0;
+  if (p && damage > 0 && angel.angelIndirectAttack(s, p)) {
+    add(
+      s,
+      E("indirect", {
+        amount: damage,
+        source: a.attacker,
+        sourceTitle: "Hook, Line, and Sinker",
+        zzzaxBatchId: `angel-attack:${s.nextId++}`,
+        zzzaxBatchOwner: s.activePlayerId,
+        attackDamage: true,
+        exhaustDamaged: true,
+        zzzaxAfter: E("ironspiderAttackComplete", {
+          attack: structuredClone(a),
+          target,
+          before,
+          recipientId: s.activePlayerId,
+        }),
+      }),
+    );
+    return;
+  }
   if (target === "hero") {
     const forced = spdrPack.spdrPackForcedDamage(
       s,
@@ -17363,6 +18167,12 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
       return;
     }
   }
+  if (
+    s.flags[`rogueBelle:${a.id}`] &&
+    a.base > a.defense &&
+    (a.piercing || sourceKeyword(s, a.attacker, "Piercing"))
+  )
+    colossusNativeDiscardTough(s, [{ targetId: target, amount: 1 }], [], true);
   const phoenixShield = phoenix.phoenixForcedDamage(
     s,
     { ...effect, target, amount: damage, kind: "attack" },
@@ -17696,6 +18506,12 @@ function finishAttackAfterDamage(
     );
   add(
     s,
+    ...gambit.gambitEnemyAfter(
+      s,
+      p?.code || a.attackerSnapshot?.code || "",
+      target,
+      !p || isTextBlank(s, p),
+    ),
     ...wolverine.wolverineAfterEnemyAttack(s, {
       enemyCode: p?.code || a.attackerSnapshot?.code || "",
       target,
@@ -17748,6 +18564,13 @@ function finishAttackAfterDamage(
       {
         receipt: zeroReceipt,
         responses: [
+          ...angel
+            .angelAfterEnemyAttack(s, a.attacker)
+            .map((effect, index) => ({
+              id: `${a.id}:angel-after:${index}`,
+              title: "Harpoon’s Harpoon",
+              effects: [effect],
+            })),
           ...magneticAfter.map((effect, index) => ({
             id: `${a.id}:magneto-after:${index}`,
             title: "Magneto",
@@ -17897,6 +18720,7 @@ function finishAttackAfterDamage(
         actorId: s.firstPlayerId,
       },
     ),
+    ...rogue.rogueAfterEnemyAttack(s, a.attacker),
     ...a.boostEffects,
     ...(a.boostIds || []).map((id) => E("finishResolution", { id })),
     E("scarletEnemyActivated", {
@@ -18012,7 +18836,14 @@ function reveal(
       add(s, ...forced);
       return;
     }
-    const opts: Option[] = [];
+    const opts: Option[] = psylocke.psylockeRevealOptions(
+      s,
+      p,
+      fromEncounterDeck,
+      [E("reveal", { piece: p, skip: true, fromEncounterDeck, knifeSurge })],
+      psylockePorts,
+    );
+    opts.push(...angel.angelRevealOptions(s, p, angelPorts));
     const revealing = s.activePlayerId;
     for (const seat of playerOrder(s))
       opts.push(
@@ -18322,7 +19153,10 @@ function reveal(
   }
   if (
     !repeat &&
-    (magneto.MAGNETO_SCRIPT_CODES.some((code) => code === p.code) ||
+    ((rogue.REAVERS_SCRIPT_CODES.includes(p.code) &&
+      c.type_code !== "attachment") ||
+      ["38025", "38026"].includes(p.code) ||
+      magneto.MAGNETO_SCRIPT_CODES.some((code) => code === p.code) ||
       acolytes.ACOLYTES_SCRIPT_CODES.some((code) => code === p.code) ||
       mansionAttack.MANSION_ATTACK_SCRIPT_CODES.some(
         (code) => code === p.code,
@@ -18418,12 +19252,16 @@ function reveal(
       ...warMachine.WAR_MACHINE_SCRIPT_CODES,
       ...valkyrie.VALKYRIE_SCRIPT_CODES,
       ...vision.VISION_SCRIPT_CODES,
+      ...rogue.ROGUE_SCRIPT_CODES,
       ...phoenix.PHOENIX_SCRIPT_CODES,
       ...spdr.SPDR_SCRIPT_CODES,
       ...spiderHam.SPIDER_HAM_SCRIPT_CODES,
+      ...gambit.GAMBIT_SCRIPT_CODES,
       ...cyclops.CYCLOPS_SCRIPT_CODES,
+      ...psylocke.PSYLOCKE_SCRIPT_CODES,
       ...wolverine.WOLVERINE_SCRIPT_CODES,
       ...storm.STORM_SCRIPT_CODES,
+      ...angel.ANGEL_SCRIPT_CODES,
       ...colossus.COLOSSUS_SCRIPT_CODES,
     ].some((code) => code === p.code) ||
       CARDS.some(
@@ -18460,7 +19298,11 @@ function reveal(
       "32028",
       "35030",
       "35036",
+      "41028",
+      "38035",
       "36033",
+      "37034",
+      "42027",
     ].some((code) => code === p.code)
   ) {
     const window = beginRevealWindow(
@@ -18475,8 +19317,12 @@ function reveal(
       mutagenEncounterReveal(s, p) ??
       armadillo.armadilloReveal(s, p) ??
       zzzax.zzzaxReveal(s, p) ??
+      gambit.gambitEncounter(s, p) ??
       cyclops.cyclopsEncounterReveal(s, p) ??
+      psylocke.psylockeEncounterReveal(s, p) ??
       wolverine.wolverineEncounterReveal(s, p) ??
+      angel.angelEncounter(s, p) ??
+      rogue.rogueEncounterReveal(s, p) ??
       storm.stormEncounterReveal(s, p) ??
       colossus.colossusEncounterReveal(s, p) ??
       spiderHam.spiderHamEncounterReveal(s, p);
@@ -18522,6 +19368,9 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    psylocke.psylockeEncounterReveal(s, p) ??
+    angel.angelEncounter(s, p) ??
+    rogue.rogueEncounterReveal(s, p) ??
     storm.stormEncounterReveal(s, p) ??
     magneto.magnetoReveal(s, p, { isTextBlank }) ??
     acolytes.acolytesReveal(s, p) ??
@@ -18550,6 +19399,7 @@ function reveal(
     miles.milesEncounterReveal(s, p) ??
     ghostSpider.ghostSpiderEncounterReveal(s, p) ??
     nova.novaEncounterReveal(s, p) ??
+    gambit.gambitEncounter(s, p) ??
     cyclops.cyclopsEncounterReveal(s, p) ??
     colossus.colossusEncounterReveal(s, p) ??
     phoenix.phoenixEncounterReveal(s, p) ??
@@ -18792,6 +19642,10 @@ function reveal(
   if (keyword(p, "Surge")) add(s, E("surge", { sourceCode: p.code }));
 }
 function obligation(s: GameState, p: Piece) {
+  if (p.code === "42024") {
+    add(s, ...angel.angelEncounter(s, p)!);
+    return;
+  }
   if (p.code === "33027") {
     add(s, ...(cyclops.cyclopsEncounterReveal(s, p) || []));
     return;
@@ -18813,6 +19667,14 @@ function obligation(s: GameState, p: Piece) {
     return;
   }
   activateSeat(s, owner.id);
+  if (p.code === "41025") {
+    add(s, ...psylocke.psylockeEncounterReveal(s, p)!);
+    return;
+  }
+  if (p.code === "37025") {
+    add(s, ...gambit.gambitEncounter(s, p)!);
+    return;
+  }
   if (p.code === "35027") {
     add(s, ...wolverine.wolverineEncounterReveal(s, p)!);
     return;
@@ -18866,12 +19728,23 @@ function obligation(s: GameState, p: Piece) {
   );
 }
 function treachery(s: GameState, p: Piece) {
+  const psy = psylocke.psylockeEncounterReveal(s, p);
+  if (psy !== null) {
+    add(s, ...psy);
+    return;
+  }
+  const gambitReveal = gambit.gambitEncounter(s, p);
+  if (gambitReveal !== null) {
+    add(s, ...gambitReveal);
+    return;
+  }
   const wolverineReveal = wolverine.wolverineEncounterReveal(s, p);
   if (wolverineReveal !== null) {
     add(s, ...wolverineReveal);
     return;
   }
-  const stormReveal = storm.stormEncounterReveal(s, p);
+  const stormReveal =
+    angel.angelEncounter(s, p) ?? storm.stormEncounterReveal(s, p);
   if (stormReveal !== null) {
     add(s, ...stormReveal);
     return;
@@ -19151,6 +20024,16 @@ function treachery(s: GameState, p: Piece) {
       else surge();
       break;
     case "01190": {
+      const gambitNemesis = gambit.gambitShadows(s);
+      if (gambitNemesis !== null) {
+        add(s, ...gambitNemesis);
+        break;
+      }
+      const rogueNemesis = rogue.rogueShadows(s);
+      if (rogueNemesis !== null) {
+        add(s, ...rogueNemesis);
+        break;
+      }
       const cyclopsNemesis = cyclops.cyclopsShadowOfPast(s);
       if (cyclopsNemesis !== null) {
         add(s, ...cyclopsNemesis);
@@ -19161,10 +20044,20 @@ function treachery(s: GameState, p: Piece) {
         add(s, ...phoenixNemesis);
         break;
       }
+      const psyNemesis = psylocke.psylockeShadowOfPast(s);
+      if (psyNemesis !== null) {
+        add(s, ...psyNemesis);
+        return;
+      }
       const wolverineNemesis = wolverine.wolverineShadowOfPast(s);
       if (wolverineNemesis !== null) {
         add(s, ...wolverineNemesis);
         return;
+      }
+      const angelNemesis = angel.angelShadows(s);
+      if (angelNemesis !== null) {
+        add(s, ...angelNemesis);
+        break;
       }
       const stormNemesis = storm.stormShadows(s);
       if (stormNemesis !== null) {
@@ -19381,14 +20274,18 @@ function resolve(s: GameState, e: Effect) {
     advanceVillain(s, e.source, e.attack, e.captured);
     return;
   }
+  if (gambit.resolveGambitEffect(s, e, gambitPorts)) return;
   if (cyclops.resolveCyclopsEffect(s, e, cyclopsPorts)) return;
+  if (psylocke.resolvePsylockeEffect(s, e, psylockePorts)) return;
   if (wolverine.resolveWolverineEffect(s, e, wolverinePorts)) return;
+  if (angel.resolveAngelEffect(s, e, angelPorts)) return;
   if (storm.resolveStormEffect(s, e, stormPorts)) return;
   if (colossus.resolveColossusEffect(s, e, colossusPorts)) return;
   if (shadowcat.resolveShadowcatEffect(s, e, shadowcatPorts)) return;
   if (mgPack.resolveMutantGenesisPlayerPackEffect(s, e, mutantGenesisPackPorts))
     return;
   if (ironspider.resolveIronspiderSinisterEffect(s, e, ironspiderPorts)) return;
+  if (rogue.resolveRogueEffect(s, e, roguePorts)) return;
   if (phoenix.resolvePhoenixEffect(s, e, phoenixPorts)) return;
   if (spdr.resolveSpdrEffect(s, e, spdrPorts)) return;
   if (spdrPack.resolveSpdrPackEffect(s, e, spdrPackPorts)) return;
@@ -19506,14 +20403,18 @@ function resolve(s: GameState, e: Effect) {
           warMachine.warMachineEncounterReveal(state, piece) ??
           valkyrie.valkyrieEncounterReveal(state, piece) ??
           vision.visionEncounterReveal(state, piece) ??
+          psylocke.psylockeEncounterReveal(state, piece) ??
           wolverine.wolverineEncounterReveal(state, piece) ??
           shadowcat.shadowcatEncounterReveal(state, piece) ??
           miles.milesEncounterReveal(state, piece) ??
           ghostSpider.ghostSpiderEncounterReveal(state, piece) ??
           nova.novaEncounterReveal(state, piece) ??
+          gambit.gambitEncounter(state, piece) ??
           cyclops.cyclopsEncounterReveal(state, piece) ??
+          angel.angelEncounter(state, piece) ??
           storm.stormEncounterReveal(state, piece) ??
           colossus.colossusEncounterReveal(state, piece) ??
+          rogue.rogueEncounterReveal(state, piece) ??
           phoenix.phoenixEncounterReveal(state, piece) ??
           spdr.spdrEncounterReveal(state, piece) ??
           spiderHam.spiderHamEncounterReveal(state, piece) ??
@@ -19546,6 +20447,8 @@ function resolve(s: GameState, e: Effect) {
                     pieceId: piece.id,
                     playerId: spdrCompletedWindow.playerId,
                     resolved: spdrCompletedWindow.resolved.length > 0,
+                    whenRevealedResolved:
+                      spdrCompletedWindow.resolved.includes("text"),
                   },
                   actorId: spdrCompletedWindow.playerId,
                 }),
@@ -19748,6 +20651,13 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "scarletHeroThwartResponse": {
+      if (!e.psylockeHandled) {
+        add(s, ...psylocke.psylockeThwartFinished(s), {
+          ...e,
+          psylockeHandled: true,
+        });
+        break;
+      }
       if (!e.niPowerHandled) {
         add(
           s,
@@ -19959,6 +20869,15 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "eventResolve": {
+      if (!e.gambitThrowHandled) {
+        const before = gambit.gambitBeforeEvent(s, e.piece, [
+          { ...e, gambitThrowHandled: true },
+        ]);
+        if (before) {
+          add(s, ...before);
+          break;
+        }
+      }
       if (s.flags[`mtsPackPaymentCostPaid:${e.piece.id}`]) {
         delete s.flags[`mtsPackPaymentCostPaid:${e.piece.id}`];
         e.mtsPackAdditionalCostPaid = true;
@@ -20122,7 +21041,8 @@ function resolve(s: GameState, e: Effect) {
           break;
         }
       }
-      const visionAction = vision.visionEventAction(s, p);
+      const visionAction =
+        angel.angelEventAction(s, p) || vision.visionEventAction(s, p);
       const multipleLabels =
         !visionAction &&
         (c.text || "").match(
@@ -20443,27 +21363,31 @@ function resolve(s: GameState, e: Effect) {
       ];
       add(
         s,
-        ...msMarvelBeforeEvent(
+        ...gambit.gambitBeforeReaction(
           s,
           p,
-          statusCanceled
-            ? []
-            : doctorStrangeBeforeEvent(
-                s,
-                p,
-                [
-                  ...(eventDefenseDeclared
-                    ? [E("quicksilverLateDefense")]
-                    : []),
-                  ...eventEffects,
-                ].map((x: Effect) => ({
-                  ...x,
-                  paid: x.paid ?? e.paid ?? [],
-                  paidForCard: x.paidForCard ?? e.paidForCard,
-                  eventId: p.id,
-                  playToken,
-                })),
-              ),
+          msMarvelBeforeEvent(
+            s,
+            p,
+            statusCanceled
+              ? []
+              : doctorStrangeBeforeEvent(
+                  s,
+                  p,
+                  [
+                    ...(eventDefenseDeclared
+                      ? [E("quicksilverLateDefense")]
+                      : []),
+                    ...eventEffects,
+                  ].map((x: Effect) => ({
+                    ...x,
+                    paid: x.paid ?? e.paid ?? [],
+                    paidForCard: x.paidForCard ?? e.paidForCard,
+                    eventId: p.id,
+                    playToken,
+                  })),
+                ),
+          ),
         ),
         E("finishResolution", {
           id: p.id,
@@ -20479,6 +21403,30 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "basicPower": {
+      if (
+        !e.angelAcrobaticsHandled &&
+        !(e.power === "attack" ? s.player.stunned : s.player.confused)
+      ) {
+        const packet = {
+          ...e,
+          angelAcrobaticsHandled: true,
+          amount: e.amount ?? heroStats(s)[e.power as "attack" | "thwart"],
+        };
+        const options = angel.angelBasicOptions(
+          s,
+          "hero",
+          e.power,
+          [packet],
+          angelPorts,
+        );
+        if (options.length) {
+          choose(s, "Soaring Acrobatics", "Boost this basic power?", [
+            ...options,
+            option("continue", "Continue", [packet]),
+          ]);
+          break;
+        }
+      }
       const power = e.power as "attack" | "thwart";
       const extraCost = power === "attack" ? wasp.waspBasicAttackCost(s) : 0;
       if (extraCost && !e.costPaid) {
@@ -20495,6 +21443,26 @@ function resolve(s: GameState, e: Effect) {
           [E("exhaust", { id: "hero" })],
         );
         break;
+      }
+      if (
+        !e.psylockeBasicHandled &&
+        !(power === "attack" ? s.player.stunned : s.player.confused)
+      ) {
+        const opts = psylocke.psylockeBasicOptions(s, e);
+        if (opts.length) {
+          choose(
+            s,
+            "Psi-Energy Control",
+            "Flip one Psi-Energy upgrade before this basic power?",
+            [
+              ...opts,
+              option("continue", "Continue without flipping", [
+                { ...e, psylockeBasicHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
       }
       e.basicUseToken ||= `basic:${s.nextId++}`;
       e.basicWasHero ??= s.player.form === "hero";
@@ -21099,6 +22067,13 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "heroAttackResponses":
+      if (!e.psylockeHandled) {
+        add(s, ...psylocke.psylockeAttackFinished(s, e, psylockePorts), {
+          ...e,
+          psylockeHandled: true,
+        });
+        break;
+      }
       if (
         (e.draxBasicAttack || e.shadowcatAbilityAttack) &&
         !e.shadowcatCompletionHandled
@@ -21266,6 +22241,7 @@ function resolve(s: GameState, e: Effect) {
         if (e.actorId || p.ownerId) activateSeat(s, e.actorId || p.ownerId);
         mtsPlayerPack.mtsPlayerPackEventFinished(s, p);
         mgPack.mutantGenesisPlayerPackEventFinished(s, p.id);
+        add(s, ...angel.angelEventFinished(s, p, angelPorts));
         const pendingFlow = s.queue.find(
           (effect) =>
             effect.type === "visionPackFlowPlayed" && effect.piece?.id === p.id,
@@ -21428,6 +22404,11 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "indirect": {
+      if (angel.angelIndirectExhaust(s)) {
+        e.exhaustDamaged = true;
+        e.zzzaxBatchId ||= `angel-indirect:${s.nextId++}`;
+        e.zzzaxBatchOwner ||= s.activePlayerId;
+      }
       const allocations = e.allocations || {};
       const choices = targets(s, "controlled").filter((t) => {
         if (e.zzzaxTakeCost && !zzzaxCanTakeCostDamage(s, t.id)) return false;
@@ -21455,6 +22436,7 @@ function resolve(s: GameState, e: Effect) {
                 zzzaxBatchId: e.zzzaxBatchId,
                 zzzaxBatchOwner: e.zzzaxBatchOwner,
                 zzzaxBatchIndex: index,
+                damageFromAttack: !!e.attackDamage,
                 actorId: e.zzzaxBatchOwner,
               }),
             ),
@@ -21465,6 +22447,7 @@ function resolve(s: GameState, e: Effect) {
               source: e.source,
               after: e.zzzaxAfter,
               exhaustDamaged: e.exhaustDamaged,
+              attackDamage: e.attackDamage,
               actorId: e.zzzaxBatchOwner,
             }),
           );
@@ -21558,6 +22541,60 @@ function resolve(s: GameState, e: Effect) {
     case "encounterVictory":
       movePieceFromPlay(s, e.id, false, undefined, true);
       break;
+    case "playerSideSchemeLimit": {
+      const schemes = playerSideSchemes(s);
+      const limit = playerSideSchemeLimit(s);
+      if (schemes.length <= limit) break;
+      const chooserId = e.playerId || s.firstPlayerId;
+      activateSeat(s, chooserId);
+      choose(
+        s,
+        "Player side scheme limit",
+        `Choose a player side scheme to discard. The shared limit is ${limit}. Discarding it does not defeat it.`,
+        schemes.map((p) =>
+          option(
+            p.id,
+            `Discard ${card(p).name}`,
+            [
+              E("playerSideSchemeDiscard", { id: p.id }),
+              E("playerSideSchemeLimit", { playerId: chooserId }),
+            ],
+            undefined,
+            p.code,
+          ),
+        ),
+      );
+      break;
+    }
+    case "playerSideSchemeDiscard": {
+      const p = playerSideSchemes(s).find((p) => p.id === e.id);
+      need(p, "The selected player side scheme is no longer in play.");
+      discardPiece(s, p!.id);
+      break;
+    }
+    case "playerSideSchemeCheckDefeat": {
+      const p = playerSideSchemes(s).find((p) => p.id === e.id);
+      if (p && !p.counters) add(s, E("defeatScheme", { id: p.id }));
+      break;
+    }
+    case "playerSideSchemeReward": {
+      const p = playerSideSchemes(s).find((p) => p.id === e.id);
+      if (!p || !p.pendingDefeat || isTextBlank(s, p)) break;
+      add(
+        s,
+        ...psylocke.psylockeSideSchemeDefeated(s, p, s.activePlayerId),
+        ...angel.angelPlayerSideSchemeDefeated(s, p),
+      );
+      break;
+    }
+    case "playerSideSchemeFinishDefeat": {
+      const p = playerSideSchemes(s).find((p) => p.id === e.id);
+      if (p?.pendingDefeat) {
+        delete p.pendingDefeat;
+        defeatScheme(s, p, e.source, true);
+      }
+      break;
+    }
     case "defeatScheme": {
       const p = s.sideSchemes.find((x) => x.id === e.id);
       if (p && zeroTolerance.zeroToleranceIsPermanent(s, p)) break;
@@ -21836,7 +22873,7 @@ function resolve(s: GameState, e: Effect) {
           "Restricted limit",
           "Choose a Restricted card to discard to meet your limit. Extra Weapon slots apply only to Weapon upgrades.",
           s.player.inPlay
-            .filter((p) => keyword(p, "Restricted"))
+            .filter((p) => keyword(p, "Restricted") && !isPermanent(card(p)))
             .map((p) =>
               option(p.id, card(p).name, [
                 E("discardRestricted", { id: p.id }),
@@ -21928,6 +22965,58 @@ function resolve(s: GameState, e: Effect) {
       add(s, { ...e, type: "damage", attack: true });
       break;
     case "damage":
+      if (e.attack) {
+        e.psylockeToken ||=
+          s.currentAttackProgramId ||
+          s.currentEventId ||
+          `psylocke-attack:${s.nextId++}`;
+        const illusion = psylocke.psylockeIllusion(s, e);
+        if (illusion) {
+          add(s, ...illusion);
+          break;
+        }
+        if (!e.psylockeDirectedHandled) {
+          const options = psylocke.psylockeAttackOptions(s, e, psylockePorts);
+          if (options.length) {
+            choose(s, "Directed Force", "Play an attack interrupt?", [
+              ...options,
+              option("continue", "Continue attack", [
+                { ...e, psylockeDirectedHandled: true },
+              ]),
+            ]);
+            break;
+          }
+        }
+        if (!e.psylockeDirectedBonusApplied) {
+          e.amount += Number(
+            s.flags[`psylockeDirectedBonus:${e.psylockeToken}`] || 0,
+          );
+          e.psylockeDirectedBonusApplied = true;
+        }
+      }
+      if (e.attack && e.amount > 0 && !e.angelDamageHandled) {
+        const packet = {
+          ...e,
+          angelDamageHandled: true,
+          angelPacketId: `angel-damage:${s.nextId++}`,
+        };
+        const options = playerOrder(s).flatMap((seat) =>
+          angel
+            .angelDamageOptions(seatView(s, seat), packet, [packet], angelPorts)
+            .map((o) => ({
+              ...o,
+              id: `${seat.id}:${o.id}`,
+              effects: o.effects.map((q) => ({ ...q, actorId: seat.id })),
+            })),
+        );
+        if (options.length) {
+          choose(s, "Aerial Intervention", "Prevent attack damage?", [
+            ...options,
+            option("continue", "Continue", [packet]),
+          ]);
+          break;
+        }
+      }
       if (
         e.basic &&
         e.attack &&
@@ -22374,6 +23463,7 @@ function resolve(s: GameState, e: Effect) {
             excessToMain: e.excessToMain,
             excessBonus: e.excessBonus,
             initiated: e.attackInitiated || e.attackAlreadyInitiated,
+            noDamageInstance: e.noDamageInstance,
             mutantGenesisBonusApplied: e.mutantGenesisBonusApplied,
           },
         );
@@ -22624,6 +23714,11 @@ function resolve(s: GameState, e: Effect) {
       }
       break;
     case "thwart": {
+      const operative = gambit.gambitThwartWindow(s, e);
+      if (operative) {
+        add(s, ...operative);
+        break;
+      }
       if (e.action && shadowcatNativeIgnoreWindow(s, e, "thwart")) break;
       if (
         (e.action || e.basic) &&
@@ -23337,6 +24432,27 @@ function resolve(s: GameState, e: Effect) {
       const p = find(s, e.id);
       if (!p) break;
       const attack = e.kind === "attack";
+      if (!e.angelAcrobaticsHandled && !(attack ? p.stunned : p.confused)) {
+        const packet = {
+          ...e,
+          angelAcrobaticsHandled: true,
+          amount: e.amount ?? allyStat(s, p, attack ? "attack" : "thwart"),
+        };
+        const options = angel.angelBasicOptions(
+          s,
+          p.id,
+          attack ? "attack" : "thwart",
+          [packet],
+          angelPorts,
+        );
+        if (options.length) {
+          choose(s, "Soaring Acrobatics", "Boost this basic power?", [
+            ...options,
+            option("continue", "Continue", [packet]),
+          ]);
+          break;
+        }
+      }
       if (
         attack &&
         !e.cyclopsDustHandled &&
@@ -23383,6 +24499,16 @@ function resolve(s: GameState, e: Effect) {
           ]),
           option("atk", "Use ATK", [{ ...e, cyclopsBefuddleHandled: true }]),
         ]);
+        break;
+      }
+      const gambitBefore = gambit.gambitBeforeAlly(s, p, e);
+      if (gambitBefore) {
+        add(s, ...gambitBefore);
+        break;
+      }
+      const rogueBefore = rogue.rogueBeforeAlly(s, p, e);
+      if (rogueBefore) {
+        add(s, ...rogueBefore);
         break;
       }
       const phoenixBefore = phoenix.phoenixBeforeAlly(s, p, e);
@@ -23763,12 +24889,23 @@ function resolve(s: GameState, e: Effect) {
           s,
           E("attackProgramEnd", { id: program, attackProgramId: program }),
         );
-      } else if (attack)
-        attackAction(s, e.target, amount, p.id, !!e.overkill, false, {
-          piercing: e.piercing,
-          ranged: e.ranged,
-        });
-      else {
+      } else if (attack) {
+        const confused = !!find(s, e.target)?.confused;
+        const result = attackAction(
+          s,
+          e.target,
+          amount,
+          p.id,
+          !!e.overkill,
+          false,
+          { piercing: e.piercing, ranged: e.ranged },
+        );
+        if (result)
+          add(
+            s,
+            ...psylocke.psylockeCypher(s, p, confused, result.actualDamage),
+          );
+      } else {
         const removed = thwartAction(s, e.target, amount, p.id);
         if (Number(removed) > 0) {
           const interrupts = s.queue.splice(0, s.queue.length - queuedBefore);
@@ -23800,6 +24937,9 @@ function resolve(s: GameState, e: Effect) {
           key: defeatKey,
           attackedEnemy: attackedEnemySnapshot,
         }),
+        ...psylocke.psylockeAllyUsed(s, p),
+        ...gambit.gambitAfterAlly(s, p, e.target, attack && !!minionTarget),
+        ...angel.angelAllyUsed(s, p, attack),
         ...phoenix.phoenixAllyUsed(s, p, attack ? "attack" : "thwart"),
         E("wolverine:ally-after", {
           piece: { ...p },
@@ -23841,7 +24981,8 @@ function resolve(s: GameState, e: Effect) {
                   0,
                   (card(p).attack_cost || 0) +
                     Number(!!e.cyclopsDust) -
-                    Number(e.cyclopsConsequenceReduction || 0) +
+                    Number(e.cyclopsConsequenceReduction || 0) -
+                    psylocke.psylockeConsequence(s, p, e.target, true) +
                     captainPackModifiers(s, p.id).consequentialAttack +
                     Number(e.stormHavok || 0) +
                     Number(
@@ -23850,7 +24991,11 @@ function resolve(s: GameState, e: Effect) {
                         !isTextBlank(s, p),
                     ),
                 )
-              : card(p).thwart_cost || 0,
+              : Math.max(
+                  0,
+                  (card(p).thwart_cost || 0) -
+                    psylocke.psylockeConsequence(s, p, e.target, false),
+                ),
           ),
         }),
         ...(attack ? [E("scarletAfterAllyAttack", { id: p.id })] : []),
@@ -23965,6 +25110,26 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "allyConsequence": {
+      const angelAlly = find(s, e.id);
+      if (angelAlly && !e.angelConsequenceHandled) {
+        const reduced = angel.angelConsequential(s, angelAlly, e.amount);
+        if (reduced < e.amount) {
+          choose(
+            s,
+            "Cannonball",
+            "Reduce consequential damage for Aerial cards in your hand?",
+            [
+              option("reduce", `Reduce to ${reduced}`, [
+                { ...e, amount: reduced, angelConsequenceHandled: true },
+              ]),
+              option("continue", "Take the full consequential damage", [
+                { ...e, angelConsequenceHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
+      }
       const p = find(s, e.id);
       const defeatedEnemy = !!s.flags[e.defeatKey];
       if (e.defeatKey) delete s.flags[e.defeatKey];
@@ -24251,6 +25416,17 @@ function resolve(s: GameState, e: Effect) {
             : effect,
         ),
       );
+      break;
+    }
+    case "rogueNativeMedPlay": {
+      const lab = find(s, e.labId),
+        p = lab?.storedCards?.find((p) => p.id === e.id);
+      if (p) {
+        lab!.storedCards = lab!.storedCards!.filter((q) => q.id !== p.id);
+        s.player.hand.push(p);
+        play(s, p, []);
+        add(s, { type: "rogue:med-exhaust", id: p.id });
+      }
       break;
     }
     case "phoenixSchemeInterrupt": {
@@ -24820,7 +25996,9 @@ function resolve(s: GameState, e: Effect) {
             )
           : [];
         const shieldmaiden =
-          againstPlayer && !friendlySource
+          againstPlayer &&
+          !friendlySource &&
+          (!a.angelTauntPlayerId || a.angelTauntPlayerId === seat.id)
             ? valkyrie
                 .valkyrieAttackInitiationOptions(
                   view,
@@ -24837,16 +26015,24 @@ function resolve(s: GameState, e: Effect) {
                   })),
                 }))
             : [];
-        const pip = againstPlayer
-          ? warlock.warlockAttackInitiatedOptions(
-              view,
-              e.playerId,
-              [packet],
-              warlockPorts,
-            )
-          : [];
+        const pip =
+          againstPlayer && !a.angelTauntPlayerId
+            ? warlock.warlockAttackInitiatedOptions(
+                view,
+                e.playerId,
+                [packet],
+                warlockPorts,
+              )
+            : [];
         options.push(
           ...scoped(seat.id, [
+            ...gambit.gambitAttackOptions(view, []).map((entry) => ({
+              ...entry,
+              effects: entry.effects.map((effect) => ({
+                ...effect,
+                after: [resume(entry.id)],
+              })),
+            })),
             ...nova,
             ...mockingbird,
             ...firstHit,
@@ -24872,6 +26058,9 @@ function resolve(s: GameState, e: Effect) {
     case "attackKeyword":
       if (s.attack && e.keyword === "piercing") s.attack.piercing = true;
       break;
+    case "angelAttackEnd":
+      add(s, ...(e.after || []));
+      break;
     case "enemyScheme":
       enemyScheme(
         s,
@@ -24891,7 +26080,30 @@ function resolve(s: GameState, e: Effect) {
       );
       break;
     case "defender":
+      if (e.id === "hero" && !e.psylockeBasicHandled) {
+        const opts = psylocke.psylockeBasicOptions(s, e);
+        if (opts.length) {
+          choose(
+            s,
+            "Psi-Energy Control",
+            "Flip one Psi-Energy upgrade before defending?",
+            [
+              ...opts,
+              option("continue", "Continue without flipping", [
+                { ...e, psylockeBasicHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
+      }
       if (s.attack) {
+        need(
+          !s.attack.angelTauntPlayerId ||
+            (s.activePlayerId === s.attack.angelTauntPlayerId &&
+              ["hero", "none"].includes(e.id)),
+          "Taunt prevents other characters from defending.",
+        );
         s.attack.defender = e.id;
         s.attack.targetPlayerId = s.activePlayerId;
         log(
@@ -24931,6 +26143,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     case "spectrumDefenseWindow": {
       const options = [
+        ...gambit.gambitDefenseOptions(s, gambitPorts),
         ...spdr.spdrDefenseOptions(s, spdrPorts),
         ...spectrum.spectrumDefenseOptions(s, e.used || [], [], spectrumPorts),
         ...vision.visionDefenseOptions(s, e.used || [], [], visionPorts),
@@ -24947,6 +26160,23 @@ function resolve(s: GameState, e: Effect) {
     case "boostAttack": {
       const a = s.attack;
       if (!a) break;
+      if (a.basicDefense && !e.angelAcrobaticsHandled) {
+        const after = [{ ...e, angelAcrobaticsHandled: true }];
+        const options = angel.angelBasicOptions(
+          s,
+          "hero",
+          "defense",
+          after,
+          angelPorts,
+        );
+        if (options.length) {
+          choose(s, "Soaring Acrobatics", "Boost this basic defense?", [
+            ...options,
+            option("continue", "Continue", after),
+          ]);
+          break;
+        }
+      }
       if (!e.venomPistolHandled) {
         const after = [{ ...e, venomPistolHandled: true }];
         const options = venom.venomBasicPowerOptions(
@@ -24983,6 +26213,12 @@ function resolve(s: GameState, e: Effect) {
             s,
             [E("boostAttack")],
             quicksilverPackPorts,
+          ),
+          ...rogue.rogueDefenseOptions(
+            s,
+            "defends",
+            [E("boostAttack")],
+            roguePorts,
           ),
           ...doctorStrangeDefenseOptions(s, [E("boostAttack")], dsPorts),
           ...captainPackExpertDefenseOptions(s, [E("boostAttack")]),
@@ -25434,6 +26670,20 @@ function resolve(s: GameState, e: Effect) {
         }
       }
       const opts = [
+        ...(heroTarget
+          ? psylocke.psylockeDamageOptions(
+              s,
+              {
+                type: "attackDamage",
+                target: "hero",
+                amount: Math.max(0, a.base - a.defense - a.prevented),
+                kind: "attack",
+                attacker: a.attacker,
+              },
+              [E("damageWindow")],
+              psylockePorts,
+            )
+          : []),
         ...(!(heroTarget ? s.player.tough : find(s, damageTarget)?.tough)
           ? niNativeDamageOptions(
               s,
@@ -25505,6 +26755,12 @@ function resolve(s: GameState, e: Effect) {
         };
         if (excess > 0)
           opts.unshift(
+            ...psylocke.psylockeDamageOptions(
+              s,
+              packet,
+              [E("damageWindow")],
+              psylockePorts,
+            ),
             ...playerOrder(s).flatMap((seat) =>
               mgPack
                 .mutantGenesisPlayerPackDamageOptions(
@@ -25982,6 +27238,35 @@ function resolve(s: GameState, e: Effect) {
     }
     case "defenseResponses": {
       s.attack = null;
+      if (!e.psylockeHandled) {
+        add(s, ...psylocke.psylockeDefenseFinished(s, e), {
+          ...e,
+          psylockeHandled: true,
+        });
+        break;
+      }
+      if (!e.gambitAfterHandled) {
+        add(s, ...gambit.gambitDefenseAfter(s, e), {
+          ...e,
+          gambitAfterHandled: true,
+        });
+        break;
+      }
+      if (!e.angelHandled) {
+        add(
+          s,
+          ...angel.angelDefenseResponses(s, e.snapshot || {}, angelPorts),
+          { ...e, angelHandled: true },
+        );
+        break;
+      }
+      if (!e.rogueAfterHandled) {
+        add(s, ...rogue.rogueAfterAttack(s, e.snapshot || {}), {
+          ...e,
+          rogueAfterHandled: true,
+        });
+        break;
+      }
       if (!e.shadowcatCompletionHandled && e.snapshot?.heroDefended) {
         const completion = shadowcatNativeCompletion(s, "defense", true);
         const receipt = completion[0]?.receipt as
@@ -26386,6 +27671,8 @@ function resolve(s: GameState, e: Effect) {
       pay(s, e.ids, e.wildAs, e.paidForCard, e.generatedForCard, e.syncPaid);
       break;
     case "spdrTreacheryResolved":
+      if (e.receipt.whenRevealedResolved)
+        add(s, ...psylocke.psylockeTreacheryResolved(s, e.receipt.playerId));
       add(
         s,
         ...spdrPack.spdrPackTreacheryResolved(s, e.receipt, spdrPackPorts),
@@ -26717,6 +28004,11 @@ function resolve(s: GameState, e: Effect) {
       add(
         s,
         ...playerOrder(s).flatMap((seat) =>
+          rogue
+            .roguePhaseBegan(seatView(s, seat))
+            .map((e) => ({ ...e, actorId: seat.id })),
+        ),
+        ...playerOrder(s).flatMap((seat) =>
           wolverine
             .wolverinePhaseBegan(seatView(s, seat), wolverinePorts)
             .map((e) => ({ ...e, actorId: seat.id })),
@@ -26903,6 +28195,7 @@ function resolve(s: GameState, e: Effect) {
             escalation(s) +
             s.encounter.acceleration +
             inheritorsAcceleration(s) +
+            angel.angelAcceleration(s) +
             s.sideSchemes.reduce(
               (n, p) =>
                 n +
@@ -27000,6 +28293,9 @@ function resolve(s: GameState, e: Effect) {
       for (const seat of order)
         for (let i = 0; i <= (s.heroic || 0); i++) dealEncounter(s, seat.id);
       const hazard =
+        allInPlay(s).filter((p) => p.code === "37025" && !isTextBlank(s, p))
+          .length +
+        angel.angelHazards(s) +
         sinisterPlayerPack.sinisterPlayerPackHazards(s) +
         (card(s.scheme.code).scheme_hazard || 0) +
         s.sideSchemes.reduce(
@@ -27123,15 +28419,18 @@ function resolve(s: GameState, e: Effect) {
           ...Object.fromEntries(
             Object.entries(s.flags).filter(
               ([key]) =>
+                key === "gambitCharges" ||
                 key === "cyclopsNemesisInitialized" ||
                 key.startsWith("stormController:") ||
                 key === "stormInitialized" ||
+                key === "angelInitialized" ||
                 key === "stormSetupComplete" ||
                 key.startsWith("valkyrie") ||
                 key.startsWith("vision") ||
                 key.startsWith("nova") ||
                 key.startsWith("ironheart") ||
-                key === "wolverineInitialized",
+                key === "wolverineInitialized" ||
+                key === "psylockeInitialized",
             ),
           ),
           ...(s.heroId === "warm"
@@ -27349,6 +28648,10 @@ function run(s: GameState) {
         "defeatScheme",
         "defeatSchemes",
         "encounterVictory",
+        "playerSideSchemeLimit",
+        "playerSideSchemeCheckDefeat",
+        "playerSideSchemeReward",
+        "playerSideSchemeFinishDefeat",
         "spiderHamBatchReceipt",
         "spiderHamSchemeThwartInterrupts",
         "spider-ham-pack:odds-after",

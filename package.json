@@ -54,7 +54,8 @@
     "test:mansion-attack": "node scripts/mansion-attack-check.mjs",
     "test:acolytes": "node scripts/acolytes-check.mjs",
     "test:magneto": "node scripts/magneto-check.mjs",
-    "test:quadruple-import": "node scripts/quadruple-import-check.mjs"
+    "test:quadruple-import": "node scripts/quadruple-import-check.mjs",
+    "test:quadruple-import-2": "node scripts/quadruple-import-2-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

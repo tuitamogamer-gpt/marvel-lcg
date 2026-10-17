@@ -1,3 +1,5 @@
+import { rogueTouched } from "./game/rogue";
+import { gambitCharges } from "./game/gambit";
 import { cyclopsCanAttack } from "./game/cyclops";
 import { wolverineRecoverOptions } from "./game/wolverine";
 import { visionCanAttack } from "./game/vision";
@@ -393,9 +395,11 @@ function CardImage({
   const [failed, setFailed] = useState(false);
   const [loadedCode, setLoadedCode] = useState<string | null>(null);
   useEffect(() => setFailed(false), [code]);
-  const landscape = ["main_scheme", "side_scheme"].includes(
-    card(code)?.type_code,
-  );
+  const landscape = [
+    "main_scheme",
+    "side_scheme",
+    "player_side_scheme",
+  ].includes(card(code)?.type_code);
   return (
     <div
       className={`card-image ${className}`}
@@ -1760,7 +1764,11 @@ export default function App() {
                 {setupCardCount > 0 &&
                   (["vision", "shadowcat"].includes(hero.id)
                     ? `One Permanent mass card stays outside the ${setupDeckSize}-card deck and enters play after you keep your opening hand. `
-                    : `${setupCardCount} Permanent energy forms start in play outside the ${setupDeckSize}-card deck. `)}
+                    : hero.id === "psylocke"
+                      ? `Your two Permanent Psi-Energy upgrades enter play Psi-Knife side up after your mulligan, outside the ${setupDeckSize}-card deck. `
+                      : `${setupCardCount} Permanent cards start in play outside the ${setupDeckSize}-card deck. `)}
+                {hero.id === "rogue" &&
+                  "Touched counts toward deck size and is set aside after your opening hand and mulligan. "}
                 <span>
                   {team[setupSeat].deckName
                     ? `${team[setupSeat].deckName} is ready to play.`
@@ -2574,7 +2582,15 @@ export default function App() {
                 ? "One reversible Intangible / Dense mass card stays outside the 40-card deck and enters play after you keep your opening hand."
                 : hero.id === "shadowcat"
                   ? "One reversible Solid / Phased mass card stays outside the 40-card deck and enters play Solid after you keep your opening hand."
-                  : `${setupCardCount} Permanent energy forms start in play and stay outside the deck count.`}
+                  : hero.id === "psylocke"
+                    ? "Your two reversible Psi-Energy upgrades stay outside the 40-card deck and enter play Psi-Knife side up after your mulligan."
+                    : `${setupCardCount} Permanent cards start in play and stay outside the deck count.`}
+            </p>
+          )}
+          {hero.id === "rogue" && (
+            <p className="modal-intro">
+              Touched counts toward deck size. Set it aside after your opening
+              hand and mulligan; setup does not draw a replacement card.
             </p>
           )}
           <DeckProvenance
@@ -4302,6 +4318,20 @@ function Tabletop({
       : PLAYMATS.find((mat) => mat.id === playmatId)!;
   const v = VILLAINS.find((v) => v.id === s.villainId)!;
   const stats = heroStats(s);
+  const touched = rogueTouched(s);
+  const touchedIdentity = s.players.find(
+    (seat) => touched?.attachedTo === `hero:${seat.id}`,
+  );
+  const touchedHost = [
+    s.villain,
+    ...s.minions,
+    ...s.players.flatMap((seat) => seatView(s, seat).player.inPlay),
+  ].find((piece) => piece.id === touched?.attachedTo);
+  const touchedHostName = touchedIdentity
+    ? heroCard(seatView(s, touchedIdentity)).name
+    : touchedHost
+      ? card(touchedHost).name
+      : "a character";
   const wrappedInMetal = magnetoIdentityRestricted(s, s.activePlayerId, {
     isTextBlank,
   });
@@ -4790,7 +4820,7 @@ function Tabletop({
                       </details>
                     </>
                   )}
-                  {s.magneto && !!s.victoryDisplay?.length && (
+                  {!s.mansionAttack && !!s.victoryDisplay?.length && (
                     <details>
                       <summary>
                         Victory display ({s.victoryDisplay.length})
@@ -4902,7 +4932,11 @@ function Tabletop({
                     key={p.id}
                     data-piece-id={p.id}
                   >
-                    <span className="table-group-label">SIDE SCHEME</span>
+                    <span className="table-group-label">
+                      {card(p).type_code === "player_side_scheme"
+                        ? "PLAYER SIDE SCHEME"
+                        : "SIDE SCHEME"}
+                    </span>
                     <button
                       className="scheme-card"
                       onClick={() => inspect({ code: p.code, piece: p })}
@@ -5218,6 +5252,48 @@ function Tabletop({
                       />
                     </div>
                   )}
+                  {s.heroId === "gambit" && (
+                    <div
+                      className="identity-stats stat-row"
+                      role="group"
+                      aria-label="Charge counters"
+                    >
+                      <StatToken
+                        kind="counter"
+                        value={gambitCharges(s)}
+                        label="CHARGE"
+                        compact
+                      />
+                    </div>
+                  )}
+                  {touched && (
+                    <div
+                      className="identity-stats stat-row"
+                      role="group"
+                      aria-label="Touched status"
+                      style={{ gridColumn: "1 / -1" }}
+                      data-touched-id={touched.id}
+                    >
+                      <button
+                        className="text-button"
+                        data-card-preview={touched.code}
+                        aria-label="Inspect Touched"
+                        onClick={() =>
+                          inspect({ code: touched.code, piece: touched })
+                        }
+                      >
+                        {`Touched · ${
+                          touched.attachedTo
+                            ? `Attached to ${touchedHostName}`
+                            : s.player.setAside?.some(
+                                  (piece) => piece.id === touched.id,
+                                )
+                              ? "Set aside"
+                              : "Not attached"
+                        }`}
+                      </button>
+                    </div>
+                  )}
                   {s.heroId === "spiderham" && (
                     <div
                       className="identity-stats stat-row"
@@ -5328,7 +5404,7 @@ function Tabletop({
                     </span>
                     <span className="hero-form-copy">
                       <strong>
-                        {["ant", "wsp"].includes(s.heroId)
+                        {["ant", "wsp", "angel"].includes(s.heroId)
                           ? "Change form"
                           : s.player.form === "hero"
                             ? `Become ${h.identity}`

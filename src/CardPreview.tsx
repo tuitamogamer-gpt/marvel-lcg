@@ -60,9 +60,11 @@ export function CardPreview() {
         const code = next.dataset.cardPreview;
         if (!code || (!card(code) && !backFor(code)) || !next.isConnected)
           return;
-        const landscape = ["main_scheme", "side_scheme"].includes(
-          card(code)?.type_code,
-        );
+        const landscape = [
+          "main_scheme",
+          "side_scheme",
+          "player_side_scheme",
+        ].includes(card(code)?.type_code);
         const ratio = landscape ? 419 / 300 : 300 / 419;
         const width = Math.max(
           1,

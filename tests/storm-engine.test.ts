@@ -113,7 +113,7 @@ describe("Storm original source and physical weather", () => {
     expect(
       s.encounter.deck.filter((p) => card(p).set_code === "shadow_king"),
     ).toHaveLength(5);
-    expect(MODULES.at(-1)?.id).toBe("shadow_king");
+    expect(MODULES[19]?.id).toBe("shadow_king");
     expect(imageFor("36001a")).toContain("36001b");
     expect(imageFor("36001b")).toContain("36001a");
   });

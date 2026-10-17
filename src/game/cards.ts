@@ -1,3 +1,5 @@
+import { psylockeStats, psylockePowerOfMind } from "./psylocke.js";
+import { rogueModifiers, rogueTraits } from "./rogue.js";
 import { CARDS, CATALOG_CARDS, card } from "./card-definitions.js";
 export { CARDS, CATALOG_CARDS, DB, card } from "./card-definitions.js";
 import { cyclopsCharacterModifiers } from "./cyclops.js";
@@ -63,6 +65,7 @@ import { spdrPackCharacterModifiers } from "./spdr-pack.js";
 import { ironspiderSinisterHealthBonus } from "./ironspider-sinister.js";
 import { phoenixStats, phoenixAllyModifiers } from "./phoenix.js";
 import { wolverineStats } from "./wolverine.js";
+import { angelIdentityCode, angelRecruitBonus } from "./angel.js";
 import { stormGlobal, stormStats, stormAllyHP } from "./storm.js";
 import { colossusStats } from "./colossus.js";
 import { brotherhoodModifiers } from "./brotherhood.js";
@@ -78,7 +81,11 @@ import { identityMatch, uniqueMatches } from "./unique.js";
 import { rulesCode } from "./rules-code.js";
 import { captainStats } from "./captain-america.js";
 import { hulkStats } from "./hulk.js";
-import { captainPackModifiers, captainPackStats } from "./captain-pack.js";
+import {
+  captainPackModifiers,
+  captainPackStats,
+  captainPackHasTrait,
+} from "./captain-pack.js";
 import { scriptedModifier } from "./script-registry.js";
 import catalogImages from "../data/catalog-images.json" with { type: "json" };
 import sourceDecks from "../data/catalog-decks.json" with { type: "json" };
@@ -93,8 +100,12 @@ const coreImageCodes = new Set(CARDS.map((c) => c.code));
 // These scans label the physical alter-ego side A and hero side B, while the
 // pinned catalog gives the hero an "a" code. Retain the original scans/data.
 const identityImageCodes: Readonly<Record<string, string>> = {
+  "37001a": "37001b",
+  "37001b": "37001a",
   "33001a": "33001b",
   "33001b": "33001a",
+  "38001a": "38001b",
+  "38001b": "38001a",
   "34001a": "34001b",
   "34001b": "34001a",
   "35001a": "35001b",
@@ -692,6 +703,62 @@ export const HEROES = [
     style: "Weather control · Leadership",
     complexity: 3,
   },
+  {
+    id: "gambit",
+    code: "37001a",
+    alter: "37001b",
+    name: "Gambit",
+    identity: "Remy LeBeau",
+    aspect: "justice" as Aspect,
+    color: "#a6408d",
+    tag: "Play your cards right.",
+    description:
+      "Build charge counters, throw explosive cards, and outwit enemies as the master thief Remy LeBeau.",
+    style: "Charged attacks and theft · Justice",
+    complexity: 3,
+  },
+  {
+    id: "rogue",
+    code: "38001a",
+    alter: "38001b",
+    name: "Rogue",
+    identity: "Anna Marie",
+    aspect: "protection" as Aspect,
+    color: "#c69b37",
+    tag: "Your power is my power.",
+    description:
+      "Borrow traits with Touched, absorb powers, and protect your team.",
+    style: "Borrowed powers · Protection",
+    complexity: 3,
+  },
+  {
+    id: "psylocke",
+    code: "41001a",
+    alter: "41001b",
+    name: "Psylocke",
+    identity: "Betsy Braddock",
+    aspect: "justice" as Aspect,
+    color: "#b158bb",
+    tag: "Master your psionic weapons.",
+    description:
+      "Switch Psi-Knives and Psi-Katanas to control threats, strike enemies, and shape your resources.",
+    style: "Psi-Energy · Justice",
+    complexity: 3,
+  },
+  {
+    id: "angel",
+    code: "42001a",
+    alter: "42001b",
+    name: "Angel",
+    identity: "Warren Worthington III",
+    aspect: "protection" as Aspect,
+    color: "#5684b2",
+    tag: "Choose the wings of life or death.",
+    description:
+      "Change between Angel, Archangel and Warren, then combine Aerial events with powerful flight responses.",
+    style: "Three forms and Aerial events · Protection",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -855,6 +922,14 @@ export const MODULES = [
   { id: "acolytes", name: "Acolytes", difficulty: 4 },
   { id: "deathstrike", name: "Lady Deathstrike", difficulty: 3 },
   { id: "shadow_king", name: "Shadow King", difficulty: 3 },
+  { id: "exodus", name: "Exodus", difficulty: 3 },
+  {
+    id: "reavers",
+    name: "Reavers",
+    difficulty: 4,
+    description:
+      "Cybernetic mercenaries coordinate attacks and reinforce each other.",
+  },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -985,9 +1060,13 @@ export function deckCodes(
       (hero === "spdr" && aspect === "protection") ||
       (hero === "cyclops" && aspect === "leadership") ||
       (hero === "storm" && aspect === "leadership") ||
+      (hero === "angel" && aspect === "protection") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
+      (hero === "rogue" && aspect === "protection") ||
       (hero === "phoenix" && aspect === "justice") ||
+      (hero === "psylocke" && aspect === "justice") ||
+      (hero === "gambit" && aspect === "justice") ||
       (hero === "wolverine" && aspect === "aggression") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
@@ -1012,6 +1091,7 @@ export function deckCodes(
         (!c.permanent ||
           hero === "spectrum" ||
           (hero === "wolverine" && c.code === "35002") ||
+          (hero === "psylocke" && c.code === "41002a") ||
           (hero === "shadowcat" && c.code === "32031a") ||
           (hero === "phoenix" && c.code === "34002a") ||
           (hero === "vision" && c.code === "26002")),
@@ -1054,11 +1134,16 @@ export function deckCodes(
   );
 }
 export function resources(c: Card, target?: Card): Resource[] {
+  const psionic = psylockePowerOfMind(c, target);
+  if (psionic) return psionic;
   let r: Resource[] = [];
   for (const k of ["energy", "mental", "physical", "wild"] as Resource[])
     r.push(...Array(c[`resource_${k}`] || 0).fill(k));
   if (
-    (c.name.startsWith("The Power of ") &&
+    (c.code === "42022" &&
+      !!target?.traits?.toLowerCase().includes("aerial.")) ||
+    (c.code !== "42022" &&
+      c.name.startsWith("The Power of ") &&
       target?.faction_code === c.faction_code) ||
     (c.name === "The Power in All of Us" && target?.faction_code === "basic")
   )
@@ -1066,6 +1151,7 @@ export function resources(c: Card, target?: Card): Resource[] {
   return r;
 }
 export function heroCard(s: GameState) {
+  if (s.heroId === "angel") return card(angelIdentityCode(s));
   const h = HEROES.find((h) => h.id === s.heroId)!;
   if (s.heroId === "ant" && s.player.form === "hero")
     return card(s.player.heroForm === "giant" ? "12001c" : "12001a");
@@ -1114,6 +1200,7 @@ export function maxHP(s: GameState) {
       0,
     ) +
     scriptedModifier(s, "health") +
+    angelRecruitBonus(s, "hero") +
     cyclopsCharacterModifiers(s, "hero").health +
     wolverineStats(s).health +
     hulkStats(s).health +
@@ -1127,10 +1214,28 @@ export function maxHP(s: GameState) {
     captainPackModifiers(s, "hero").hp
   );
 }
-export function aerial(s: GameState) {
+export function aerial(s: GameState, visited: string[] = []): boolean {
   return (
     (s.player.form === "hero" &&
       (has(s, "01017") || !!s.flags.aerial || thorStats(s).aerial)) ||
+    (s.heroId === "angel" && s.player.form === "hero") ||
+    rogueModifiers(s).aerial ||
+    rogueTraits(
+      s,
+      (state, id, seen) => {
+        const seatId =
+          id === "hero"
+            ? state.activePlayerId
+            : id.startsWith("hero:")
+              ? id.slice(5)
+              : undefined;
+        const seat =
+          seatId && state.players.find((p) => p.id === seatId && !p.eliminated);
+        if (seat) return aerial(seatView(state, seat), seen) ? ["Aerial"] : [];
+        return captainPackHasTrait(state, id, "Aerial") ? ["Aerial"] : [];
+      },
+      visited,
+    ).includes("Aerial") ||
     stormStats(s).aerial ||
     doctorStrangeTraits(s).includes("Aerial") ||
     spiderWomanHasAerial(s) ||
@@ -1151,7 +1256,7 @@ export function heroStats(s: GameState) {
   const h =
     s.heroId === "ironheart"
       ? card(ironheartIdentityCode(s, "hero"))
-      : ["ant", "wsp"].includes(s.heroId) && s.player.form === "hero"
+      : ["ant", "wsp", "angel"].includes(s.heroId) && s.player.form === "hero"
         ? heroCard(s)
         : card(HEROES.find((h) => h.id === s.heroId)!.code);
   s = textActiveState(s);
@@ -1193,8 +1298,10 @@ export function heroStats(s: GameState) {
       spiderHamPackCharacterModifiers(s, "hero").attack +
       spdrPackCharacterModifiers(s, "hero").attack +
       colossusStats(s, { isTextBlank }).attack +
+      rogueModifiers(s).attack +
       phoenixStats(s).attack +
       wolverineStats(s).attack +
+      psylockeStats(s).attack +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
@@ -1226,7 +1333,9 @@ export function heroStats(s: GameState) {
       spiderHamStats(s, { isTextBlank }).thwart +
       spdrPackCharacterModifiers(s, "hero").thwart +
       colossusStats(s, { isTextBlank }).thwart +
+      rogueModifiers(s).thwart +
       phoenixStats(s).thwart +
+      psylockeStats(s).thwart +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
@@ -1235,6 +1344,7 @@ export function heroStats(s: GameState) {
     defense:
       h.defense! +
       stormStats(s).defense +
+      psylockeStats(s).defense +
       (has(s, "01081") ? 1 : 0) +
       (has(s, "01016") ? (aerial(s) ? 2 : 1) : 0) +
       captainStats(s).def +
@@ -1325,6 +1435,7 @@ export function pieceHP(s: GameState, p: Piece) {
     ).length *
       3 +
     scriptedModifier(s, "health", p) +
+    angelRecruitBonus(s, p.id) +
     phoenixAllyModifiers(s, p).health +
     stormAllyHP(s, p) +
     hawkeyeAllyMaxHP(s, p) +

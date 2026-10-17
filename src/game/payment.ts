@@ -1,3 +1,5 @@
+import { psylockeResourceSources } from "./psylocke.js";
+import { rogueResourceSources } from "./rogue.js";
 import { cyclopsResourceSources } from "./cyclops.js";
 import { phoenixResourceSources } from "./phoenix.js";
 import { stormResourceSources } from "./storm.js";
@@ -146,6 +148,7 @@ function localPaymentSources(
         kind: "ability",
       });
   }
+  sources.push(...psylockeResourceSources(s));
   sources.push(...stormResourceSources(s));
   sources.push(...thorResourceSources(s));
   sources.push(...waspPackResourceSources(s));
@@ -186,6 +189,7 @@ function localPaymentSources(
     }),
   );
   sources.push(...spdrResourceSources(s, { isTextBlank }));
+  sources.push(...rogueResourceSources(s, targetCode));
   sources.push(...phoenixResourceSources(s));
   sources.push(
     ...spdrPackResourceSources(s, {

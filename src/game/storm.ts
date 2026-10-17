@@ -189,12 +189,12 @@ export function stormPiercing(s: GameState, p: Piece) {
 }
 /** Attachments are kept in their physical entry order; the latest active control effect wins. */
 export function stormLatestControl(s: GameState, p: Piece): string | undefined {
-  return [...allInPlay(s), ...s.attachments]
+  return [...allInPlay(s), ...s.attachments, ...s.minions]
     .filter(
       (a) =>
-        ["34009", "36038", "25031"].includes(a.code) &&
-        a.attachedTo === p.id &&
-        !isTextBlank(s, a),
+        ["34009", "36038", "25031", "38011"].includes(a.code) &&
+        (a.attachedTo === p.id || a.controlTargetId === p.id) &&
+        (a.code === "38011" || !isTextBlank(s, a)),
     )
     .sort((a, b) => (b.controlOrder || 0) - (a.controlOrder || 0))[0]?.code;
 }

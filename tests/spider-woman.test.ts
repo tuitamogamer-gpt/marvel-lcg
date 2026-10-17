@@ -526,17 +526,22 @@ describe("Spider-Woman's complete Rise of Red Skull hero and starter dependency 
     expect(s.queue[0].action).toBeUndefined();
   });
   it("Skilled Investigator opens independent hero-only owner responses and validates its exhaust before drawing", () => {
-    const { s, ports, play, scheme, run } = fixture(true);
+    const { s, ports, play, scheme, run, choose } = fixture(true);
     const a = play("04047"),
       b = play("04047", "p2");
     seatView(s, "p2").player.form = "alter";
     const responses = spiderWomanSchemeDefeated(s, scheme());
     expect(responses).toHaveLength(1);
-    run(responses[0].effects[0]);
+    run(responses[0]);
+    const commit = s.prompt!.options.find((o) => o.id === "yes")!.effects[0];
+    choose("yes");
     expect(a.exhausted).toBe(true);
     expect(b.exhausted).toBe(false);
     expect(s.queue.shift()).toEqual({ type: "draw", amount: 1 });
-    expect(() => run(responses[0].effects[0])).toThrow("unavailable");
+    run(responses[0]);
+    expect(s.prompt).toBeNull();
+    expect(s.queue).toEqual([]);
+    expect(() => run(commit)).toThrow("unavailable");
     expect(
       spiderWomanPlayRestriction(s, makePiece(s, "04047"), ports),
     ).toContain("maximum 1");

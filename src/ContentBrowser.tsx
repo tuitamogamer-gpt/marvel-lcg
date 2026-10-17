@@ -381,9 +381,14 @@ export function ContentBrowser({
   const nativeSetup = heroSetupCards(hero.id);
   const setupReady =
     !setupCount ||
-    (["spectrum", "vision", "shadowcat", "phoenix", "wolverine"].includes(
-      hero.id,
-    ) &&
+    ([
+      "spectrum",
+      "vision",
+      "shadowcat",
+      "phoenix",
+      "wolverine",
+      "psylocke",
+    ].includes(hero.id) &&
       Object.entries(deck?.setupCards || {}).every(
         ([code, count]) => nativeSetup[code] === count,
       ) &&
@@ -709,6 +714,12 @@ export function ContentBrowser({
                   {setupCount} that start in play.
                 </p>
               )}
+              {hero.id === "rogue" && (
+                <p className="catalog-deck-composition">
+                  Touched counts toward your deck size. After your opening hand
+                  and mulligan, set it aside during setup.
+                </p>
+              )}
               <DeckDescription deck={deck} />
               {deck.sourceNote && (
                 <div className="catalog-source-note">
@@ -743,7 +754,9 @@ export function ContentBrowser({
                       ? "Your one mass form card is included in the composition above and does not count toward deck-size limits. It enters play Intangible after your mulligan."
                       : hero.id === "shadowcat"
                         ? "Your one reversible Solid / Phased mass card is included in the composition above and does not count toward deck-size limits. It enters play Solid after your mulligan."
-                        : "These Permanent cards are included in the composition above. They begin in play and do not count toward deck-size limits."}
+                        : hero.id === "psylocke"
+                          ? "Your two reversible Psi-Energy upgrades are included in the composition above and do not count toward deck-size limits. They enter play Psi-Knife side up after your mulligan."
+                          : "These Permanent cards are included in the composition above. They begin in play and do not count toward deck-size limits."}
                   </p>
                   <DeckCardList
                     counts={deck.setupCards || {}}
