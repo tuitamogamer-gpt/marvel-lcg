@@ -1,3 +1,4 @@
+import { PSYLOCKE_SCRIPT_CODES } from "./psylocke.js";
 import {
   CYCLOPS_SCRIPT_CODES,
   CYCLOPS_SHARED_SCRIPT_CODES,
@@ -119,10 +120,12 @@ export const SCRIPTED_HERO_IDS = new Set([
   "phoenix",
   "wolverine",
   "storm",
+  "psylocke",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...CYCLOPS_SCRIPT_CODES,
   ...CYCLOPS_SHARED_SCRIPT_CODES,
+  ...PSYLOCKE_SCRIPT_CODES,
   ...WOLVERINE_SCRIPT_CODES,
   ...STORM_SCRIPT_CODES,
   ...MAGNETO_SCRIPT_CODES,

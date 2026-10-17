@@ -53,9 +53,17 @@ export function scriptedModifier(
               !script ||
               script.implementation !== "script" ||
               // These native handlers enforce form/recipient timing themselves.
-              ["05023", "05033", "09009", "09010", "09026", "35004"].includes(
-                rulesCode(source),
-              ) ||
+              [
+                "05023",
+                "05033",
+                "09009",
+                "09010",
+                "09026",
+                "35004",
+                "41002a",
+                "41002b",
+                "41009",
+              ].includes(rulesCode(source)) ||
               entries.get(source.code)?.name === "Team Training"
             )
               return sum;

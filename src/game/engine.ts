@@ -47,6 +47,7 @@ import * as spiderHam from "./spider-ham.js";
 import * as spiderHamPack from "./spider-ham-pack.js";
 import * as niPack from "./nova-ironheart-pack.js";
 import * as wolverine from "./wolverine.js";
+import * as psylocke from "./psylocke.js";
 import * as storm from "./storm.js";
 import * as colossus from "./colossus.js";
 import * as shadowcat from "./shadowcat.js";
@@ -719,7 +720,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         ? 1
         : 0) +
       (name === "Retaliate"
-        ? phoenix.phoenixSuit(s).retaliate +
+        ? psylocke.psylockeStats(s).retaliate +
+          phoenix.phoenixSuit(s).retaliate +
           storm.stormGlobal(s).retaliate +
           captainStats(s).retaliate +
           mansionAttack.mansionAttackModifiers(s, "hero", { isTextBlank })
@@ -2482,6 +2484,7 @@ function attackExcess(s: GameState, packet: Effect): number {
     ["hero", `hero:${s.activePlayerId}`].includes(source)
   )
     amount += msMarvelEventAmountModifier(s, s.currentEventId, "damage");
+  amount += psylocke.psylockeDamageBonus(s, source, target.id);
   amount += cyclops.cyclopsAttackModifiers(s, target.id).damage;
   const resistance = s.attachments.filter(
     (p) =>
@@ -2543,6 +2546,7 @@ function dealDamage(
       msMarvelEventAmountModifier(s, s.currentEventId, "damage") +
       Number(s.flags[`niHoned:${s.currentEventId}`] || 0) +
       mgPack.mutantGenesisPlayerPackAttackEventBonus(s, s.currentEventId || "");
+  if (attack && n > 0) n += psylocke.psylockeDamageBonus(s, source, target);
   const original = find(s, target);
   const dealt = Math.max(0, traits.damageDealt ?? n);
   // Exploit Weakness modifies damage TAKEN. Preserve the original dealt amount
@@ -2687,6 +2691,7 @@ function dealDamage(
         wasMinion: card(original).type_code === "minion",
         defeatedCode: code,
         excessDamage: result.excessDamage,
+        actualDamage: result.actualDamage,
         mandatory: false,
         afterAttack: true,
       }),
@@ -4004,6 +4009,7 @@ export function targets(
       return [
         ...(!attack ||
         nebula.nebulaIgnoresRestrictions(s).guard ||
+        psylocke.psylockeIgnoresGuardPatrol(s) ||
         shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts) ||
         !engaged(s).some((p) => keyword(p, "Guard", s))
           ? [
@@ -4040,6 +4046,7 @@ export function targets(
         !(
           thwarting &&
           !nebula.nebulaIgnoresRestrictions(s).patrol &&
+          !psylocke.psylockeIgnoresGuardPatrol(s) &&
           !shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts) &&
           engaged(s).some((p) => keyword(p, "Patrol", s))
         ) &&
@@ -4494,6 +4501,8 @@ function attackAction(
     (source !== "hero" && card(p as Piece)?.type_code === "ally")
   )
     n += wolverine.wolverineBasicBonus(s, source, target);
+  if (source === "hero" && traits.basic && psylocke.psylockeStats(s).piercing)
+    traits.piercing = true;
   if (source === "hero" && traits.basic && wolverine.wolverineStats(s).piercing)
     traits.piercing = true;
   if (
@@ -5456,6 +5465,8 @@ function pay(
         delete seatView(s, paymentActor).flags[
           `spdrClarityCommitted:${info.id}`
         ];
+      } else if (psylocke.psylockeIsResource(s, id)) {
+        spentResponses.push(...psylocke.psylockeResourceSpent(s, id));
       } else if (phoenix.phoenixResourceSpent(s, id)) {
         // The actual Phoenix Force counter pays this phase-limited resource.
       } else if (spdr.spdrResourceSpent(s, id)) {
@@ -5841,6 +5852,7 @@ export function newGame(config: {
     vision.visionInitializeMass(s, { makePiece });
     shadowcat.shadowcatInitializeMass(s, { makePiece });
     wolverine.wolverineInitialize(s, { makePiece });
+    psylocke.psylockeInitialize(s, { makePiece });
     s.player.deck = shuffle(s, s.player.deck);
     doctorStrangeSetup(s, dsPorts);
     venom.venomInitializeNemesis(s, { makePiece });
@@ -6081,6 +6093,9 @@ function initialSetup(s: GameState) {
       ...shadowcat
         .shadowcatSetup(seatView(s, seat), { makePiece })
         .map((e) => ({ ...e, actorId: seat.id })),
+      ...psylocke
+        .psylockeSetup(seatView(s, seat))
+        .map((e) => ({ ...e, actorId: seat.id })),
       ...wolverine
         .wolverineSetup(seatView(s, seat))
         .map((e) => ({ ...e, actorId: seat.id })),
@@ -6246,6 +6261,7 @@ export function playable(s: GameState, p: Piece): string | null {
     gamora.gamoraPlayRestriction(s, p, gamoraPorts) ||
     drax.draxPlayRestriction(s, p, draxPorts) ||
     cyclops.cyclopsPlayRestriction(s, p, cyclopsPorts) ||
+    psylocke.psylockePlayRestriction(s, p, psylockePorts) ||
     wolverine.wolverinePlayRestriction(s, p, wolverinePorts) ||
     storm.stormPlayRestriction(s, p, stormPorts) ||
     colossus.colossusPlayRestriction(s, p, colossusPorts) ||
@@ -6719,6 +6735,16 @@ function play(
     niPackPorts,
   );
   if (c.type_code === "event") {
+    for (const key of Object.keys(s.flags))
+      if (
+        [
+          `psylockeDirected:${p.id}`,
+          `psylockeDirectedBonus:${p.id}`,
+          `psylockeIllusionChecked:${p.id}`,
+          `psylockeIllusionTarget:${p.id}`,
+        ].includes(key)
+      )
+        delete s.flags[key];
     delete s.flags[`wolverineWarriorBonus:${p.id}`];
     for (const key of Object.keys(s.flags))
       if (key.startsWith(`wolverineWarriorUsed:${p.id}:`)) delete s.flags[key];
@@ -6819,6 +6845,7 @@ function play(
     );
     add(
       s,
+      ...psylocke.psylockeCardEntered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
       ...phoenix.phoenixCardEntered(s, p),
       ...wolverine
@@ -6990,6 +7017,10 @@ function allyEnter(
   if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
     giveCharacterStatus(s, p, "tough");
   if (isTextBlank(s, p)) return;
+  if (p.code === "41003") {
+    add(s, ...psylocke.psylockeCardEntered(s, p, fromHand));
+    return;
+  }
   if (["35003", "35014"].includes(p.code)) {
     add(s, ...wolverine.wolverineCardEntered(s, p, fromHand));
     return;
@@ -7234,6 +7265,7 @@ function event(
   syncPaid = 0,
 ) {
   const ant =
+    psylocke.psylockeEvent(s, p, paid) ??
     cyclops.cyclopsEvent(s, p) ??
     wolverine.wolverineEvent(s, p) ??
     storm.stormEvent(s, p) ??
@@ -8058,6 +8090,16 @@ function ability(s: GameState, id: string, action = "special") {
   );
   if (cyclopsAbility !== null) {
     add(s, ...cyclopsAbility);
+    return;
+  }
+  const psylockeAbility = psylocke.psylockeAbility(
+    s,
+    id,
+    action,
+    psylockePorts,
+  );
+  if (psylockeAbility !== null) {
+    add(s, ...psylockeAbility);
     return;
   }
   const wolverineAbility = wolverine.wolverineAbility(
@@ -10078,7 +10120,7 @@ const gamoraPackPorts: gamoraPack.GamoraPackPorts = {
   heroThwart: (s) => heroStats(s).thwart,
   enemyUnique: (s, target) =>
     !!card(target === s.villain.id ? s.villain : find(s, target) || "")
-      .is_unique,
+      ?.is_unique,
 };
 function discardNativePlayerTop(s: GameState) {
   const length = s.player.deck.length;
@@ -10342,6 +10384,7 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
     add(s, ...ghostSpider.ghostSpiderCardEntered(s, p));
     add(
       s,
+      ...psylocke.psylockeCardEntered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
       ...wolverine
         .wolverineCardEntered(s, p, false)
@@ -11093,6 +11136,7 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...(id === "identity" ? nova.novaHeroAbilityOptions(s, novaPorts) : []),
     ...nova.novaAbilityOptions(s, id, novaPorts),
     ...cyclops.cyclopsAbilityOptions(s, id, cyclopsPorts),
+    ...psylocke.psylockeAbilityOptions(s, id, psylockePorts),
     ...wolverine.wolverineAbilityOptions(s, id, wolverinePorts),
     ...colossus.colossusAbilityOptions(s, id, colossusPorts),
     ...sabretooth.sabretoothActionOptions(s, id, sabretoothPorts),
@@ -15293,6 +15337,7 @@ const nebulaPorts: nebula.NebulaPorts = {
       s.player.inPlay.push(p);
       add(
         s,
+        ...psylocke.psylockeCardEntered(s, p),
         ...cyclops.cyclopsCardEntered(s, p),
         ...wolverine
           .wolverineCardEntered(s, p, false)
@@ -15486,6 +15531,62 @@ const cyclopsPorts: cyclops.CyclopsPorts = {
   revealHidden,
 };
 
+const psylockePorts: psylocke.PsylockePorts = {
+  ...antManPorts,
+  attackProgram: niAttackProgram,
+  makePiece,
+  hasTrait: captainPackHasTrait,
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  pay: (s, title, cost, req, after) =>
+    requestPayment(s, title, cost, after, req, undefined, true),
+  playReaction: (s, p, effects, after) => {
+    requestPayment(
+      s,
+      card(p).name,
+      cardCost(s, card(p), p),
+      [
+        E("resolveHandEvent", {
+          id: p.id,
+          after: effects,
+          continuation: after,
+        }),
+      ],
+      [],
+      p,
+      true,
+    );
+    if (s.prompt?.cancelable)
+      s.prompt.cancellationQueue = [...after, ...s.queue];
+  },
+  shufflePlayer: warMachinePortsShufflePlayer,
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  discardTop: discardNativePlayerTop,
+  friendlyTargets: (s) => targets(s, "friendly"),
+  transferControl: venomPackPorts.transferControl,
+  dealEncounter,
+  indirect: (s, amount, source) =>
+    zzzaxPorts.indirect(s, {
+      playerId: s.activePlayerId,
+      amount,
+      sourceId: source,
+      sourceTitle: "Telekinetic Dragon",
+    }),
+  keyword: (s, id, name) => !!sourceKeyword(s, id, name as PrintedKeyword),
+  prevent: (s, p, amount) => {
+    if (p.kind === "attack" && s.attack) s.attack.prevented += amount;
+    else if (p.kind === "overkill" && s.attack)
+      s.attack.identityPrevented = (s.attack.identityPrevented || 0) + amount;
+    else p.amount = Math.max(0, p.amount - amount);
+  },
+  declareDefense: (s) => {
+    if (s.attack && (!s.attack.defender || s.attack.defender === "none")) {
+      s.attack.defender = "hero";
+      s.attack.targetPlayerId = s.activePlayerId;
+      s.attack.basicDefense = false;
+      s.attack.eventDefense = true;
+    }
+  },
+};
 const wolverinePorts: wolverine.WolverinePorts = {
   ...antManPorts,
   attackProgram: niAttackProgram,
@@ -16504,7 +16605,10 @@ function enemyAttack(
       (isVillain && !!villainAt(s, "01099").length) ||
       (!!nebulaSource && !!sourceKeyword(s, id, "Overkill")),
     extra,
-    modifier: (activation?.modifier || 0) + novaModifiers.attack,
+    modifier:
+      (activation?.modifier || 0) +
+      novaModifiers.attack +
+      psylocke.psylockeActivationBonus(s, id),
     omitNormalBoost: activation?.omitNormalBoost,
     activationAfter: activation?.after,
     attackerSnapshot: structuredClone(p),
@@ -16815,6 +16919,11 @@ function boostEffects(s: GameState, p: Piece) {
     add(s, ...cyclopsBoost);
     return;
   }
+  const psylockeBoost = psylocke.psylockeBoost(s, p);
+  if (psylockeBoost !== null) {
+    add(s, ...psylockeBoost);
+    return;
+  }
   const wolverineBoost = wolverine.wolverineBoost(s, p);
   if (wolverineBoost !== null) {
     add(s, ...wolverineBoost);
@@ -17105,7 +17214,8 @@ function enemyScheme(
     boostIds: [],
     pendingBoosts,
     extra,
-    modifier: request?.modifier || 0,
+    modifier:
+      (request?.modifier || 0) + psylocke.psylockeActivationBonus(s, id),
     activationAfter: request?.after,
   };
   add(
@@ -18046,7 +18156,13 @@ function reveal(
       add(s, ...forced);
       return;
     }
-    const opts: Option[] = [];
+    const opts: Option[] = psylocke.psylockeRevealOptions(
+      s,
+      p,
+      fromEncounterDeck,
+      [E("reveal", { piece: p, skip: true, fromEncounterDeck, knifeSurge })],
+      psylockePorts,
+    );
     const revealing = s.activePlayerId;
     for (const seat of playerOrder(s))
       opts.push(
@@ -18456,6 +18572,7 @@ function reveal(
       ...spdr.SPDR_SCRIPT_CODES,
       ...spiderHam.SPIDER_HAM_SCRIPT_CODES,
       ...cyclops.CYCLOPS_SCRIPT_CODES,
+      ...psylocke.PSYLOCKE_SCRIPT_CODES,
       ...wolverine.WOLVERINE_SCRIPT_CODES,
       ...storm.STORM_SCRIPT_CODES,
       ...colossus.COLOSSUS_SCRIPT_CODES,
@@ -18494,6 +18611,7 @@ function reveal(
       "32028",
       "35030",
       "35036",
+      "41028",
       "36033",
     ].some((code) => code === p.code)
   ) {
@@ -18510,6 +18628,7 @@ function reveal(
       armadillo.armadilloReveal(s, p) ??
       zzzax.zzzaxReveal(s, p) ??
       cyclops.cyclopsEncounterReveal(s, p) ??
+      psylocke.psylockeEncounterReveal(s, p) ??
       wolverine.wolverineEncounterReveal(s, p) ??
       storm.stormEncounterReveal(s, p) ??
       colossus.colossusEncounterReveal(s, p) ??
@@ -18556,6 +18675,7 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    psylocke.psylockeEncounterReveal(s, p) ??
     storm.stormEncounterReveal(s, p) ??
     magneto.magnetoReveal(s, p, { isTextBlank }) ??
     acolytes.acolytesReveal(s, p) ??
@@ -18847,6 +18967,10 @@ function obligation(s: GameState, p: Piece) {
     return;
   }
   activateSeat(s, owner.id);
+  if (p.code === "41025") {
+    add(s, ...psylocke.psylockeEncounterReveal(s, p)!);
+    return;
+  }
   if (p.code === "35027") {
     add(s, ...wolverine.wolverineEncounterReveal(s, p)!);
     return;
@@ -18900,6 +19024,11 @@ function obligation(s: GameState, p: Piece) {
   );
 }
 function treachery(s: GameState, p: Piece) {
+  const psy = psylocke.psylockeEncounterReveal(s, p);
+  if (psy !== null) {
+    add(s, ...psy);
+    return;
+  }
   const wolverineReveal = wolverine.wolverineEncounterReveal(s, p);
   if (wolverineReveal !== null) {
     add(s, ...wolverineReveal);
@@ -19195,6 +19324,11 @@ function treachery(s: GameState, p: Piece) {
         add(s, ...phoenixNemesis);
         break;
       }
+      const psyNemesis = psylocke.psylockeShadowOfPast(s);
+      if (psyNemesis !== null) {
+        add(s, ...psyNemesis);
+        return;
+      }
       const wolverineNemesis = wolverine.wolverineShadowOfPast(s);
       if (wolverineNemesis !== null) {
         add(s, ...wolverineNemesis);
@@ -19416,6 +19550,7 @@ function resolve(s: GameState, e: Effect) {
     return;
   }
   if (cyclops.resolveCyclopsEffect(s, e, cyclopsPorts)) return;
+  if (psylocke.resolvePsylockeEffect(s, e, psylockePorts)) return;
   if (wolverine.resolveWolverineEffect(s, e, wolverinePorts)) return;
   if (storm.resolveStormEffect(s, e, stormPorts)) return;
   if (colossus.resolveColossusEffect(s, e, colossusPorts)) return;
@@ -19540,6 +19675,7 @@ function resolve(s: GameState, e: Effect) {
           warMachine.warMachineEncounterReveal(state, piece) ??
           valkyrie.valkyrieEncounterReveal(state, piece) ??
           vision.visionEncounterReveal(state, piece) ??
+          psylocke.psylockeEncounterReveal(state, piece) ??
           wolverine.wolverineEncounterReveal(state, piece) ??
           shadowcat.shadowcatEncounterReveal(state, piece) ??
           miles.milesEncounterReveal(state, piece) ??
@@ -19580,6 +19716,8 @@ function resolve(s: GameState, e: Effect) {
                     pieceId: piece.id,
                     playerId: spdrCompletedWindow.playerId,
                     resolved: spdrCompletedWindow.resolved.length > 0,
+                    whenRevealedResolved:
+                      spdrCompletedWindow.resolved.includes("text"),
                   },
                   actorId: spdrCompletedWindow.playerId,
                 }),
@@ -19782,6 +19920,13 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "scarletHeroThwartResponse": {
+      if (!e.psylockeHandled) {
+        add(s, ...psylocke.psylockeThwartFinished(s), {
+          ...e,
+          psylockeHandled: true,
+        });
+        break;
+      }
       if (!e.niPowerHandled) {
         add(
           s,
@@ -20530,6 +20675,26 @@ function resolve(s: GameState, e: Effect) {
         );
         break;
       }
+      if (
+        !e.psylockeBasicHandled &&
+        !(power === "attack" ? s.player.stunned : s.player.confused)
+      ) {
+        const opts = psylocke.psylockeBasicOptions(s, e);
+        if (opts.length) {
+          choose(
+            s,
+            "Psi-Energy Control",
+            "Flip one Psi-Energy upgrade before this basic power?",
+            [
+              ...opts,
+              option("continue", "Continue without flipping", [
+                { ...e, psylockeBasicHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
+      }
       e.basicUseToken ||= `basic:${s.nextId++}`;
       e.basicWasHero ??= s.player.form === "hero";
       s.player.exhausted = true;
@@ -21133,6 +21298,13 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "heroAttackResponses":
+      if (!e.psylockeHandled) {
+        add(s, ...psylocke.psylockeAttackFinished(s, e, psylockePorts), {
+          ...e,
+          psylockeHandled: true,
+        });
+        break;
+      }
       if (
         (e.draxBasicAttack || e.shadowcatAbilityAttack) &&
         !e.shadowcatCompletionHandled
@@ -21924,7 +22096,7 @@ function resolve(s: GameState, e: Effect) {
           "Restricted limit",
           "Choose a Restricted card to discard to meet your limit. Extra Weapon slots apply only to Weapon upgrades.",
           s.player.inPlay
-            .filter((p) => keyword(p, "Restricted"))
+            .filter((p) => keyword(p, "Restricted") && !isPermanent(card(p)))
             .map((p) =>
               option(p.id, card(p).name, [
                 E("discardRestricted", { id: p.id }),
@@ -22016,6 +22188,35 @@ function resolve(s: GameState, e: Effect) {
       add(s, { ...e, type: "damage", attack: true });
       break;
     case "damage":
+      if (e.attack) {
+        e.psylockeToken ||=
+          s.currentAttackProgramId ||
+          s.currentEventId ||
+          `psylocke-attack:${s.nextId++}`;
+        const illusion = psylocke.psylockeIllusion(s, e);
+        if (illusion) {
+          add(s, ...illusion);
+          break;
+        }
+        if (!e.psylockeDirectedHandled) {
+          const options = psylocke.psylockeAttackOptions(s, e, psylockePorts);
+          if (options.length) {
+            choose(s, "Directed Force", "Play an attack interrupt?", [
+              ...options,
+              option("continue", "Continue attack", [
+                { ...e, psylockeDirectedHandled: true },
+              ]),
+            ]);
+            break;
+          }
+        }
+        if (!e.psylockeDirectedBonusApplied) {
+          e.amount += Number(
+            s.flags[`psylockeDirectedBonus:${e.psylockeToken}`] || 0,
+          );
+          e.psylockeDirectedBonusApplied = true;
+        }
+      }
       if (
         e.basic &&
         e.attack &&
@@ -23851,12 +24052,23 @@ function resolve(s: GameState, e: Effect) {
           s,
           E("attackProgramEnd", { id: program, attackProgramId: program }),
         );
-      } else if (attack)
-        attackAction(s, e.target, amount, p.id, !!e.overkill, false, {
-          piercing: e.piercing,
-          ranged: e.ranged,
-        });
-      else {
+      } else if (attack) {
+        const confused = !!find(s, e.target)?.confused;
+        const result = attackAction(
+          s,
+          e.target,
+          amount,
+          p.id,
+          !!e.overkill,
+          false,
+          { piercing: e.piercing, ranged: e.ranged },
+        );
+        if (result)
+          add(
+            s,
+            ...psylocke.psylockeCypher(s, p, confused, result.actualDamage),
+          );
+      } else {
         const removed = thwartAction(s, e.target, amount, p.id);
         if (Number(removed) > 0) {
           const interrupts = s.queue.splice(0, s.queue.length - queuedBefore);
@@ -23888,6 +24100,7 @@ function resolve(s: GameState, e: Effect) {
           key: defeatKey,
           attackedEnemy: attackedEnemySnapshot,
         }),
+        ...psylocke.psylockeAllyUsed(s, p),
         ...phoenix.phoenixAllyUsed(s, p, attack ? "attack" : "thwart"),
         E("wolverine:ally-after", {
           piece: { ...p },
@@ -23929,7 +24142,8 @@ function resolve(s: GameState, e: Effect) {
                   0,
                   (card(p).attack_cost || 0) +
                     Number(!!e.cyclopsDust) -
-                    Number(e.cyclopsConsequenceReduction || 0) +
+                    Number(e.cyclopsConsequenceReduction || 0) -
+                    psylocke.psylockeConsequence(s, p, e.target, true) +
                     captainPackModifiers(s, p.id).consequentialAttack +
                     Number(e.stormHavok || 0) +
                     Number(
@@ -23938,7 +24152,11 @@ function resolve(s: GameState, e: Effect) {
                         !isTextBlank(s, p),
                     ),
                 )
-              : card(p).thwart_cost || 0,
+              : Math.max(
+                  0,
+                  (card(p).thwart_cost || 0) -
+                    psylocke.psylockeConsequence(s, p, e.target, false),
+                ),
           ),
         }),
         ...(attack ? [E("scarletAfterAllyAttack", { id: p.id })] : []),
@@ -24979,6 +25197,23 @@ function resolve(s: GameState, e: Effect) {
       );
       break;
     case "defender":
+      if (e.id === "hero" && !e.psylockeBasicHandled) {
+        const opts = psylocke.psylockeBasicOptions(s, e);
+        if (opts.length) {
+          choose(
+            s,
+            "Psi-Energy Control",
+            "Flip one Psi-Energy upgrade before defending?",
+            [
+              ...opts,
+              option("continue", "Continue without flipping", [
+                { ...e, psylockeBasicHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
+      }
       if (s.attack) {
         s.attack.defender = e.id;
         s.attack.targetPlayerId = s.activePlayerId;
@@ -25522,6 +25757,20 @@ function resolve(s: GameState, e: Effect) {
         }
       }
       const opts = [
+        ...(heroTarget
+          ? psylocke.psylockeDamageOptions(
+              s,
+              {
+                type: "attackDamage",
+                target: "hero",
+                amount: Math.max(0, a.base - a.defense - a.prevented),
+                kind: "attack",
+                attacker: a.attacker,
+              },
+              [E("damageWindow")],
+              psylockePorts,
+            )
+          : []),
         ...(!(heroTarget ? s.player.tough : find(s, damageTarget)?.tough)
           ? niNativeDamageOptions(
               s,
@@ -25593,6 +25842,12 @@ function resolve(s: GameState, e: Effect) {
         };
         if (excess > 0)
           opts.unshift(
+            ...psylocke.psylockeDamageOptions(
+              s,
+              packet,
+              [E("damageWindow")],
+              psylockePorts,
+            ),
             ...playerOrder(s).flatMap((seat) =>
               mgPack
                 .mutantGenesisPlayerPackDamageOptions(
@@ -26070,6 +26325,13 @@ function resolve(s: GameState, e: Effect) {
     }
     case "defenseResponses": {
       s.attack = null;
+      if (!e.psylockeHandled) {
+        add(s, ...psylocke.psylockeDefenseFinished(s, e), {
+          ...e,
+          psylockeHandled: true,
+        });
+        break;
+      }
       if (!e.shadowcatCompletionHandled && e.snapshot?.heroDefended) {
         const completion = shadowcatNativeCompletion(s, "defense", true);
         const receipt = completion[0]?.receipt as
@@ -26474,6 +26736,8 @@ function resolve(s: GameState, e: Effect) {
       pay(s, e.ids, e.wildAs, e.paidForCard, e.generatedForCard, e.syncPaid);
       break;
     case "spdrTreacheryResolved":
+      if (e.receipt.whenRevealedResolved)
+        add(s, ...psylocke.psylockeTreacheryResolved(s, e.receipt.playerId));
       add(
         s,
         ...spdrPack.spdrPackTreacheryResolved(s, e.receipt, spdrPackPorts),
@@ -27219,7 +27483,8 @@ function resolve(s: GameState, e: Effect) {
                 key.startsWith("vision") ||
                 key.startsWith("nova") ||
                 key.startsWith("ironheart") ||
-                key === "wolverineInitialized",
+                key === "wolverineInitialized" ||
+                key === "psylockeInitialized",
             ),
           ),
           ...(s.heroId === "warm"

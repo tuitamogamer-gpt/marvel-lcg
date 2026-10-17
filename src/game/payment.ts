@@ -1,3 +1,4 @@
+import { psylockeResourceSources } from "./psylocke.js";
 import { cyclopsResourceSources } from "./cyclops.js";
 import { phoenixResourceSources } from "./phoenix.js";
 import { stormResourceSources } from "./storm.js";
@@ -146,6 +147,7 @@ function localPaymentSources(
         kind: "ability",
       });
   }
+  sources.push(...psylockeResourceSources(s));
   sources.push(...stormResourceSources(s));
   sources.push(...thorResourceSources(s));
   sources.push(...waspPackResourceSources(s));

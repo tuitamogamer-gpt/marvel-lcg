@@ -1,3 +1,4 @@
+import { psylockeStats, psylockePowerOfMind } from "./psylocke.js";
 import { CARDS, CATALOG_CARDS, card } from "./card-definitions.js";
 export { CARDS, CATALOG_CARDS, DB, card } from "./card-definitions.js";
 import { cyclopsCharacterModifiers } from "./cyclops.js";
@@ -679,6 +680,20 @@ export const HEROES = [
     complexity: 2,
   },
   {
+    id: "psylocke",
+    code: "41001a",
+    alter: "41001b",
+    name: "Psylocke",
+    identity: "Betsy Braddock",
+    aspect: "justice" as Aspect,
+    color: "#b158bb",
+    tag: "Master your psionic weapons.",
+    description:
+      "Switch Psi-Knives and Psi-Katanas to control threats, strike enemies, and shape your resources.",
+    style: "Psi-Energy · Justice",
+    complexity: 3,
+  },
+  {
     id: "storm",
     code: "36001a",
     alter: "36001b",
@@ -988,6 +1003,7 @@ export function deckCodes(
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
       (hero === "phoenix" && aspect === "justice") ||
+      (hero === "psylocke" && aspect === "justice") ||
       (hero === "wolverine" && aspect === "aggression") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
@@ -1012,6 +1028,7 @@ export function deckCodes(
         (!c.permanent ||
           hero === "spectrum" ||
           (hero === "wolverine" && c.code === "35002") ||
+          (hero === "psylocke" && c.code === "41002a") ||
           (hero === "shadowcat" && c.code === "32031a") ||
           (hero === "phoenix" && c.code === "34002a") ||
           (hero === "vision" && c.code === "26002")),
@@ -1054,6 +1071,8 @@ export function deckCodes(
   );
 }
 export function resources(c: Card, target?: Card): Resource[] {
+  const psionic = psylockePowerOfMind(c, target);
+  if (psionic) return psionic;
   let r: Resource[] = [];
   for (const k of ["energy", "mental", "physical", "wild"] as Resource[])
     r.push(...Array(c[`resource_${k}`] || 0).fill(k));
@@ -1195,6 +1214,7 @@ export function heroStats(s: GameState) {
       colossusStats(s, { isTextBlank }).attack +
       phoenixStats(s).attack +
       wolverineStats(s).attack +
+      psylockeStats(s).attack +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
@@ -1227,6 +1247,7 @@ export function heroStats(s: GameState) {
       spdrPackCharacterModifiers(s, "hero").thwart +
       colossusStats(s, { isTextBlank }).thwart +
       phoenixStats(s).thwart +
+      psylockeStats(s).thwart +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
@@ -1235,6 +1256,7 @@ export function heroStats(s: GameState) {
     defense:
       h.defense! +
       stormStats(s).defense +
+      psylockeStats(s).defense +
       (has(s, "01081") ? 1 : 0) +
       (has(s, "01016") ? (aerial(s) ? 2 : 1) : 0) +
       captainStats(s).def +
