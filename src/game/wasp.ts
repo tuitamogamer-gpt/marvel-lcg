@@ -53,6 +53,7 @@ export interface WaspPorts extends AntManPorts {
   ): void;
   cardCost(s: GameState, p: Piece): number;
   heroStat(s: GameState, power: WaspPower): number;
+  basicThwartUsesAttack?(s: GameState, target: string): boolean;
   shufflePlayerDeck(s: GameState): void;
   shuffleEncounter(s: GameState): void;
   /** Commit the entire legal target snapshot simultaneously, then open the
@@ -416,12 +417,13 @@ function beginDistribution(
   ports: WaspPorts,
   overkill = false,
   metadata?: Partial<Effect>,
+  attackThwartAmount?: number,
 ) {
   const legal =
     power === "attack"
       ? ports.enemyTargets(s, true)
       : ports.schemeTargets(s, true);
-  if (!legal.length || amount <= 0) return;
+  if (!legal.length || (amount <= 0 && (attackThwartAmount ?? 0) <= 0)) return;
   ports.queue(
     s,
     W("divide", {
@@ -435,6 +437,7 @@ function beginDistribution(
       legal,
       packets: [],
       metadata,
+      attackThwartAmount,
     }),
   );
 }
@@ -582,6 +585,15 @@ export function resolveWaspEffect(
           ports,
           !!e.overkill,
           e.metadata,
+          power === "thwart" &&
+            ports
+              .schemeTargets(s, true)
+              .some((t) => ports.basicThwartUsesAttack?.(s, t.id))
+            ? ports.heroStat(s, "attack") +
+                Number(e.bonus || 0) +
+                Number(e.amount || 0) -
+                Number(e.metadata?.x23AnimalBonus || 0)
+            : undefined,
         );
       else
         select(
@@ -714,6 +726,52 @@ export function resolveWaspEffect(
     case "wasp:divide": {
       const packets = (e.packets || []) as WaspPacket[];
       const legal = e.legal as ReturnType<WaspPorts["enemyTargets"]>;
+      if (e.attackThwartAmount !== undefined) {
+        // One basic thwart has one shared pool. Including an Assault target
+        // substitutes ATK for that pool; start there before dividing the rest.
+        // A THW division may only select targets that do not require ATK.
+        const starts = legal.flatMap((t) => {
+          const attack = !!ports.basicThwartUsesAttack?.(s, t.id);
+          const total = attack ? e.attackThwartAmount : e.total;
+          const available = attack
+            ? legal
+            : legal.filter((q) => !ports.basicThwartUsesAttack?.(s, q.id));
+          const amounts =
+            total <= 0
+              ? []
+              : available.length === 1
+                ? [total]
+                : Array.from({ length: total }, (_, i) => i + 1);
+          return amounts.map((amount) => {
+            const next = {
+              ...e,
+              type: amount === total ? "wasp:division-commit" : "wasp:divide",
+              attackThwartAmount: undefined,
+              total,
+              remaining: total - amount,
+              legal: available,
+              packets: [{ target: t.id, amount }],
+            };
+            return option(
+              `${t.id}:${amount}`,
+              `${t.label} · ${amount} threat (${attack ? "ATK" : "THW"})`,
+              [next],
+              t.code,
+            );
+          });
+        });
+        if (legal.length === 1) {
+          const last = starts.at(-1);
+          if (last) ports.queue(s, ...last.effects);
+        } else if (starts.length)
+          ports.choose(
+            s,
+            e.title,
+            "Start on an Assault scheme to divide ATK, or use THW on other schemes.",
+            starts,
+          );
+        break;
+      }
       const targets = legal.filter(
         (t) => !packets.some((p) => p.target === t.id),
       );

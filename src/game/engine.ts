@@ -10185,6 +10185,7 @@ const waspPorts: wasp.WaspPorts = {
   select,
   cardCost: (s, p) => cardCost(s, card(p)),
   heroStat: (s, power) => heroStats(s)[power],
+  basicThwartUsesAttack: x23.x23Assault,
   shufflePlayerDeck: hawkeyePorts.shufflePlayerDeck,
   shuffleEncounter: mutagenPorts.shuffleEncounter,
   attackDistribution: (s, packets, options) => {

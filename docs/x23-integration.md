@@ -40,6 +40,13 @@ resource costs if subsequently played from hand.
   substitutes ATK and printed ATK consequential icons for a basic thwart while
   retaining thwart timing. THW-only Animal Instinct and Sisterly Bond bonuses do
   not increase an Assault thwart.
+- Giant Wasp's basic thwart also applies Assault before distributing threat.
+  Choosing an Assault scheme starts one ATK pool that can be divided among
+  schemes; choosing only ordinary schemes retains the THW pool. Rapid Growth's
+  basic-power bonus increases the ATK pool, as specified by Assault's basic-power
+  modifier rule (RRG1.8 p8). The mixed-target behavior follows
+  Assault's substitution for the single basic power and Wasp's simultaneous
+  distribution; no separate published Wasp/Assault ruling was found.
 - The four Specializations add the proper stat or identity HP and open their
   native once-per-exhaust draw responses. Surveillance Specialist granted by the
   defeating basic thwart can respond to that same thwart.
@@ -71,3 +78,5 @@ phase limits, multiplayer ownership, same-window Specialization triggers,
 Assault, reveal/boost effects, physical conservation and JSON save/reload.
 The prior Psylocke/Angel and cross-pack regression suites cover the shared
 support and engine integration.
+`tests/x23-wasp-engine.test.ts` covers a sole Assault target, mixed targets,
+ordinary-only targets, and Rapid Growth through native commands and payments.
