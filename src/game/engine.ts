@@ -11134,7 +11134,12 @@ const mtsPlayerPackPorts: mtsPlayerPack.MtsPlayerPackPorts = {
       requirements,
     ).ready;
   },
-  discardPlayerTop: discardNativePlayerTop,
+  discardPlayerCards: (s, count) => {
+    const before = s.queue.length;
+    const pieces = mill(s, count);
+    const responses = s.queue.splice(0, s.queue.length - before);
+    return { pieces, responses };
+  },
   shufflePlayerDeck: hawkeyePorts.shufflePlayerDeck,
   revealHidden,
   canPutAlly: (s, p) =>

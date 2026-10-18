@@ -115,7 +115,12 @@ export interface MtsPlayerPackPorts {
     requirements?: Resource[],
     handOnly?: boolean,
   ): boolean;
-  discardPlayerTop(s: GameState): { piece?: Piece; emptied: boolean };
+  /** Discard one original-deck cohort and return its pending responses so
+   * additional-cost responses can finish before the spell continues. */
+  discardPlayerCards(
+    s: GameState,
+    count: number,
+  ): { pieces: Piece[]; responses: Effect[] };
   shufflePlayerDeck(s: GameState): void;
   revealHidden(s: GameState): void;
   canPutAlly(s: GameState, p: Piece): boolean;
@@ -661,19 +666,6 @@ function storedCost(
 function saveCost(s: GameState, id: string, data: Record<string, unknown>) {
   s.flags["mtsPackEventCost:" + id] = JSON.stringify(data);
 }
-function discardFixed(
-  s: GameState,
-  amount: number,
-  ports: MtsPlayerPackPorts,
-): number {
-  let discarded = 0;
-  for (let i = 0; i < amount && s.player.deck.length; i++) {
-    const result = ports.discardPlayerTop(s);
-    if (result.piece) discarded++;
-    if (result.emptied || !result.piece) break;
-  }
-  return discarded;
-}
 export function resolveMtsPlayerPackEffect(
   s: GameState,
   e: Effect,
@@ -911,13 +903,14 @@ export function resolveMtsPlayerPackEffect(
           e.amount <= s.player.deck.length,
         "The selected Spell cost is unavailable.",
       );
-      const amount = discardFixed(s, e.amount, ports);
+      const { pieces, responses } = ports.discardPlayerCards(s, e.amount);
+      const amount = pieces.length;
       need(
         amount === e.amount,
         "The complete selected Spell cost must be paid.",
       );
       saveCost(s, e.id, { target: e.target, amount });
-      ports.queue(s, ...(e.after || []));
+      ports.queue(s, ...responses, ...(e.after || []));
       break;
     }
     case "mts-pack:spell": {
@@ -945,24 +938,22 @@ export function resolveMtsPlayerPackEffect(
       break;
     }
     case "mts-pack:summon-cost": {
-      let allyId: string | undefined;
-      while (s.player.deck.length) {
-        const result = ports.discardPlayerTop(s);
-        if (
-          result.piece &&
-          cards.get(result.piece.code)?.type_code === "ally"
-        ) {
-          allyId = result.piece.id;
-          // The last original card may have recycled immediately. Preserve
-          // its exact physical identity and put it back in the discard area.
-          const i = s.player.deck.findIndex((p) => p.id === allyId);
-          if (i >= 0) s.player.discard.push(...s.player.deck.splice(i, 1));
-          break;
-        }
-        if (result.emptied || !result.piece) break;
+      const index = s.player.deck.findIndex(
+        (p) => cards.get(p.code)?.type_code === "ally",
+      );
+      const { pieces, responses } = ports.discardPlayerCards(
+        s,
+        index >= 0 ? index + 1 : s.player.deck.length,
+      );
+      const allyId = index >= 0 ? pieces[index]?.id : undefined;
+      if (allyId) {
+        // The last original card may have recycled immediately. Preserve
+        // its exact physical identity and put it back in the discard area.
+        const i = s.player.deck.findIndex((p) => p.id === allyId);
+        if (i >= 0) s.player.discard.push(...s.player.deck.splice(i, 1));
       }
       saveCost(s, e.id, { allyId });
-      ports.queue(s, ...(e.after || []));
+      ports.queue(s, ...responses, ...(e.after || []));
       break;
     }
     case "mts-pack:summon": {
@@ -1119,11 +1110,19 @@ export function resolveMtsPlayerPackEffect(
         e.amount > 0 && s.player.deck.length >= e.amount,
         "Shield Spell must discard its full attack-damage cost.",
       );
-      const discarded = discardFixed(s, e.amount, ports);
+      const { pieces, responses } = ports.discardPlayerCards(s, e.amount);
       need(
-        discarded === e.amount,
+        pieces.length === e.amount,
         "Shield Spell must pay the complete discard cost.",
       );
+      ports.queue(
+        s,
+        ...responses,
+        P("shield-resolve", { packet: e.packet, amount: e.amount }),
+      );
+      break;
+    }
+    case "mts-pack:shield-resolve": {
       ports.claimDefense(s, e.packet);
       ports.preventAllAttackDamage(s, e.packet, e.amount);
       break;
