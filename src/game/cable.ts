@@ -406,6 +406,12 @@ export function cableDamageOptions(
     packet.target === "hero"
       ? `hero:${packet.actorId || s.activePlayerId}`
       : packet.target;
+  const receiving = target?.startsWith("hero:")
+    ? seatView(s, target.slice(5)).player
+    : ports.find(s, target);
+  // Tough is a status-card replacement and resolves before optional interrupts.
+  // Native enemy-attack windows have already applied Piercing and constant prevention.
+  if (receiving?.tough && !packet.ignoreTough) return [];
   if (
     !ports
       .friendly(s)
@@ -553,8 +559,11 @@ export function resolveCableEffect(s: GameState, e: Effect, ports: CablePorts) {
       if (e.put && card(p!).type_code === "player_side_scheme")
         ports.queue(
           s,
-          ...enterPlayerSideScheme(s, p!),
-          E("playerSideSchemeLimit", { playerId: s.firstPlayerId }),
+          ...enterPlayerSideScheme(s, p!).map((e) =>
+            e.type === "playerSideSchemeLimit"
+              ? { ...e, actorId: s.firstPlayerId, playerId: s.firstPlayerId }
+              : e,
+          ),
         );
       else if (e.put) ports.put(s, p!);
       else s.player.hand.push(p!);
@@ -1065,9 +1074,18 @@ export function resolveCableEffect(s: GameState, e: Effect, ports: CablePorts) {
         ],
         p = zones.flat().find((p) => p.code === "40006");
       if (!p) {
-        ports.removeEncounter(s, e.piece.id);
-        s.encounter.discard.push(e.piece);
-        ports.dealEncounter(s, s.activePlayerId);
+        ports.shuffle(s);
+        const existing = s.sideSchemes.find((q) => q.code === "40006");
+        if (existing)
+          ports.queue(
+            s,
+            C("obligation-attach", { piece: e.piece, target: existing.id }),
+          );
+        else {
+          ports.removeEncounter(s, e.piece.id);
+          s.encounter.discard.push(e.piece);
+          ports.dealEncounter(s, s.activePlayerId);
+        }
         break;
       }
       take(s, p.id, zones);

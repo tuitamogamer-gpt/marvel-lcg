@@ -1,3 +1,4 @@
+import { captainPackHasTrait } from "../src/game/captain-pack.js";
 import { describe, it, expect } from "vitest";
 import { card, deckCodes, heroStats, resources } from "../src/game/cards.js";
 import {
@@ -6,6 +7,8 @@ import {
   nativeHeroAbilityOptions,
   playable,
   cardCost,
+  nativeCanPutIntoPlay,
+  nativePutIntoPlay,
 } from "../src/game/engine.js";
 import { hasExecutableScript } from "../src/game/script-registry.js";
 import { deckErrors, deckOptions } from "../src/game/decks.js";
@@ -650,4 +653,206 @@ describe("Cable shared cards and saved native entry", () => {
     expect(s.player.inPlay.find((q) => q.id === p.id)?.damage).toBe(2);
     expect(s.encounter.acceleration).toBe(0);
   });
+});
+
+describe("Cable rules-reference regressions", () => {
+  it("Deadpool heals after the entire consequential packet, preserving excess damage", () => {
+    let s = base();
+    const p = put(s, "40024");
+    p.damage = 2;
+    s = finish(
+      native(s, {
+        type: "damage",
+        target: p.id,
+        amount: 2,
+        source: "consequential",
+      }),
+    );
+    expect(s.player.inPlay.find((q) => q.id === p.id)?.damage).toBe(1);
+    expect(s.encounter.acceleration).toBe(1);
+  });
+  it("Deadpool still leaves play if one heal cannot cover lethal consequential damage", () => {
+    let s = base();
+    const p = put(s, "40024");
+    p.damage = 2;
+    s = finish(
+      native(s, {
+        type: "damage",
+        target: p.id,
+        amount: 4,
+        source: "consequential",
+      }),
+    );
+    expect(s.player.inPlay.some((q) => q.id === p.id)).toBe(false);
+    expect(s.encounter.acceleration).toBe(1);
+  });
+  it("nemesis introduction retains unrelated set-aside physical cards", () => {
+    let s = base();
+    const other = makePiece(s, "41002a");
+    s.player.setAside!.push(other);
+    s = finish(reveal(s, "01190"));
+    expect(s.player.setAside?.map((p) => p.id)).toEqual([other.id]);
+  });
+  it("Crisis prevents Temporal Leap before any card is removed", () => {
+    let s = base();
+    const p = put(s, "40013");
+    victory(s, "40020");
+    side(s, "01108", 3);
+    expect(card("01108").scheme_crisis).toBeTruthy();
+    s.scheme.threat = 6;
+    s = finish(native(s, { type: "threat", target: "main", amount: 1 }));
+    expect(s.phase).toBe("lost");
+    expect(s.removed.some((q) => q.id === p.id)).toBe(false);
+  });
+  it("Caliban retrieves the actual last-card ally after immediate deck recycling", () => {
+    let s = base();
+    const caliban = put(s, "40014"),
+      last = makePiece(s, "40024");
+    last.ownerId = "p1";
+    s.player.discard.push(...s.player.deck.splice(0));
+    s.player.deck.push(last);
+    const dealt = s.encounter.dealt.length;
+    s = finish(native(s, { type: "cable:enter", id: caliban.id }));
+    expect(s.player.hand.filter((p) => p.id === last.id)).toHaveLength(1);
+    expect(s.player.deck.some((p) => p.id === last.id)).toBe(false);
+    expect(s.encounter.dealt).toHaveLength(dealt + 1);
+  });
+  it("an already-in-play Purge receives the obligation without resetting its threat", () => {
+    let s = base();
+    const p = s.player.deck.splice(
+      s.player.deck.findIndex((p) => p.code === "40006"),
+      1,
+    )[0];
+    p.counters = 2;
+    s.sideSchemes.push(p);
+    const dealt = s.encounter.dealt.length;
+    s = finish(reveal(s, "40031"));
+    expect(s.sideSchemes.find((q) => q.id === p.id)?.counters).toBe(2);
+    expect(s.attachments.find((q) => q.code === "40031")?.attachedTo).toBe(
+      p.id,
+    );
+    expect(s.encounter.dealt).toHaveLength(dealt);
+  });
+  it("Technovirus Resurgence lets first player discard Purge and then deals the owner an encounter", () => {
+    let s = base("hero", true);
+    s.firstPlayerId = "p2";
+    const existing = side(s, "40020", 4);
+    existing.ownerId = "p2";
+    s = reveal(s, "40031");
+    expect(s.prompt?.title).toBe("Player side scheme limit");
+    expect(s.activePlayerId).toBe("p2");
+    const purge = s.sideSchemes.find((p) => p.code === "40006")!;
+    s = finish(choose(reload(s), purge.id));
+    expect(s.sideSchemes.some((p) => p.id === existing.id)).toBe(true);
+    expect(s.attachments.some((p) => p.code === "40031")).toBe(false);
+    expect(s.encounter.dealt.filter((p) => p.dealtTo === "p1")).toHaveLength(1);
+  });
+  it("Stryfe's own damage is not prohibited by another player's Back to the Future", () => {
+    let s = base("hero", true);
+    const stryfe = minion(s, "40032", "p1");
+    side(s, "40033", 4);
+    s = finish(
+      native(s, {
+        type: "damage",
+        target: stryfe.id,
+        amount: 1,
+        source: stryfe.id,
+        actorId: "p2",
+      }),
+    );
+    expect(s.minions.find((p) => p.id === stryfe.id)?.damage).toBe(1);
+  });
+});
+
+describe("Telekinetic Force Field replacement timing", () => {
+  it("ordinary Tough consumes its status without offering or discarding the field", () => {
+    let s = base();
+    const p = put(s, "40012");
+    s.player.tough = true;
+    const hp = s.player.hp;
+    s = native(s, { type: "damage", target: "hero", amount: 3 });
+    expect(s.prompt?.title).not.toBe("Telekinetic Force Field");
+    s = finish(s);
+    expect(s.player.hp).toBe(hp);
+    expect(s.player.tough).toBe(false);
+    expect(s.player.inPlay.some((q) => q.id === p.id)).toBe(true);
+  });
+  it("teammate Tough resolves before Cable can spend their field", () => {
+    let s = base("hero", true);
+    const p = put(s, "40012");
+    seatView(s, "p2").player.tough = true;
+    const hp = seatView(s, "p2").player.hp;
+    s = native(s, { type: "damage", target: "hero:p2", amount: 3 });
+    expect(s.prompt?.title).not.toBe("Telekinetic Force Field");
+    s = finish(s);
+    expect(seatView(s, "p2").player.hp).toBe(hp);
+    expect(seatView(s, "p2").player.tough).toBe(false);
+    expect(s.player.inPlay.some((q) => q.id === p.id)).toBe(true);
+  });
+  it("enemy attack Tough resolves before optional field prevention", () => {
+    let s = base();
+    const p = put(s, "40012");
+    s.player.tough = true;
+    const hp = s.player.hp;
+    s = finish(native(s, { type: "enemyAttack", id: s.villain.id }));
+    expect(s.player.hp).toBe(hp);
+    expect(s.player.tough).toBe(false);
+    expect(s.player.inPlay.some((q) => q.id === p.id)).toBe(true);
+  });
+});
+
+describe("Shared put-into-play entry", () => {
+  it("native entry initializes uses and applies current/max HP together", () => {
+    let s = base();
+    const web = makePiece(s, "01008"),
+      armor = makePiece(s, "01036");
+    const hp = s.player.hp;
+    nativePutIntoPlay(s, web);
+    nativePutIntoPlay(s, armor);
+    s = finish(native(s, ...s.queue));
+    expect(s.player.inPlay.find((p) => p.id === web.id)?.counters).toBe(3);
+    expect(s.player.hp).toBe(hp + 6);
+  });
+  it("a native enemy attachment can enter without transferring its owner to that enemy", () => {
+    let s = base(),
+      enemy = minion(s, "01103"),
+      tracer = makePiece(s, "01007");
+    nativePutIntoPlay(s, tracer);
+    s = finish(choose(s, enemy.id));
+    expect(s.player.inPlay.find((p) => p.id === tracer.id)).toMatchObject({
+      ownerId: "p1",
+      attachedTo: enemy.id,
+    });
+  });
+  it("Mind Control put into play obeys non-Elite attachment constraints", () => {
+    const s = base();
+    minion(s, "40032");
+    const elite = minion(s, "01102");
+    expect(card(elite).traits).toContain("Elite");
+    const mind = makePiece(s, "34009");
+    s.minions = s.minions.filter((p) => p.id === elite.id);
+    expect(nativeCanPutIntoPlay(s, mind)).toBe(false);
+  });
+  it("Mind Control applies its native control entry after choosing the original minion", () => {
+    let s = base();
+    const enemy = minion(s, "01103"),
+      mind = makePiece(s, "34009");
+    nativePutIntoPlay(s, mind);
+    s = finish(choose(s, enemy.id));
+    expect(s.minions.some((p) => p.id === enemy.id)).toBe(false);
+    expect(s.player.inPlay.some((p) => p.id === enemy.id)).toBe(true);
+    expect(s.player.inPlay.find((p) => p.id === mind.id)?.attachedTo).toBe(
+      enemy.id,
+    );
+  });
+});
+
+it("Purge supplies Psionic to shared trait consumers in both identity forms", () => {
+  const s = base();
+  victory(s);
+  expect(captainPackHasTrait(s, "hero", "Psionic")).toBe(true);
+  s.player.form = "alter";
+  expect(captainPackHasTrait(s, "hero", "Psionic")).toBe(true);
+  s.victoryDisplay = [];
+  expect(captainPackHasTrait(s, "hero", "Psionic")).toBe(false);
 });

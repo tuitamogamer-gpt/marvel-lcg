@@ -16377,6 +16377,17 @@ export function nativeCanPutIntoPlay(s: GameState, p: Piece) {
   return true;
 }
 function nativePutAttachmentTargets(s: GameState, p: Piece) {
+  const native =
+    cyclops.cyclopsAttachmentTargets(s, p, cyclopsPorts) ??
+    phoenix.phoenixAttachmentTargets(s, p, phoenixPorts) ??
+    shadowcat.shadowcatAttachmentTargets(s, p, shadowcatPorts) ??
+    mgPack.mutantGenesisPlayerPackAttachmentTargets(
+      s,
+      p,
+      mutantGenesisPackPorts,
+    );
+  if (native !== null)
+    return native.filter((t) => playerAttachmentTarget(s, p, t.id));
   const ally = allyUpgradeTargets(s, p);
   if (
     ally.length ||
@@ -16402,8 +16413,16 @@ function nativePutAttachmentTargets(s: GameState, p: Piece) {
             : /Attach to.*enemy/i.test(text)
               ? "enemy"
               : "friendly");
-  return targets(s, group, false, false).filter((t) =>
-    playerAttachmentTarget(s, p, t.id),
+  return targets(s, group, false, false).filter(
+    (t) =>
+      playerAttachmentTarget(s, p, t.id) &&
+      (!/(?:Max|Limit) 1 per (?:enemy|minion|character|scheme)/i.test(text) ||
+        !allInPlay(s).some(
+          (q) =>
+            q.id !== p.id &&
+            card(q).name === card(p).name &&
+            q.attachedTo === t.id,
+        )),
   );
 }
 export function nativePutIntoPlay(
@@ -16417,7 +16436,14 @@ export function nativePutIntoPlay(
   Object.assign(p, resetPiece(p, true));
   p.ownerId ||= s.activePlayerId;
   if (isPlayerSideScheme(p)) {
-    add(s, ...enterPlayerSideScheme(s, p));
+    add(
+      s,
+      ...enterPlayerSideScheme(s, p).map((e) =>
+        e.type === "playerSideSchemeLimit"
+          ? { ...e, actorId: s.firstPlayerId, playerId: s.firstPlayerId }
+          : e,
+      ),
+    );
     return;
   }
   if (c.type_code === "ally") {
@@ -16426,12 +16452,19 @@ export function nativePutIntoPlay(
     return;
   }
   s.player.inPlay.push(p);
+  const printedUses = /Uses\s*\((\d+)\b/i.exec(c.text || "");
+  if (printedUses) p.counters = Number(printedUses[1]);
   if (attachedTarget) {
     need(
       nativePutAttachmentTargets(s, p).some((t) => t.id === attachedTarget),
       "The original upgrade cannot attach to this character.",
     );
-    attachPackUpgrade(s, p.id, attachedTarget);
+    if (
+      attachedTarget === s.villain.id ||
+      s.minions.some((q) => q.id === attachedTarget)
+    )
+      p.attachedTo = attachedTarget;
+    else attachPackUpgrade(s, p.id, attachedTarget);
   }
   if (["01008", "01056", "01064", "01080"].includes(rulesCode(p)))
     p.counters = 3;
@@ -20845,7 +20878,14 @@ function resolve(s: GameState, e: Effect) {
   if (psylocke.resolvePsylockeEffect(s, e, psylockePorts)) return;
   if (wolverine.resolveWolverineEffect(s, e, wolverinePorts)) return;
   if (e.type === "cableAttach") {
-    attachPackUpgrade(s, e.id, e.target);
+    const p = find(s, e.id);
+    need(
+      p && nativePutAttachmentTargets(s, p).some((t) => t.id === e.target),
+      "This attachment target is no longer legal.",
+    );
+    if (e.target === s.villain.id || s.minions.some((q) => q.id === e.target))
+      p!.attachedTo = e.target;
+    else attachPackUpgrade(s, e.id, e.target);
     return;
   }
   if (cable.resolveCableEffect(s, e, cablePorts)) return;
