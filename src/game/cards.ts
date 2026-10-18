@@ -66,6 +66,7 @@ import { spdrPackCharacterModifiers } from "./spdr-pack.js";
 import { ironspiderSinisterHealthBonus } from "./ironspider-sinister.js";
 import { phoenixStats, phoenixAllyModifiers } from "./phoenix.js";
 import { wolverineStats } from "./wolverine.js";
+import { x23Stats, x23Mad } from "./x23.js";
 import { angelIdentityCode, angelRecruitBonus } from "./angel.js";
 import { stormGlobal, stormStats, stormAllyHP } from "./storm.js";
 import { colossusStats } from "./colossus.js";
@@ -788,6 +789,20 @@ export const HEROES = [
     style: "Player side schemes · Leadership",
     complexity: 3,
   },
+  {
+    id: "x23",
+    code: "43001a",
+    alter: "43001b",
+    name: "X-23",
+    identity: "Laura Kinney",
+    aspect: "aggression" as Aspect,
+    color: "#c6a82d",
+    tag: "Turn pain into purpose.",
+    description:
+      "Ready through damage, strike with adamantium claws, and fight alongside Honey Badger.",
+    style: "Living Weapon · Aggression",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -1134,6 +1149,7 @@ export function deckCodes(
       (hero === "storm" && aspect === "leadership") ||
       (hero === "cable" && aspect === "leadership") ||
       (hero === "angel" && aspect === "protection") ||
+      (hero === "x23" && aspect === "aggression") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
       (hero === "rogue" && aspect === "protection") ||
@@ -1277,6 +1293,7 @@ export function maxHP(s: GameState) {
     angelRecruitBonus(s, "hero") +
     cyclopsCharacterModifiers(s, "hero").health +
     wolverineStats(s).health +
+    x23Stats(s).health +
     hulkStats(s).health +
     msMarvelStats(s).health +
     rocketMaxHpBonus(s) +
@@ -1377,6 +1394,8 @@ export function heroStats(s: GameState) {
       wolverineStats(s).attack +
       psylockeStats(s).attack +
       cableStatBonus(s) +
+      x23Stats(s).attack +
+      x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
@@ -1412,6 +1431,8 @@ export function heroStats(s: GameState) {
       phoenixStats(s).thwart +
       psylockeStats(s).thwart +
       cableStatBonus(s) +
+      x23Stats(s).thwart -
+      x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
@@ -1422,6 +1443,7 @@ export function heroStats(s: GameState) {
       stormStats(s).defense +
       psylockeStats(s).defense +
       cableStatBonus(s) +
+      x23Stats(s).defense +
       (has(s, "01081") ? 1 : 0) +
       (has(s, "01016") ? (aerial(s) ? 2 : 1) : 0) +
       captainStats(s).def +

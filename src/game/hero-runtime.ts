@@ -115,7 +115,17 @@ export const HERO_RUNTIME: HeroRuntime[] = (
           ...sourceStarter,
           supplementaryCards: { "29002a": 1, "29003a": 1 },
         }
-      : sourceStarter;
+      : sourceStarter.heroCode === "43001a"
+        ? {
+            ...sourceStarter,
+            supplementaryCards: {
+              "43034": 1,
+              "43035": 1,
+              "43036": 1,
+              "43037": 1,
+            },
+          }
+        : sourceStarter;
   const front = byCode.get(starter.heroCode)!;
   const id = front.set_code!;
   const forms = cards.filter(
@@ -360,6 +370,10 @@ export function validateHeroDeck(
   >;
   for (const [index, code] of codes.entries()) {
     const c = known[index];
+    if (["43034", "43035", "43036", "43037"].includes(code))
+      errors.push(
+        "Linked Specialization upgrades cannot be included in a deck.",
+      );
     if (!c) {
       errors.push(`Unknown card ${code}.`);
       continue;

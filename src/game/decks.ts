@@ -50,6 +50,7 @@ export function deckOptions(
       c.code !== "32031b" &&
       c.code !== "34002b" &&
       c.code !== "41002b" &&
+      !["43034", "43035", "43036", "43037"].includes(c.code) &&
       !identityCodes.has(c.code) &&
       !identityMatch(heroId, c) &&
       (hasExecutableScript(c) ||
@@ -130,6 +131,7 @@ export function deckErrors(
       "domino",
       "angel",
       "cable",
+      "x23",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

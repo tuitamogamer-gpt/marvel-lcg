@@ -1,5 +1,6 @@
 import * as domino from "./domino.js";
 import * as cable from "./cable.js";
+import * as x23 from "./x23.js";
 import * as gambit from "./gambit.js";
 import * as cyclops from "./cyclops.js";
 import {
@@ -721,12 +722,16 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           (nebula.nebulaAttackKeywords(s).piercing ||
             nebula.nebulaNamedCharacterModifiers(s, heroCard(s).name).piercing),
       ) +
-      Number(name === "Overkill" && nebula.nebulaAttackKeywords(s).overkill) +
+      Number(
+        name === "Overkill" &&
+          (nebula.nebulaAttackKeywords(s).overkill || x23.x23Stats(s).overkill),
+      ) +
       (name === "Ranged" && s.player.inPlay.some((p) => p.code === "04002")
         ? 1
         : 0) +
       (name === "Retaliate"
-        ? psylocke.psylockeStats(s).retaliate +
+        ? x23.x23Stats(s).retaliate +
+          psylocke.psylockeStats(s).retaliate +
           (s.attack?.angelRetaliatePlayerId === s.activePlayerId
             ? s.attack.angelRetaliate || 0
             : 0) +
@@ -1460,6 +1465,8 @@ function movePieceFromPlay(
     !isTextBlank(s, removedSource)
       ? removedSource.attachedTo.slice(5)
       : undefined;
+  if (removedSource && !removed && x23.x23Cybermods(s, removedSource, x23Ports))
+    return;
   if (removedSource) cyclops.cyclopsCardLeft(s, removedSource);
   need(
     !removedSource ||
@@ -1728,7 +1735,7 @@ function movePieceFromPlay(
       p.code === "16035" ||
       p.code === "25007" ||
       p.code === "27191" ||
-      ["29012", "29013", "35004"].includes(p.code) ||
+      ["29012", "29013", "35004", "43009", "43036"].includes(p.code) ||
       (p.code === "22035" && p.attachedTo?.startsWith("hero:")) ||
       (p.code === "03025" && p.attachedTo?.startsWith("hero:"))
     )
@@ -2702,6 +2709,16 @@ function dealDamage(
     damageDealt:
       taken.damageDealt ?? (traits.overkillDamage ? taken.actualDamage : dealt),
   };
+  add(
+    s,
+    ...x23.x23Damaged(
+      s,
+      target,
+      result.actualDamage,
+      !!traits.enemyAttack,
+      x23Ports,
+    ),
+  );
   if (s.currentEventId && attack)
     s.flags[`shadowcatDealt:${s.currentEventId}:${target}`] =
       result.damageDealt > 0 || (!replaced && dealt === 0);
@@ -2828,6 +2845,7 @@ function dealDamage(
           mansionAttack.mansionAttackModifiers(s, original, { isTextBlank })
             .retaliate +
           magneto.magnetoModifiers(s, original, { isTextBlank }).retaliate +
+          x23.x23EnemyRetaliate(s) +
           (target === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -3362,6 +3380,27 @@ function defeatCharacter(
       return true;
     }
   }
+  if (
+    minion &&
+    m.code === "43029" &&
+    !isTextBlank(s, m) &&
+    !s.flags[`x23Deathstrike:${m.id}`]
+  ) {
+    s.flags[`x23Deathstrike:${m.id}`] = true;
+    m.pendingDefeat = true;
+    add(
+      s,
+      ...x23.x23Defeated(s, m),
+      E("finishDefeat", {
+        id: m.id,
+        source,
+        attack,
+        enemyAttack,
+        valkyrieReceipts: receipts,
+      }),
+    );
+    return true;
+  }
   if (gambit.gambitShield(s, m, { discard: discardPiece })) return false;
   const tracers = allInPlay(s).filter(
     (a) =>
@@ -3404,6 +3443,7 @@ function defeatCharacter(
         actorId: allyController,
       }),
     );
+  delete s.flags[`x23Deathstrike:${m.id}`];
   delete s.flags[`acolytesDefeat:${m.id}`];
   delete s.flags[`magnetoDefeat:${m.id}`];
   log(s, `${name} is defeated.`, "good");
@@ -5582,6 +5622,8 @@ function pay(
         delete seatView(s, paymentActor).flags[
           `spdrClarityCommitted:${info.id}`
         ];
+      } else if (find(s, id)?.code === "43010") {
+        spentResponses.push(...(x23.x23ResourceSpent(s, id, x23Ports) || []));
       } else if (psylocke.psylockeIsResource(s, id)) {
         spentResponses.push(...psylocke.psylockeResourceSpent(s, id));
       } else if (cable.cableSpendResource(s, id)) {
@@ -5977,6 +6019,7 @@ export function newGame(config: {
     shadowcat.shadowcatInitializeMass(s, { makePiece });
     wolverine.wolverineInitialize(s, { makePiece });
     psylocke.psylockeInitialize(s, { makePiece });
+    x23.x23Initialize(s, { makePiece });
     s.player.deck = shuffle(s, s.player.deck);
     doctorStrangeSetup(s, dsPorts);
     venom.venomInitializeNemesis(s, { makePiece });
@@ -6232,6 +6275,9 @@ function initialSetup(s: GameState) {
       ...shadowcat
         .shadowcatSetup(seatView(s, seat), { makePiece })
         .map((e) => ({ ...e, actorId: seat.id })),
+      ...x23
+        .x23Setup(seatView(s, seat))
+        .map((e) => ({ ...e, actorId: seat.id })),
       ...psylocke
         .psylockeSetup(seatView(s, seat))
         .map((e) => ({ ...e, actorId: seat.id })),
@@ -6401,6 +6447,7 @@ export function playable(s: GameState, p: Piece): string | null {
     gamora.gamoraPlayRestriction(s, p, gamoraPorts) ||
     drax.draxPlayRestriction(s, p, draxPorts) ||
     domino.dominoPlayRestriction(s, p, dominoPorts) ||
+    x23.x23PlayRestriction(s, p, x23Ports) ||
     gambit.gambitPlayRestriction(s, p, gambitPorts) ||
     cyclops.cyclopsPlayRestriction(s, p, cyclopsPorts) ||
     psylocke.psylockePlayRestriction(s, p, psylockePorts) ||
@@ -6760,6 +6807,7 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
 function nativeCardPlayCommitted(s: GameState, p: Piece) {
   add(s, ...cable.cablePlayed(s, p));
   angel.angelCardPlayed(s, p);
+  add(s, ...x23.x23Played(s, p));
   const playToken = `play:${s.nextId++}`;
   miles.milesCardPlayCommitted(s, p, playToken);
   nova.novaCardPlayCommitted(s, p, playToken);
@@ -7001,6 +7049,7 @@ function play(
       ...psylocke.psylockeCardEntered(s, p),
       ...angel.angelCardEntered(s, p),
 
+      ...x23.x23Entered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
       ...phoenix.phoenixCardEntered(s, p),
       ...rogue.rogueCardEntered(s, p, fromHand),
@@ -7052,7 +7101,7 @@ function play(
       p.code === "16035" ||
       p.code === "25007" ||
       p.code === "27191" ||
-      ["29012", "29013", "35004"].includes(p.code)
+      ["29012", "29013", "35004", "43009", "43036"].includes(p.code)
     )
       s.player.hp += maxHP(s) - healthBefore;
     if (["01057", "01065", "01081"].includes(rulesCode(p)) && s.playerCount > 1)
@@ -7090,7 +7139,7 @@ function play(
           starLordPackPorts,
         ),
       );
-    if (p.code === "42023" && s.playerCount > 1)
+    if (["42023", "43019"].includes(p.code) && s.playerCount > 1)
       choosePlayer(
         s,
         c.name,
@@ -7448,6 +7497,7 @@ function event(
   const ant =
     psylocke.psylockeEvent(s, p, paid) ??
     domino.dominoEvent(s, p) ??
+    x23.x23Event(s, p) ??
     gambit.gambitEvent(s, p) ??
     cyclops.cyclopsEvent(s, p) ??
     rogue.rogueEvent(s, p) ??
@@ -8208,6 +8258,15 @@ function ability(s: GameState, id: string, action = "special") {
       : cableOptions.find((o) => o.id === action);
   if (cableSelected) {
     add(s, ...cableSelected.effects);
+    return;
+  }
+  const x23Options = x23.x23AbilityOptions(s, id, x23Ports);
+  const x23Selected =
+    action === "special"
+      ? x23Options[0]
+      : x23Options.find((o) => o.id === action);
+  if (x23Selected) {
+    add(s, ...x23Selected.effects);
     return;
   }
   const angelOptions = angel.angelAbilityOptions(s, id, angelPorts);
@@ -10605,6 +10664,7 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
   canPutAlly: (s, p) =>
     card(p).type_code === "ally" && !uniqueConflict(s, card(p)),
   canPutUpgrade: (s, p) =>
+    !x23.x23PlayRestriction(s, p, x23Ports, true) &&
     card(p).type_code === "upgrade" &&
     !isPermanent(card(p)) &&
     !uniqueConflict(s, card(p)) &&
@@ -10662,6 +10722,7 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
       ...psylocke.psylockeCardEntered(s, p),
       ...angel.angelCardEntered(s, p),
       ...cable.cableCardEntered(s, p),
+      ...x23.x23Entered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
       ...wolverine
         .wolverineCardEntered(s, p, false)
@@ -11386,6 +11447,7 @@ const gmwPorts: gmwPack.GmwPlayerPackPorts = {
 export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
   return [
     ...cable.cableAbilityOptions(s, id, cablePorts),
+    ...x23.x23AbilityOptions(s, id, x23Ports),
     ...angel.angelAbilityOptions(s, id, angelPorts),
     ...storm.stormAbilityOptions(s, id, stormPorts),
     ...antMan.antManAbilityOptions(s, id, antManPorts),
@@ -15846,6 +15908,7 @@ const nebulaPorts: nebula.NebulaPorts = {
         ...psylocke.psylockeCardEntered(s, p),
         ...angel.angelCardEntered(s, p),
         ...cable.cableCardEntered(s, p),
+        ...x23.x23Entered(s, p),
         ...cyclops.cyclopsCardEntered(s, p),
         ...wolverine
           .wolverineCardEntered(s, p, false)
@@ -16622,6 +16685,71 @@ const angelPorts: angel.AngelPorts = {
     return p;
   },
   dealEncounter,
+};
+
+const x23Ports: x23.X23Ports = {
+  queue: add,
+  choose,
+  makePiece,
+  find,
+  maxHP,
+  stats: heroStats,
+  allyStat,
+  allyHP: pieceHP,
+  damageCostResponses: (s, amount) =>
+    spiderHam.spiderHamAfterDamage(
+      s,
+      {
+        token: `x23-cost:${s.nextId++}`,
+        playerId: s.activePlayerId,
+        actualDamage: amount,
+      },
+      spiderHamPorts,
+    ),
+  canReady: (s) => s.player.exhausted && canReadyIdentity(s),
+  ready: (s) => {
+    readyIdentity(s);
+  },
+  canTakeDamageCost: (s, n) => wolverinePorts.canTakeDamageCost(s, n),
+  takeDamageCost: (s, n) => {
+    const paid = wolverinePorts.takeDamageCost(s, n);
+    check(s);
+    return paid;
+  },
+  canPay: angelPorts.canPay,
+  reaction: gambitPorts.reaction,
+  discard: discardPiece,
+  discardHand,
+  discardTop: discardNativePlayerTop,
+  discardEncounterTop: (s) => mutagenPorts.discardTop(s).piece,
+  randomDiscard,
+  shuffle: (s) => {
+    revealHidden(s);
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  hidden: revealHidden,
+  attach: (s, p, target) => {
+    removeEncounterInstance(s, p.id);
+    s.attachments = s.attachments.filter((q) => q.id !== p.id);
+    p.attachedTo = target;
+    s.attachments.push(p);
+  },
+  keepObligation: gambitPorts.keepObligation,
+  putMinion: (s, p) => mutagenPorts.putMinion(s, p, s.activePlayerId),
+  indirect: (s, amount, source) =>
+    zzzaxPorts.indirect(s, {
+      playerId: s.activePlayerId,
+      amount,
+      sourceId: source,
+      sourceTitle: "Lady Deathstrike",
+    }),
+  heal,
+  batch: spectrumPorts.damageBatch,
+  canStatus: antManPorts.canGiveStatus,
+  cancelReveal: angelPorts.cancelReveal,
+  declareDefense: psylockePorts.declareDefense,
+  permanent: angelPorts.permanent,
 };
 
 const stormPorts: storm.StormPorts = {
@@ -17694,6 +17822,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
         )
       : 0) +
     bonus +
+    x23.x23EnemyAttackModifier(s, p.id) +
     attachments +
     ironheart.ironheartEnemyStats(s, p, { isTextBlank }).attack +
     blackWidowEnemyModifier(s, p, originalPlayerId) +
@@ -17883,6 +18012,11 @@ function boostEffects(s: GameState, p: Piece) {
   const cableBoost = cable.cableBoost(s, p);
   if (cableBoost !== null) {
     add(s, ...cableBoost);
+    return;
+  }
+  const xboost = x23.x23Boost(p);
+  if (xboost !== null) {
+    add(s, ...xboost);
     return;
   }
   const angelBoost = angel.angelBoost(s, p);
@@ -19210,6 +19344,30 @@ function reveal(
     );
     opts.push(...domino.dominoRevealOptions(s, p));
     opts.push(...angel.angelRevealOptions(s, p, angelPorts));
+    for (const seat of playerOrder(s))
+      opts.push(
+        ...x23
+          .x23RevealOptions(
+            seatView(s, seat),
+            p,
+            fromEncounterDeck,
+            [
+              E("reveal", {
+                piece: p,
+                skip: true,
+                actorId: s.activePlayerId,
+                fromEncounterDeck,
+                knifeSurge,
+              }),
+            ],
+            x23Ports,
+          )
+          .map((o) => ({
+            ...o,
+            id: `${seat.id}:${o.id}`,
+            effects: o.effects.map((q) => ({ ...q, actorId: seat.id })),
+          })),
+      );
     const revealing = s.activePlayerId;
     for (const seat of playerOrder(s))
       opts.push(
@@ -19629,6 +19787,7 @@ function reveal(
       ...storm.STORM_SCRIPT_CODES,
       ...angel.ANGEL_SCRIPT_CODES,
       ...cable.CABLE_SCRIPT_CODES,
+      ...x23.X23_SCRIPT_CODES,
       ...colossus.COLOSSUS_SCRIPT_CODES,
     ].some((code) => code === p.code) ||
       CARDS.some(
@@ -19692,6 +19851,7 @@ function reveal(
       psylocke.psylockeEncounterReveal(s, p) ??
       wolverine.wolverineEncounterReveal(s, p) ??
       cable.cableEncounter(s, p) ??
+      x23.x23Encounter(s, p) ??
       angel.angelEncounter(s, p) ??
       rogue.rogueEncounterReveal(s, p) ??
       storm.stormEncounterReveal(s, p) ??
@@ -19742,6 +19902,7 @@ function reveal(
     domino.dominoEncounter(s, p) ??
     psylocke.psylockeEncounterReveal(s, p) ??
     cable.cableEncounter(s, p) ??
+    x23.x23Encounter(s, p) ??
     angel.angelEncounter(s, p) ??
     rogue.rogueEncounterReveal(s, p) ??
     storm.stormEncounterReveal(s, p) ??
@@ -20114,6 +20275,11 @@ function treachery(s: GameState, p: Piece) {
     add(s, ...psy);
     return;
   }
+  const xreveal = x23.x23Encounter(s, p);
+  if (xreveal !== null) {
+    add(s, ...xreveal);
+    return;
+  }
   const gambitReveal = gambit.gambitEncounter(s, p);
   if (gambitReveal !== null) {
     add(s, ...gambitReveal);
@@ -20126,6 +20292,7 @@ function treachery(s: GameState, p: Piece) {
   }
   const stormReveal =
     cable.cableEncounter(s, p) ??
+    x23.x23Encounter(s, p) ??
     angel.angelEncounter(s, p) ??
     storm.stormEncounterReveal(s, p);
   if (stormReveal !== null) {
@@ -20447,6 +20614,11 @@ function treachery(s: GameState, p: Piece) {
         add(s, ...cableNemesis);
         break;
       }
+      const xnemesis = x23.x23Shadows(s);
+      if (xnemesis !== null) {
+        add(s, ...xnemesis);
+        break;
+      }
       const angelNemesis = angel.angelShadows(s);
       if (angelNemesis !== null) {
         add(s, ...angelNemesis);
@@ -20677,6 +20849,7 @@ function resolve(s: GameState, e: Effect) {
     return;
   }
   if (cable.resolveCableEffect(s, e, cablePorts)) return;
+  if (x23.resolveX23Effect(s, e, x23Ports)) return;
   if (angel.resolveAngelEffect(s, e, angelPorts)) return;
   if (storm.resolveStormEffect(s, e, stormPorts)) return;
   if (colossus.resolveColossusEffect(s, e, colossusPorts)) return;
@@ -20811,6 +20984,7 @@ function resolve(s: GameState, e: Effect) {
           gambit.gambitEncounter(state, piece) ??
           cyclops.cyclopsEncounterReveal(state, piece) ??
           cable.cableEncounter(state, piece) ??
+          x23.x23Encounter(state, piece) ??
           angel.angelEncounter(state, piece) ??
           storm.stormEncounterReveal(state, piece) ??
           colossus.colossusEncounterReveal(state, piece) ??
@@ -21834,6 +22008,14 @@ function resolve(s: GameState, e: Effect) {
           break;
         }
       }
+      const xopts = x23.x23BasicOptions(s, e, x23Ports);
+      if (xopts.length) {
+        choose(s, "Animal Instinct", "Boost this basic thwart?", [
+          ...xopts,
+          option("continue", "Continue", [{ ...e, x23Handled: true }]),
+        ]);
+        break;
+      }
       if (
         !e.angelAcrobaticsHandled &&
         !(e.power === "attack" ? s.player.stunned : s.player.confused)
@@ -22075,6 +22257,7 @@ function resolve(s: GameState, e: Effect) {
         draxPackLeadingBlows: e.draxPackLeadingBlows,
         venomPackEntrances: e.venomPackEntrances,
         gmwBasicBonus: e.gmwBasicBonus,
+        x23AnimalBonus: e.x23AnimalBonus,
       };
       const native = wasp.waspBasicPower(
         s,
@@ -22114,6 +22297,7 @@ function resolve(s: GameState, e: Effect) {
                     attack: true,
                     overkill: !!e.overkill,
                     piercing:
+                      x23.x23Stats(s).piercing ||
                       !!e.piercing ||
                       quicksilverPack.quicksilverPackBasicPiercing(
                         textActiveState(s),
@@ -22136,6 +22320,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "quicksilverBasicUsed":
+      add(s, ...x23.x23BasicUsed(s, e.power));
       add(
         s,
         ...nova.novaAfterBasicPower(
@@ -22498,6 +22683,13 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "heroAttackResponses":
+      if (!e.x23Handled) {
+        add(s, ...x23.x23HeroAttack(s, e, x23Ports), {
+          ...e,
+          x23Handled: true,
+        });
+        break;
+      }
       if (!e.psylockeHandled) {
         add(s, ...psylocke.psylockeAttackFinished(s, e, psylockePorts), {
           ...e,
@@ -23017,6 +23209,7 @@ function resolve(s: GameState, e: Effect) {
         ...psylocke.psylockeSideSchemeDefeated(s, p, s.activePlayerId),
         ...angel.angelPlayerSideSchemeDefeated(s, p),
         ...cable.cableSideReward(s, p),
+        ...x23.x23SchemeDefeated(s, p),
       );
       break;
     }
@@ -24259,6 +24452,15 @@ function resolve(s: GameState, e: Effect) {
         break;
       }
       if (e.additional) s.flags.additionalThwartPacket = true;
+      if (e.basic && !e.x23AssaultHandled && x23.x23Assault(s, e.target)) {
+        e.amount =
+          e.amount -
+          (e.basicStatAmount ?? heroStats(s).thwart) +
+          heroStats(s).attack -
+          Number(e.x23AnimalBonus || 0);
+        delete e.basicStatAmount;
+        e.x23AssaultHandled = true;
+      }
       if (e.basic && e.basicStatAmount !== undefined) {
         e.amount += heroStats(s).thwart - e.basicStatAmount;
         delete e.basicStatAmount;
@@ -24936,6 +25138,22 @@ function resolve(s: GameState, e: Effect) {
       const p = find(s, e.id);
       if (!p) break;
       const attack = e.kind === "attack";
+      if (x23.x23Shatterstar(s, p, e, x23Ports)) break;
+      const xopts = x23.x23AllyOptions(s, p, e, x23Ports);
+      if (xopts.length) {
+        choose(s, "Sisterly Bond", "Add X-23’s matching power?", [
+          ...xopts,
+          option("continue", "Continue", [{ ...e, x23Handled: true }]),
+        ]);
+        break;
+      }
+      if (!attack && !e.x23AssaultHandled && x23.x23Assault(s, e.target)) {
+        e.amount =
+          (e.amount ?? allyStat(s, p, "thwart")) -
+          allyStat(s, p, "thwart") +
+          allyStat(s, p, "attack");
+        e.x23AssaultHandled = true;
+      }
       if (!e.angelAcrobaticsHandled && !(attack ? p.stunned : p.confused)) {
         const packet = {
           ...e,
@@ -25453,6 +25671,7 @@ function resolve(s: GameState, e: Effect) {
           attackedEnemy: attackedEnemySnapshot,
         }),
         ...psylocke.psylockeAllyUsed(s, p),
+        ...x23.x23AllyUsed(s, p, e.target, attack),
         ...gambit.gambitAfterAlly(s, p, e.target, attack && !!minionTarget),
         ...angel.angelAllyUsed(s, p, attack),
         ...domino.dominoAfterAlly(s, p, attack),
@@ -25511,7 +25730,9 @@ function resolve(s: GameState, e: Effect) {
                 )
               : Math.max(
                   0,
-                  (card(p).thwart_cost || 0) -
+                  ((e.x23AssaultHandled
+                    ? card(p).attack_cost
+                    : card(p).thwart_cost) || 0) -
                     psylocke.psylockeConsequence(s, p, e.target, false),
                 ),
           ),
@@ -26559,6 +26780,11 @@ function resolve(s: GameState, e: Effect) {
                 after: [resume(entry.id)],
               })),
             })),
+            ...(!friendlySource
+              ? x23
+                  .x23DefenseOptions(view, [packet], x23Ports)
+                  .filter((o) => !usedIds.includes(o.id))
+              : []),
             ...nova,
             ...mockingbird,
             ...firstHit,
@@ -27917,6 +28143,7 @@ function resolve(s: GameState, e: Effect) {
               isVillain: e.attacker === s.villain.id,
             },
           ),
+          ...(e.snapshot?.basicDefense ? x23.x23BasicUsed(s, "defense") : []),
           ...(e.snapshot?.basicDefense
             ? quicksilver.quicksilverBasicUsed(s, "defense")
             : []),
@@ -28980,6 +29207,7 @@ function resolve(s: GameState, e: Effect) {
                 key === "stormInitialized" ||
                 key === "angelInitialized" ||
                 key === "cableInitialized" ||
+                key === "x23Initialized" ||
                 key === "stormSetupComplete" ||
                 key.startsWith("valkyrie") ||
                 key.startsWith("vision") ||
@@ -29044,6 +29272,7 @@ function resolve(s: GameState, e: Effect) {
       );
       add(
         s,
+        ...x23.x23PhaseStart(s),
         E("wolverinePlayerPhase"),
         ...nebula.nebulaTurnBegan(s, s.turnPlayerId, nebulaPorts),
         ...niPack.novaIronheartPackTurnBegan(s, s.turnPlayerId),
@@ -29516,7 +29745,7 @@ export function dispatch(state: GameState, command: Command): GameState {
                 ]);
               else heal(s, "hero", stats.recover);
             }
-            add(s, ...phoenix.phoenixRecovered(s));
+            add(s, ...phoenix.phoenixRecovered(s), ...x23.x23Recovered(s));
             add(
               s,
               ...spiderHam.spiderHamAfterBasicRecover(
@@ -29694,7 +29923,7 @@ export function dispatch(state: GameState, command: Command): GameState {
             s,
             ...spectrum.spectrumTurnEnded(s, s.turnPlayerId, spectrumPorts),
           );
-          add(s, ...wolverineTurnEnd);
+          add(s, ...wolverineTurnEnd, ...x23.x23TurnEnd(s));
         }
       }
     }

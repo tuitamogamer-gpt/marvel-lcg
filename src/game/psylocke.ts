@@ -226,7 +226,7 @@ export function psylockePlayRestriction(
   if (["41006", "41007", "41015", "41019", "41032"].includes(p.code))
     return "Play this event in its printed interrupt or response window.";
   if (
-    ["41018", "41022"].includes(p.code) &&
+    ["41018", "41022", "43025"].includes(p.code) &&
     !ports.hasTrait(s, "hero", "X-Force")
   )
     return "This card requires an X-Force identity.";
@@ -331,7 +331,7 @@ export function psylockeAbilityOptions(
       ),
     ];
   if (
-    p.code === "41022" &&
+    ["41022", "43025"].includes(p.code) &&
     s.player.form === "hero" &&
     (s.encounter.deck.length || s.encounter.discard.length)
   )
@@ -344,7 +344,7 @@ export function psylockeAbilityOptions(
       ),
     ];
   if (
-    p.code === "41023" &&
+    ["41023", "43026"].includes(p.code) &&
     (s.victoryDisplay || []).some((q) =>
       ["side_scheme", "player_side_scheme"].includes(card(q).type_code),
     ) &&
@@ -382,9 +382,16 @@ export function psylockeAbility(
 ): Effect[] | null {
   if (
     id !== "identity" &&
-    !["41008", "41022", "41023", "41024", "41025", "41033"].includes(
-      own(s, id)?.code || "",
-    )
+    ![
+      "41008",
+      "41022",
+      "41023",
+      "41024",
+      "41025",
+      "41033",
+      "43025",
+      "43026",
+    ].includes(own(s, id)?.code || "")
   )
     return null;
   if (id === "identity" && !active(s)) return null;
