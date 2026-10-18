@@ -29630,11 +29630,7 @@ function resolve(s: GameState, e: Effect) {
       for (const seat of order)
         for (let i = 0; i <= (s.heroic || 0); i++) dealEncounter(s, seat.id);
       const hazard =
-        allInPlay(s).filter((p) => p.code === "37025" && !isTextBlank(s, p))
-          .length +
-        angel.angelHazards(s) +
         deadpool.deadpoolPlayerIcons(s, "scheme_hazard") +
-        sinisterPlayerPack.sinisterPlayerPackHazards(s) +
         (card(s.scheme.code).scheme_hazard || 0) +
         s.sideSchemes.reduce(
           (n, p) =>

@@ -15,6 +15,7 @@ import {
   maxHP,
 } from "../src/game/cards.js";
 import { resourcesFor } from "../src/game/payment.js";
+import { activateSeat } from "../src/game/team.js";
 import { heroStarterCodes } from "../src/game/hero-runtime.js";
 import { hasExecutableScript } from "../src/game/script-registry.js";
 import {
@@ -180,6 +181,18 @@ describe("Deadpool full original pack", () => {
       crisis: 0,
     });
     expect(deadpoolIconCount(s)).toBe(3);
+  });
+  it("counts mixed Pool, Suit, Venom, Guild, and Angel hazards once across both players", () => {
+    let s = base("hero", true);
+    put(s, "44044");
+    activateSeat(s, "p2");
+    ["27190", "27191", "37025", "42024"].forEach((code) => put(s, code));
+    activateSeat(s, "p1");
+    s.encounter.deck = Array.from({ length: 15 }, () => makePiece(s, "01101"));
+    s = finish(native(s, { type: "dealEncounters" }));
+    expect(s.minions.filter((p) => p.dealtTo === "p1")).toHaveLength(4);
+    expect(s.minions.filter((p) => p.dealtTo === "p2")).toHaveLength(3);
+    expect(s.encounter.deck).toHaveLength(8);
   });
   it("Live Dangerously adds two cards to each identity's hand size and leaves one physical side scheme", () => {
     let s = base();
