@@ -1565,9 +1565,11 @@ export function resolveDeadpoolEffect(
           (q) => !cards.some((a) => a.id === q.id),
         );
       s.resolving = s.resolving.filter((q) => q.id !== e.piece.id);
-      s.removed.push(e.piece);
+      if (!s.removed.some((q) => q.id === e.piece.id)) s.removed.push(e.piece);
+      if (!cards.length) break;
       const minion = cards.find((q) => q.code === "44038"),
         scheme = cards.find((q) => q.code === "44039");
+      s.resolving.push(...cards.filter((q) => q === minion || q === scheme));
       s.encounter.deck.push(
         ...cards.filter((q) => q !== minion && q !== scheme),
       );

@@ -251,16 +251,49 @@ describe("Deadpool full original pack", () => {
     s = native(s, { type: "damage", target: "hero", amount: 99 });
     expect(s.phase).toBe("lost");
   });
-  it("Crisis reveals the actual set-aside minion/scheme, shuffles the four others and removes itself", () => {
+  it.each([0, 1, 2])(
+    "Crisis preserves its seven physical cards with %i Media Coverage copies",
+    (copies) => {
+      let s = base();
+      for (let i = 0; i < copies; i++)
+        s.attachments.push({
+          ...makePiece(s, "02049"),
+          attachedTo: `hero:${s.activePlayerId}`,
+        });
+      const ids = s.deadpool!.poolSetAside.map((p) => p.id);
+      const crisis = makePiece(s, "44037");
+      s = native(s, { type: "reveal", piece: crisis });
+      s = finish(s);
+      expect(s.deadpool!.poolSetAside).toHaveLength(0);
+      expect(s.removed.filter((p) => p.id === crisis.id)).toHaveLength(1);
+      const current = [
+        ...s.minions,
+        ...s.sideSchemes,
+        ...s.encounter.deck,
+        ...s.encounter.discard,
+        ...s.resolving,
+        ...s.removed,
+      ];
+      for (const id of [...ids, crisis.id])
+        expect(current.filter((p) => p.id === id)).toHaveLength(1);
+    },
+  );
+  it("keeps both pending Crisis reveals in physical zones during interrupts", () => {
     let s = base();
+    hand(s, "44005", "01088");
     const ids = s.deadpool!.poolSetAside.map((p) => p.id);
     const crisis = makePiece(s, "44037");
     s = native(s, { type: "reveal", piece: crisis });
-    s = finish(s);
-    expect(s.deadpool!.poolSetAside).toHaveLength(0);
-    expect(s.removed.some((p) => p.id === crisis.id)).toBe(true);
-    const current = [...s.minions, ...s.sideSchemes, ...s.encounter.deck];
-    for (const id of ids)
+    s = choose(s, "resolve");
+    expect(s.prompt?.title).toBe("Dreadpool");
+    const current = [
+      ...s.minions,
+      ...s.sideSchemes,
+      ...s.encounter.deck,
+      ...s.resolving,
+      ...s.removed,
+    ];
+    for (const id of [...ids, crisis.id])
       expect(current.filter((p) => p.id === id)).toHaveLength(1);
   });
   it("Pool-ized moves the same highest-cost ally to its controller's enemy area and restores it when removed", () => {
