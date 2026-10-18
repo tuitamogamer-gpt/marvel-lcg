@@ -18,15 +18,15 @@ describe("complete mission dependency checks", () => {
   });
 
   it("rejects an invalid aspect even when the default deck is requested", () => {
-    expect(() => newGame({ ...setup, aspect: "pool" as Aspect })).toThrow(
-      "Choose a valid aspect for every hero.",
-    );
+    expect(() =>
+      newGame({ ...setup, aspect: "not_an_aspect" as Aspect }),
+    ).toThrow("Choose a valid aspect for every hero.");
     expect(() =>
       newGame({
         ...setup,
         heroes: [
           { heroId: "captain_america", aspect: "leadership" },
-          { heroId: "hulk", aspect: "pool" as Aspect },
+          { heroId: "hulk", aspect: "not_an_aspect" as Aspect },
         ],
       }),
     ).toThrow("Choose a valid aspect for every hero.");

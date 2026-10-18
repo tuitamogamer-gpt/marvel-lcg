@@ -674,11 +674,13 @@ describe("complete seeded missions", () => {
               !magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
             )
               command({ type: "BASIC", action: "recover" });
+            if (s.phase !== "player") break;
             if (
               (h.id === "captain_marvel" && !s.flags.commander) ||
               (h.id === "iron_man" && !s.flags.futurist)
             )
               command({ type: "ABILITY", id: "identity" });
+            if (s.phase !== "player") break;
             if (!s.player.flipped && canChangeIdentityForm(s))
               command({ type: "FLIP" });
           }
@@ -762,6 +764,8 @@ describe("complete seeded missions", () => {
             ...s.encounter.dealt,
             ...s.minions,
             ...s.sideSchemes,
+            ...(s.victoryDisplay || []),
+            ...(s.deadpool?.poolSetAside || []),
             ...(s.environments || []),
           ]
             .flatMap(function walk(this: void, p: Piece): Piece[] {
