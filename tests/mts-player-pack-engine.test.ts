@@ -445,6 +445,53 @@ describe("Saved physical Mystic additional costs and spent resources", () => {
     expect(s.encounter.dealt).toHaveLength(1);
     conserved(s);
   });
+  it.each([false, true])(
+    "Summoning Spell resolves its complete discard cohort before the summon effect, including immediate recycle=%s",
+    (recycle) => {
+      let s = base("warlock");
+      const event = take(s, "21055"),
+        rs = [take(s, "21034"), take(s, "21040")],
+        [deep, fox] = (recycle ? onlyDeck : top)(s, "40060", "40057");
+      s = play(s, event, rs);
+      expect(s.prompt?.title).toBe("After discarding from your deck");
+      expect(s.prompt?.options.map((o) => o.id)).toEqual(
+        expect.arrayContaining([`digging:${deep.id}`, `fox:${fox.id}`]),
+      );
+      expect(s.player.inPlay.some((p) => p.id === fox.id)).toBe(false);
+      expect(s.player.hand.some((p) => p.id === event.id)).toBe(true);
+      expect(s.encounter.dealt).toHaveLength(recycle ? 1 : 0);
+      s = choose(reload(s), `digging:${deep.id}`);
+      s = choose(reload(s), recycle ? "continue" : `fox:${fox.id}`);
+      s = finish(s);
+      expect(s.player.hand.some((p) => p.id === deep.id)).toBe(true);
+      expect(s.player.inPlay.filter((p) => p.id === fox.id)).toHaveLength(1);
+      expect(s.player.discard.some((p) => p.id === event.id)).toBe(true);
+      expect(physical(s).filter((p) => p.id === fox.id)).toHaveLength(1);
+      conserved(s);
+    },
+  );
+  it("Magic Attack opens its one discard-cost cohort before dealing damage", () => {
+    let s = base("warlock");
+    const event = take(s, "21043"),
+      r = take(s, "21034"),
+      [deep, fox] = top(s, "40060", "40057");
+    s = play(s, event, [r]);
+    s = choose(s, s.villain.id);
+    s = choose(s, "2");
+    expect(s.prompt?.title).toBe("After discarding from your deck");
+    expect(s.villain.hp).toBe(60);
+    expect(s.prompt?.options.map((o) => o.id)).toEqual(
+      expect.arrayContaining([`digging:${deep.id}`, `fox:${fox.id}`]),
+    );
+    s = choose(reload(s), `fox:${fox.id}`);
+    expect(s.villain.hp).toBe(60);
+    s = choose(reload(s), `digging:${deep.id}`);
+    s = finish(s);
+    expect(s.villain.hp).toBe(58);
+    expect(s.player.hand.some((p) => p.id === deep.id)).toBe(true);
+    expect(s.player.inPlay.some((p) => p.id === fox.id)).toBe(true);
+    conserved(s);
+  });
   it("Summoning Spell stops at the first duplicate unique ally instead of continuing to the playable second ally", () => {
     let s = base("warlock");
     const existing = take(s, "21065", "inPlay"),
@@ -738,6 +785,31 @@ describe("Native ally payments, defeat interrupts and full attack prevention", (
       expect(s.player.discard.some((q) => q.id === p.id)).toBe(true);
     expect(s.attack).toBeNull();
     expect(s.enemyAttackCounts?.[s.villain.id]).toBe(1);
+    conserved(s);
+  });
+  it("Shield Spell waits for its complete discard-cost responses before preventing the attack", () => {
+    let s = base("warlock");
+    const spell = take(s, "21061"),
+      [deep, fox] = top(s, "40060", "40057"),
+      beforeHP = s.player.hp;
+    s = native(s, { type: "enemyAttack", id: s.villain.id });
+    s = until(s, (v) => !!v.prompt?.options.some((o) => o.image === "21061"));
+    s = choose(s, s.prompt!.options.find((o) => o.image === "21061")!.id);
+    s = until(s, (v) => v.prompt?.title === "After discarding from your deck");
+    expect(s.prompt?.options.map((o) => o.id)).toEqual(
+      expect.arrayContaining([`digging:${deep.id}`, `fox:${fox.id}`]),
+    );
+    expect(s.queue.some((e) => e.type === "mts-pack:shield-resolve")).toBe(
+      true,
+    );
+    expect(s.resolving.some((p) => p.id === spell.id)).toBe(true);
+    s = choose(reload(s), `fox:${fox.id}`);
+    s = choose(reload(s), `digging:${deep.id}`);
+    s = finish(s);
+    expect(s.player.hp).toBe(beforeHP);
+    expect(s.attack).toBeNull();
+    expect(s.player.hand.some((p) => p.id === deep.id)).toBe(true);
+    expect(s.player.inPlay.some((p) => p.id === fox.id)).toBe(true);
     conserved(s);
   });
 });

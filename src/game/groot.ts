@@ -1,4 +1,5 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
+import { isTextBlank } from "./card-text.js";
 import { playerOrder } from "./team.js";
 import { consumeStatus } from "./keywords.js";
 import type { AntManPorts, AntManTarget } from "./ant-man.js";
@@ -85,6 +86,7 @@ export function grootPreventDamage(
   if (
     !active(s) ||
     s.player.form !== "hero" ||
+    isTextBlank(s, "16001a") ||
     !["hero", `hero:${s.activePlayerId}`].includes(target) ||
     s.player.tough ||
     amount <= 0

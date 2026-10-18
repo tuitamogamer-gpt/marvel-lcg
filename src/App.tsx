@@ -724,7 +724,7 @@ export default function App() {
     0,
   );
   const chosenAspects =
-    (allFourAspects ? undefined : team[setupSeat].deckAspects) ||
+    team[setupSeat].deckAspects ||
     heroDeckAspects(
       hero.id,
       team[setupSeat].deckCards || deckCodes(hero.id, aspect),
@@ -1262,7 +1262,7 @@ export default function App() {
       await account.request("deck.save", {
         name:
           team[setupSeat].deckName ||
-          `${hero.name} / ${allFourAspects ? "All four aspects" : ASPECTS.find((a) => a.id === aspect)!.name}`,
+          `${hero.name} / ${allFourAspects ? "Four chosen aspects" : ASPECTS.find((a) => a.id === aspect)!.name}`,
         heroId: hero.id,
         aspect,
         aspects: chosenAspects,
@@ -1578,7 +1578,7 @@ export default function App() {
                       <b>{h.name}</b>
                       <small>
                         {p.heroId === "warlock"
-                          ? "All four aspects"
+                          ? "Four chosen aspects"
                           : ASPECTS.find((a) => a.id === p.aspect)?.name}{" "}
                         ·{" "}
                         {deckSizeFor(
@@ -1702,6 +1702,9 @@ export default function App() {
               </div>
               <div className="aspect-grid">
                 {ASPECTS.map((a) => {
+                  const selected = allFourAspects
+                    ? chosenAspects.includes(a.id)
+                    : aspect === a.id;
                   const I =
                     a.id === "justice"
                       ? Target
@@ -1709,30 +1712,68 @@ export default function App() {
                         ? Fist
                         : a.id === "leadership"
                           ? Users
-                          : Shield;
+                          : a.id === "pool"
+                            ? DiceFive
+                            : Shield;
                   return (
                     <button
                       style={aspectStyle(a.color)}
                       key={a.id}
-                      className={`aspect-option ${allFourAspects || aspect === a.id ? "selected" : ""}`}
+                      className={`aspect-option ${selected ? "selected" : ""}`}
                       onClick={() => setAspect(a.id)}
-                      aria-pressed={allFourAspects || aspect === a.id}
+                      aria-pressed={selected}
                       disabled={allFourAspects}
                     >
-                      <I
-                        size={21}
-                        weight={
-                          allFourAspects || aspect === a.id ? "fill" : "regular"
-                        }
-                      />
+                      <I size={21} weight={selected ? "fill" : "regular"} />
                       <span>{a.name}</span>
-                      {(allFourAspects || aspect === a.id) && (
-                        <Check size={13} />
-                      )}
+                      {selected && <Check size={13} />}
                     </button>
                   );
                 })}
               </div>
+              {allFourAspects && (
+                <label className="aspect-description">
+                  Aspect to leave out{" "}
+                  <select
+                    aria-label="Adam Warlock excluded aspect"
+                    value={
+                      ASPECTS.find((a) => !chosenAspects.includes(a.id))?.id ||
+                      "pool"
+                    }
+                    onChange={(event) => {
+                      const selected = ASPECTS.filter(
+                        (a) => a.id !== event.target.value,
+                      ).map((a) => a.id);
+                      setTeam((list) =>
+                        list.map((p, i) => {
+                          if (i !== setupSeat) return p;
+                          const primary = selected.includes(p.aspect)
+                            ? p.aspect
+                            : selected[0];
+                          return {
+                            heroId: p.heroId,
+                            aspect: primary,
+                            deckAspects: selected,
+                            deckCards: deckCodes(p.heroId, primary, selected),
+                            deckName: selected.includes("pool")
+                              ? "Four-aspect starter deck"
+                              : "Adam Warlock Starter Deck",
+                            ...(!selected.includes("pool")
+                              ? { deckOrigin: "source" as const }
+                              : {}),
+                          };
+                        }),
+                      );
+                    }}
+                  >
+                    {ASPECTS.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               {hero.id === "spider_woman" && (
                 <label className="aspect-description">
                   Second aspect{" "}
@@ -1759,7 +1800,7 @@ export default function App() {
               )}
               <p className="aspect-description">
                 {allFourAspects
-                  ? "Adam Warlock uses all four aspects with equal card totals and only one copy of each non-signature card."
+                  ? "Adam Warlock chooses four aspects with equal card totals and only one copy of each non-signature card."
                   : ASPECTS.find((a) => a.id === aspect)!.description}{" "}
                 {setupCardCount > 0 &&
                   (["vision", "shadowcat"].includes(hero.id)
@@ -1769,6 +1810,11 @@ export default function App() {
                       : `${setupCardCount} Permanent cards start in play outside the ${setupDeckSize}-card deck. `)}
                 {hero.id === "rogue" &&
                   "Touched counts toward deck size and is set aside after your opening hand and mulligan. "}
+                {hero.id === "cable" &&
+                  "Cable may include player side schemes from any aspect. "}
+                {allFourAspects &&
+                  chosenAspects.includes("pool") &&
+                  "Choosing 'Pool adds Crisis of Infinite Deadpools to the encounter deck. "}
                 <span>
                   {team[setupSeat].deckName
                     ? `${team[setupSeat].deckName} is ready to play.`
@@ -2101,7 +2147,7 @@ export default function App() {
                       <b>{HEROES.find((h) => h.id === p.heroId)!.name}</b>
                       <small>
                         {p.heroId === "warlock"
-                          ? "All four aspects"
+                          ? "Four chosen aspects"
                           : ASPECTS.find((a) => a.id === p.aspect)?.name}{" "}
                         ·{" "}
                         {deckSizeFor(
@@ -4385,12 +4431,13 @@ function Tabletop({
       img.src = imageFor(code);
     }
   }, [s.round, s.activePlayerId, s.player.hand.length]);
-  const importedIdentityAbility = [
+  const importedIdentityAbilities = [
     ...nativeHeroAbilityOptions(s),
     ...doctorStrangeAbilityOptions(s, "identity"),
     ...thorAbilityOptions(s, "identity"),
     ...msMarvelAbilityOptions(s, "identity"),
-  ][0];
+  ];
+  const importedIdentityAbility = importedIdentityAbilities[0];
   const visibleInvocation = doctorStrangeTopInvocation(s);
   const spellUnavailable =
     importedIdentityAbility?.id === "spell" &&
@@ -5387,6 +5434,22 @@ function Tabletop({
                                   : "Use Commander"}
                     </button>
                   )}
+                  {importedIdentityAbilities.slice(1).map((ability) => (
+                    <button
+                      key={ability.id}
+                      className="ability-button"
+                      disabled={!canUseAction}
+                      onClick={() =>
+                        sendAction({
+                          type: "ABILITY",
+                          id: "identity",
+                          action: ability.id,
+                        })
+                      }
+                    >
+                      <Sparkle size={13} /> {ability.label}
+                    </button>
+                  ))}
                   <button
                     className="flip-button hero-form-button"
                     data-form={s.player.form}

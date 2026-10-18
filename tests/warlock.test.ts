@@ -510,8 +510,8 @@ describe("original Warlock catalog and physical nemesis", () => {
 });
 
 describe("Battle Mage actual discard, aspect effects and optional responses", () => {
-  it.each(["01088", "21038"])(
-    "Basic/hero card %s still resolves Mage and both actual Mystic Senses",
+  it.each(["01088", "21038", "44017"])(
+    "Basic/hero/Pool card %s still resolves Mage and both actual Mystic Senses",
     (code) => {
       const f = fixture(),
         p = add(f, code, "hand"),
@@ -828,6 +828,16 @@ describe("Warlock events commit original physical additional costs", () => {
         ),
       ),
     ).toBe(4);
+  });
+  it("counts Pool as a fifth distinct aspect for printed discard effects", () => {
+    const f = fixture();
+    expect(
+      warlockDistinctAspects(
+        ["01054", "01060", "01073", "01079", "44017", "44021", "01088"].map(
+          (code) => f.piece(code),
+        ),
+      ),
+    ).toBe(5);
   });
   it.each(["21038", "21039"])(
     "%s chooses 1–4 discards up front without looking, never offers a zero cost",

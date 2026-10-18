@@ -87,6 +87,10 @@ const heroIds = [
   "rogue",
   "psylocke",
   "angel",
+  "cable",
+  "domino",
+  "x23",
+  "deadpool",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -125,7 +129,7 @@ const selectedMissions = [
 
 /** Only physical-zone auditing inspects hidden card IDs. The player strategy
  * uses hand cards, visible board state, and the same public prompts as the UI. */
-function ownedPieces(s: GameState, originalIds: Set<string>): Piece[] {
+function ownedPieces(s: GameState, originalIds?: Set<string>): Piece[] {
   const playerZones = s.players.flatMap((seat) => {
     const p = seatView(s, seat).player;
     return [
@@ -144,6 +148,8 @@ function ownedPieces(s: GameState, originalIds: Set<string>): Piece[] {
     ...s.encounter.deck,
     ...s.encounter.discard,
     ...s.encounter.dealt,
+    ...((s as GameState & { deadpool?: { poolSetAside: Piece[] } }).deadpool
+      ?.poolSetAside || []),
     ...(s.encounter.storedBoosts || []),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
@@ -174,7 +180,7 @@ function ownedPieces(s: GameState, originalIds: Set<string>): Piece[] {
   // Encounter cards such as Spectrum's Loss of Control can be in player zones;
   // owned Cosmic Entities can be in encounter zones. Membership follows the
   // original physical source IDs, never the current zone or owner alone.
-  return pieces.filter((p) => originalIds.has(p.id));
+  return originalIds ? pieces.filter((p) => originalIds.has(p.id)) : pieces;
 }
 
 /** Native scenario piles own original main/villain/progress cards. Public
@@ -211,6 +217,8 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
     ...s.encounter.deck,
     ...s.encounter.discard,
     ...s.encounter.dealt,
+    ...((s as GameState & { deadpool?: { poolSetAside: Piece[] } }).deadpool
+      ?.poolSetAside || []),
     ...(s.encounter.storedBoosts || []),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
@@ -268,6 +276,10 @@ function runMission(config: (typeof missions)[number]) {
     rogue: 41,
     psylocke: 42,
     angel: 40,
+    cable: 40,
+    domino: 40,
+    x23: 41,
+    deadpool: 40,
   };
   if (Object.hasOwn(physicalSourceCounts, hero.id)) {
     expect(codes).toHaveLength(physicalSourceCounts[hero.id]);
@@ -314,9 +326,21 @@ function runMission(config: (typeof missions)[number]) {
       [s.player.spdrSuitId, s.player.spdrPilotId].sort(),
     );
   }
-  const total = codes.length + supplementary.length + identities.length;
+  // Scenario setup can already deal or discard Crisis before the mulligan.
+  // Capture all seven actual dependency IDs from the full physical zones.
+  const poolDependency = ownedPieces(s).filter(
+    (p) => Number(p.code) >= 44037 && Number(p.code) <= 44042,
+  );
+  expect(poolDependency).toHaveLength(aspect === "pool" ? 7 : 0);
+  const total =
+    codes.length +
+    supplementary.length +
+    identities.length +
+    poolDependency.length;
   const originalIds = new Set(
-    [...initial, ...supplementary, ...identities].map((p) => p.id),
+    [...initial, ...supplementary, ...identities, ...poolDependency].map(
+      (p) => p.id,
+    ),
   );
   expect(originalIds.size, "Original physical source IDs are distinct").toBe(
     total,
@@ -538,8 +562,8 @@ describe("published expansion starters across every supported mission setting", 
     );
     expect(VILLAINS).toHaveLength(10);
     expect(MODULES).toHaveLength(22);
-    expect(heroIds).toHaveLength(40);
-    expect(missions).toHaveLength(17360);
+    expect(heroIds).toHaveLength(44);
+    expect(missions).toHaveLength(19096);
     const key = (mission: (typeof missions)[number]) =>
       [
         mission.heroId,
@@ -574,14 +598,23 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(previousImport).join("\n"))
         .digest("hex"),
     ).toBe("88a7dfa4ec824a10b054097804b59c33d9bafb5f1f15f3e35dde99edec2463b3");
-    expect(new Set(missions.map(key)).size).toBe(17360);
-    expect(new Set(combined.map(key)).size).toBe(17360);
+    const secondImport = missions.filter(
+      (mission) => heroIds.indexOf(mission.heroId) < 40,
+    );
+    expect(secondImport).toHaveLength(17360);
+    expect(
+      createHash("sha256")
+        .update(manifest(secondImport).join("\n"))
+        .digest("hex"),
+    ).toBe("81f2fa5fc4410fcd58139b13ade0c65cf7812111772eeb17299d72f9622ce255");
+    expect(new Set(missions.map(key)).size).toBe(19096);
+    expect(new Set(combined.map(key)).size).toBe(19096);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(4340);
-      expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(10);
+      expect(partition).toHaveLength(4774);
+      expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(11);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 4340 : 17360);
+    expect(selectedMissions).toHaveLength(isSharded ? 4774 : 19096);
   });
   for (const mission of selectedMissions)
     it(

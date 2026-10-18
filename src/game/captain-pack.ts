@@ -169,6 +169,10 @@ export function captainPackHasTrait(
   return (
     hasPrintedTrait(c, name) ||
     (!!view &&
+      view.heroId === "cable" &&
+      name === "Psionic" &&
+      !!s.victoryDisplay?.some((p) => p.code === "40006")) ||
+    (!!view &&
       view.heroId === "rogue" &&
       !visited.includes(view.activePlayerId) &&
       Number(view.flags.rogueTraitsRound) === s.round &&

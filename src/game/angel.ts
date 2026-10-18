@@ -75,7 +75,7 @@ export interface AngelPorts {
   attach(s: GameState, p: Piece, id: string): void;
   reveal(s: GameState, p: Piece): void;
   cancelReveal(s: GameState, p: Piece): void;
-  discardPlayerTop(s: GameState): Piece | undefined;
+  discardPlayerCards(s: GameState, count: number): Piece[];
   dealEncounter(s: GameState, playerId: string): void;
 }
 export function angelForm(s: GameState): AngelForm {
@@ -1016,16 +1016,14 @@ export function resolveAngelEffect(
       ports.discard(s, e.id);
       break;
     case "angel:mill-event": {
-      let event: Piece | undefined;
-      const n = s.player.deck.length;
-      for (let i = 0; i < n; i++) {
-        const p = ports.discardPlayerTop(s);
-        if (!p) break;
-        if (card(p).type_code === "event") {
-          event = p;
-          break;
-        }
-      }
+      const index = s.player.deck.findIndex(
+        (p) => card(p).type_code === "event",
+      );
+      const discarded = ports.discardPlayerCards(
+        s,
+        index < 0 ? s.player.deck.length : index + 1,
+      );
+      const event = discarded.find((p) => card(p).type_code === "event");
       if (event)
         ports.queue(
           s,

@@ -12,6 +12,7 @@ import type {
 } from "./types.js";
 
 const cards = new Map((catalog as unknown as Card[]).map((c) => [c.code, c]));
+const cardType = (code: string) => cards.get(code)?.type_code;
 const E = (type: string, args: Record<string, unknown> = {}): Effect => ({
   type,
   ...args,
@@ -238,6 +239,19 @@ export function novaCanReadyPiece(
   p: Piece,
   ports: Pick<NovaPorts, "isTextBlank">,
 ): boolean {
+  if (
+    cardType(p.code) === "ally" &&
+    s.players.some((seat) => {
+      const v = seatView(s, seat);
+      return (
+        v.player.inPlay.some((q) => q.id === p.id) &&
+        v.player.inPlay.some(
+          (q) => q.code === "44032" && !ports.isTextBlank(s, q),
+        )
+      );
+    })
+  )
+    return false;
   if (p.code !== "28009") return true;
   return !helmetLocked(s, ports);
 }

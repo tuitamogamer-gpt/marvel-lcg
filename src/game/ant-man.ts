@@ -289,7 +289,13 @@ export function antManResourceSpent(
 export function antManFormChanged(s: GameState, ports: AntManPorts): Effect[] {
   const form = applicableForm(s),
     effects: Effect[] = [];
-  if (active(s)) {
+  if (
+    active(s) &&
+    !isTextBlank(
+      s,
+      form === "alter" ? "12001b" : form === "giant" ? "12001c" : "12001a",
+    )
+  ) {
     if (form === "alter")
       effects.push(
         optional("Time to Unwind", "Heal 1 damage from Scott Lang?", [

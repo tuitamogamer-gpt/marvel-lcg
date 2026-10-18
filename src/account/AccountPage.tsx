@@ -56,7 +56,9 @@ function editorAspects(
   declared?: Aspect[],
 ): Aspect[] {
   if (heroDeckRule(heroId)?.aspects === "four-equal-singleton")
-    return ASPECTS.map((a) => a.id);
+    return declared?.length === 4
+      ? declared
+      : heroDeckAspects(heroId, codes, primary);
   if (heroDeckRule(heroId)?.aspects !== "two-equal") return [primary];
   const candidates = [
     ...(declared || heroDeckAspects(heroId, codes, primary)),
@@ -311,6 +313,8 @@ export function DeckEditor({
   const [secondAspect, setSecondAspect] = useState<Aspect>(
     initialAspects[1] || "aggression",
   );
+  const [fourChosenAspects, setFourChosenAspects] =
+    useState<Aspect[]>(initialAspects);
   const [name, setName] = useState(initial?.name || "");
   const [codes, setCodes] = useState(
     initial?.cards || deckCodes(heroId, aspect, initialAspects),
@@ -318,7 +322,7 @@ export function DeckEditor({
   const dualAspect = heroDeckRule(heroId)?.aspects === "two-equal";
   const fourAspects = heroDeckRule(heroId)?.aspects === "four-equal-singleton";
   const aspects = fourAspects
-    ? ASPECTS.map((a) => a.id)
+    ? fourChosenAspects
     : dualAspect
       ? [aspect, secondAspect]
       : [aspect];
@@ -342,25 +346,27 @@ export function DeckEditor({
   const pools = [
     "hero",
     ...aspects,
-    ...(crossAspectEvents
-      ? ASPECTS.filter(
-          (a) =>
-            !aspects.includes(a.id) &&
-            options.some((c) => c.faction_code === a.id),
-        ).map((a) => a.id)
-      : []),
+    ...ASPECTS.filter(
+      (a) =>
+        !aspects.includes(a.id) &&
+        options.some(
+          (c) => c.faction_code === a.id && !Object.hasOwn(required, c.code),
+        ),
+    ).map((a) => a.id),
     "basic",
   ];
-  function reset(h: string, a: Aspect, secondary?: Aspect) {
+  function reset(h: string, a: Aspect, secondary?: Aspect, four?: Aspect[]) {
     const next = editorAspects(
       h,
       a,
       [],
-      secondary ? [a, secondary === a ? aspect : secondary] : undefined,
+      four ||
+        (secondary ? [a, secondary === a ? aspect : secondary] : undefined),
     );
     setHero(h);
     setAspect(a);
     setSecondAspect(next[1] || "aggression");
+    setFourChosenAspects(next);
     setCodes(deckCodes(h, a, next));
   }
   return (
@@ -437,12 +443,42 @@ export function DeckEditor({
             </label>
           )}
           {fourAspects && (
+            <label>
+              Aspect to leave out
+              <select
+                aria-label="Adam Warlock excluded aspect"
+                value={
+                  ASPECTS.find((a) => !aspects.includes(a.id))?.id || "pool"
+                }
+                onChange={(e) => {
+                  const selected = ASPECTS.filter(
+                    (a) => a.id !== e.target.value,
+                  ).map((a) => a.id);
+                  reset(
+                    heroId,
+                    selected.includes(aspect) ? aspect : selected[0],
+                    undefined,
+                    selected,
+                  );
+                }}
+              >
+                {ASPECTS.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {fourAspects && (
             <p className="account-hint">
-              All four aspects ·{" "}
-              {ASPECTS.map(
-                (a) =>
-                  `${a.name} ${codes.filter((code) => card(code).faction_code === a.id).length}`,
-              ).join(" · ")}
+              Four chosen aspects ·{" "}
+              {ASPECTS.filter((a) => aspects.includes(a.id))
+                .map(
+                  (a) =>
+                    `${a.name} ${codes.filter((code) => card(code).faction_code === a.id).length}`,
+                )
+                .join(" · ")}
             </p>
           )}
           {dualAspect && (
@@ -472,7 +508,11 @@ export function DeckEditor({
           {dualAspect &&
             " Include equal numbers of your two chosen aspects, counting required hero cards of those colors."}
           {fourAspects &&
-            " Include equal numbers of Aggression, Justice, Leadership and Protection cards, and only one copy of each other card. Your signature cards stay fixed."}
+            " Choose any four aspects with equal card totals, and only one copy of each other card. Your signature cards stay fixed."}
+          {aspects.includes("pool") &&
+            " Choosing 'Pool adds Crisis of Infinite Deadpools to the encounter deck."}
+          {heroId === "cable" &&
+            " Cable may include player side schemes from every aspect. Off-aspect cards do not change your chosen aspect."}
           {setupCount > 0 &&
             (heroId === "vision"
               ? " Your mass form is one Permanent card and does not count toward the 40–50 card deck. It enters play Intangible after your mulligan."

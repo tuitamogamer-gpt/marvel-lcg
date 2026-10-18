@@ -7,6 +7,11 @@ const definitions = new Map(
   ([...catalog, ...players] as Card[]).map((c) => [c.code, c]),
 );
 
+const seatViewForBlank = (s: GameState, id: string) =>
+  id === s.activePlayerId
+    ? s.player
+    : s.players.find((seat) => seat.id === id)!.player;
+
 /** Tech Theft blanks printed text, while retaining stats, traits and icons. */
 export function isTextBlank(
   s: GameState,
@@ -15,6 +20,61 @@ export function isTextBlank(
   if (typeof p !== "string" && "treatedAsAlly" in p && p.treatedAsAlly)
     return true;
   const printedCode = typeof p === "string" ? p : p.code;
+  if (["40037a", "40037b"].includes(printedCode)) {
+    const id = typeof p === "string" ? undefined : p.id;
+    const owner = s.players.find(
+      (seat) =>
+        seat.heroId === "domino" &&
+        (!id || id === "hero" || id === `hero:${seat.id}`),
+    );
+    if (
+      owner &&
+      seatViewForBlank(s, owner.id).inPlay.some((q) => q.code === "40065")
+    )
+      return true;
+  }
+  const dpIdentity = definitions.get(printedCode);
+  const dpSeat = ["hero", "alter_ego"].includes(dpIdentity?.type_code || "")
+    ? s.players.find((seat) => seat.heroId === dpIdentity?.set_code)
+    : undefined;
+  const dpTarget =
+    (dpSeat ? `hero:${dpSeat.id}` : undefined) ||
+    (typeof p !== "string" ? p.id : undefined);
+  if (
+    dpTarget &&
+    s.players.some(
+      (seat) =>
+        (seat.id === s.activePlayerId ? s.flags : seat.flags)[
+          `deadpoolRay:${dpTarget}`
+        ],
+    )
+  )
+    return true;
+  if (
+    dpTarget &&
+    s.attachments.some((a) => a.code === "44035" && a.attachedTo === dpTarget)
+  )
+    return true;
+  if (
+    dpTarget &&
+    s.attack &&
+    s.attachments.some(
+      (a) => a.code === "44040" && a.attachedTo === s.attack!.attacker,
+    )
+  ) {
+    const target =
+      s.attack.defender && s.attack.defender !== "none"
+        ? s.attack.defender
+        : s.attack.originalTarget ||
+          `hero:${s.attack.targetPlayerId || s.activePlayerId}`;
+    if (
+      dpTarget ===
+      (target === "hero"
+        ? `hero:${s.attack.targetPlayerId || s.activePlayerId}`
+        : target)
+    )
+      return true;
+  }
   if (
     typeof p !== "string" &&
     p.id &&

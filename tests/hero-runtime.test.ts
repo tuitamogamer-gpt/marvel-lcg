@@ -49,7 +49,7 @@ describe("imported hero definitions and printed starter legality", () => {
   it("imported identities stay unautomated until their full runtime is installed", () => {
     expect(
       HERO_RUNTIME.filter((h) => h.scripted).map((h) => h.id),
-    ).toHaveLength(45);
+    ).toHaveLength(49);
     expect(heroRuntime("captain_america")?.scripted).toBe(true);
     expect(heroRuntime("wsp")?.scripted).toBe(true);
     expect(heroRuntime("qsv")?.scripted).toBe(true);
@@ -76,6 +76,10 @@ describe("imported hero definitions and printed starter legality", () => {
       "rogue",
       "psylocke",
       "angel",
+      "cable",
+      "domino",
+      "x23",
+      "deadpool",
     ])
       expect(heroRuntime(id)?.scripted).toBe(true);
     expect(heroRuntime("daredevil")?.scripted).toBe(false);
@@ -650,6 +654,47 @@ describe("imported hero definitions and printed starter legality", () => {
         codes,
       ).errors.some((e) => e.includes("deck limit is 1")),
     ).toBe(true);
+  });
+  it("lets Adam Warlock replace any standard aspect with Pool while keeping four equal singleton pools", () => {
+    const all = [
+      "aggression",
+      "justice",
+      "leadership",
+      "protection",
+      "pool",
+    ] as const;
+    for (const omitted of all) {
+      const selected = all.filter((a) => a !== omitted);
+      const codes = deckCodes("warlock", selected[0], selected);
+      expect(codes).toHaveLength(40);
+      expect(validateHeroDeck("warlock", selected, codes).errors).toEqual([]);
+      expect(heroDeckAspects("warlock", codes, selected[0]).sort()).toEqual(
+        [...selected].sort(),
+      );
+      for (const aspect of selected)
+        expect(
+          codes.filter((code) => byCode.get(code)?.faction_code === aspect),
+        ).toHaveLength(6);
+      expect(
+        codes.some((code) => byCode.get(code)?.faction_code === omitted),
+      ).toBe(false);
+    }
+    expect(
+      deckCodes("warlock", "pool").some(
+        (code) => byCode.get(code)?.faction_code === "pool",
+      ),
+    ).toBe(true);
+    expect(
+      validateHeroDeck("warlock", [...all], heroStarterCodes("warlock")).errors,
+    ).toContain("Adam Warlock must choose exactly four distinct aspects.");
+    expect(() =>
+      deckCodes("warlock", "justice", [
+        "justice",
+        "leadership",
+        "protection",
+        "protection",
+      ]),
+    ).toThrow("four distinct aspects");
   });
   it("Permanent signature cards are required but excluded from the 40–50 card size", () => {
     const spectrum = heroRuntime("spectrum")!;

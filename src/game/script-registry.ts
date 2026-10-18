@@ -63,6 +63,12 @@ export function scriptedModifier(
                 "41002a",
                 "41002b",
                 "41009",
+                "43009",
+                "43019",
+                "43034",
+                "43035",
+                "43036",
+                "43037",
               ].includes(rulesCode(source)) ||
               entries.get(source.code)?.name === "Team Training"
             )

@@ -253,6 +253,7 @@ export function blackWidowPlayRestriction(
 export function blackWidowCardPlayed(s: GameState, p: Piece): Effect[] {
   return active(s) &&
     s.player.form === "alter" &&
+    !isTextBlank(s, "08001b") &&
     prep(p) &&
     s.flags.bwMissionPrepPhase !== phaseKey(s) &&
     (s.player.deck.length || s.player.discard.length)
@@ -964,7 +965,11 @@ export function resolveBlackWidowEffect(
       const used: string[] = e.used || [];
       const choices: Option[] = [];
       if (active(s) && s.player.form === "hero") {
-        if (!used.includes("widowmaker") && ports.enemyTargets(s, false).length)
+        if (
+          !isTextBlank(s, "08001a") &&
+          !used.includes("widowmaker") &&
+          ports.enemyTargets(s, false).length
+        )
           choices.push(
             option(
               "widowmaker",
@@ -1014,7 +1019,7 @@ export function resolveBlackWidowEffect(
     }
     case "bw:widowmaker":
       need(
-        active(s) && s.player.form === "hero",
+        active(s) && s.player.form === "hero" && !isTextBlank(s, "08001a"),
         "Widowmaker requires Black Widow in hero form.",
       );
       ports.choose(

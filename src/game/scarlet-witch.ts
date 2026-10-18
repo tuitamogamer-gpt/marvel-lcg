@@ -94,6 +94,7 @@ function eligibleChaos(s: GameState) {
     return (
       active(view) &&
       view.player.form === "hero" &&
+      !isTextBlank(view, "15001a") &&
       view.flags.scwChaosControlPhase !== phaseKey(s)
     );
   });

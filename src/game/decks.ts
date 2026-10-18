@@ -50,6 +50,7 @@ export function deckOptions(
       c.code !== "32031b" &&
       c.code !== "34002b" &&
       c.code !== "41002b" &&
+      !["43034", "43035", "43036", "43037"].includes(c.code) &&
       !identityCodes.has(c.code) &&
       !identityMatch(heroId, c) &&
       (hasExecutableScript(c) ||
@@ -68,6 +69,9 @@ export function deckOptions(
         c.pack_code === heroPack) ||
         selectedAspects.includes(c.faction_code as Aspect) ||
         heroAllowsOffAspectEvent(heroId, c) ||
+        (heroId === "cable" &&
+          c.type_code === "player_side_scheme" &&
+          c.faction_code !== "hero") ||
         (heroId === "cyclops" &&
           c.type_code === "ally" &&
           (c.traits || "").split(/\.\s*/).includes("X-Men")) ||
@@ -124,7 +128,10 @@ export function deckErrors(
       "wolverine",
       "psylocke",
       "gambit",
+      "domino",
       "angel",
+      "cable",
+      "x23",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

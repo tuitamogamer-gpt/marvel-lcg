@@ -218,6 +218,7 @@ export function msMarvelAfterEvent(
   return active(s) &&
     s.player.form === "hero" &&
     !s.player.exhausted &&
+    !isTextBlank(s, "05001a") &&
     ["Attack", "Thwart", "Defense"].some((name) => trait(p.code, name)) &&
     [...s.resolving, ...s.player.discard].some((event) => event.id === p.id)
     ? [

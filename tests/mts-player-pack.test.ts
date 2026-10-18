@@ -105,15 +105,14 @@ function fixture(team = false) {
     ),
     cardCost: (_state, p) => card(p).cost || 0,
     canPay: vi.fn(() => true),
-    discardPlayerTop: vi.fn((state) => {
-      const piece = state.player.deck.shift();
-      if (piece) state.player.discard.push(piece);
-      const emptied = !state.player.deck.length;
-      if (emptied && piece) {
+    discardPlayerCards: vi.fn((state, count) => {
+      const pieces = state.player.deck.splice(0, count);
+      state.player.discard.push(...pieces);
+      if (!state.player.deck.length && pieces.length) {
         state.player.deck = [...state.player.discard];
         state.player.discard = [];
       }
-      return { piece, emptied };
+      return { pieces, responses: [] };
     }),
     shufflePlayerDeck: vi.fn((state) => {
       state.player.deck.reverse();
@@ -671,7 +670,7 @@ describe("Mystic event costs consume actual top cards before event effects", () 
     run(pack.mtsPlayerPackBeforeEvent(s, event, [{ type: "status-gate" }])[0]);
     choose(s.villain.id);
     choose("2");
-    expect(port.discardPlayerTop).toHaveBeenCalledTimes(2);
+    expect(port.discardPlayerCards).toHaveBeenCalledExactlyOnceWith(s, 2);
     expect(s.player.deck).toHaveLength(3);
     expect(s.queue).toEqual([{ type: "status-gate" }]);
     expect(
@@ -698,7 +697,7 @@ describe("Mystic event costs consume actual top cards before event effects", () 
         }),
       ),
     ).toThrow("cost is unavailable");
-    expect(port.discardPlayerTop).not.toHaveBeenCalled();
+    expect(port.discardPlayerCards).not.toHaveBeenCalled();
     expect(s.player.deck).toHaveLength(1);
   });
   it("Summoning Spell discards only through the first ally and puts that exact piece into play without playing it", () => {
@@ -745,7 +744,7 @@ describe("Mystic event costs consume actual top cards before event effects", () 
     s.player.discard.push(oldAlly);
     run(pack.mtsPlayerPackBeforeEvent(s, event, [])[0]);
     run(pack.mtsPlayerPackEvent(s, event)![0]);
-    expect(port.discardPlayerTop).toHaveBeenCalledOnce();
+    expect(port.discardPlayerCards).toHaveBeenCalledExactlyOnceWith(s, 1);
     expect(s.player.inPlay).toHaveLength(0);
     expect(s.player.deck.some((p) => p.id === oldAlly.id)).toBe(true);
   });
@@ -918,11 +917,13 @@ describe("Blade, Marvel Boy, Major Victory and Shield Spell timing", () => {
     const body = req.after[0].after[0],
       saved = JSON.parse(JSON.stringify(s)) as GameState;
     run(body, saved);
-    expect(port.discardPlayerTop).toHaveBeenCalledTimes(2);
+    expect(port.discardPlayerCards).toHaveBeenCalledExactlyOnceWith(saved, 2);
+    expect(port.claimDefense).not.toHaveBeenCalled();
+    run(saved.queue.shift()!, saved);
     expect(port.claimDefense).toHaveBeenCalledWith(saved, packet);
     expect(port.preventAllAttackDamage).toHaveBeenCalledWith(saved, packet, 2);
     expect(
-      vi.mocked(port.discardPlayerTop).mock.invocationCallOrder[1],
+      vi.mocked(port.discardPlayerCards).mock.invocationCallOrder[0],
     ).toBeLessThan(vi.mocked(port.claimDefense).mock.invocationCallOrder[0]);
   });
   it("Shield Spell never partially discards an unavailable cost", () => {
@@ -931,7 +932,7 @@ describe("Blade, Marvel Boy, Major Victory and Shield Spell timing", () => {
     expect(() =>
       run(P("shield", { amount: 2, packet: { type: "damageWindow" } })),
     ).toThrow("full attack-damage");
-    expect(port.discardPlayerTop).not.toHaveBeenCalled();
+    expect(port.discardPlayerCards).not.toHaveBeenCalled();
     expect(port.preventAllAttackDamage).not.toHaveBeenCalled();
   });
 });
@@ -1032,7 +1033,7 @@ describe("Mystic Spell target requirements before payment", () => {
       run(s.queue.shift()!);
       expect(s.prompt?.options.map((o) => o.id)).toEqual(["1", "2"]);
       choose("1");
-      expect(port.discardPlayerTop).toHaveBeenCalledTimes(1);
+      expect(port.discardPlayerCards).toHaveBeenCalledExactlyOnceWith(s, 1);
       expect(s.player.discard.some((p) => p.id === milled.id)).toBe(true);
       expect(s.queue).toEqual([{ type: "status-gate" }]);
     },

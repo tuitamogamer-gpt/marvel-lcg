@@ -1,4 +1,4 @@
-import { defenseEventSources } from "./card-text.js";
+import { defenseEventSources, isTextBlank } from "./card-text.js";
 import { printedCardMetadata } from "./printed-card-metadata.js";
 import { goblinIdentityLocked } from "./goblin-modules.js";
 import type {
@@ -106,6 +106,7 @@ export function captainStats(s: GameState) {
 export function captainAllyDiscount(s: GameState, c: Card): number {
   return active(s) &&
     s.player.form === "alter" &&
+    !isTextBlank(s, "03001b") &&
     c.type_code === "ally" &&
     s.flags.captainFirstAllyRound !== s.round
     ? 1

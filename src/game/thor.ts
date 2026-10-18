@@ -445,6 +445,7 @@ export function thorEngagementResponses(
   const view = seatView(s, seat);
   if (
     view.player.form !== "hero" ||
+    isTextBlank(view, "06001a") ||
     view.flags.thorEngagedPhase === phaseKey(s) ||
     !["player", "villain"].includes(s.phase)
   )

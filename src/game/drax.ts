@@ -106,7 +106,9 @@ export function draxStats(
     return { attack: 0, retaliate: 0 };
   return {
     attack:
-      draxVengeanceCounters(s) +
+      (isTextBlank(s, { code: "19001a", id: `hero:${s.activePlayerId}` })
+        ? 0
+        : draxVengeanceCounters(s)) +
       s.player.inPlay.filter((p) => p.code === "19008" && !blank(s, p, ports))
         .length,
     retaliate: s.player.inPlay.filter(
@@ -135,7 +137,10 @@ export function draxChangedForm(
   s: GameState,
   from: "hero" | "alter",
 ): Effect[] {
-  return active(s) && from !== s.player.form && s.player.form === "alter"
+  return active(s) &&
+    from !== s.player.form &&
+    s.player.form === "alter" &&
+    !isTextBlank(s, { code: "19001b", id: `hero:${s.activePlayerId}` })
     ? [D("alter-ego-response", { actorId: s.activePlayerId, mandatory: true })]
     : [];
 }
@@ -316,7 +321,12 @@ function responseOptions(
             after,
           }),
         ];
-  if (active(s) && snapshot.identityAttacked && !used.includes("vengeance"))
+  if (
+    active(s) &&
+    snapshot.identityAttacked &&
+    !used.includes("vengeance") &&
+    !isTextBlank(s, { code: "19001a", id: `hero:${s.activePlayerId}` })
+  )
     options.push(
       option(
         "vengeance",

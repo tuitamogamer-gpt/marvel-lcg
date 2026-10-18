@@ -1,3 +1,5 @@
+import { cableStatBonus } from "./cable.js";
+import { deadpoolAttackBonus, deadpoolHandBonus } from "./deadpool.js";
 import { psylockeStats, psylockePowerOfMind } from "./psylocke.js";
 import { rogueModifiers, rogueTraits } from "./rogue.js";
 import { CARDS, CATALOG_CARDS, card } from "./card-definitions.js";
@@ -65,6 +67,7 @@ import { spdrPackCharacterModifiers } from "./spdr-pack.js";
 import { ironspiderSinisterHealthBonus } from "./ironspider-sinister.js";
 import { phoenixStats, phoenixAllyModifiers } from "./phoenix.js";
 import { wolverineStats } from "./wolverine.js";
+import { x23Stats, x23Mad } from "./x23.js";
 import { angelIdentityCode, angelRecruitBonus } from "./angel.js";
 import { stormGlobal, stormStats, stormAllyHP } from "./storm.js";
 import { colossusStats } from "./colossus.js";
@@ -732,6 +735,20 @@ export const HEROES = [
     complexity: 3,
   },
   {
+    id: "domino",
+    code: "40037a",
+    alter: "40037b",
+    name: "Domino",
+    identity: "Neena Thurman",
+    aspect: "justice" as Aspect,
+    color: "#8ad2bc",
+    tag: "Make your own luck.",
+    description:
+      "Swap and discard cards to shape your luck, lead the Posse, and turn printed resources into powerful effects.",
+    style: "Top-deck luck · Justice",
+    complexity: 3,
+  },
+  {
     id: "psylocke",
     code: "41001a",
     alter: "41001b",
@@ -757,6 +774,48 @@ export const HEROES = [
     description:
       "Change between Angel, Archangel and Warren, then combine Aerial events with powerful flight responses.",
     style: "Three forms and Aerial events · Protection",
+    complexity: 3,
+  },
+  {
+    id: "cable",
+    code: "40001a",
+    alter: "40001b",
+    name: "Cable",
+    identity: "Nathan Summers",
+    aspect: "leadership" as Aspect,
+    color: "#376779",
+    tag: "Change the future.",
+    description:
+      "Complete player side schemes, cure the technovirus, and build a victory display that powers your psionic abilities.",
+    style: "Player side schemes · Leadership",
+    complexity: 3,
+  },
+  {
+    id: "x23",
+    code: "43001a",
+    alter: "43001b",
+    name: "X-23",
+    identity: "Laura Kinney",
+    aspect: "aggression" as Aspect,
+    color: "#c6a82d",
+    tag: "Turn pain into purpose.",
+    description:
+      "Ready through damage, strike with adamantium claws, and fight alongside Honey Badger.",
+    style: "Living Weapon · Aggression",
+    complexity: 3,
+  },
+  {
+    id: "deadpool",
+    code: "44001a",
+    alter: "44001b",
+    name: "Deadpool",
+    identity: "Wade Wilson",
+    aspect: "pool" as Aspect,
+    color: "#c72026",
+    tag: "The Regeneratin’ Degenerate.",
+    description:
+      "Spend health for maximum effort, regenerate in alter-ego form, and manage the chaos of the Pool aspect.",
+    style: "Health and acceleration · Pool",
     complexity: 3,
   },
 ];
@@ -966,6 +1025,13 @@ export const ASPECTS: {
     color: "#72b27d",
     description: "Stay standing. Protect your hero.",
   },
+  {
+    id: "pool",
+    name: "'Pool",
+    color: "#ed8cb3",
+    description:
+      "Take risks and bend the fourth wall. Adds Crisis of Infinite Deadpools to the encounter deck.",
+  },
 ];
 const basics: Record<string, number> = {
   "01083": 1,
@@ -981,6 +1047,16 @@ const basics: Record<string, number> = {
   "01093": 1,
 };
 const aspects: Record<Aspect, Record<string, number>> = {
+  pool: {
+    "44017": 3,
+    "44021": 3,
+    "44025": 1,
+    "44026": 1,
+    "44027": 1,
+    "44029": 3,
+    "44030": 1,
+    "44048": 1,
+  },
   aggression: {
     "01050": 1,
     "01051": 1,
@@ -1035,6 +1111,32 @@ export function deckCodes(
     aspect,
     aspect === "aggression" ? "justice" : "aggression",
   ];
+  if (hero === "warlock" && sourceStarter) {
+    const selected =
+      chosenAspects ||
+      (aspect === "pool"
+        ? ["pool", "justice", "leadership", "protection"]
+        : ["aggression", "justice", "leadership", "protection"]);
+    if (
+      selected.length !== 4 ||
+      new Set(selected).size !== 4 ||
+      selected.some((value) => !ASPECTS.some((a) => a.id === value))
+    )
+      throw Error("Adam Warlock must choose four distinct aspects.");
+    const codes = Object.entries(sourceStarter.cards).flatMap(
+      ([code, quantity]) => Array<string>(quantity).fill(code),
+    );
+    if (!selected.includes("pool")) return codes;
+    const pool = ["44017", "44021", "44025", "44026", "44027", "44029"];
+    let replacement = 0;
+    return codes.map((code) => {
+      const faction = card(code).faction_code;
+      return ASPECTS.some((a) => a.id === faction) &&
+        !selected.includes(faction as Aspect)
+        ? pool[replacement++]
+        : code;
+    });
+  }
   if (
     sourceStarter &&
     (((hero === "hawkeye" || hero === "ant") && aspect === "leadership") ||
@@ -1060,13 +1162,17 @@ export function deckCodes(
       (hero === "spdr" && aspect === "protection") ||
       (hero === "cyclops" && aspect === "leadership") ||
       (hero === "storm" && aspect === "leadership") ||
+      (hero === "cable" && aspect === "leadership") ||
       (hero === "angel" && aspect === "protection") ||
+      (hero === "x23" && aspect === "aggression") ||
+      (hero === "deadpool" && String(aspect) === "pool") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
       (hero === "rogue" && aspect === "protection") ||
       (hero === "phoenix" && aspect === "justice") ||
       (hero === "psylocke" && aspect === "justice") ||
       (hero === "gambit" && aspect === "justice") ||
+      (hero === "domino" && aspect === "justice") ||
       (hero === "wolverine" && aspect === "aggression") ||
       hero === "warlock" ||
       (hero === "spider_woman" &&
@@ -1091,6 +1197,7 @@ export function deckCodes(
         (!c.permanent ||
           hero === "spectrum" ||
           (hero === "wolverine" && c.code === "35002") ||
+          (hero === "x23" && c.code === "43002") ||
           (hero === "psylocke" && c.code === "41002a") ||
           (hero === "shadowcat" && c.code === "32031a") ||
           (hero === "phoenix" && c.code === "34002a") ||
@@ -1103,14 +1210,18 @@ export function deckCodes(
     );
     if (selected.length !== 2)
       throw Error("Spider-Woman must choose two distinct aspects.");
+    const signatureCounts = selected.map(
+      (color) => a.filter((code) => card(code).faction_code === color).length,
+    );
+    const cardsPerAspect = (14 + signatureCounts[0] + signatureCounts[1]) / 2;
     return a.concat(
       Object.entries(basics).flatMap(([code, quantity]) =>
         Array(quantity).fill(code),
       ),
-      ...selected.map((selectedAspect) =>
+      ...selected.map((selectedAspect, index) =>
         Object.entries(aspects[selectedAspect])
           .flatMap(([code, quantity]) => Array(quantity).fill(code))
-          .slice(0, 7),
+          .slice(0, cardsPerAspect - signatureCounts[index]),
       ),
     );
   }
@@ -1203,6 +1314,7 @@ export function maxHP(s: GameState) {
     angelRecruitBonus(s, "hero") +
     cyclopsCharacterModifiers(s, "hero").health +
     wolverineStats(s).health +
+    x23Stats(s).health +
     hulkStats(s).health +
     msMarvelStats(s).health +
     rocketMaxHpBonus(s) +
@@ -1297,11 +1409,15 @@ export function heroStats(s: GameState) {
       spiderHamStats(s, { isTextBlank }).attack +
       spiderHamPackCharacterModifiers(s, "hero").attack +
       spdrPackCharacterModifiers(s, "hero").attack +
+      deadpoolAttackBonus(s) +
       colossusStats(s, { isTextBlank }).attack +
       rogueModifiers(s).attack +
       phoenixStats(s).attack +
       wolverineStats(s).attack +
       psylockeStats(s).attack +
+      cableStatBonus(s) +
+      x23Stats(s).attack +
+      x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
       antManPackStats(s).attack +
@@ -1336,6 +1452,9 @@ export function heroStats(s: GameState) {
       rogueModifiers(s).thwart +
       phoenixStats(s).thwart +
       psylockeStats(s).thwart +
+      cableStatBonus(s) +
+      x23Stats(s).thwart -
+      x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
       quicksilverPackHeroStatBonus(s, "thwart") +
@@ -1345,6 +1464,8 @@ export function heroStats(s: GameState) {
       h.defense! +
       stormStats(s).defense +
       psylockeStats(s).defense +
+      cableStatBonus(s) +
+      x23Stats(s).defense +
       (has(s, "01081") ? 1 : 0) +
       (has(s, "01016") ? (aerial(s) ? 2 : 1) : 0) +
       captainStats(s).def +
@@ -1377,7 +1498,9 @@ export function heroStats(s: GameState) {
 }
 export function handSize(s: GameState) {
   const base =
-    s.player.form === "hero" && s.heroId === "iron_man"
+    s.player.form === "hero" &&
+    s.heroId === "iron_man" &&
+    !isTextBlank(s, heroCard(s))
       ? heroCard(s).hand_size! +
         Math.min(
           6,
@@ -1401,7 +1524,7 @@ export function handSize(s: GameState) {
         antManPackHandSize(s) +
         visionAlterStats(s).handSize +
         sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).handSize;
-  return novaHandSize(s, base, { isTextBlank });
+  return novaHandSize(s, base + deadpoolHandBonus(s), { isTextBlank });
 }
 /** Printed encounter attachment modifiers apply to their attached enemy.
  * Player cards attached as resources retain their physical printed values,
@@ -1434,6 +1557,7 @@ export function pieceHP(s: GameState, p: Piece) {
         a.attachedTo === p.id && rulesCode(a) === "01163" && !isTextBlank(s, a),
     ).length *
       3 +
+    (p.code === "40068" && !isTextBlank(s, p) ? p.counters : 0) +
     scriptedModifier(s, "health", p) +
     angelRecruitBonus(s, p.id) +
     phoenixAllyModifiers(s, p).health +
