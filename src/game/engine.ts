@@ -9675,17 +9675,7 @@ const dsPorts: DoctorStrangePorts = {
   discardTop: (s, id, n) => {
     const previous = s.activePlayerId;
     activateSeat(s, id);
-    const cards: Piece[] = [];
-    for (let i = 0; i < n; i++) {
-      recyclePlayer(s);
-      const p = s.player.deck.shift();
-      if (p) {
-        cards.push(p);
-        s.player.discard.push(resetPiece(p));
-        revealHidden(s);
-      }
-      recyclePlayer(s);
-    }
+    const cards = mill(s, n);
     activateSeat(s, previous);
     return cards;
   },
@@ -15873,19 +15863,13 @@ const nebulaPorts: nebula.NebulaPorts = {
     !isPermanent(card(p)),
   discardUntilTechnique: (s, continuation) => {
     const queuedBefore = s.queue.length;
-    const originalCount = s.player.deck.length;
-    let found: Piece | undefined;
-    for (let n = 0; n < originalCount; n++) {
-      const empties = s.player.deck.length <= 1;
-      const p = mill(s, 1)[0];
-      if (!p) break;
-      if (
+    const index = s.player.deck.findIndex(
+      (p) =>
         card(p).type_code === "upgrade" &&
-        (card(p).traits || "").split(/\.\s*/).includes("Technique")
-      )
-        found = p;
-      if (found || empties) break;
-    }
+        (card(p).traits || "").split(/\.\s*/).includes("Technique"),
+    );
+    const discarded = mill(s, index < 0 ? s.player.deck.length : index + 1);
+    const found = index < 0 ? undefined : discarded[index];
     // Immediate reset can move the found physical card back into the deck.
     // Exhaustion interrupts/responses precede retrieving that same instance.
     const exhaustion = s.queue.splice(0, s.queue.length - queuedBefore);
@@ -16708,15 +16692,7 @@ const angelPorts: angel.AngelPorts = {
     );
     s.encounter.discard.push(resetPiece(p));
   },
-  discardPlayerTop: (s) => {
-    const p = s.player.deck.shift();
-    if (p) s.player.discard.push(resetPiece(p));
-    if (!s.player.deck.length && p) {
-      s.player.deck = shuffle(s, s.player.discard.splice(0));
-      dealEncounter(s);
-    }
-    return p;
-  },
+  discardPlayerCards: mill,
   dealEncounter,
 };
 
@@ -16953,16 +16929,11 @@ const colossusPorts: colossus.ColossusPorts = {
   discardTough: colossusNativeDiscardTough,
   discardUntilColossus: (s, after) => {
     const before = s.queue.length;
-    const originalCount = s.player.deck.length;
-    let found: Piece | undefined;
-    for (let index = 0; index < originalCount; index++) {
-      const emptied = s.player.deck.length <= 1;
-      const p = mill(s, 1)[0];
-      if (!p) break;
-      if (card(p).set_code === "colossus" && card(p).faction_code === "hero")
-        found = p;
-      if (found || emptied) break;
-    }
+    const index = s.player.deck.findIndex(
+      (p) => card(p).set_code === "colossus" && card(p).faction_code === "hero",
+    );
+    const discarded = mill(s, index < 0 ? s.player.deck.length : index + 1);
+    const found = index < 0 ? undefined : discarded[index];
     const exhaustion = s.queue.splice(0, s.queue.length - before);
     add(
       s,
@@ -29904,7 +29875,10 @@ export function dispatch(state: GameState, command: Command): GameState {
             const identity = ["identity", "hero"].includes(command.id);
             const affected =
               !["attack", "thwart"].includes(command.action || "") &&
-              (identity || (!!source && card(source).set_code === s.heroId));
+              (identity ||
+                (!!source &&
+                  card(source).faction_code === "hero" &&
+                  card(source).set_code === s.heroId));
             const before = s.queue.length;
             ability(s, command.id, command.action);
             if (affected && domino.dominoFeedback(s).length) {

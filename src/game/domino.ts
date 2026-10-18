@@ -29,7 +29,8 @@ const identityActive = (s: GameState) =>
   });
 const own = (s: GameState, id: string) =>
   s.player.inPlay.find((p) => p.id === id);
-const sourceCard = (s: GameState, p: Piece) => card(p).set_code === s.heroId;
+const sourceCard = (s: GameState, p: Piece) =>
+  card(p).faction_code === "hero" && card(p).set_code === s.heroId;
 const powerTypes = ["energy", "mental", "physical", "wild"] as const;
 export const DOMINO_SCRIPT_CODES = [
   "40037a",

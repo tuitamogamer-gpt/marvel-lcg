@@ -545,3 +545,49 @@ it("Team Investigation uses Alliance across both actual owners and its per-playe
     true,
   );
 });
+
+it("Spear Shot completes the native discard cohort before exposing new player-card responses", () => {
+  let s = base();
+  const lady = put(s, "40045");
+  const event = top(s, "40040"),
+    deep = top(s, "40060"),
+    fox = top(s, "40057");
+  s = reveal(s, "42028").s;
+  while (s.prompt?.title !== "After discarding from your deck")
+    s = choose(s, "hero");
+  expect(s.player.discard.map((p) => p.id)).toEqual(
+    expect.arrayContaining([event.id, deep.id, fox.id]),
+  );
+  expect(s.prompt?.options.some((o) => o.id === `fox:${fox.id}`)).toBe(true);
+  expect(s.prompt?.options.some((o) => o.id === `digging:${deep.id}`)).toBe(
+    true,
+  );
+  s = choose(s, `digging:${deep.id}`);
+  s = choose(s, `lady:${lady.id}:${event.id}`);
+  s = choose(s, `fox:${fox.id}`);
+  s = finish(s);
+  expect(s.player.hand.some((p) => p.id === deep.id)).toBe(true);
+  expect(s.player.inPlay.some((p) => p.id === fox.id)).toBe(true);
+});
+it("Baron Mordo's native attack discard opens Digging Deep after its printed status effects", () => {
+  let s = base();
+  const deep = top(s, "40060"),
+    mordo = minion(s, "09028");
+  s = native(s, { type: "enemyAttack", id: mordo.id });
+  expect(s.prompt?.title).toBe("After discarding from your deck");
+  expect(s.player.stunned).toBe(true);
+  expect(s.player.confused).toBe(true);
+  s = choose(s, `digging:${deep.id}`);
+  s = finish(s);
+  expect(s.player.hand.some((p) => p.id === deep.id)).toBe(true);
+});
+
+it("discarding Memories resolves an encounter action, not a signature player-card ability", () => {
+  let s = base();
+  const memories = put(s, "40065");
+  attach(s, "40069", "hero:p1");
+  s.player.form = "alter";
+  s = ability(s, "memories", memories.id);
+  expect(s.player.hp).toBe(9);
+  expect(s.attachments.some((p) => p.code === "40069")).toBe(true);
+});
