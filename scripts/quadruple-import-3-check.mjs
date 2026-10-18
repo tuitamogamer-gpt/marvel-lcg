@@ -589,7 +589,17 @@ async function cableReady(source) {
   const perimeter = before.sideSchemes.find((piece) => piece.code === "40020");
   assert.ok(perimeter && perimeter.counters === heroStats(before).thwart);
   await page.locator(".thwart-action").click();
-  await choosePiece(perimeter, "Cable's basic thwart target");
+  const targeting = await settle();
+  if (targeting.sideSchemes.some((piece) => piece.id === perimeter.id)) {
+    await choosePiece(perimeter, "Cable's basic thwart target");
+  } else {
+    // The zero-threat main scheme is ineligible, so the engine may resolve
+    // the sole eligible player side scheme without an unnecessary prompt.
+    assert.ok(
+      targeting.victoryDisplay?.some((piece) => piece.id === perimeter.id),
+      "The native basic thwart automatically targets the sole eligible side scheme",
+    );
+  }
   const after = await finishChoices(source);
   assert.ok(!after.sideSchemes.some((piece) => piece.id === perimeter.id));
   assert.ok(
@@ -848,9 +858,11 @@ async function publicSource(source, width) {
     false,
     "Changing form leaves the hero ready",
   );
+  // Capture the actual available native controls before once-per-round use
+  // hides them, including Domino's long swap label at mobile widths.
+  await checkpoint(`${source.id}-hero-form`, width, source, initial);
   if (source.id === "domino") state = await dominoSwap(source);
   if (source.id === "cable") state = await cableReady(source);
-  await checkpoint(`${source.id}-hero-form`, width, source, initial);
   const beforeHp = state.villain.hp;
 
   current.stage = "basic-attack";

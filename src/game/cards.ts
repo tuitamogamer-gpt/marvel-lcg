@@ -1197,6 +1197,7 @@ export function deckCodes(
         (!c.permanent ||
           hero === "spectrum" ||
           (hero === "wolverine" && c.code === "35002") ||
+          (hero === "x23" && c.code === "43002") ||
           (hero === "psylocke" && c.code === "41002a") ||
           (hero === "shadowcat" && c.code === "32031a") ||
           (hero === "phoenix" && c.code === "34002a") ||
@@ -1209,14 +1210,18 @@ export function deckCodes(
     );
     if (selected.length !== 2)
       throw Error("Spider-Woman must choose two distinct aspects.");
+    const signatureCounts = selected.map(
+      (color) => a.filter((code) => card(code).faction_code === color).length,
+    );
+    const cardsPerAspect = (14 + signatureCounts[0] + signatureCounts[1]) / 2;
     return a.concat(
       Object.entries(basics).flatMap(([code, quantity]) =>
         Array(quantity).fill(code),
       ),
-      ...selected.map((selectedAspect) =>
+      ...selected.map((selectedAspect, index) =>
         Object.entries(aspects[selectedAspect])
           .flatMap(([code, quantity]) => Array(quantity).fill(code))
-          .slice(0, 7),
+          .slice(0, cardsPerAspect - signatureCounts[index]),
       ),
     );
   }
