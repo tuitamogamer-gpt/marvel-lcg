@@ -16702,7 +16702,7 @@ const deadpoolPorts: deadpool.DeadpoolPorts = {
     s.encounter.deck = shuffle(s, s.encounter.deck);
   },
   drawEncounter,
-  discardPlayerTop: (s) => angelPorts.discardPlayerTop(s),
+  discardPlayerTop: (s) => mill(s, 1)[0],
   dealEncounter,
   attach: (s, p, id) => angelPorts.attach(s, p, id),
   reveal: (s, p) => angelPorts.reveal(s, p),

@@ -203,6 +203,8 @@ describe("complete expansion rules inventory", () => {
       ["rogue", 36],
       ["psylocke", 35],
       ["angel", 34],
+      ["x23", 41],
+      ["deadpool", 59],
     ] as const) {
       expect(
         coverage.products.find((pack: { code: string }) => pack.code === code),
@@ -295,6 +297,10 @@ describe("complete expansion rules inventory", () => {
       ["rogue", "rogue"],
       ["psylocke", "psylocke"],
       ["angel", "angel"],
+      ["next_evol", "cable"],
+      ["next_evol", "domino"],
+      ["x23", "x23"],
+      ["deadpool", "deadpool"],
     ])
       expect(
         inventory.heroes.find(
@@ -314,10 +320,10 @@ describe("complete expansion rules inventory", () => {
         "reavers",
       ]),
     );
-    expect(coverage.executableFaces).toBe(1856);
-    expect(coverage.unsupportedFaces).toBe(2695);
-    expect(coverage.dedicatedFaces).toBe(1393);
-    expect(coverage.registeredHeroIds).toHaveLength(45);
+    expect(coverage.executableFaces).toBe(2019);
+    expect(coverage.unsupportedFaces).toBe(2532);
+    expect(coverage.dedicatedFaces).toBe(1561);
+    expect(coverage.registeredHeroIds).toHaveLength(49);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
     );
@@ -381,6 +387,49 @@ describe("complete expansion rules inventory", () => {
         (scenario: { id: string }) => scenario.id === "mutagen_formula",
       ).registered,
     ).toBe(true);
+  });
+  it("closes both NeXt Evolution hero sections while retaining the boxed scenario and campaign gaps", () => {
+    const next = inventory.installedRegistryCoverage.products.find(
+      (pack: { code: string }) => pack.code === "next_evol",
+    );
+    expect(next).toMatchObject({
+      faceCount: 235,
+      executableFaces: 72,
+      installedCardClosure: false,
+    });
+    const heroFaces = cards.filter(
+      (entry: { pack_code: string; position: number }) =>
+        entry.pack_code === "next_evol" && entry.position <= 69,
+    );
+    expect(heroFaces).toHaveLength(71);
+    for (const entry of heroFaces) {
+      expect(next.unsupportedFaceCodes, entry.code).not.toContain(entry.code);
+      expect(
+        audited.get(entry.code)?.installedRegistry.executable,
+        entry.code,
+      ).toBe(true);
+    }
+    // Pouches already has a declarative resource registration; this does not
+    // supply campaign automation or close any of the remaining box sections.
+    expect(audited.get("40196")?.installedRegistry).toMatchObject({
+      executable: true,
+      mechanism: "declarative",
+    });
+    expect(next.unsupportedFaceCodes).toEqual(
+      cards
+        .filter(
+          (entry: { pack_code: string; position: number; code: string }) =>
+            entry.pack_code === "next_evol" &&
+            entry.position > 69 &&
+            entry.code !== "40196",
+        )
+        .map((entry: { code: string }) => entry.code)
+        .sort(),
+    );
+    expect(next.unsupportedFaceCodes).toEqual(
+      expect.arrayContaining(["40070a", "40204"]),
+    );
+    expect(MODULES.map((module) => module.id)).not.toContain("dreadpool");
   });
   it("retains the independent nine-card Inheritors closure beside the complete Spider-Ham pack", () => {
     const codes = [
@@ -486,7 +535,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(110);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(114);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
@@ -598,6 +647,10 @@ describe("complete expansion rules inventory", () => {
       "src/game/rogue.ts",
       "src/game/psylocke.ts",
       "src/game/angel.ts",
+      "src/game/cable.ts",
+      "src/game/domino.ts",
+      "src/game/x23.ts",
+      "src/game/deadpool.ts",
       "src/game/player-side-schemes.ts",
       "src/game/mutant-genesis-player-pack.ts",
       "src/game/sabretooth.ts",
