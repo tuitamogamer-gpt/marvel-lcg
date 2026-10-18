@@ -587,7 +587,7 @@ async function dominoSwap(source) {
 async function cableReady(source) {
   const before = await save();
   const perimeter = before.sideSchemes.find((piece) => piece.code === "40020");
-  assert.ok(perimeter && perimeter.threat === heroStats(before).thwart);
+  assert.ok(perimeter && perimeter.counters === heroStats(before).thwart);
   await page.locator(".thwart-action").click();
   await choosePiece(perimeter, "Cable's basic thwart target");
   const after = await finishChoices(source);
@@ -719,6 +719,17 @@ async function publicSource(source, width) {
       exact: true,
     })
     .click();
+  assert.equal(
+    await page.locator(".aspect-grid .aspect-option").count(),
+    5,
+    "The public lobby exposes all five playable aspects",
+  );
+  if (source.id === "deadpool")
+    assert.match(
+      await page.locator('.aspect-option[aria-pressed="true"]').innerText(),
+      /Pool/,
+      "The original Deadpool source chooses the native Pool aspect",
+    );
   await page
     .getByRole("button", { name: `View ${source.deckSize}-card deck` })
     .click();
@@ -748,10 +759,30 @@ async function publicSource(source, width) {
   const initial = snapshot(state, source);
   conserved(state, source, initial, "original mulligan");
 
+  current.stage = "native-mulligan";
+  // Seed 40001 naturally opens Establish Perimeter. Return that physical card
+  // through the real mulligan so Soldier X can search the deck for it.
+  const mulliganScheme =
+    source.id === "cable"
+      ? state.player.hand.find((piece) => piece.code === "40020")
+      : null;
+  if (source.id === "cable") {
+    assert.ok(mulliganScheme, "The fixed Cable seed opens Establish Perimeter");
+    const choice = page.locator(".selection-card").filter({
+      has: page.locator(`img[src="${imageFor("40020")}"]`),
+    });
+    assert.equal(await choice.count(), 1);
+    await choice.click();
+    assert.equal(await choice.getAttribute("aria-pressed"), "true");
+    await page
+      .getByRole("button", { name: "Replace 1 & begin", exact: true })
+      .click();
+  } else {
+    await page
+      .getByRole("button", { name: "Keep hand & begin", exact: true })
+      .click();
+  }
   current.stage = "native-setup";
-  await page
-    .getByRole("button", { name: "Keep hand & begin", exact: true })
-    .click();
   state = await finishChoices(source, true);
   assert.equal(state.phase, "player");
   assert.equal(state.player.form, "alter");
@@ -767,7 +798,12 @@ async function publicSource(source, width) {
       "Soldier X puts the chosen original Establish Perimeter into play",
     );
     assert.ok(initial.sourceCards.some((piece) => piece.id === scheme.id));
-    assert.equal(scheme.threat, 2);
+    assert.equal(
+      scheme.id,
+      mulliganScheme.id,
+      "Soldier X finds the same physical card returned by the public mulligan",
+    );
+    assert.equal(scheme.counters, 2);
   }
   if (source.id === "x23") {
     assert.equal(
@@ -776,6 +812,15 @@ async function publicSource(source, width) {
       "Shhnk! puts the one original physical Claws into play",
     );
   }
+  assert.equal(
+    await page
+      .locator(
+        `.identity-card img[src="${imageFor(heroRuntime(source.id).alter)}"]`,
+      )
+      .count(),
+    1,
+    "The original alter-ego face is rendered after native setup",
+  );
   await checkpoint(`${source.id}-native-setup`, width, source, initial);
   await reload();
 
@@ -791,6 +836,13 @@ async function publicSource(source, width) {
   state = await finishChoices(source);
   assert.equal(state.player.form, "hero");
   assert.equal(state.player.flipped, true);
+  assert.equal(
+    await page
+      .locator(`.identity-card img[src="${imageFor(source.code)}"]`)
+      .count(),
+    1,
+    "The original hero face is rendered after changing form",
+  );
   assert.equal(
     state.player.exhausted,
     false,
@@ -836,6 +888,7 @@ async function publicSource(source, width) {
       deadpool: "Break the Fourth Wall",
     }[source.id],
     seed: source.seed,
+    mulliganCards: mulliganScheme ? [mulliganScheme.code] : [],
     exactReload: true,
   });
   console.log(

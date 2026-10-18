@@ -148,6 +148,8 @@ function ownedPieces(s: GameState, originalIds: Set<string>): Piece[] {
     ...s.encounter.deck,
     ...s.encounter.discard,
     ...s.encounter.dealt,
+    ...((s as GameState & { deadpool?: { poolSetAside: Piece[] } }).deadpool
+      ?.poolSetAside || []),
     ...(s.encounter.storedBoosts || []),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
@@ -215,6 +217,8 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
     ...s.encounter.deck,
     ...s.encounter.discard,
     ...s.encounter.dealt,
+    ...((s as GameState & { deadpool?: { poolSetAside: Piece[] } }).deadpool
+      ?.poolSetAside || []),
     ...(s.encounter.storedBoosts || []),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
@@ -272,6 +276,10 @@ function runMission(config: (typeof missions)[number]) {
     rogue: 41,
     psylocke: 42,
     angel: 40,
+    cable: 40,
+    domino: 40,
+    x23: 41,
+    deadpool: 40,
   };
   if (Object.hasOwn(physicalSourceCounts, hero.id)) {
     expect(codes).toHaveLength(physicalSourceCounts[hero.id]);
@@ -318,9 +326,21 @@ function runMission(config: (typeof missions)[number]) {
       [s.player.spdrSuitId, s.player.spdrPilotId].sort(),
     );
   }
-  const total = codes.length + supplementary.length + identities.length;
+  const poolDependency = [
+    ...s.encounter.deck,
+    ...((s as GameState & { deadpool?: { poolSetAside: Piece[] } }).deadpool
+      ?.poolSetAside || []),
+  ].filter((p) => Number(p.code) >= 44037 && Number(p.code) <= 44042);
+  expect(poolDependency).toHaveLength(aspect === "pool" ? 7 : 0);
+  const total =
+    codes.length +
+    supplementary.length +
+    identities.length +
+    poolDependency.length;
   const originalIds = new Set(
-    [...initial, ...supplementary, ...identities].map((p) => p.id),
+    [...initial, ...supplementary, ...identities, ...poolDependency].map(
+      (p) => p.id,
+    ),
   );
   expect(originalIds.size, "Original physical source IDs are distinct").toBe(
     total,

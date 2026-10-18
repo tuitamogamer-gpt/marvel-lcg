@@ -189,7 +189,7 @@ const specs: {
 const source = (spec: (typeof specs)[number]) =>
   sourceDecks.find((deck) => deck.heroCode === `${spec.first}a`)!;
 const original = (spec: (typeof specs)[number]) =>
-  composition(source(spec).cards);
+  composition(source(spec).cards as Record<string, number>);
 const playerZones = (player: GameState["player"]): Piece[] => [
   ...player.hand,
   ...player.deck,
@@ -700,7 +700,7 @@ describe("batch three: cross-product source and setup constraints", () => {
 
     const warlockSource = sourceDecks.find((d) => d.heroCode === "21031a")!;
     const warlockCodes = [
-      ...composition(warlockSource.cards).filter(
+      ...composition(warlockSource.cards as Record<string, number>).filter(
         (code) => raw(code).faction_code !== "protection",
       ),
       "44013",
