@@ -63,7 +63,13 @@ export interface DeadpoolPorts {
   handSize(s: GameState): number;
   canReady(s: GameState, id: string): boolean;
   ready(s: GameState, id: string): void;
-  heal(s: GameState, id: string, n: number): void;
+  heal(s: GameState, id: string, n: number): number;
+  moveThreat(
+    s: GameState,
+    id: string,
+    amount?: number,
+    ignore?: boolean,
+  ): number;
   damage(s: GameState, id: string, n: number, source: string): number;
   discard(s: GameState, id: string): void;
   remove(s: GameState, id: string): void;
@@ -85,7 +91,13 @@ export interface DeadpoolPorts {
     commit?: Effect[],
   ): void;
   canPay(s: GameState, p: Piece): boolean;
-  reaction(s: GameState, p: Piece, effects: Effect[], after: Effect[]): void;
+  reaction(
+    s: GameState,
+    p: Piece,
+    effects: Effect[],
+    after: Effect[],
+    cancelAfter?: Effect[],
+  ): void;
   putAlly(s: GameState, p: Piece): void;
   collectionWeapons(s: GameState): Card[];
   canEnter(s: GameState, p: Piece): boolean;
@@ -207,6 +219,45 @@ export function deadpoolCardPlayed(s: GameState) {
   s.flags.deadpoolPlayedPhase = phase(s);
 }
 export function deadpoolPlayRestriction(s: GameState, p: Piece) {
+  if (p.code === "44031") {
+    const identities = playerOrder(s)
+      .filter((seat) => seatView(s, seat).player.form === "hero")
+      .map(
+        (seat) =>
+          CATALOG_CARDS.find(
+            (c) => c.type_code === "hero" && c.set_code === seat.heroId,
+          )?.name,
+      );
+    const names = [
+      ...identities,
+      ...allInPlay(s)
+        .filter((q) => card(q).type_code === "ally")
+        .map((q) => card(q).name),
+    ];
+    if (
+      !["deadpool", "cable"].includes(s.heroId) ||
+      !["Deadpool", "Cable"].every((name) => names.includes(name))
+    )
+      return "Frenemies requires Cable and Deadpool in play and one as your identity.";
+  }
+  if (
+    p.code === "44051" &&
+    !s.sideSchemes.some(
+      (q) =>
+        !allInPlay(s).some((a) => a.code === "44051" && a.attachedTo === q.id),
+    )
+  )
+    return "Ambush requires a side scheme without another Ambush.";
+  if (
+    p.code === "44054" &&
+    !s.minions.some(
+      (q) =>
+        !trait(q, "Elite") &&
+        !allInPlay(s).some((a) => a.code === "44054" && a.attachedTo === q.id),
+    )
+  )
+    return "Distraction requires a non-Elite minion without another Distraction.";
+
   if (p.code === "44048" && s.flags.deadpoolPlayedPhase === phase(s))
     return "Mulligan cannot be played after another card this phase.";
   if (p.code === "44028" && typeof s.flags.deadpoolPreviousWon !== "boolean")
@@ -216,7 +267,10 @@ export function deadpoolPlayRestriction(s: GameState, p: Piece) {
   return undefined;
 }
 export function deadpoolTriggeredBlocked(s: GameState) {
-  const turn = s.players.find((p) => p.id === s.turnPlayerId);
+  if (s.phase !== "player") return false;
+  const turn = s.players.find(
+    (p) => p.id === s.turnPlayerId && !p.ended && !p.eliminated,
+  );
   return (
     !!turn &&
     turn.id !== s.activePlayerId &&
@@ -235,22 +289,31 @@ export function deadpoolCanReady(s: GameState, p: Piece) {
 }
 export function deadpoolRescue(
   s: GameState,
-  ports: Pick<DeadpoolPorts, "remove">,
+  ports: Pick<DeadpoolPorts, "remove" | "queue">,
 ) {
   if (s.player.hp > 0) return false;
-  if (
+  if (s.flags.deadpoolRescuePending) return true;
+  const regenerate =
     s.heroId === "deadpool" &&
     s.player.form === "hero" &&
-    !isTextBlank(s, { code: "44001a", id: `hero:${s.activePlayerId}` })
-  ) {
+    !isTextBlank(s, { code: "44001a", id: `hero:${s.activePlayerId}` });
+  const git = allInPlay(s).find(
+    (p) => p.code === "44028" && !isTextBlank(s, p),
+  );
+  if (regenerate && git) {
+    s.flags.deadpoolRescuePending = true;
+    ports.queue(
+      s,
+      D("rescue-choice", { actorId: s.activePlayerId, gitId: git.id }),
+    );
+    return true;
+  }
+  if (regenerate) {
     s.player.hp = 1;
     s.player.form = "alter";
     s.encounter.acceleration++;
     return true;
   }
-  const git = allInPlay(s).find(
-    (p) => p.code === "44028" && !isTextBlank(s, p),
-  );
   if (git) {
     s.player.hp = 1;
     s.player.form = "alter";
@@ -259,8 +322,9 @@ export function deadpoolRescue(
   }
   return false;
 }
+
 export function deadpoolDamageTaken(s: GameState) {
-  if (s.heroId !== "deadpool") return;
+  if (s.heroId !== "deadpool" || s.player.form !== "hero") return;
   for (const p of [...s.sideSchemes].filter(
     (p) => p.code === "44034" && !isTextBlank(s, p),
   )) {
@@ -362,7 +426,7 @@ export function deadpoolAbilityOptions(
           ),
         ]
       : [];
-  if (p.exhausted) return [];
+  if (p.exhausted && p.code !== "44052") return [];
   const actions: Record<string, string> = {
     "44009": "swap",
     "44010": "katana",
@@ -542,7 +606,7 @@ export function deadpoolRevealOptions(
         ),
       );
   if (card(p).type_code === "treachery")
-    for (const q of live(s, "44044").filter((q) => !q.tough && q.damage <= 2))
+    for (const q of live(s, "44044"))
       out.push(
         O(
           q.id,
@@ -674,6 +738,34 @@ export function resolveDeadpoolEffect(
   if (!e.type.startsWith("deadpool:")) return false;
   const p = e.id ? find(s, e.id) : undefined;
   switch (e.type) {
+    case "deadpool:ray-end":
+      delete s.flags[`deadpoolRay:${e.target}`];
+      break;
+    case "deadpool:rescue-choice":
+      ports.choose(
+        s,
+        "Forced defeat replacements",
+        "Choose which forced replacement resolves first.",
+        [
+          O("regenerate", "Regenerate · add acceleration", [
+            D("rescue", { kind: "regenerate" }),
+          ]),
+          O("git-gud", "Git Gud · remove upgrade", [
+            D("rescue", { kind: "git", id: e.gitId }),
+          ]),
+        ],
+      );
+      break;
+    case "deadpool:rescue":
+      delete s.flags.deadpoolRescuePending;
+      s.player.hp = 1;
+      s.player.form = "alter";
+      if (e.kind === "regenerate") s.encounter.acceleration++;
+      else if (p) ports.remove(s, p.id);
+      break;
+    case "deadpool:remove-threat":
+      ports.moveThreat(s, e.target, e.amount);
+      break;
     case "deadpool:history":
       ports.choose(
         s,
@@ -681,6 +773,9 @@ export function resolveDeadpoolEffect(
         "Did you win your previous game of Marvel Champions? Your answer controls this card's printed discount.",
         [
           O("won", "I won my previous game", [D("history-set", { won: true })]),
+          O("unknown", "First game or previous result unknown", [
+            D("history-set", { won: false }),
+          ]),
           O("not-won", "I did not win my previous game", [
             D("history-set", { won: false }),
           ]),
@@ -873,7 +968,7 @@ export function resolveDeadpoolEffect(
               target(
                 '"I Got This"',
                 "scheme",
-                E("threat", { amount: -2, source: "hero" }),
+                D("remove-threat", { amount: 2 }),
               ),
             ]
           : []),
@@ -913,9 +1008,7 @@ export function resolveDeadpoolEffect(
         s,
         ...ports
           .schemes(s, false, true)
-          .map((t) =>
-            E("threat", { target: t.id, amount: -n, source: "hero" }),
-          ),
+          .map((t) => D("remove-threat", { target: t.id, amount: n })),
       );
       break;
     }
@@ -1005,7 +1098,7 @@ export function resolveDeadpoolEffect(
             target(
               "Bob, Agent of Hydra",
               "scheme",
-              E("threat", { amount: -1, source: p.id }),
+              D("remove-threat", { amount: 1 }),
             ),
           ]),
           O("skip", "Skip response", []),
@@ -1258,8 +1351,11 @@ export function resolveDeadpoolEffect(
       p!.exhausted = true;
       const q = ports.discardPlayerTop(s);
       if (q && deadpoolRPS(card(chosen!), card(q))) {
-        const i = s.player.discard.findIndex((a) => a.id === q.id);
-        if (i >= 0) s.player.hand.push(s.player.discard.splice(i, 1)[0]);
+        const zone = s.player.discard.some((a) => a.id === q.id)
+          ? s.player.discard
+          : s.player.deck;
+        const i = zone.findIndex((a) => a.id === q.id);
+        if (i >= 0) s.player.hand.push(zone.splice(i, 1)[0]);
       }
       break;
     }
@@ -1338,7 +1434,7 @@ export function resolveDeadpoolEffect(
           card(p).name,
           p.code === "44053"
             ? ports
-                .schemes(s, false, true)
+                .schemes(s, false)
                 .filter((t) =>
                   t.id === "main"
                     ? s.scheme.threat > 0
@@ -1364,16 +1460,11 @@ export function resolveDeadpoolEffect(
           !(p.deadpoolSpaces || []).includes(e.space),
           "The board space is already occupied.",
         );
-        if (p.code === "44053") {
-          if (e.target === "main") {
-            need(s.scheme.threat > 0, "Choose existing threat.");
-            s.scheme.threat--;
-          } else {
-            const q = find(s, e.target);
-            need(q && q.counters > 0, "Choose existing threat.");
-            q!.counters--;
-          }
-        } else ports.heal(s, e.target, 1);
+        const moved =
+          p.code === "44053"
+            ? ports.moveThreat(s, e.target)
+            : ports.heal(s, e.target, 1);
+        if (!moved) break;
         (p.deadpoolSpaces ||= []).push(e.space);
         p.counters = p.deadpoolSpaces.length;
         if (p.code === "44053" && p.counters === 6) {
@@ -1608,6 +1699,7 @@ export function resolveDeadpoolEffect(
         q!,
         [D("reveal-cancel", { piece: e.piece, code: q!.code })],
         [],
+        [E("reveal", { piece: e.piece, skip: true })],
       );
       break;
     }
@@ -1624,8 +1716,13 @@ export function resolveDeadpoolEffect(
           }),
         );
       else {
+        for (const key of Object.keys(s.flags))
+          if (key.startsWith("deadpoolFront:")) delete s.flags[key];
+        delete s.flags.deadpoolOtherDefended;
         const key = `deadpoolFront:${s.nextId++}`;
         s.flags[key] = true;
+        s.flags.deadpoolFrontAwaiting = true;
+        delete s.flags.deadpoolFrontAttackId;
         ports.queue(
           s,
           E("enemyAttack", { id: s.villain.id }),
@@ -1634,14 +1731,15 @@ export function resolveDeadpoolEffect(
       }
       break;
     case "deadpool:negasonic":
-      need(
-        p && !p.tough && p.damage <= 2,
-        "Negasonic must take the full 2 damage cost.",
-      );
+      need(p, "Negasonic must still be in play to pay her damage cost.");
       ports.damage(s, p!.id, 2, p!.id);
       ports.cancelReveal(s, e.piece, true);
       break;
     case "deadpool:front-draw":
+      delete s.flags.deadpoolFrontAwaiting;
+      delete s.flags.deadpoolFrontAttackId;
+      for (const key of Object.keys(s.flags))
+        if (key.startsWith("deadpoolFront:")) delete s.flags[key];
       if (s.flags.deadpoolOtherDefended) {
         delete s.flags.deadpoolOtherDefended;
         ports.queue(s, E("draw", { amount: 1, actorId: e.playerId }));
@@ -1666,6 +1764,7 @@ export function resolveDeadpoolEffect(
                 },
               ],
           [],
+          e.after,
         );
       break;
     }
@@ -1687,7 +1786,13 @@ export function resolveDeadpoolEffect(
     case "deadpool:threat-pay": {
       const q = s.player.hand.find((q) => q.id === e.id);
       if (q)
-        ports.reaction(s, q, [D("threat-target", { packet: e.packet })], []);
+        ports.reaction(
+          s,
+          q,
+          [D("threat-target", { packet: e.packet })],
+          [],
+          [e.packet],
+        );
       break;
     }
     case "deadpool:threat-target":

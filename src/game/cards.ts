@@ -1498,7 +1498,9 @@ export function heroStats(s: GameState) {
 }
 export function handSize(s: GameState) {
   const base =
-    s.player.form === "hero" && s.heroId === "iron_man"
+    s.player.form === "hero" &&
+    s.heroId === "iron_man" &&
+    !isTextBlank(s, heroCard(s))
       ? heroCard(s).hand_size! +
         Math.min(
           6,

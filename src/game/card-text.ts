@@ -33,7 +33,23 @@ export function isTextBlank(
     )
       return true;
   }
-  const dpTarget = typeof p !== "string" ? p.id : undefined;
+  const dpIdentity = definitions.get(printedCode);
+  const dpSeat = ["hero", "alter_ego"].includes(dpIdentity?.type_code || "")
+    ? s.players.find((seat) => seat.heroId === dpIdentity?.set_code)
+    : undefined;
+  const dpTarget =
+    (dpSeat ? `hero:${dpSeat.id}` : undefined) ||
+    (typeof p !== "string" ? p.id : undefined);
+  if (
+    dpTarget &&
+    s.players.some(
+      (seat) =>
+        (seat.id === s.activePlayerId ? s.flags : seat.flags)[
+          `deadpoolRay:${dpTarget}`
+        ],
+    )
+  )
+    return true;
   if (
     dpTarget &&
     s.attachments.some((a) => a.code === "44035" && a.attachedTo === dpTarget)

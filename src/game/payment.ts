@@ -112,6 +112,7 @@ function localPaymentSources(
   if (
     s.heroId === "spider_man" &&
     s.player.form === "alter" &&
+    !isTextBlank(s, heroCard(s)) &&
     !s.flags.scientist
   )
     sources.push({
@@ -328,7 +329,13 @@ export function paymentSources(
         sources.push(source);
     }
   }
-  return sources;
+  return sources.filter(
+    (source) =>
+      source.kind === "card" ||
+      !deadpoolTriggeredBlocked(
+        source.playerId ? seatView(s, source.playerId) : s,
+      ),
+  );
 }
 
 /**

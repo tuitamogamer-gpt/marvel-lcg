@@ -710,7 +710,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     return sourceKeyword(seatView(s, source.slice(5)), "hero", name);
   if (source === "hero")
     return (
-      printedKeyword(heroCard(s), name) +
+      (isTextBlank(s, heroCard(s)) ? 0 : printedKeyword(heroCard(s), name)) +
       Number(
         name === "Stalwart" &&
           (rogue.rogueModifiers(s).stalwart ||
@@ -988,6 +988,16 @@ function choose(
   options: Option[],
   cancelable = false,
 ) {
+  options = options.filter((o) => {
+    const c = o.image ? card(o.image) : undefined;
+    const actor = o.effects.find((e) => e.actorId)?.actorId || s.activePlayerId;
+    return (
+      o.effects.some((e) => e.type === "defender") ||
+      !c ||
+      c.faction_code === "encounter" ||
+      !deadpool.deadpoolTriggeredBlocked(seatView(s, actor))
+    );
+  });
   // Every labeled defense ability, including attack/defense interrupts, must
   // respect the identity's defense restrictions during an actual attack.
   if (s.attack)
@@ -1787,15 +1797,25 @@ function endGame(s: GameState, won: boolean, reason: string) {
 }
 /** Extra Weapon slots cannot absorb non-Weapon Restricted cards. */
 function restrictedLimitExceeded(s: GameState) {
-  const restricted = s.player.inPlay.filter((p) => keyword(p, "Restricted"));
-  const general = 2 + venom.venomRestrictedAllowance(s);
-  const weapons = restricted.filter(
+  const restricted = s.player.inPlay.filter(
     (p) =>
-      card(p).type_code === "upgrade" &&
-      /(?:^|\.)\s*Weapon\s*(?:\.|$)/i.test(card(p).traits || ""),
-  ).length;
+      keyword(p, "Restricted") || (p.code === "44055" && !isTextBlank(s, p)),
+  );
+  const general = 2 + venom.venomRestrictedAllowance(s);
+  const weight = (p: Piece) => (p.code === "44055" ? 2 : 1);
+  const weapons = restricted
+    .filter(
+      (p) =>
+        card(p).type_code === "upgrade" &&
+        /(?:^|\.)\s*Weapon\s*(?:\.|$)/i.test(card(p).traits || ""),
+    )
+    .reduce((n, p) => n + weight(p), 0);
   const weaponSlots = venomPack.venomPackRestrictedWeaponAllowance(s);
-  return restricted.length - Math.min(weapons, weaponSlots) > general;
+  return (
+    restricted.reduce((n, p) => n + weight(p), 0) -
+      Math.min(weapons, weaponSlots) >
+    general
+  );
 }
 function nativeIdentityDamageSource(s: GameState, source: string) {
   if (source === "hero" || source === "audacity")
@@ -2051,6 +2071,9 @@ function check(s: GameState) {
           "hero"),
   ))
     if (!isTextBlank(s, p)) discardPiece(s, p.id);
+  for (const p of s.minions)
+    if (p.code === "44038" && !isTextBlank(s, p))
+      p.engagedWith = s.firstPlayerId;
   syncValkyrieConvertedCards(s);
   syncVillainTextHealth(s);
   if (
@@ -2301,10 +2324,16 @@ function check(s: GameState) {
 }
 export function schemeLimit(s: GameState) {
   const magneticLimit = magneto.magnetoMainThreatLimit(s);
-  if (magneticLimit !== undefined) return magneticLimit;
+  if (magneticLimit !== undefined)
+    return magneticLimit > 0
+      ? magneticLimit + deadpool.deadpoolSchemeBonus(s)
+      : magneticLimit;
   const mansionLimit = mansionAttack.mansionAttackMainThreatLimit(s);
   const wideawakeLimit = wideawake.projectWideawakeMainThreatLimit(s);
-  if (wideawakeLimit !== undefined) return wideawakeLimit;
+  if (wideawakeLimit !== undefined)
+    return wideawakeLimit > 0
+      ? wideawakeLimit + deadpool.deadpoolSchemeBonus(s)
+      : wideawakeLimit;
   const sabretoothLimit = sabretooth.sabretoothMainThreatLimit(s);
   if (sabretoothLimit === 0) return 0;
   const value = riskySchemeValues(s) || mutagenSchemeValues(s);
@@ -2644,6 +2673,13 @@ function dealDamage(
   panther = false,
   traits: DamageTraits = {},
 ): DamageResult {
+  const raySource = source === "hero" ? `hero:${s.activePlayerId}` : source;
+  const ray =
+    attack &&
+    target !== s.villain.id &&
+    s.attachments.some((p) => p.code === "44040" && p.attachedTo === raySource);
+  if (ray) s.flags[`deadpoolRay:${target}`] = true;
+  const rayContinuation = ray ? s.queue[0] : undefined;
   if (traits.noDamageInstance) n = 0;
   if (
     attack &&
@@ -3011,6 +3047,14 @@ function dealDamage(
         ...continuation,
       ];
     }
+  }
+  if (ray) {
+    const boundary = rayContinuation ? s.queue.indexOf(rayContinuation) : -1;
+    s.queue.splice(
+      boundary < 0 ? s.queue.length : boundary,
+      0,
+      E("deadpool:ray-end", { target, actorId: s.activePlayerId }),
+    );
   }
   return result;
 }
@@ -3771,6 +3815,8 @@ function threat(
       if (
         v.heroId === "she_hulk" &&
         v.player.form === "alter" &&
+        !isTextBlank(v, heroCard(v)) &&
+        !deadpool.deadpoolTriggeredBlocked(v) &&
         !v.flags.objection
       )
         opts.push(
@@ -4951,6 +4997,12 @@ export function canPay(
   const handCard = excludeId
     ? s.player.hand.find((p) => p.id === excludeId)
     : undefined;
+  if (
+    deadpool.deadpoolTriggeredBlocked(s) &&
+    (handCard || targetCode) &&
+    card(handCard || targetCode!).type_code === "event"
+  )
+    return false;
   // Reaction option builders ask about the actual hand event before its play
   // interrupt opens. Ability costs have no excluded physical hand event.
   if (
@@ -6175,6 +6227,9 @@ export function newGame(config: {
       Array.from({ length: c.quantity }, () => makePiece(s, c.code)),
     ),
   );
+  deadpool.deadpoolSetupPool(s, makePiece);
+  if (s.deadpool?.initializedPoolSeats.length)
+    s.encounter.deck = shuffle(s, s.encounter.deck);
   if (v.id === "magneto") {
     const boarding = s.encounter.deck.find((p) => p.code === "32144a");
     const orbital = s.encounter.deck.find((p) => p.code === "32145a");
@@ -8054,7 +8109,12 @@ function flip(
     s,
     `Change form to ${heroCard(s).name}${["ant", "wsp"].includes(s.heroId) && s.player.form === "hero" ? ` (${s.player.heroForm})` : ""}.`,
   );
-  if (s.player.form === "hero" && s.heroId === "she_hulk")
+  if (
+    s.player.form === "hero" &&
+    s.heroId === "she_hulk" &&
+    !isTextBlank(s, heroCard(s)) &&
+    !deadpool.deadpoolTriggeredBlocked(s)
+  )
     add(
       s,
       E("target", {
@@ -8323,6 +8383,11 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   );
 }
 function ability(s: GameState, id: string, action = "special") {
+  if (["identity", "hero"].includes(id) && action !== "game-history")
+    need(
+      !isTextBlank(s, heroCard(s)),
+      "This identity’s printed text box is blank.",
+    );
   need(
     !deadpool.deadpoolTriggeredBlocked(s),
     "The Merc with the Mouth prevents another player’s triggered card abilities during this turn.",
@@ -11532,6 +11597,10 @@ const gmwPorts: gmwPack.GmwPlayerPackPorts = {
   attackExcess: (s, packet) => attackExcess(s, packet),
 };
 export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
+  if (["identity", "hero"].includes(id) && isTextBlank(s, heroCard(s)))
+    return deadpool
+      .deadpoolAbilityOptions(s, id, deadpoolPorts)
+      .filter((o) => o.id === "game-history");
   if (deadpool.deadpoolTriggeredBlocked(s)) return [];
   return [
     ...cable.cableAbilityOptions(s, id, cablePorts),
@@ -16679,6 +16748,14 @@ const deadpoolPorts: deadpool.DeadpoolPorts = {
   maxHP,
   handSize,
   heal,
+  moveThreat: (s, id, amount = 1, ignore = false) => {
+    s.flags.additionalThwartPacket = true;
+    try {
+      return thwart(s, id, amount, ignore, "hero") || 0;
+    } finally {
+      delete s.flags.additionalThwartPacket;
+    }
+  },
   discard: discardPiece,
   remove: removePlayerCard,
   discardHand,
@@ -16709,7 +16786,11 @@ const deadpoolPorts: deadpool.DeadpoolPorts = {
   drawEncounter,
   discardPlayerTop: (s) => mill(s, 1)[0],
   dealEncounter,
-  attach: (s, p, id) => angelPorts.attach(s, p, id),
+  attach: (s, p, id) => {
+    removeEncounterInstance(s, p.id);
+    s.attachments = s.attachments.filter((q) => q.id !== p.id);
+    mutagenPorts.attach(s, p, id);
+  },
   reveal: (s, p) => angelPorts.reveal(s, p),
   cancelReveal: (s, p, onlyWhenRevealed) => {
     s.queue = s.queue.filter(
@@ -16746,8 +16827,24 @@ const deadpoolPorts: deadpool.DeadpoolPorts = {
       commit,
     ),
   canPay: (s, p) => canPay(s, cardCost(s, card(p), p), [], p.id, p.code),
-  reaction: (s, p, effects, after) =>
-    angelPorts.playReaction(s, p, effects, after),
+  reaction: (s, p, effects, after, cancelAfter) =>
+    add(
+      s,
+      E("payRequest", {
+        title: card(p).name,
+        cost: cardCost(s, card(p), p),
+        piece: p,
+        cancelable: true,
+        after: [
+          E("resolveHandEvent", {
+            id: p.id,
+            after: effects,
+            continuation: after,
+          }),
+        ],
+        cancellationQueue: cancelAfter || after,
+      }),
+    ),
   collectionWeapons: (s) =>
     CATALOG_CARDS.filter(
       (c) =>
@@ -17916,7 +18013,14 @@ function enemyAttack(
     return;
   }
   const isVillain = id === s.villain.id;
-  if (isVillain && s.heroId === "spider_man" && s.player.form === "hero")
+  if (
+    isVillain &&
+    s.heroId === "spider_man" &&
+    s.player.form === "hero" &&
+    !isTextBlank(s, heroCard(s)) &&
+    !s.attachments.some((a) => a.code === "44040" && a.attachedTo === id) &&
+    !deadpool.deadpoolTriggeredBlocked(s)
+  )
     draw(s, 1);
   const novaModifiers = friendlySource
     ? { attack: 0, overkill: false }
@@ -17986,6 +18090,10 @@ function enemyAttack(
       usedIds: [],
     }),
   );
+  if (s.flags.deadpoolFrontAwaiting && s.attack) {
+    s.flags.deadpoolFrontAttackId = s.attack.id || "";
+    delete s.flags.deadpoolFrontAwaiting;
+  }
   add(s, ...cyclops.cyclopsEnemyAttackStarted(s, id));
   add(s, ...wolverine.wolverineEnemyAttackStarted(s, id));
   add(s, ...colossus.colossusEnemyAttackStarted(s, id, colossusPorts));
@@ -18836,16 +18944,17 @@ type SabretoothAttackDefeatPiece = Piece & {
   };
 };
 function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
-  if (
-    s.attack &&
-    Object.keys(s.flags).some((k) => k.startsWith("deadpoolFront:"))
-  ) {
-    s.flags.deadpoolOtherDefended =
-      !!s.attack.defender &&
-      s.attack.defender !== "none" &&
-      (s.attack.defender !== "hero" ||
-        s.attack.targetPlayerId !== s.attack.originalPlayerId);
-  }
+  if (s.attack)
+    for (const seat of playerOrder(s)) {
+      const flags = seatView(s, seat).flags;
+      if (flags.deadpoolFrontAttackId === s.attack.id)
+        flags.deadpoolOtherDefended =
+          !!s.attack.defender &&
+          s.attack.defender !== "none" &&
+          (s.attack.defender !== "hero" ||
+            (s.attack.targetPlayerId || s.activePlayerId) !== seat.id);
+    }
+
   const a = s.attack!;
   if (!a) return;
   const p = nebulaNativeAttacker(s, a.attacker);
@@ -23817,7 +23926,12 @@ function resolve(s: GameState, e: Effect) {
           "Restricted limit",
           "Choose a Restricted card to discard to meet your limit. Extra Weapon slots apply only to Weapon upgrades.",
           s.player.inPlay
-            .filter((p) => keyword(p, "Restricted") && !isPermanent(card(p)))
+            .filter(
+              (p) =>
+                (keyword(p, "Restricted") ||
+                  (p.code === "44055" && !isTextBlank(s, p))) &&
+                !isPermanent(card(p)),
+            )
             .map((p) =>
               option(p.id, card(p).name, [
                 E("discardRestricted", { id: p.id }),
@@ -25285,6 +25399,13 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "optional":
+      if (
+        deadpool.deadpoolTriggeredBlocked(s) &&
+        CATALOG_CARDS.some(
+          (c) => c.name === e.title && c.faction_code !== "encounter",
+        )
+      )
+        break;
       choose(s, e.title, e.text, [
         option("yes", "Use ability", e.effects, undefined, e.image),
         option("skip", "Pass", []),
@@ -25995,6 +26116,22 @@ function resolve(s: GameState, e: Effect) {
           add(
             s,
             ...psylocke.psylockeCypher(s, p, confused, result.actualDamage),
+          );
+        if (
+          result &&
+          result.actualDamage > 0 &&
+          p.code === "44014" &&
+          !isTextBlank(s, p) &&
+          minionTarget &&
+          s.minions.some((q) => q.id === minionTarget.id)
+        )
+          add(
+            s,
+            E("optional", {
+              title: "Headpool",
+              text: "Have the damaged minion attack another enemy?",
+              effects: [E("deadpool:headpool", { id: minionTarget.id })],
+            }),
           );
       } else {
         const removed = thwartAction(s, e.target, amount, p.id);
@@ -30218,6 +30355,7 @@ export function dispatch(state: GameState, command: Command): GameState {
             const p = find(s, command.id)!;
             const custom = [
               ...domino.dominoAbilityOptions(s, p.id, dominoPorts),
+              ...deadpool.deadpoolAbilityOptions(s, p.id, deadpoolPorts),
               ...wolverine.wolverineAbilityOptions(s, p.id, wolverinePorts),
               ...wideawake.projectWideawakeActionOptions(
                 s,
