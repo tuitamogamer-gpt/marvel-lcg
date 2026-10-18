@@ -368,12 +368,14 @@ export function cableConsequential(
     0,
     amount -
       Number(
-        !e.attack &&
+        !!(
+          !e.attack &&
           e.wideawakeTargetCode &&
           ["side_scheme", "player_side_scheme"].includes(
             card(e.wideawakeTargetCode)?.type_code,
           ) &&
-          cableXForceTeam(v, ports),
+          cableXForceTeam(v, ports)
+        ),
       ),
   );
 }
