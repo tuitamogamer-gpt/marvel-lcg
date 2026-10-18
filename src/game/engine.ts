@@ -15972,19 +15972,8 @@ const dominoPorts: domino.DominoPorts = {
   discard: discardPiece,
   discardHand,
   makePiece,
-  canPut: (s, p) =>
-    !uniqueConflict(s, card(p)) &&
-    !domino.dominoPlayRestriction(s, p, dominoPorts),
-  put: (s, p) => {
-    Object.assign(p, resetPiece(p, true));
-    s.player.inPlay.push(p);
-    add(
-      s,
-      E("allyLimit"),
-      ...(card(p).type_code === "ally" ? [E("allyEnter", { id: p.id })] : []),
-      ...gambit.gambitEntered(s, p),
-    );
-  },
+  canPut: nativeCanPutIntoPlay,
+  put: nativePutIntoPlay,
   canDamage: (s, p) =>
     !p.tough &&
     pieceHP(s, p) - p.damage >= 1 &&
