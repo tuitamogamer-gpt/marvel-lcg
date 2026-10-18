@@ -40,9 +40,9 @@ const sum = (counts: Record<string, number>) =>
   Object.values(counts).reduce((total, count) => total + count, 0);
 const range = (first: number, last: number) =>
   Array.from({ length: last - first + 1 }, (_, index) => String(first + index));
-const composition = (codes: Record<string, number>) =>
+const composition = (codes: Record<string, number | undefined>) =>
   Object.entries(codes).flatMap(([code, quantity]) =>
-    Array<string>(quantity).fill(code),
+    Array<string>(quantity ?? 0).fill(code),
   );
 const specs: {
   id: string;
@@ -189,7 +189,7 @@ const specs: {
 const source = (spec: (typeof specs)[number]) =>
   sourceDecks.find((deck) => deck.heroCode === `${spec.first}a`)!;
 const original = (spec: (typeof specs)[number]) =>
-  composition(source(spec).cards as Record<string, number>);
+  composition(source(spec).cards);
 const playerZones = (player: GameState["player"]): Piece[] => [
   ...player.hand,
   ...player.deck,
@@ -700,7 +700,7 @@ describe("batch three: cross-product source and setup constraints", () => {
 
     const warlockSource = sourceDecks.find((d) => d.heroCode === "21031a")!;
     const warlockCodes = [
-      ...composition(warlockSource.cards as Record<string, number>).filter(
+      ...composition(warlockSource.cards).filter(
         (code) => raw(code).faction_code !== "protection",
       ),
       "44013",

@@ -16460,6 +16460,7 @@ export function nativeCanPutIntoPlay(s: GameState, p: Piece) {
 }
 function nativePutAttachmentTargets(s: GameState, p: Piece) {
   const native =
+    x23.x23AttachmentTargets(s, p, x23Ports) ??
     cyclops.cyclopsAttachmentTargets(s, p, cyclopsPorts) ??
     phoenix.phoenixAttachmentTargets(s, p, phoenixPorts) ??
     shadowcat.shadowcatAttachmentTargets(s, p, shadowcatPorts) ??
@@ -16558,6 +16559,8 @@ export function nativePutIntoPlay(
     ...psylocke.psylockeCardEntered(s, p),
     ...angel.angelCardEntered(s, p),
     ...cable.cableCardEntered(s, p),
+    ...x23.x23Entered(s, p),
+    ...deadpool.deadpoolCardEntered(s, p),
     ...cyclops.cyclopsCardEntered(s, p),
     ...phoenix.phoenixCardEntered(s, p),
     ...wolverine.wolverineCardEntered(s, p, false),
