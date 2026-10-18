@@ -299,6 +299,33 @@ export function x23Played(s: GameState, p: Piece): Effect[] {
 }
 const attacked = (s: GameState, id: string) =>
   s.flags[`x23Attacked:${id}`] === turn(s);
+/** Printed attachment restrictions also apply when another card puts this into play. */
+export function x23AttachmentTargets(
+  s: GameState,
+  p: Piece,
+  ports: Pick<X23Ports, "permanent">,
+): { id: string; label: string; code: string }[] | null {
+  const possible =
+    p.code === "43012"
+      ? [s.villain, ...s.minions].filter((q) => attacked(s, q.id))
+      : p.code === "43020"
+        ? s.sideSchemes.filter(
+            (q) =>
+              !ports.permanent(s, q) &&
+              !allInPlay(s).some(
+                (a) =>
+                  a.id !== p.id && a.code === "43020" && a.attachedTo === q.id,
+              ),
+          )
+        : null;
+  return (
+    possible?.map((q) => ({
+      id: q.id,
+      label: card(q).name,
+      code: q.code,
+    })) ?? null
+  );
+}
 export function x23PlayRestriction(
   s: GameState,
   p: Piece,
@@ -319,19 +346,9 @@ export function x23PlayRestriction(
     return "Claw Mastery is limited to one per round.";
   if (p.code === "43006" && s.player.hp >= ports.maxHP(s) && !badger(s)?.damage)
     return "There is no damage to heal.";
-  if (
-    p.code === "43012" &&
-    ![s.villain, ...s.minions].some((q) => attacked(s, q.id))
-  )
+  if (p.code === "43012" && !x23AttachmentTargets(s, p, ports)?.length)
     return "X-23 or Honey Badger must have attacked an enemy this turn.";
-  if (
-    p.code === "43020" &&
-    !s.sideSchemes.some(
-      (q) =>
-        !ports.permanent(s, q) &&
-        !allInPlay(s).some((a) => a.code === "43020" && a.attachedTo === q.id),
-    )
-  )
+  if (p.code === "43020" && !x23AttachmentTargets(s, p, ports)?.length)
     return "A non-permanent side scheme without The Direct Approach is required.";
   if (
     ["43016", "43038", "43040"].includes(p.code) &&
@@ -938,16 +955,14 @@ export function resolveX23Effect(
           s,
           "Puncture Wound",
           "Choose an enemy X-23 or Honey Badger attacked this turn.",
-          [s.villain, ...s.minions]
-            .filter((q) => attacked(s, q.id))
-            .map((q) =>
-              O(
-                q.id,
-                card(q).name,
-                [X("attach-player", { id: p.id, target: q.id, wound: true })],
-                q.code,
-              ),
+          x23AttachmentTargets(s, p, ports)!.map((q) =>
+            O(
+              q.id,
+              q.label,
+              [X("attach-player", { id: p.id, target: q.id, wound: true })],
+              q.code,
             ),
+          ),
         );
       break;
     case "attach-assault":
@@ -956,29 +971,21 @@ export function resolveX23Effect(
           s,
           "The Direct Approach",
           "Choose a non-permanent side scheme.",
-          s.sideSchemes
-            .filter(
-              (q) =>
-                !ports.permanent(s, q) &&
-                !allInPlay(s).some(
-                  (a) => a.code === "43020" && a.attachedTo === q.id,
-                ),
-            )
-            .map((q) =>
-              O(
-                q.id,
-                card(q).name,
-                [X("attach-player", { id: p.id, target: q.id })],
-                q.code,
-              ),
+          x23AttachmentTargets(s, p, ports)!.map((q) =>
+            O(
+              q.id,
+              q.label,
+              [X("attach-player", { id: p.id, target: q.id })],
+              q.code,
             ),
+          ),
         );
       break;
     case "attach-player":
       if (p) {
         need(
-          !e.wound || attacked(s, e.target),
-          "The enemy was not attacked this turn.",
+          x23AttachmentTargets(s, p, ports)?.some((q) => q.id === e.target),
+          "This attachment's printed target requirements are not met.",
         );
         p.attachedTo = e.target;
       }

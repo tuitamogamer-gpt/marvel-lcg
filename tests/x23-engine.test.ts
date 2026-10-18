@@ -11,7 +11,9 @@ import {
 import {
   heroStarterCodes,
   heroSupplementaryCards,
+  isPermanent,
 } from "../src/game/hero-runtime.js";
+import { x23AttachmentTargets } from "../src/game/x23.js";
 import { deckErrors } from "../src/game/decks.js";
 import { hasExecutableScript } from "../src/game/script-registry.js";
 import { paymentSources } from "../src/game/payment.js";
@@ -283,6 +285,53 @@ describe("X-23 full retail pack", () => {
     expect(s.player.inPlay.find((p) => p.id === w.id)?.attachedTo).toBe(
       s.villain.id,
     );
+  });
+  it("put-into-play attachment eligibility retains Puncture Wound's attack history", () => {
+    let s = base();
+    const [w] = hand(s, "43012");
+    const untouched = minion(s, "01103");
+    const ports = {
+      permanent: (_: GameState, p: typeof w) => isPermanent(card(p)),
+    };
+    expect(x23AttachmentTargets(s, w, ports)).toEqual([]);
+    expect(x23AttachmentTargets(s, makePiece(s, "43009"), ports)).toBeNull();
+    s = finish(
+      target(command(s, { type: "BASIC", action: "attack" }), s.villain.id),
+    );
+    expect(x23AttachmentTargets(s, w, ports)?.map((q) => q.id)).toEqual([
+      s.villain.id,
+    ]);
+    expect(
+      x23AttachmentTargets(s, w, ports)?.some((q) => q.id === untouched.id),
+    ).toBe(false);
+    // An attack in the previous player's turn cannot authorize this entry.
+    s.turnPlayerId = "next-player";
+    expect(x23AttachmentTargets(s, w, ports)).toEqual([]);
+  });
+  it("put-into-play attachment eligibility excludes main/permanent/occupied side schemes", () => {
+    const s = base(false, true);
+    s.sideSchemes = [];
+    const approach = makePiece(s, "43020");
+    const ports = {
+      permanent: (_: GameState, p: typeof approach) => isPermanent(card(p)),
+    };
+    expect(x23AttachmentTargets(s, approach, ports)).toEqual([]);
+    side(s, "34030", 10);
+    expect(x23AttachmentTargets(s, approach, ports)).toEqual([]);
+    const occupied = side(s, "01107", 10);
+    const existing = makePiece(s, "43020");
+    existing.attachedTo = occupied.id;
+    seatView(s, s.players[1]).player.inPlay.push(existing);
+    expect(x23AttachmentTargets(s, approach, ports)).toEqual([]);
+    const eligible = side(s, "43018", 10);
+    expect(x23AttachmentTargets(s, approach, ports)?.map((q) => q.id)).toEqual([
+      eligible.id,
+    ]);
+    s.player.inPlay.push(approach);
+    approach.attachedTo = eligible.id;
+    expect(x23AttachmentTargets(s, approach, ports)?.map((q) => q.id)).toEqual([
+      eligible.id,
+    ]);
   });
   it("Rictor counts printed icons and only damages his controller's engaged minions", () => {
     let s = base(false, true);
