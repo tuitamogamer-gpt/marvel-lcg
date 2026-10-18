@@ -260,7 +260,8 @@ export function waspDefeated(
   eventId = s.currentEventId,
   attack = false,
 ): Effect[] {
-  if (!active(s) || waspForm(s) !== "tiny") return [];
+  if (!active(s) || waspForm(s) !== "tiny" || isTextBlank(s, "13001a"))
+    return [];
   const event = s.resolving.find(
     (p) =>
       p.id === eventId &&
@@ -571,7 +572,7 @@ export function resolveWaspEffect(
       // amount; Rapid Growth contributes its separate, one-use stat bonus.
       const amount =
         ports.heroStat(s, power) + Number(e.bonus || 0) + Number(e.amount || 0);
-      if (waspForm(s) === "giant")
+      if (waspForm(s) === "giant" && !isTextBlank(s, "13001c"))
         beginDistribution(
           s,
           power === "attack" ? "Basic attack" : "Basic thwart",

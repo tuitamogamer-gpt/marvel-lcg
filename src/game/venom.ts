@@ -117,7 +117,10 @@ export interface VenomPorts extends AntManPorts {
 
 /** Both identity faces grant the extra general Restricted slot. */
 export function venomRestrictedAllowance(s: GameState): number {
-  return active(s) ? 1 : 0;
+  return active(s) &&
+    !isTextBlank(s, s.player.form === "hero" ? "20001a" : "20001b")
+    ? 1
+    : 0;
 }
 
 /** Called once during native hero creation, and once for an old save missing
@@ -171,6 +174,7 @@ export function venomResourceSources(
 ): PaymentSource[] {
   return active(s) &&
     s.player.form === "hero" &&
+    !isTextBlank(s, "20001a") &&
     s.flags.venomBondPhase !== phaseKey(s) &&
     ports.canTakeDamageCost(s, 1)
     ? [

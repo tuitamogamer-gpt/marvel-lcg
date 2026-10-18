@@ -79,12 +79,13 @@ export interface GamoraPorts extends AntManPorts {
 export function gamoraIdentityBlank(s: GameState): boolean {
   return (
     active(s) &&
-    s.attachments.some(
-      (p) =>
-        p.code === "18027" &&
-        !isTextBlank(s, p) &&
-        ["hero", `hero:${s.activePlayerId}`].includes(p.attachedTo || ""),
-    )
+    (isTextBlank(s, s.player.form === "hero" ? "18001a" : "18001b") ||
+      s.attachments.some(
+        (p) =>
+          p.code === "18027" &&
+          !isTextBlank(s, p) &&
+          ["hero", `hero:${s.activePlayerId}`].includes(p.attachedTo || ""),
+      ))
   );
 }
 export function gamoraCanRemoveThreat(s: GameState, target: string): boolean {

@@ -101,7 +101,9 @@ export function rogueInitialize(
 }
 export const rogueSetup = (s: GameState) => (active(s) ? [R("set-aside")] : []);
 export function roguePhaseBegan(s: GameState): Effect[] {
-  return active(s) && s.player.form === "hero" ? [R("set-aside")] : [];
+  return active(s) && s.player.form === "hero" && !isTextBlank(s, "38001a")
+    ? [R("set-aside")]
+    : [];
 }
 export function rogueTouchedTarget(s: GameState) {
   const p = rogueTouched(s);
@@ -225,7 +227,8 @@ export function rogueFormChanged(
   wasMutant: boolean,
   ports: RoguePorts,
 ): Effect[] {
-  if (active(s) && s.player.form === "alter") ports.findTouched(s);
+  if (active(s) && s.player.form === "alter" && !isTextBlank(s, "38001b"))
+    ports.findTouched(s);
   if (!wasMutant || s.player.form !== "hero") return [];
   return allInPlay(s)
     .filter((p) => p.code === "38018" && !p.exhausted && !isTextBlank(s, p))

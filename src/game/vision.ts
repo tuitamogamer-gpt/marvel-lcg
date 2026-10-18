@@ -141,7 +141,9 @@ export function visionAlterStats(
   ports?: Pick<VisionPorts, "isIdentityTextBlank">,
 ) {
   const applies =
-    active(s) && s.player.form === "alter" && !ports?.isIdentityTextBlank?.(s);
+    active(s) &&
+    s.player.form === "alter" &&
+    !(ports?.isIdentityTextBlank?.(s) ?? isTextBlank(s, "26001b"));
   return {
     recover: applies && visionMassForm(s) === "dense" ? 2 : 0,
     handSize: applies && visionMassForm(s) === "intangible" ? 1 : 0,

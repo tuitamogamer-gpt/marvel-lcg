@@ -315,6 +315,7 @@ export function rocketDamageResolved(
       }),
     );
   if (
+    !isTextBlank(s, "16029a") &&
     snapshot.excessDamage > 0 &&
     snapshot.wasHero !== false &&
     s.player.form === "hero"

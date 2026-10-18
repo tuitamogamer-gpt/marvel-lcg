@@ -139,6 +139,7 @@ export function quicksilverBasicUsed(
   return active(s) &&
     s.player.form === "hero" &&
     s.player.exhausted &&
+    !isTextBlank(s, "14001a") &&
     s.flags.qsvSuperSpeedPhase !== phaseKey(s)
     ? [Q("speed-window", { power, phase: phaseKey(s) })]
     : [];

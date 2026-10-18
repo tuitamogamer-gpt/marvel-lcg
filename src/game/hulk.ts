@@ -120,7 +120,9 @@ export function hulkFormChanged(s: GameState): Effect[] {
 }
 /** Invoke on this hero's own turn ending, before end-of-phase hand replenishment. */
 export function hulkTurnEnds(s: GameState): Effect[] {
-  return active(s) && s.player.form === "hero" ? [H("enraged")] : [];
+  return active(s) && s.player.form === "hero" && !isTextBlank(s, "10001a")
+    ? [H("enraged")]
+    : [];
 }
 export function hulkAbilityOptions(s: GameState, id: string): Option[] {
   return active(s) &&

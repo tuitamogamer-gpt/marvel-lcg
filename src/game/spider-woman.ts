@@ -163,6 +163,7 @@ export function spiderWomanHandSize(s: GameState) {
 export function spiderWomanCardPlayed(s: GameState, c: Card): Effect[] {
   return active(s) &&
     s.player.form === "hero" &&
+    !isTextBlank(s, "04031a") &&
     aspect(c) &&
     s.flags[`swAgility:${c.faction_code}`] !== s.round
     ? [

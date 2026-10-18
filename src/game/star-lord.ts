@@ -79,6 +79,7 @@ export function starLordHeroTraits(s: GameState): string[] {
 export function starLordAllyTraits(s: GameState, p: Piece): string[] {
   return active(s) &&
     s.player.form === "hero" &&
+    !isTextBlank(s, "17001a") &&
     definition(p)?.type_code === "ally" &&
     s.player.inPlay.some((controlled) => controlled.id === p.id)
     ? ["Guardian"]
@@ -141,6 +142,7 @@ export function starLordCanReduceHandCost(
   return (
     active(s) &&
     s.player.form === "hero" &&
+    !isTextBlank(s, "17001a") &&
     s.flags.starlordCostRound !== s.round &&
     cost > 0 &&
     s.player.hand.some((inHand) => inHand.id === p.id) &&
