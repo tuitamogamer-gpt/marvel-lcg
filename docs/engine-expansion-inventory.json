@@ -264740,7 +264740,7 @@
     "src/game/cable.ts": "359dad204e50db82dc5b74a3ce0562e6f2371895fcb517aa662f15fb8fd3ef2d",
     "src/game/domino.ts": "db4e9eb71b2b119801777512123555a505017963a7e6fe93086baa0ae2aa7931",
     "src/game/x23.ts": "6ecc5952a4f304e1940633890af161a041f7f7207984da1c958feede6fa69a41",
-    "src/game/deadpool.ts": "e84860bc80e685546a4cfac1e48beae8c3ea67f6126605a82e49c9c94caa87a2",
+    "src/game/deadpool.ts": "ebfa27cc711496be273294ae6fb77f885b732b8b3346ab1b8f8c0a35aca46bc5",
     "src/game/player-side-schemes.ts": "48b569f59b51b484060fd2f7819096e3bb3470569be659b09aaee9fc977a013d",
     "src/game/mutant-genesis-player-pack.ts": "4fe0ec72bf81b7b651efc83f86d09ebbd786a24190522990b6ecefa9dd808748",
     "src/game/sabretooth.ts": "6d9ac435796d9ccfd81ee1d77d41cfe49f7d49fb14b0391fd68ad9fc058b06f0",

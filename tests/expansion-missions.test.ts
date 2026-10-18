@@ -129,7 +129,7 @@ const selectedMissions = [
 
 /** Only physical-zone auditing inspects hidden card IDs. The player strategy
  * uses hand cards, visible board state, and the same public prompts as the UI. */
-function ownedPieces(s: GameState, originalIds: Set<string>): Piece[] {
+function ownedPieces(s: GameState, originalIds?: Set<string>): Piece[] {
   const playerZones = s.players.flatMap((seat) => {
     const p = seatView(s, seat).player;
     return [
@@ -180,7 +180,7 @@ function ownedPieces(s: GameState, originalIds: Set<string>): Piece[] {
   // Encounter cards such as Spectrum's Loss of Control can be in player zones;
   // owned Cosmic Entities can be in encounter zones. Membership follows the
   // original physical source IDs, never the current zone or owner alone.
-  return pieces.filter((p) => originalIds.has(p.id));
+  return originalIds ? pieces.filter((p) => originalIds.has(p.id)) : pieces;
 }
 
 /** Native scenario piles own original main/villain/progress cards. Public
@@ -326,11 +326,11 @@ function runMission(config: (typeof missions)[number]) {
       [s.player.spdrSuitId, s.player.spdrPilotId].sort(),
     );
   }
-  const poolDependency = [
-    ...s.encounter.deck,
-    ...((s as GameState & { deadpool?: { poolSetAside: Piece[] } }).deadpool
-      ?.poolSetAside || []),
-  ].filter((p) => Number(p.code) >= 44037 && Number(p.code) <= 44042);
+  // Scenario setup can already deal or discard Crisis before the mulligan.
+  // Capture all seven actual dependency IDs from the full physical zones.
+  const poolDependency = ownedPieces(s).filter(
+    (p) => Number(p.code) >= 44037 && Number(p.code) <= 44042,
+  );
   expect(poolDependency).toHaveLength(aspect === "pool" ? 7 : 0);
   const total =
     codes.length +
