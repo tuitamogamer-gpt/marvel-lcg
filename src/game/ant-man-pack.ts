@@ -1,3 +1,4 @@
+import { magikTopPlayable } from "./magik.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller } from "./team.js";
 import { isTextBlank } from "./card-text.js";
@@ -233,7 +234,10 @@ export function antManPackEvent(
   }
 }
 function teamCards(s: GameState, ports: AntManPackPorts) {
-  return s.player.hand.filter(
+  return [
+    ...s.player.hand,
+    ...[magikTopPlayable(s)].filter((p): p is Piece => !!p),
+  ].filter(
     (p) =>
       printedTraits(cards.get(p.code)).some((trait) =>
         ports.hasTrait(s, "hero", trait),

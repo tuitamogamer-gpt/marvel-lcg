@@ -1,3 +1,4 @@
+import { magikTopPlayable } from "./magik.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import players from "../data/core-player.json" with { type: "json" };
 import type { Card, GameState, Piece } from "./types.js";
@@ -168,6 +169,7 @@ export function eventPlaySources(s: GameState): Piece[] {
   const event = (p: Piece) => definitions.get(p.code)?.type_code === "event";
   return [
     ...s.player.hand.filter(event),
+    ...[magikTopPlayable(s)].filter((p): p is Piece => !!p && event(p)),
     ...s.player.inPlay
       .filter((p) => p.code === "27007" && !isTextBlank(s, p))
       .flatMap((p) => (p.storedCards || []).filter(event)),
@@ -188,6 +190,7 @@ export function defenseEventSources(s: GameState): Piece[] {
   };
   return [
     ...s.player.hand.filter(defense),
+    ...[magikTopPlayable(s)].filter((p): p is Piece => !!p && defense(p)),
     ...s.player.inPlay
       .filter((p) => ["26013", "27007"].includes(p.code) && !isTextBlank(s, p))
       .flatMap((p) => (p.storedCards || []).filter(defense)),

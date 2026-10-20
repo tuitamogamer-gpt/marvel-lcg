@@ -1,4 +1,5 @@
 import * as bishop from "./bishop.js";
+import * as magik from "./magik.js";
 import * as domino from "./domino.js";
 import * as cable from "./cable.js";
 import * as x23 from "./x23.js";
@@ -559,6 +560,7 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
   );
 }
 function nativeStatusModifiers(s: GameState, p: StatusState) {
+  if (!("code" in p) && magik.magikStats(s).steady) return { steady: true };
   if (!("code" in p))
     return s.villainId === "mansion_attack"
       ? {
@@ -618,6 +620,7 @@ function giveCharacterStatus(
             vision.visionStalwart(identity),
           toughLimit: colossus.colossusToughLimit(identity, colossusPorts),
           steady:
+            magik.magikStats(identity).steady ||
             phoenix.phoenixSuit(identity).steady ||
             spdrPack.spdrPackCharacterSteady(identity, "hero", {
               isTextBlank,
@@ -651,8 +654,12 @@ function syncNebulaIdentityStatuses(s: GameState) {
       vision.visionStalwart(view)
     )
       syncStatuses(view.player, heroCard(view), { stalwart: true });
-    else if (s.villainId === "mansion_attack" || view.heroId === "phoenix") {
+    else if (
+      s.villainId === "mansion_attack" ||
+      ["phoenix", "magik"].includes(view.heroId)
+    ) {
       const steady =
+        magik.magikStats(view).steady ||
         mansionAttack.mansionAttackModifiers(view, "hero", { isTextBlank })
           .steady ||
         phoenix.phoenixSuit(view).steady ||
@@ -732,7 +739,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         ? 1
         : 0) +
       (name === "Retaliate"
-        ? x23.x23Stats(s).retaliate +
+        ? magik.magikStats(s).retaliate +
+          x23.x23Stats(s).retaliate +
           psylocke.psylockeStats(s).retaliate +
           (s.attack?.angelRetaliatePlayerId === s.activePlayerId
             ? s.attack.angelRetaliate || 0
@@ -991,6 +999,7 @@ function choose(
   options: Option[],
   cancelable = false,
 ) {
+  cancelable = cancelable && !magik.magikHasPending(s);
   options = options.filter((o) => {
     const c = o.image ? card(o.image) : undefined;
     const actor = o.effects.find((e) => e.actorId)?.actorId || s.activePlayerId;
@@ -3611,6 +3620,7 @@ function defeatCharacter(
     add(s, ...wasp.waspDefeated(s, "minion", source, s.currentEventId, attack));
     s.flags.defeatedMinion = true;
     if (source === "hero" && attack) s.flags.heroKill = true;
+    add(s, ...magik.magikBasicDefeat(s, source, attack, !!s.flags.basicAttack));
     for (const tracer of tracers)
       add(
         s,
@@ -3711,6 +3721,7 @@ function advanceVillain(
       id: bishopX23.id,
       actorId: controller(s, bishopX23.id)?.id || s.activePlayerId,
     });
+  add(s, ...magik.magikBasicDefeat(s, source, attack, !!s.flags.basicAttack));
   if (s.villainId === "mansion_attack") {
     if (s.villain.pendingDefeat || s.mansionAttack?.activeVillainRetired)
       return;
@@ -4030,7 +4041,11 @@ function thwart(
   ignoreCrisis = false,
   source = "hero",
 ) {
-  if (!cable.cableCanRemoveThreat(s, target, source)) return 0;
+  if (
+    !magik.magikCanRemoveThreat(s, target) ||
+    !cable.cableCanRemoveThreat(s, target, source)
+  )
+    return 0;
   if (n > 0 && !s.flags.additionalThwartPacket) {
     n += phoenix.phoenixThwartBonus(s);
   }
@@ -4197,8 +4212,12 @@ function defeatScheme(
     ["32065a", "32088a", "32144a", "32144b", "32145a", "32158"].includes(
       p.code,
     ) && !isTextBlank(s, p);
+  const magikDefeat = magik.magikSideDefeated(s, p);
   if (!victory && !retainFind) discardPiece(s, p.id);
   const responses = [
+    ...(magikDefeat.length
+      ? [{ id: `${p.id}:magik`, title: card(p).name, effects: magikDefeat }]
+      : []),
     ...(magneticDefeat?.length
       ? [
           {
@@ -4498,6 +4517,7 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
         ? 1
         : 0) -
       wolverine.wolverineCostReduction(s, physical || c, wolverinePorts) -
+      magik.magikDiscount(s, physical || {}) -
       cable.cableDiscount(s, physical || c, cablePorts) -
       deadpool.deadpoolDiscount(s, physical || c) -
       angel.angelDiscount(s, physical || c) -
@@ -5103,6 +5123,12 @@ function requestPayment(
   handOnly = false,
   abilityCost = false,
 ) {
+  if (!abilityCost && piece && magik.magikTopPlayable(s)?.id === piece.id) {
+    magik.magikBeginTopPlay(s, piece);
+    recyclePlayer(s);
+    revealHidden(s);
+  }
+  if (magik.magikHasPending(s)) cancelable = false;
   const paymentTarget = abilityCost ? targetCode : targetCode || piece?.code;
   if (
     !abilityCost &&
@@ -5415,7 +5441,9 @@ function requestPayment(
   s.prompt = {
     kind: "payment",
     title,
-    text: "Choose cards to spend as resources. Cards spent from your hand are discarded.",
+    text: magik.magikHasPending(s)
+      ? "Choose cards to spend as resources. The next card is already revealed; finish playing this card."
+      : "Choose cards to spend as resources. Cards spent from your hand are discarded.",
     options: [],
     cost,
     requirements,
@@ -5828,6 +5856,10 @@ function pay(
         spentResponses.push(...(x23.x23ResourceSpent(s, id, x23Ports) || []));
       } else if (psylocke.psylockeIsResource(s, id)) {
         spentResponses.push(...psylocke.psylockeResourceSpent(s, id));
+      } else if (find(s, id)?.code === "45050") {
+        spentResponses.push(
+          ...(magik.magikResourceSpent(s, id, magikPorts) || []),
+        );
       } else if (cable.cableSpendResource(s, id)) {
       } else if (rogue.rogueSpendResource(s, id)) {
         // The physical X-Gene exhausts only when payment commits.
@@ -6250,6 +6282,7 @@ export function newGame(config: {
     storm.stormInitialize(s, { makePiece });
     gambit.gambitInitialize(s, makePiece);
     domino.dominoInitialize(s, makePiece);
+    magik.magikInitialize(s, makePiece);
     angel.angelInitialize(s, { makePiece });
     cable.cableInitialize(s, { makePiece });
     bishop.bishopInitialize(s, makePiece);
@@ -6629,7 +6662,7 @@ export function playable(s: GameState, p: Piece): string | null {
     return "Baron Zemo prevents this identity from thwarting.";
   if (
     p.code === "06006" &&
-    !thorLightningPaymentOptions(s, p, cardCost(s, c), thorPorts).length
+    !thorLightningPaymentOptions(s, p, cardCost(s, c, p), thorPorts).length
   )
     return "Lightning Strike requires its card cost and at least one energy.";
   if (
@@ -6668,6 +6701,7 @@ export function playable(s: GameState, p: Piece): string | null {
     starLord.starLordPlayRestriction(s, p) ||
     gamora.gamoraPlayRestriction(s, p, gamoraPorts) ||
     drax.draxPlayRestriction(s, p, draxPorts) ||
+    magik.magikPlayRestriction(s, p, magikPorts) ||
     domino.dominoPlayRestriction(s, p, dominoPorts) ||
     x23.x23PlayRestriction(s, p, x23Ports) ||
     gambit.gambitPlayRestriction(s, p, gambitPorts) ||
@@ -6824,8 +6858,8 @@ export function playable(s: GameState, p: Piece): string | null {
     p.code === "10002" &&
     !canPay(
       s,
-      cardCost(s, c),
-      Array(cardCost(s, c)).fill("physical"),
+      cardCost(s, c, p),
+      Array(cardCost(s, c, p)).fill("physical"),
       p.id,
       p.code,
     )
@@ -6846,6 +6880,11 @@ export function playable(s: GameState, p: Piece): string | null {
   return null;
 }
 function requestPlay(s: GameState, p: Piece, discountHandled = false) {
+  if (magik.magikTopPlayable(s)?.id === p.id) {
+    magik.magikBeginTopPlay(s, p);
+    recyclePlayer(s);
+    revealHidden(s);
+  }
   const npcRestriction = npcPlayerPlayRestriction(s, p);
   need(!npcRestriction, npcRestriction || "This card has no eligible target.");
   const strikeCost = mgPack.mutantGenesisPlayerPackBeforeEvent(s, p, [
@@ -7157,16 +7196,19 @@ function play(
     .ghostSpiderStoredPlayable(s, ghostSpiderPorts)
     .some((x) => x.id === p.id);
   const stored = storedArrow || storedPanther || storedDefense || storedGeorge;
-  const fromHand = s.player.hand.some((x) => x.id === p.id);
-  const zone = fromHand
-    ? s.player.hand
-    : fromSetAside
-      ? s.player.setAside!
-      : fromDeck
-        ? s.player.deck
-        : msMarvelDiscardPlayable(s, p)
-          ? s.player.discard
-          : s.player.hand;
+  const magikOrigin = magik.magikPending(s, p);
+  const fromHand = s.player.hand.some((x) => x.id === p.id) || magikOrigin;
+  const zone = magikOrigin
+    ? s.resolving
+    : fromHand
+      ? s.player.hand
+      : fromSetAside
+        ? s.player.setAside!
+        : fromDeck
+          ? s.player.deck
+          : msMarvelDiscardPlayable(s, p)
+            ? s.player.discard
+            : s.player.hand;
   const i = zone.findIndex((x) => x.id === p.id);
   need(stored || i >= 0, "Card is no longer available to play.");
   if (storedArrow)
@@ -7186,6 +7228,8 @@ function play(
       ghostSpider.ghostSpiderTakeStoredForPlay(s, p.id, ghostSpiderPorts),
       "The stored George Stacy event is unavailable.",
     );
+  else if (magikOrigin)
+    need(magik.magikTakePending(s, p.id), "The staged top-card play changed.");
   else zone.splice(i, 1);
   const playToken = nativeCardPlayCommitted(s, p);
   const niBonus = niPack.novaIronheartPackAttackEventBonus(
@@ -7314,6 +7358,7 @@ function play(
       ...psylocke.psylockeCardEntered(s, p),
       ...angel.angelCardEntered(s, p),
 
+      ...magik.magikEntered(s, p),
       ...x23.x23Entered(s, p),
       ...bishop.bishopEntered(s, p),
       ...deadpool.deadpoolCardEntered(s, p),
@@ -7762,6 +7807,13 @@ function event(
   syncPaid = 0,
 ) {
   const ant =
+    magik.magikEvent(s, p, magikPorts) ??
+    (p.code === "45046"
+      ? gamoraPack.gamoraPackEvent(s, { ...p, code: "18012" })
+      : null) ??
+    (p.code === "45052"
+      ? scarletPack.scarletWitchPackEvent(s, { ...p, code: "15019" }, paid)
+      : null) ??
     psylocke.psylockeEvent(s, p, paid) ??
     domino.dominoEvent(s, p) ??
     x23.x23Event(s, p) ??
@@ -8105,6 +8157,7 @@ function flip(
   s: GameState,
   counts = true,
   target?: "alter" | "tiny" | "giant" | "angel" | "archangel",
+  magikHandled = false,
 ) {
   const previousForm = s.player.form;
   const wasMutant =
@@ -8123,6 +8176,13 @@ function flip(
     return;
   }
   if (counts) need(!s.player.flipped, "You already changed form this turn.");
+  if (!magikHandled) {
+    const interrupt = magik.magikBeforeFlip(s, counts, target);
+    if (interrupt) {
+      add(s, ...interrupt);
+      return;
+    }
+  }
   if (s.heroId === "angel") {
     const current = angel.angelForm(s);
     if (!target) {
@@ -8555,6 +8615,15 @@ function ability(s: GameState, id: string, action = "special") {
       : bishopOptions.find((o) => o.id === action);
   if (bishopSelected) {
     add(s, ...bishopSelected.effects);
+    return;
+  }
+  const magikOptions = magik.magikAbilityOptions(s, id);
+  const magikSelected =
+    !action || action === "ability"
+      ? magikOptions[0]
+      : magikOptions.find((o) => o.id === action);
+  if (magikSelected) {
+    add(s, ...magikSelected.effects);
     return;
   }
   const cableOptions = cable.cableAbilityOptions(s, id, cablePorts);
@@ -10299,7 +10368,7 @@ const antPackPorts: antPack.AntManPackPorts = {
   canGiveStatus: dsPorts.canAddStatus,
   schemeTargets: (s) =>
     captainThwartBlocked(s) ? [] : targets(s, "scheme", false, true),
-  cardCost: (s, p) => cardCost(s, card(p)),
+  cardCost: (s, p) => cardCost(s, card(p), p),
   canPay: (s, cost, exclude, code) => canPay(s, cost, [], exclude, code),
   playableWithDiscount: (s, p, discount) =>
     !playable(
@@ -10314,7 +10383,11 @@ const antPackPorts: antPack.AntManPackPorts = {
       p,
     ),
   playFromHand: (s, id, discount) => {
-    const p = s.player.hand.find((p) => p.id === id);
+    const p =
+      s.player.hand.find((p) => p.id === id) ||
+      (magik.magikTopPlayable(s)?.id === id
+        ? magik.magikTopPlayable(s)
+        : undefined);
     need(
       p && antPackPorts.playableWithDiscount(s, p, discount),
       "That card cannot be played now.",
@@ -11024,6 +11097,7 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
       ...psylocke.psylockeCardEntered(s, p),
       ...angel.angelCardEntered(s, p),
       ...cable.cableCardEntered(s, p),
+      ...magik.magikEntered(s, p),
       ...x23.x23Entered(s, p),
       ...bishop.bishopEntered(s, p),
       ...deadpool.deadpoolCardEntered(s, p),
@@ -11764,6 +11838,7 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
   if (deadpool.deadpoolTriggeredBlocked(s)) return [];
   return [
     ...bishop.bishopAbilityOptions(s, id, bishopPorts),
+    ...magik.magikAbilityOptions(s, id),
     ...cable.cableAbilityOptions(s, id, cablePorts),
     ...x23.x23AbilityOptions(s, id, x23Ports),
     ...deadpool.deadpoolAbilityOptions(s, id, deadpoolPorts),
@@ -16224,6 +16299,7 @@ const nebulaPorts: nebula.NebulaPorts = {
         ...psylocke.psylockeCardEntered(s, p),
         ...angel.angelCardEntered(s, p),
         ...cable.cableCardEntered(s, p),
+        ...magik.magikEntered(s, p),
         ...x23.x23Entered(s, p),
         ...bishop.bishopEntered(s, p),
         ...deadpool.deadpoolCardEntered(s, p),
@@ -16796,6 +16872,7 @@ export function nativePutIntoPlay(
     ...psylocke.psylockeCardEntered(s, p),
     ...angel.angelCardEntered(s, p),
     ...cable.cableCardEntered(s, p),
+    ...magik.magikEntered(s, p),
     ...x23.x23Entered(s, p),
     ...bishop.bishopEntered(s, p),
     ...deadpool.deadpoolCardEntered(s, p),
@@ -17217,6 +17294,118 @@ const bishopPorts: bishop.BishopPorts = {
     s.queue = s.queue.filter((e) => before.has(e));
     add(s, ...generated, { ...after, discarded });
   },
+};
+
+const magikPorts: magik.MagikPorts = {
+  queue: add,
+  choose,
+  targets: (s, group, action) =>
+    targets(
+      s,
+      group,
+      group === "enemy" && !!action,
+      group === "scheme" ? !!action : true,
+    ),
+  find,
+  hasTrait: sinisterNativeHasTrait,
+  makePiece,
+  hidden: revealHidden,
+  recycle: recyclePlayer,
+  mill,
+  discard: discardPiece,
+  discardHand,
+  discardLooked: (s, p) => {
+    if (mystique.mystiqueDiscardFromPlayerZone(p, "deck"))
+      s.encounter.discard.push(p);
+    else s.player.discard.push(p);
+    add(s, ...domino.dominoDiscardedTop(s, [p]));
+  },
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  put: nativePutIntoPlay,
+  canPut: nativeCanPutIntoPlay,
+  putMinion: mutagenPorts.putMinion,
+  canActivate: (s, p) =>
+    phoenix.phoenixCanActivate(s, p.id) &&
+    !allInPlay(s).some(
+      (q) => q.code === "44054" && q.attachedTo === p.id && !isTextBlank(s, q),
+    ),
+  activate: (s, p, after) => {
+    const request: MutagenActivation = {
+      enemyId: p.id,
+      playerId: s.activePlayerId,
+      kind: s.player.form === "hero" ? "attack" : "scheme",
+      modifier: 0,
+      after,
+    };
+    if (request.kind === "attack") enemyAttack(s, p.id, undefined, request);
+    else enemyScheme(s, p.id, undefined, request);
+  },
+  startingHP: (s) =>
+    Number(
+      HEROES.find((h) => h.id === s.heroId)
+        ? card(HEROES.find((h) => h.id === s.heroId)!.code).health
+        : 0,
+    ),
+  canHeal: (s, id) =>
+    id === "hero"
+      ? s.player.hp < maxHP(s)
+      : id.startsWith("hero:")
+        ? seatView(s, id.slice(5)).player.hp < maxHP(seatView(s, id.slice(5)))
+        : Number(find(s, id)?.damage || 0) > 0,
+  canDefend: (s) =>
+    !!s.attack &&
+    !armadillo.armadilloDefenseBlocked(s, s.attack.attacker) &&
+    !ghostSpider.ghostSpiderCannotPlayEvents(s),
+  cost: (s, p) => cardCost(s, card(p), p),
+  canPay: (s, cost, exclude, code) => canPay(s, cost, [], exclude, code, false),
+  playReaction: (s, p, effects, after) => {
+    requestPayment(
+      s,
+      card(p).name,
+      cardCost(s, card(p), p),
+      [
+        E("resolveHandEvent", {
+          id: p.id,
+          after: effects,
+          continuation: after,
+        }),
+      ],
+      [],
+      p,
+      true,
+    );
+    if (s.prompt?.cancelable)
+      s.prompt.cancellationQueue = [...after, ...s.queue];
+  },
+  playAllyReaction: (s, p, after) => {
+    requestPayment(
+      s,
+      card(p).name,
+      cardCost(s, card(p), p),
+      [
+        E("play", { piece: p }),
+        E("magik:colossus-defender", { id: p.id, after }),
+      ],
+      [],
+      p,
+      true,
+    );
+    if (s.prompt?.cancelable)
+      s.prompt.cancellationQueue = [...after, ...s.queue];
+  },
+  canTakeDamageCost: (s, amount) => wolverinePorts.canTakeDamageCost(s, amount),
+  takeDamageCost: (s, amount) => {
+    const paid = wolverinePorts.takeDamageCost(s, amount);
+    check(s);
+    return paid;
+  },
+  damageResponses: (s, amount) => [
+    ...x23Ports.damageCostResponses(s, amount),
+    ...x23.x23Damaged(s, "hero", amount, false, x23Ports),
+  ],
+  feedback: domino.dominoFeedback,
+  cancelReveal: dominoPorts.cancelReveal,
+  drawEncounter,
 };
 
 const x23Ports: x23.X23Ports = {
@@ -17964,6 +18153,7 @@ function mutantGenesisAttackOptions(
         mutantGenesisPackPorts,
       )
       .filter((o) => !a.angelTauntPlayerId || o.image !== "32017");
+    opts.push(...magik.magikAttackOptions(view, stage, after, magikPorts));
     if (stage === "attacks")
       opts.push(
         ...angel.angelDefenseOptions(view, after, angelPorts),
@@ -18081,6 +18271,37 @@ function colossusNativeActivationWindow(
         })),
       })),
   );
+  if (kind === "scheme")
+    for (const seat of playerOrder(s)) {
+      const canceledAfter =
+        continuation.request?.after || continuation.activation?.after;
+      choices.push(
+        ...magik
+          .magikSchemeOptions(
+            seatView(s, seat),
+            canceledAfter
+              ? [
+                  {
+                    ...canceledAfter,
+                    performed: false,
+                    damagePlaced: 0,
+                    threatPlaced: 0,
+                    actorId: receipt.playerId,
+                  },
+                ]
+              : [],
+          )
+          .map((o) => ({
+            ...o,
+            id: `${seat.id}:${o.id}`,
+            effects: o.effects.map((effect) => ({
+              ...effect,
+              activationToken: receipt.token,
+              actorId: seat.id,
+            })),
+          })),
+      );
+    }
   if (!choices.length) {
     delete s.flags[`colossusActivation:${receipt.token}`];
     return false;
@@ -18088,7 +18309,7 @@ function colossusNativeActivationWindow(
   choose(
     s,
     "Villain would activate",
-    "Play Armor Up before the villain activates?",
+    "Use an interrupt before the villain activates?",
     [...choices, option("continue", "Continue activation", [next])],
   );
   return true;
@@ -18553,6 +18774,11 @@ function declareDefense(s: GameState) {
 }
 function boostEffects(s: GameState, p: Piece) {
   if (!s.scheming && s.attack?.angelIgnoreBoosts) return;
+  const magikBoost = magik.magikBoost(s, p);
+  if (magikBoost !== null) {
+    add(s, ...magikBoost);
+    return;
+  }
   const cableBoost = cable.cableBoost(s, p);
   if (cableBoost !== null) {
     add(s, ...cableBoost);
@@ -19575,6 +19801,14 @@ function finishAttackAfterDamage(
       add(s, E("threat", { target: "main", amount: 1 }));
     if (a.extra === "rage") mill(s, a.damage);
   }
+  if (
+    p?.code === "45057" &&
+    target !== "hero" &&
+    !target.startsWith("hero:") &&
+    before > 0 &&
+    !find(s, target)
+  )
+    add(s, ...magik.magikActivated(s, p.id, true));
   if (rulesCode(p) === "01129") randomDiscard(s);
   if (p && rulesCode(p) === "01131" && !isTextBlank(s, p))
     giveCharacterStatus(s, p, "tough");
@@ -19954,6 +20188,19 @@ function reveal(
       psylockePorts,
     );
     opts.push(...domino.dominoRevealOptions(s, p));
+    for (const seat of playerOrder(s))
+      opts.push(
+        ...magik
+          .magikRevealOptions(seatView(s, seat), p, s.activePlayerId)
+          .map((o) => ({
+            ...o,
+            id: `${seat.id}:${o.id}`,
+            effects: o.effects.map((effect) => ({
+              ...effect,
+              actorId: seat.id,
+            })),
+          })),
+      );
     for (const seat of playerOrder(s))
       opts.push(
         ...deadpool
@@ -20414,6 +20661,7 @@ function reveal(
       ...deadpool.DEADPOOL_SCRIPT_CODES,
       ...angel.ANGEL_SCRIPT_CODES,
       ...bishop.BISHOP_SCRIPT_CODES,
+      ...magik.MAGIK_SCRIPT_CODES,
       ...cable.CABLE_SCRIPT_CODES,
       ...x23.X23_SCRIPT_CODES,
       ...colossus.COLOSSUS_SCRIPT_CODES,
@@ -20479,6 +20727,7 @@ function reveal(
       psylocke.psylockeEncounterReveal(s, p) ??
       wolverine.wolverineEncounterReveal(s, p) ??
       bishop.bishopEncounter(s, p) ??
+      magik.magikEncounter(s, p) ??
       cable.cableEncounter(s, p) ??
       x23.x23Encounter(s, p) ??
       deadpool.deadpoolEncounter(s, p) ??
@@ -20532,6 +20781,7 @@ function reveal(
     domino.dominoEncounter(s, p) ??
     psylocke.psylockeEncounterReveal(s, p) ??
     bishop.bishopEncounter(s, p) ??
+    magik.magikEncounter(s, p) ??
     cable.cableEncounter(s, p) ??
     x23.x23Encounter(s, p) ??
     deadpool.deadpoolEncounter(s, p) ??
@@ -20937,6 +21187,7 @@ function treachery(s: GameState, p: Piece) {
   }
   const stormReveal =
     bishop.bishopEncounter(s, p) ??
+    magik.magikEncounter(s, p) ??
     cable.cableEncounter(s, p) ??
     x23.x23Encounter(s, p) ??
     deadpool.deadpoolEncounter(s, p) ??
@@ -21221,6 +21472,11 @@ function treachery(s: GameState, p: Piece) {
       else surge();
       break;
     case "01190": {
+      const magikNemesis = magik.magikShadows(s);
+      if (magikNemesis !== null) {
+        add(s, ...magikNemesis);
+        break;
+      }
       const dominoNemesis = domino.dominoShadows(s);
       if (dominoNemesis !== null) {
         add(s, ...dominoNemesis);
@@ -21496,6 +21752,7 @@ function resolve(s: GameState, e: Effect) {
     advanceVillain(s, e.source, e.attack, e.captured);
     return;
   }
+  if (magik.resolveMagikEffect(s, e, magikPorts)) return;
   if (domino.resolveDominoEffect(s, e, dominoPorts)) return;
   if (gambit.resolveGambitEffect(s, e, gambitPorts)) return;
   if (cyclops.resolveCyclopsEffect(s, e, cyclopsPorts)) return;
@@ -21650,6 +21907,7 @@ function resolve(s: GameState, e: Effect) {
           gambit.gambitEncounter(state, piece) ??
           cyclops.cyclopsEncounterReveal(state, piece) ??
           bishop.bishopEncounter(state, piece) ??
+          magik.magikEncounter(state, piece) ??
           cable.cableEncounter(state, piece) ??
           x23.x23Encounter(state, piece) ??
           deadpool.deadpoolEncounter(state, piece) ??
@@ -21884,6 +22142,7 @@ function resolve(s: GameState, e: Effect) {
       if (p)
         add(
           s,
+          ...magik.magikActivated(s, p.id),
           ...groot.grootEnemyActivated(s, p, grootPorts),
           ...scarletWitch.scarletWitchEnemyActivated(s, p),
           ...(e.againstPlayer === false
@@ -22502,7 +22761,17 @@ function resolve(s: GameState, e: Effect) {
       break;
     case "resolveHandEvent": {
       const i = s.player.hand.findIndex((p) => p.id === e.id);
+      const magikSource =
+        magik.magikTopPlayable(s)?.id === e.id
+          ? magik.magikTopPlayable(s)
+          : s.resolving.find((p) => p.id === e.id && magik.magikPending(s, p));
+      if (magikSource && !magik.magikPending(s, magikSource)) {
+        magik.magikBeginTopPlay(s, magikSource);
+        recyclePlayer(s);
+        revealHidden(s);
+      }
       const available =
+        magikSource ||
         s.player.hand[i] ||
         visionPack
           .visionPackStoredPlayable(s, visionPackPorts)
@@ -22518,8 +22787,9 @@ function resolve(s: GameState, e: Effect) {
         add(s, ...agility, { ...e, agilityHandled: true });
         break;
       }
-      const p =
-        i >= 0
+      const p = magikSource
+        ? magik.magikTakePending(s, e.id)!
+        : i >= 0
           ? s.player.hand.splice(i, 1)[0]
           : visionPack.visionPackTakeStoredForPlay(s, e.id, visionPackPorts) ||
             ghostSpider.ghostSpiderTakeStoredForPlay(
@@ -22774,6 +23044,8 @@ function resolve(s: GameState, e: Effect) {
       const continuation = {
         ...e,
         basic: true,
+        piercing:
+          e.piercing || (power === "attack" && magik.magikStats(s).piercing),
         amount: e.amount ?? base,
         basicStatAmount: e.basicStatAmount ?? base,
       };
@@ -22984,6 +23256,7 @@ function resolve(s: GameState, e: Effect) {
                     attack: true,
                     overkill: !!e.overkill,
                     piercing:
+                      magik.magikStats(s).piercing ||
                       x23.x23Stats(s).piercing ||
                       !!e.piercing ||
                       quicksilverPack.quicksilverPackBasicPiercing(
@@ -23551,7 +23824,11 @@ function resolve(s: GameState, e: Effect) {
         if (e.actorId || p.ownerId) activateSeat(s, e.actorId || p.ownerId);
         mtsPlayerPack.mtsPlayerPackEventFinished(s, p);
         mgPack.mutantGenesisPlayerPackEventFinished(s, p.id);
-        add(s, ...angel.angelEventFinished(s, p, angelPorts));
+        add(
+          s,
+          ...angel.angelEventFinished(s, p, angelPorts),
+          ...magik.magikAttackPlayed(s, p),
+        );
         const pendingFlow = s.queue.find(
           (effect) =>
             effect.type === "visionPackFlowPlayed" && effect.piece?.id === p.id,
@@ -25286,7 +25563,7 @@ function resolve(s: GameState, e: Effect) {
       }
       break;
     case "flip":
-      flip(s, e.counts ?? false, e.target);
+      flip(s, e.counts ?? false, e.target, !!e.magikHandled);
       break;
     case "ready":
       e.target ||= e.id;
@@ -25321,7 +25598,8 @@ function resolve(s: GameState, e: Effect) {
     case "antTeamPayment": {
       const p: Piece = e.piece;
       need(
-        s.player.hand.some((card) => card.id === p.id),
+        s.player.hand.some((card) => card.id === p.id) ||
+          magik.magikTopPlayable(s)?.id === p.id,
         "The chosen card is no longer in hand.",
       );
       if (e.target)
@@ -25332,7 +25610,7 @@ function resolve(s: GameState, e: Effect) {
       const cost =
         Math.max(
           0,
-          cardCost(s, card(p)) -
+          cardCost(s, card(p), p) -
             e.discount -
             (e.target ? doctorStrangeAttachedUpgradeDiscount(s, e.target) : 0),
         ) + doctorStrangeAdditionalPlayCost(s, p);
@@ -25864,6 +26142,19 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "allyAction": {
+      const goldballs = find(s, e.id);
+      if (goldballs) {
+        const opts = magik.magikAllyAttackOptions(s, goldballs, e);
+        if (opts.length) {
+          choose(
+            s,
+            "Goldballs",
+            "Choose the number of cards before discarding them.",
+            opts,
+          );
+          break;
+        }
+      }
       need(
         e.id !== sabretooth.sabretoothKelly(s)?.id,
         "Robert Kelly has no basic ATK or THW power.",
@@ -29755,6 +30046,7 @@ function resolve(s: GameState, e: Effect) {
           ],
           actorId: s.firstPlayerId,
         }),
+        ...magik.magikVillainPhase(s),
         ...groot.grootVillainPhaseBegin(s, grootPorts),
         ...ghostSpider.ghostSpiderVillainPhaseBegins(s, ghostSpiderPorts),
         ...gamora.gamoraVillainPhaseBegin(s, gamoraPorts),
@@ -30486,6 +30778,10 @@ export function dispatch(state: GameState, command: Command): GameState {
       add(s, { ...p.selectAction!, ids: command.ids });
     } else if (command.type === "PAY") pay(s, command.ids, command.wildAs);
     else if (command.type === "CANCEL") {
+      need(
+        !magik.magikHasPending(s),
+        "The next card is already revealed; finish playing this card.",
+      );
       need(s.prompt?.cancelable, "This decision cannot be canceled.");
       const resume = s.prompt?.cancellationQueue;
       if (!resume?.some((e) => e.type === "restorePaymentPrompt"))
@@ -30504,6 +30800,9 @@ export function dispatch(state: GameState, command: Command): GameState {
       if (command.type === "PLAY") {
         const p =
           s.player.hand.find((p) => p.id === command.id) ||
+          (magik.magikTopPlayable(s)?.id === command.id
+            ? magik.magikTopPlayable(s)
+            : undefined) ||
           s.player.discard.find(
             (p) => p.id === command.id && msMarvelDiscardPlayable(s, p),
           ) ||

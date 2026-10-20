@@ -1,3 +1,4 @@
+import { magikResourceSources } from "./magik.js";
 import { cableResourceSources } from "./cable.js";
 import { x23ResourceSources } from "./x23.js";
 import { deadpoolResources, deadpoolTriggeredBlocked } from "./deadpool.js";
@@ -153,6 +154,7 @@ function localPaymentSources(
         kind: "ability",
       });
   }
+  sources.push(...magikResourceSources(s, venomPaymentDamageCostAvailable));
   sources.push(...cableResourceSources(s));
   sources.push(...psylockeResourceSources(s));
   sources.push(...x23ResourceSources(s));

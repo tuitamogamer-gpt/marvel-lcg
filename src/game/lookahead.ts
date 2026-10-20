@@ -1,3 +1,4 @@
+import { magikRevealedTop, magikTopPlayable } from "./magik.js";
 import {
   doctorStrangeAbilityOptions,
   doctorStrangeTopInvocation,
@@ -88,7 +89,11 @@ export function fairClone(s: GameState, random: () => number): GameState {
     c.scheming.pendingBoosts = c.scheming.pendingBoosts.map(takeEncounter);
   const lookedAt = new Set<string>(
     c.prompt?.options.flatMap((o) =>
-      o.effects.flatMap((e) => (e.type === "futurist" ? e.ids : [])),
+      o.effects.flatMap((e) =>
+        e.type === "futurist" || e.type.startsWith("magik:scry")
+          ? e.ids || []
+          : [],
+      ),
     ) || [],
   );
   for (const seat of c.players) {
@@ -103,7 +108,9 @@ export function fairClone(s: GameState, random: () => number): GameState {
       seat.player.invocationDeck = [...visible, ...unknown];
     }
     const drones = c.minions.filter((p) => p.droneCard?.ownerId === seat.id);
-    const known = seat.id === c.activePlayerId ? lookedAt : new Set<string>();
+    const known = new Set(seat.id === c.activePlayerId ? lookedAt : []);
+    const publicTop = magikRevealedTop(seatView(c, seat));
+    if (publicTop) known.add(publicTop.id);
     const hidden: Piece[] = [
       ...seat.player.deck.filter((p) => !known.has(p.id)),
       ...drones.map((p) => p.droneCard!),
@@ -153,7 +160,10 @@ export function evaluate(s: GameState): number {
 export function candidates(s: GameState): Command[] {
   const list: Command[] = [];
   if (s.phase !== "player" || s.prompt || s.review) return list;
-  for (const p of s.player.hand)
+  for (const p of [
+    ...s.player.hand,
+    ...[magikTopPlayable(s)].filter((p): p is Piece => !!p),
+  ])
     if (!playable(s, p)) list.push({ type: "PLAY", id: p.id });
   for (const p of s.player.inPlay) {
     const options = abilityOptions(s, p).filter((o) => !o.disabled);

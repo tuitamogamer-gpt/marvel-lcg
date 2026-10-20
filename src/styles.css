@@ -6504,3 +6504,39 @@ option {
     grid-column: 2;
   }
 }
+
+.magik-payment-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+  text-align: left;
+}
+.magik-payment-top button {
+  flex: 0 0 48px;
+  width: 48px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  overflow: hidden;
+  background: transparent;
+}
+.magik-payment-top img {
+  display: block;
+  width: 48px;
+  height: auto;
+}
+.magik-payment-top > span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.magik-payment-top small {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+.magik-payment-top b {
+  font-size: 12px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}

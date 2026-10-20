@@ -1,4 +1,5 @@
 import { bishopAllyHP, bishopCharacterBonus } from "./bishop.js";
+import { magikStats } from "./magik.js";
 import { cableStatBonus } from "./cable.js";
 import { deadpoolAttackBonus, deadpoolHandBonus } from "./deadpool.js";
 import { psylockeStats, psylockePowerOfMind } from "./psylocke.js";
@@ -833,6 +834,20 @@ export const HEROES = [
     style: "Energy Absorption · Leadership",
     complexity: 3,
   },
+  {
+    id: "magik",
+    code: "45030a",
+    alter: "45030b",
+    name: "Magik",
+    identity: "Illyana Rasputin",
+    aspect: "aggression" as Aspect,
+    color: "#e4bd38",
+    tag: "There are no snowflakes in Limbo.",
+    description:
+      "Reveal the top of your deck, play through Limbo, and empower spells with its resources.",
+    style: "Top-deck spells · Aggression",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -1178,6 +1193,7 @@ export function deckCodes(
       (hero === "cyclops" && aspect === "leadership") ||
       (hero === "storm" && aspect === "leadership") ||
       (hero === "bishop" && aspect === "leadership") ||
+      (hero === "magik" && aspect === "aggression") ||
       (hero === "cable" && aspect === "leadership") ||
       (hero === "angel" && aspect === "protection") ||
       (hero === "x23" && aspect === "aggression") ||
@@ -1433,6 +1449,7 @@ export function heroStats(s: GameState) {
       psylockeStats(s).attack +
       bishopCharacterBonus(s, "hero") +
       cableStatBonus(s) +
+      magikStats(s).attack +
       x23Stats(s).attack +
       x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
       nebulaNamedCharacterModifiers(s, h.name).attack +
@@ -1471,6 +1488,7 @@ export function heroStats(s: GameState) {
       psylockeStats(s).thwart +
       bishopCharacterBonus(s, "hero") +
       cableStatBonus(s) +
+      magikStats(s).thwart +
       x23Stats(s).thwart -
       x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
@@ -1483,6 +1501,7 @@ export function heroStats(s: GameState) {
       stormStats(s).defense +
       psylockeStats(s).defense +
       cableStatBonus(s) +
+      magikStats(s).defense +
       x23Stats(s).defense +
       (has(s, "01081") ? 1 : 0) +
       (has(s, "01016") ? (aerial(s) ? 2 : 1) : 0) +
