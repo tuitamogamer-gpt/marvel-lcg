@@ -17263,16 +17263,25 @@ const bishopPorts: bishop.BishopPorts = {
   makePiece,
   discardHand,
   discard: discardPiece,
-  canReady: (s, id) =>
-    id === "hero"
-      ? s.player.exhausted && canReadyIdentity(s)
-      : !!find(s, id)?.exhausted && warMachinePackPorts.canReady(s, id),
+  canReady: (s, id) => {
+    if (id === "hero") return s.player.exhausted && canReadyIdentity(s);
+    const p = find(s, id);
+    return (
+      !!p?.exhausted &&
+      nova.novaCanReadyPiece(s, p, { isTextBlank }) &&
+      warMachinePackPorts.canReady(s, id) &&
+      !s.attachments.some(
+        (q) => q.code === "21083" && q.attachedTo === id && !isTextBlank(s, q),
+      )
+    );
+  },
   ready: (s, id) => {
+    if (!bishopPorts.canReady(s, id)) return;
     if (id === "hero") {
-      if (canReadyIdentity(s)) readyIdentity(s);
+      readyIdentity(s);
     } else {
       const p = find(s, id);
-      if (p && warMachinePackPorts.canReady(s, id)) p.exhausted = false;
+      if (p) p.exhausted = false;
     }
   },
   heal,

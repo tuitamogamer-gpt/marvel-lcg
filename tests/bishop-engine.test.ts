@@ -3,6 +3,7 @@ import rawCards from "../src/data/catalog-cards.json" with { type: "json" };
 import { card, deckCodes, heroStats, pieceHP } from "../src/game/cards.js";
 import {
   newGame,
+  dispatch,
   makePiece,
   playable,
   nativeHeroAbilityOptions,
@@ -720,6 +721,60 @@ describe("Sidekick, Advanced Suit, Side-by-Side and Suit Up", () => {
     const s = base();
     const [p] = hand(s, "45016", "45022");
     expect(playable(s, p)).toMatch(/sidekick/i);
+  });
+  it.each(["The Merc with the Mouth", "Restrained"])(
+    "%s prevents initiating Side-by-Side and spends no costs",
+    (restriction) => {
+      let s = base();
+      const ally = put(s, "45002"),
+        title = put(s, "45015");
+      title.attachedTo = ally.id;
+      ally.exhausted = true;
+      if (restriction === "The Merc with the Mouth") put(s, "44032");
+      else {
+        const restrained = makePiece(s, "21083");
+        restrained.attachedTo = ally.id;
+        s.attachments.push(restrained);
+      }
+      const [event, resource] = hand(s, "45016", "45022");
+      expect(playable(s, event)).toMatch(/readying.*sidekick/i);
+      s = dispatch(reload(s), { type: "PLAY", id: event.id });
+      expect(s.error).toMatch(/readying.*sidekick/i);
+      expect(s.player.hand.map((p) => p.id)).toEqual([event.id, resource.id]);
+      expect(s.player.inPlay.find((p) => p.id === ally.id)?.exhausted).toBe(
+        true,
+      );
+    },
+  );
+  it("rechecks Side-by-Side's readying cost at payment commitment without spending resources on failure", () => {
+    let s = base();
+    const ally = put(s, "45002"),
+      title = put(s, "45015");
+    title.attachedTo = ally.id;
+    ally.exhausted = true;
+    const [event, resource] = hand(s, "45016", "45022");
+    s = choose(command(s, { type: "PLAY", id: event.id }), ally.id);
+    expect(s.prompt?.kind).toBe("payment");
+    put(s, "44032");
+    s = dispatch(reload(s), { type: "PAY", ids: [resource.id] });
+    expect(s.error).toMatch(/must ready.*sidekick/i);
+    expect(s.prompt?.kind).toBe("payment");
+    expect(s.player.hand.map((p) => p.id)).toEqual([event.id, resource.id]);
+    expect(s.player.inPlay.find((p) => p.id === ally.id)?.exhausted).toBe(true);
+    expect(s.player.discard.some((p) => p.id === resource.id)).toBe(false);
+  });
+  it("X-23 offers no ready response when The Merc with the Mouth prevents readying her", () => {
+    let s = base();
+    const ally = put(s, "45012"),
+      enemy = minion(s, "01103");
+    put(s, "44032");
+    s = target(
+      command(s, { type: "ABILITY", id: ally.id, action: "attack" }),
+      enemy.id,
+    );
+    expect(s.prompt).toBeNull();
+    expect(s.minions.some((p) => p.id === enemy.id)).toBe(false);
+    expect(s.player.inPlay.find((p) => p.id === ally.id)?.exhausted).toBe(true);
   });
   it("Advanced Suit only attaches to X-Men/X-Force and heals per discarded printedicons afterdefeat", () => {
     let s = base();
