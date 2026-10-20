@@ -358,7 +358,7 @@ export function ContentBrowser({
       Object.entries(deck?.supplementaryCards || {}).every(
         ([code, count]) => ["29002a", "29003a"].includes(code) && count === 1,
       )) ||
-    (hero.id === "storm" &&
+    (["storm", "iceman"].includes(hero.id) &&
       Object.entries(deck?.supplementaryCards || {}).every(
         ([code, count]) => nativeSupplementary[code] === count,
       ) &&
