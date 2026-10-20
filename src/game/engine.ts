@@ -17133,10 +17133,25 @@ const wolverinePorts: wolverine.WolverinePorts = {
     rocketPorts.damageBatch(s, ids, amount, source),
   canPlayIgnoringCost: (s, p) => scarletPorts.canPlayIgnoringCost(s, p),
   playIgnoringCost: (s, p, after) => scarletPorts.playIgnoringCost(s, p, after),
-  playMeanSwing: (s, p, after) => {
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  playMeanSwing: (s, p, effects, after) => {
     if (magik.magikPending(s, p)) recyclePlayer(s);
-    add(s, ...after);
-    play(s, p, []);
+    requestPayment(
+      s,
+      card(p).name,
+      cardCost(s, card(p), p),
+      [
+        E("resolveHandEvent", {
+          id: p.id,
+          after: effects,
+          continuation: after,
+        }),
+      ],
+      [],
+      p,
+      false,
+      p.code,
+    );
   },
   shufflePlayerDeck: warMachinePortsShufflePlayer,
   shuffleEncounter: mutagenPorts.shuffleEncounter,
