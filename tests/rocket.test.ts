@@ -580,9 +580,14 @@ describe("Rocket printed rules and physical continuations", () => {
     const { s, ports, piece } = fixture();
     const cheap = piece("16034"),
       one = piece("16036"),
-      two = piece("16037");
+      two = piece("16037"),
+      obligation = piece("16053");
     s.player.inPlay.push(cheap, one, two);
-    resolveRocketEffect(s, R("obligation-discard"), ports);
+    resolveRocketEffect(
+      s,
+      R("obligation-discard", { piece: obligation }),
+      ports,
+    );
     expect(s.prompt?.options.map((o) => o.id)).toEqual([one.id, two.id]);
     expect(() =>
       resolveRocketEffect(
@@ -592,7 +597,18 @@ describe("Rocket printed rules and physical continuations", () => {
       ),
     ).toThrow();
     resolveRocketEffect(s, s.prompt!.options[1].effects[0], ports);
+    const discard = s.queue.shift()!;
+    expect(discard).toMatchObject({
+      type: "discardPiece",
+      id: two.id,
+      encounterDiscard: true,
+      source: obligation.id,
+    });
+    ports.discardPiece(s, discard.id);
+    for (const after of discard.after || [])
+      resolveRocketEffect(s, after, ports);
     expect(s.player.discard.at(-1)?.id).toBe(two.id);
+    expect(s.queue.some((e) => e.type === "surge")).toBe(false);
   });
   it("Crisis gains surge when no upgrade can be discarded", () => {
     const { s, ports } = fixture();

@@ -32,6 +32,18 @@ export function isTextBlank(
 ) {
   if (typeof p !== "string" && "treatedAsAlly" in p && p.treatedAsAlly)
     return true;
+  const targetId = typeof p !== "string" ? p.id : undefined;
+  if (
+    targetId &&
+    s.minions.some((m) => m.id === targetId) &&
+    s.players.some((seat) =>
+      (seat.id === s.activePlayerId ? s.player : seat.player).inPlay.some(
+        (a) =>
+          a.code === "49007" && a.attachedTo === targetId && !isTextBlank(s, a),
+      ),
+    )
+  )
+    return true;
   const printedCode = typeof p === "string" ? p : p.code;
   if (["40037a", "40037b"].includes(printedCode)) {
     const id = typeof p === "string" ? undefined : p.id;

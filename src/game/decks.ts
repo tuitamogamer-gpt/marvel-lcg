@@ -6,6 +6,7 @@ import {
   heroDeckAspects,
   heroRequiredCards,
   heroAllowsOffAspectEvent,
+  heroAllowsOffAspectShieldSupport,
   heroDeckRule,
   heroRuntime,
   isPermanent,
@@ -50,7 +51,18 @@ export function deckOptions(
       c.code !== "32031b" &&
       c.code !== "34002b" &&
       c.code !== "41002b" &&
-      !["43034", "43035", "43036", "43037", "46002"].includes(c.code) &&
+      c.code !== "50035b" &&
+      ![
+        "43034",
+        "43035",
+        "43036",
+        "43037",
+        "46002",
+        "49033",
+        "49034",
+        "49035",
+        "49036",
+      ].includes(c.code) &&
       !identityCodes.has(c.code) &&
       !identityMatch(heroId, c) &&
       (hasExecutableScript(c) ||
@@ -69,6 +81,7 @@ export function deckOptions(
         c.pack_code === heroPack) ||
         selectedAspects.includes(c.faction_code as Aspect) ||
         heroAllowsOffAspectEvent(heroId, c) ||
+        heroAllowsOffAspectShieldSupport(heroId, c) ||
         (heroId === "cable" &&
           c.type_code === "player_side_scheme" &&
           c.faction_code !== "hero") ||
@@ -135,6 +148,10 @@ export function deckErrors(
       "x23",
       "iceman",
       "jubilee",
+      "nightcrawler",
+      "nick_fury",
+      "magneto",
+      "maria_hill",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

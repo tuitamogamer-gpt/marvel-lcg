@@ -246,6 +246,7 @@ export function resolveMystiqueEffect(
                 [
                   M("infiltration-discard", {
                     id: p.id,
+                    source: r.pieceId,
                     after,
                     actorId: r.playerId,
                   }),
@@ -277,7 +278,15 @@ export function resolveMystiqueEffect(
         p,
         "Infiltration requires the selected actual controlled ally or support.",
       );
-      ports.discardControlled(s, p!.id, after);
+      ports.queue(
+        s,
+        E("discardPiece", {
+          id: p!.id,
+          encounterDiscard: true,
+          source: e.source,
+          after,
+        }),
+      );
       break;
     }
     case "mystique:surprise-search": {

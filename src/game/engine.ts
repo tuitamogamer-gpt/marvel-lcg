@@ -1,4 +1,9 @@
+import * as nickFury from "./nick-fury.js";
+import * as magnetoHero from "./magneto-hero.js";
+import * as mariaHill from "./maria-hill.js";
 import * as bishop from "./bishop.js";
+import * as nightcrawler from "./nightcrawler.js";
+import * as nightcrawlerEncounter from "./nightcrawler-encounters.js";
 import * as magik from "./magik.js";
 import * as iceman from "./iceman.js";
 import * as jubilee from "./jubilee.js";
@@ -159,6 +164,7 @@ import {
   blackWidowResourceSpent,
   blackWidowEvent,
   blackWidowAllyEnter,
+  blackWidowPreparationResolved,
   blackWidowBoostOptions,
   blackWidowRevealOptions,
   blackWidowMinionEntered,
@@ -564,7 +570,11 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
   );
 }
 function nativeStatusModifiers(s: GameState, p: StatusState) {
-  if (!("code" in p) && magik.magikStats(s).steady) return { steady: true };
+  if (
+    !("code" in p) &&
+    (magik.magikStats(s).steady || magnetoHero.magnetoHeroStats(s).steady)
+  )
+    return { steady: true };
   if (!("code" in p))
     return s.villainId === "mansion_attack"
       ? {
@@ -584,6 +594,9 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     inherited.stalwart ||
     sabretooth.sabretoothModifiers(s, piece.id).stalwart
       ? { stalwart: true }
+      : {}),
+    ...(piece.code === "50060" && !isTextBlank(s, piece)
+      ? { toughLimit: Infinity }
       : {}),
     ...(magnetic.losesSteady ? { steady: false } : {}),
     ...(mansionAttack.mansionAttackModifiers(s, piece, { isTextBlank }).steady
@@ -625,6 +638,7 @@ function giveCharacterStatus(
           toughLimit: colossus.colossusToughLimit(identity, colossusPorts),
           steady:
             magik.magikStats(identity).steady ||
+            magnetoHero.magnetoHeroStats(identity).steady ||
             phoenix.phoenixSuit(identity).steady ||
             spdrPack.spdrPackCharacterSteady(identity, "hero", {
               isTextBlank,
@@ -660,10 +674,11 @@ function syncNebulaIdentityStatuses(s: GameState) {
       syncStatuses(view.player, heroCard(view), { stalwart: true });
     else if (
       s.villainId === "mansion_attack" ||
-      ["phoenix", "magik"].includes(view.heroId)
+      ["phoenix", "magik", "magneto"].includes(view.heroId)
     ) {
       const steady =
         magik.magikStats(view).steady ||
+        magnetoHero.magnetoHeroStats(view).steady ||
         mansionAttack.mansionAttackModifiers(view, "hero", { isTextBlank })
           .steady ||
         phoenix.phoenixSuit(view).steady ||
@@ -718,6 +733,12 @@ function readyIdentity(s: GameState) {
   return true;
 }
 function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
+  if (
+    name === "Piercing" &&
+    nightcrawlerEncounter.nightcrawlerEncounterEnemyModifiers(s, source)
+      .piercing
+  )
+    return 1;
   if (source.startsWith("hero:"))
     return sourceKeyword(seatView(s, source.slice(5)), "hero", name);
   if (source === "hero")
@@ -743,7 +764,9 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         ? 1
         : 0) +
       (name === "Retaliate"
-        ? magik.magikStats(s).retaliate +
+        ? nightcrawler.nightcrawlerStats(s).retaliate +
+          magik.magikStats(s).retaliate +
+          magnetoHero.magnetoHeroStats(s).retaliate +
           x23.x23Stats(s).retaliate +
           psylocke.psylockeStats(s).retaliate +
           (s.attack?.angelRetaliatePlayerId === s.activePlayerId
@@ -942,6 +965,11 @@ function beginResolution(s: GameState, p: Piece) {
   if (!s.resolving.some((x) => x.id === p.id)) s.resolving.push(p);
 }
 function finishResolution(s: GameState, id: string) {
+  delete s.flags[`nightcrawlerCost:${id}`];
+  delete s.flags[`nightcrawlerMinionCostPaid:${id}`];
+  delete s.flags[`nightcrawlerMinionCostMinion:${id}`];
+  delete s.flags[`nightcrawlerMinionCostOrigin:${id}`];
+  delete s.flags[`magnetoHeroCost:${id}`];
   delete s.flags[`bishopResourcePaid:${id}`];
   delete s.flags[`bishopSidekickCost:${id}`];
   phoenix.phoenixEventFinished(s, id);
@@ -1100,6 +1128,8 @@ export function allyCount(s: GameState) {
   return friends(s).filter(
     (p) =>
       !antPack.antManPackAllyExcluded(s, p) &&
+      !magnetoHero.magnetoHeroNewModifiers(s, p, captainPackHasTrait)
+        .excluded &&
       masterMold.masterMoldMagnetoCountsAgainstAllyLimit(s, p, {
         isTextBlank,
       }) &&
@@ -1147,6 +1177,10 @@ function attachPackUpgrade(s: GameState, upgradeId: string, target: string) {
   );
   const p = find(s, upgradeId),
     source = controller(s, upgradeId);
+  need(
+    !p || nightcrawlerEncounter.nightcrawlerEncounterCanAttach(s, target, p),
+    "Azazel cannot have upgrades attached.",
+  );
   const targetSeat = target.startsWith("hero:")
     ? s.players.find((seat) => seat.id === target.slice(5))
     : controller(s, target);
@@ -1447,6 +1481,7 @@ function dealEncounter(s: GameState, playerId = s.activePlayerId) {
   if (p) {
     p.dealtTo = playerId;
     s.encounter.dealt.push(p);
+    add(s, ...nickFury.nickFuryDealt(s));
   }
 }
 function removedByPlayerElimination(s: GameState, p: Piece) {
@@ -1468,6 +1503,24 @@ function discardPiece(s: GameState, id: string) {
     "Powerful Enchantments prevents discarding this attachment.",
   );
   movePieceFromPlay(s, id, false);
+  if (p && !s.flags.nickDiscardingPreparation) {
+    const owner = p.ownerId || s.activePlayerId;
+    const view = seatView(s, owner);
+    add(
+      s,
+      ...nickFury
+        .nickFuryPracticedPlan(view, p)
+        .map((q) => ({ ...q, actorId: owner })),
+    );
+  }
+}
+function discardEncounterControlled(
+  s: GameState,
+  id: string,
+  source?: string,
+  after: Effect[] = [],
+) {
+  mariaHill.mariaHillEncounterDiscard(s, id, source, mariaHillPorts, after);
 }
 function removePlayerCard(s: GameState, id: string) {
   const p = allInPlay(s).find((p) => p.id === id);
@@ -1485,12 +1538,14 @@ function movePieceFromPlay(
   removed: boolean,
   setAsideOwnerId?: string,
   victory = false,
+  movement = false,
 ) {
   const controlling = controller(s, id);
   const viewBefore = controlling ? seatView(s, controlling) : s;
   const healthBefore = maxHP(viewBefore);
   const removedSource = find(s, id);
   if (
+    !movement &&
     removedSource &&
     gambit.gambitShield(s, removedSource, { discard: discardPiece })
   )
@@ -1630,6 +1685,7 @@ function movePieceFromPlay(
   }
   if (!p) return;
   iceman.icemanEnemyLeft(s, id);
+  magnetoHero.magnetoHeroEnemyLeft(s, id);
   rogue.rogueCardLeft(s, id);
   wideawake.projectWideawakeEnemyLeftPlay(s, id);
   if (
@@ -1826,8 +1882,11 @@ function restrictedLimitExceeded(s: GameState) {
     (p) =>
       keyword(p, "Restricted") || (p.code === "44055" && !isTextBlank(s, p)),
   );
-  const general = 2 + venom.venomRestrictedAllowance(s);
-  const weight = (p: Piece) => (p.code === "44055" ? 2 : 1);
+  const general =
+    2 +
+    venom.venomRestrictedAllowance(s) +
+    nightcrawler.nightcrawlerStats(s).restricted;
+  const weight = (p: Piece) => (["44055", "48004"].includes(p.code) ? 2 : 1);
   const weapons = restricted
     .filter(
       (p) =>
@@ -2419,7 +2478,7 @@ export function schemeLimit(s: GameState) {
     deadpool.deadpoolSchemeBonus(s) +
     allInPlay(s).filter(
       (p) =>
-        p.code === "06031" &&
+        rulesCode(p) === "06031" &&
         ["main", `main:${s.scheme.code}`].includes(p.attachedTo || ""),
     ).length *
       4;
@@ -2510,6 +2569,8 @@ function playerHealingTarget(s: GameState, target: string): boolean {
   return (find(s, target)?.damage || 0) > 0;
 }
 function playerAttachmentTarget(s: GameState, source: Piece, target: string) {
+  if (!nightcrawlerEncounter.nightcrawlerEncounterCanAttach(s, target, source))
+    return false;
   if (
     card(source).type_code === "upgrade" &&
     !iceman.icemanCanAttachUpgrade(s, target)
@@ -2813,7 +2874,9 @@ function dealDamage(
     !traits.noDamageInstance &&
     (target === s.villain.id || s.minions.some((p) => p.id === target))
   )
-    n += cyclops.cyclopsAttackModifiers(s, target).damage;
+    n +=
+      cyclops.cyclopsAttackModifiers(s, target).damage +
+      magnetoHero.magnetoHeroAttackBonus(s, target);
 
   const code = original?.code;
   const originalStage = target === s.villain.id ? s.villain.stage : undefined;
@@ -3225,10 +3288,13 @@ function applyDamage(
     cable.cableDeadpool(s, cableAlly, n, source, pieceHP(s, cableAlly))
   )
     return none;
+  if (magnetoHero.magnetoHeroBubble(s, target, n, magnetoHeroPorts))
+    return none;
   if (target === "hero") {
     if (!traits.grootHandled) n -= groot.grootPreventDamage(s, "hero", n);
     if (n <= 0) return none;
     s.player.hp -= n;
+    add(s, ...nickFury.nickFuryDamaged(s, undefined, n, "hero"));
     if (
       (attack || traits.damageFromAttack) &&
       s.attack?.id &&
@@ -3291,6 +3357,7 @@ function applyDamage(
       textBlank: isTextBlank(s, m),
     };
   m.damage += n;
+  add(s, ...nickFury.nickFuryDamaged(s, m, n, target));
   track(
     s,
     s.minions.some((x) => x.id === m.id) ? "damageDealt" : "damageTaken",
@@ -3566,6 +3633,25 @@ function defeatCharacter(
       return true;
     }
   }
+  if (minion && !s.flags[`magnetoHeroDefeat:${m.id}`]) {
+    const effects = magnetoHero.magnetoHeroDefeated(s, m);
+    if (effects.length) {
+      s.flags[`magnetoHeroDefeat:${m.id}`] = true;
+      m.pendingDefeat = true;
+      add(
+        s,
+        ...effects,
+        E("finishDefeat", {
+          id: m.id,
+          source,
+          attack,
+          enemyAttack,
+          valkyrieReceipts: receipts,
+        }),
+      );
+      return true;
+    }
+  }
   if (minion && !s.flags[`magnetoDefeat:${m.id}`]) {
     const effects = magneto.magnetoMinionDefeated(s, m, s.activePlayerId, {
       isTextBlank,
@@ -3638,12 +3724,14 @@ function defeatCharacter(
     (a) =>
       rulesCode(a) === "01007" && a.attachedTo === m.id && !isTextBlank(s, a),
   );
+  add(s, ...mariaHill.mariaHillControlledDefeated(s, m));
   const name = card(m).name;
   const textWasBlank = isTextBlank(s, m);
   const defeatedSentinel = minion && captainPackHasTrait(s, m.id, "Sentinel");
   const allyController = controller(s, m.id)?.id;
   const sabretoothDefeat = (m as SabretoothAttackDefeatPiece)
     .sabretoothAttackDefeatReceipt;
+  if (minion) add(s, ...nightcrawler.nightcrawlerDefeated(s, source));
   if (!minion) recordMilesEnemyAttackDefeat(s, source, enemyAttack);
   if (minion) add(s, ...bishop.bishopDefeated(s, m, source, true, attack));
   else if (enemyAttack) add(s, ...bishop.bishopEnemyAllyDefeated(s, source));
@@ -3651,6 +3739,15 @@ function defeatCharacter(
     recordZeroToleranceAllyDefeat(s, m, source, enemyAttack, allyController);
   if (!minion && ["32088b", "32172b"].includes(m.code) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
+  else if (
+    nightcrawlerEncounter.nightcrawlerEncounterExecutionerRemoves(
+      s,
+      m,
+      source,
+      enemyAttack,
+    )
+  )
+    movePieceFromPlay(s, m.id, true);
   else discardPiece(s, m.id);
   if (!textWasBlank)
     add(s, ...deadpool.deadpoolDefeated(s, m, source, allyController));
@@ -3683,6 +3780,7 @@ function defeatCharacter(
   delete s.flags[`icemanSuppress:${m.id}`];
   delete s.flags[`acolytesDefeat:${m.id}`];
   delete s.flags[`magnetoDefeat:${m.id}`];
+  delete s.flags[`magnetoHeroDefeat:${m.id}`];
   log(s, `${name} is defeated.`, "good");
   if (minion) {
     if (
@@ -3822,6 +3920,7 @@ function advanceVillain(
     );
     return;
   }
+  add(s, ...nightcrawler.nightcrawlerDefeated(s, source));
   add(s, ...receipts.flatMap((r) => valkyrie.valkyrieEnemyDefeated(s, r)));
   niNativeAchievement(
     s,
@@ -4286,7 +4385,12 @@ function defeatScheme(
       shadowcatPorts,
     ),
   );
-  add(s, ...iceman.icemanSchemeDefeated(s, p));
+  add(s, ...nightcrawlerEncounter.nightcrawlerEncounterSchemeDefeated(s, p));
+  add(
+    s,
+    ...iceman.icemanSchemeDefeated(s, p),
+    ...mariaHill.mariaHillSchemeDefeated(s, p),
+  );
   const nativeDefeat = sabretooth.sabretoothSideSchemeDefeated(
     s,
     p,
@@ -4334,7 +4438,12 @@ function defeatScheme(
     ["32065a", "32088a", "32144a", "32144b", "32145a", "32158"].includes(
       p.code,
     ) && !isTextBlank(s, p);
-  const magikDefeat = magik.magikSideDefeated(s, p);
+  const magikDefeat = [
+    ...magik.magikSideDefeated(s, p),
+    ...(!isPlayerSideScheme(p)
+      ? magnetoHero.magnetoHeroSideDefeated(s, p)
+      : []),
+  ];
   if (!victory && !retainFind) discardPiece(s, p.id);
   const responses = [
     ...(magikDefeat.length
@@ -4438,13 +4547,14 @@ export function targets(
         ...s.minions.map((p) => ({
           id: p.id,
           label: card(p).name,
-          code: p.code,
+          code: p.mariaControlled ? undefined : p.code,
         })),
       ].filter(
         (t) =>
           cable.cableCanDamage(s, t.id) &&
           (!attack ||
-            (valkyrie.valkyrieCanAttackTarget(s, t.id) &&
+            (globalMagnetoHeroAttackAllowed(s, t.id) &&
+              valkyrie.valkyrieCanAttackTarget(s, t.id) &&
               (t.id !== s.villain.id ||
                 !mystique.mystiqueVillainAttackProhibited(s, mystiquePorts)))),
       );
@@ -4452,7 +4562,7 @@ export function targets(
       return s.minions.map((p) => ({
         id: p.id,
         label: card(p).name,
-        code: p.code,
+        code: p.mariaControlled ? undefined : p.code,
       }));
     case "scheme":
       return [
@@ -4642,6 +4752,7 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
         ? 1
         : 0) -
       wolverine.wolverineCostReduction(s, physical || c, wolverinePorts) -
+      nickFury.nickFuryCostReduction(s, physical || c, captainPackHasTrait) -
       magik.magikDiscount(s, physical || {}) -
       cable.cableDiscount(s, physical || c, cablePorts) -
       deadpool.deadpoolDiscount(s, physical || c) -
@@ -4697,7 +4808,29 @@ function captainPackHasTrait(
   target: string,
   trait: string,
 ): boolean {
+  if (
+    nightcrawler.nightcrawlerHasTrait(s, target, trait, (id, t) =>
+      captainPackHasTrait(s, id, t),
+    )
+  )
+    return true;
+  if (
+    magnetoHero.magnetoHeroGrantedTrait(
+      s,
+      target,
+      trait,
+      captainPrintedHasTrait,
+    )
+  )
+    return true;
+  if (mariaHill.mariaHillTrait(s, target, trait)) return true;
   if (jubilee.jubileeEnemyTrait(s, target, trait)) return true;
+  if (
+    (target === "hero" || target === `hero:${s.activePlayerId}`) &&
+    trait === "Aerial" &&
+    nickFury.nickFuryAerial(s)
+  )
+    return true;
   if (
     trait.toLowerCase() === "x-force" &&
     angel.angelRecruitBonus(s, target) > 0
@@ -4992,6 +5125,16 @@ function attackAction(
     log(s, "The attack has no eligible target.");
     return;
   }
+  if (!magnetoHero.magnetoHeroCanAttack(s, target, source)) return;
+  if (
+    source === "hero" &&
+    s.heroId === "nick_fury" &&
+    s.player.form === "hero" &&
+    !isTextBlank(s, heroCard(s)) &&
+    !deadpool.deadpoolTriggeredBlocked(s) &&
+    nickFury.nickFurySuit(s)?.code === "50035b"
+  )
+    nickFury.nickFuryChangeSuit(s, "assault", nickFuryPorts);
   const attacker = combatCharacter(s, source);
   const defender = combatCharacter(s, target);
   const previousEffects = new Set(s.queue);
@@ -5005,6 +5148,7 @@ function attackAction(
     panther,
     traits,
   );
+  if (result) add(s, ...magnetoHero.magnetoHeroEnemyAttacked(s, target));
   if (source === "hero" && s.currentEventId && result)
     s.flags[`shadowcatAttackPerformed:${s.currentEventId}`] = true;
   if (
@@ -5260,6 +5404,47 @@ function requestPayment(
   }
   if (magik.magikHasPending(s)) cancelable = false;
   const paymentTarget = abilityCost ? targetCode : targetCode || piece?.code;
+  if (
+    !abilityCost &&
+    piece &&
+    !paymentCommit.some((e) => e.type === "nightcrawler:cost")
+  ) {
+    const costs = nightcrawler.nightcrawlerAdditionalCostOptions(
+      s,
+      piece,
+      nightcrawlerPorts,
+    );
+    if (costs !== null) {
+      need(costs.length, "This event requires its actual additional cost.");
+      choose(
+        s,
+        `${card(piece).name} · additional cost`,
+        "Choose the printed cost to commit with payment.",
+        costs.map((o) => ({
+          ...o,
+          effects: [
+            E("payRequest", {
+              title,
+              cost,
+              after,
+              requirements,
+              piece,
+              cancelable,
+              targetCode,
+              forcePayment,
+              commit: [...paymentCommit, ...o.effects],
+              starLordCostHandled,
+              starLordApplyDiscount,
+              handOnly,
+              abilityCost,
+            }),
+          ],
+        })),
+        cancelable,
+      );
+      return;
+    }
+  }
   if (
     !abilityCost &&
     piece?.code === "45016" &&
@@ -5665,6 +5850,7 @@ function pay(
   const p = s.prompt!;
   need(p?.kind === "payment", "No payment is pending.");
   need(new Set(ids).size === ids.length, "Choose each resource source once.");
+  if (nickFury.nickFuryWatchPreflight(s, p, ids, wildAs, nickFuryPorts)) return;
   const sources = paymentSources(
     s,
     p.card?.id,
@@ -5677,6 +5863,17 @@ function pay(
     jubilee.jubileePaymentPreflight(s, p.card, jubileePorts);
 
   need(selected.every(Boolean), "A selected resource is unavailable.");
+  if (
+    mariaHill.mariaHillOrgPreflight(
+      s,
+      p,
+      selected as PaymentSource[],
+      [...s.queue],
+      mariaHillPorts,
+    )
+  )
+    return;
+
   if (p.card && !p.abilityCost)
     mgPack.mutantGenesisPlayerPackPaymentPreflight(
       s,
@@ -6132,6 +6329,68 @@ function pay(
       bishopResourceCardPaid = possible[0];
     }
   }
+  let mariaFundingIds: string[] = [];
+  if (
+    p.card &&
+    !p.abilityCost &&
+    card(p.card).type_code === "support" &&
+    card(p.card).traits?.includes("S.H.I.E.L.D.")
+  ) {
+    const allocations = mariaHill.mariaHillFundingAllocations(
+      selected as PaymentSource[],
+      p.cost || 0,
+      req,
+      wildAs,
+      paidForCard,
+      generatedForCard,
+      explicitWilds,
+      paidResourceAllocations,
+    );
+    const receipt = p.mariaFundingPayment;
+    if (receipt && receipt.sourceIds.join("|") === ids.join("|")) {
+      need(
+        allocations.some((a) => a.join("|") === receipt.fundingIds.join("|")),
+        "The selected Special Funding origin cannot pay this cost.",
+      );
+      mariaFundingIds = receipt.fundingIds;
+    } else if (allocations.length > 1) {
+      choose(
+        s,
+        "Allocate Special Funding",
+        "Choose which selected physical Special Funding cards pay the actual cost; excess icons are overpaid.",
+        allocations.map((fundingIds, index) =>
+          option(
+            String(index),
+            fundingIds.length
+              ? `Use ${fundingIds.length} Special Funding card(s) for the cost`
+              : "Use other sources for the cost",
+            [
+              E("commitPaymentAllocation", {
+                payment: {
+                  ...p,
+                  mariaFundingPayment: { sourceIds: [...ids], fundingIds },
+                },
+                ids,
+                wildAs,
+                paidForCard,
+                generatedForCard,
+                syncPaid,
+              }),
+            ],
+          ),
+        ),
+        true,
+      );
+      s.prompt!.cancellationQueue = [
+        E("restorePaymentPrompt", {
+          actorId: s.activePlayerId,
+          payment: p,
+          queue: [...s.queue],
+        }),
+      ];
+      return;
+    } else mariaFundingIds = allocations[0] || [];
+  }
   const clarity = selected.find(
     (info) =>
       info!.code === "31029" && !s.flags[`spdrClarityCommitted:${info!.id}`],
@@ -6169,6 +6428,13 @@ function pay(
     return;
   }
   const paymentActor = s.activePlayerId;
+  if (p.card)
+    mariaHill.mariaHillRecordFunding(
+      s,
+      p.card,
+      selected as PaymentSource[],
+      mariaFundingIds,
+    );
   if (p.card && ["45007", "45008"].includes(p.card.code)) {
     delete s.flags[`bishopResourcePaid:${p.card.id}`];
     if (bishopResourceCardPaid)
@@ -6203,7 +6469,13 @@ function pay(
         spentResponses.push(
           ...(magik.magikResourceSpent(s, id, magikPorts) || []),
         );
+      } else if (nightcrawler.nightcrawlerSpendResource(s, id)) {
+      } else if (magnetoHero.magnetoHeroResourceSpent(s, id)) {
+        spentResponses.push(...domino.dominoFeedback(s));
+      } else if (mariaHill.mariaHillResourceSpent(s, id, mariaHillPorts)) {
       } else if (iceman.icemanResourceSpent(s, id)) {
+      } else if (nickFury.nickFurySpendResource(s, id)) {
+        // The physical Watch/Jemma source commits its own exhaust/threat cost.
       } else if (jubilee.jubileeSpendResource(s, id)) {
       } else if (cable.cableSpendResource(s, id)) {
       } else if (rogue.rogueSpendResource(s, id)) {
@@ -6226,6 +6498,8 @@ function pay(
       } else if (spiderHam.spiderHamResourceSpent(s, id, spiderHamPorts)) {
         // Counter resources are validated together and spent individually.
       } else if (s.player.hand.some((x) => x.id === id)) {
+        const toSpend = s.player.hand.find((q) => q.id === id)!;
+        mariaHill.mariaHillOrgSpend(s, toSpend, mariaHillPorts);
         const spent = discardHand(s, id);
         phoenix.phoenixPayment(seatView(s, paymentActor), spent, p.card);
         spentResponses.push(...gambit.gambitPayment(s, spent));
@@ -6601,7 +6875,10 @@ export function newGame(config: {
     psylocke.psylockeInitialize(s, { makePiece });
     x23.x23Initialize(s, { makePiece });
     iceman.icemanInitialize(s, { makePiece });
+    mariaHill.mariaHillInitialize(s, { makePiece });
     jubilee.jubileeInitialize(s, makePiece);
+    nickFury.nickFuryInitialize(s, makePiece);
+    magnetoHero.magnetoHeroInitialize(s, makePiece);
     s.player.deck = shuffle(s, s.player.deck);
     doctorStrangeSetup(s, dsPorts);
     venom.venomInitializeNemesis(s, { makePiece });
@@ -6626,6 +6903,7 @@ export function newGame(config: {
     magik.magikInitialize(s, makePiece);
     angel.angelInitialize(s, { makePiece });
     cable.cableInitialize(s, { makePiece });
+    nightcrawlerEncounter.nightcrawlerEncounterInitialize(s, makePiece);
     bishop.bishopInitialize(s, makePiece);
     deadpool.deadpoolInitialize(s, makePiece);
     colossus.colossusInitializeNemesis(s, { makePiece });
@@ -6655,30 +6933,34 @@ export function newGame(config: {
                 ? "gambit"
                 : c.set_code === "sauron"
                   ? "iceman"
-                  : c.set_code === "arcade"
-                    ? "jubilee"
-                    : c.set_code === "reavers"
-                      ? "rogue"
-                      : c.set_code === "deathstrike"
-                        ? "wolv"
-                        : c.set_code === "shadow_king"
-                          ? "storm"
-                          : c.set_code === "ironspider_sinister"
-                            ? "spdr"
-                            : c.set_code === "inheritors"
-                              ? "spiderham"
-                              : c.set_code === "zzzax"
-                                ? "ironheart"
-                                : c.set_code === "armadillo"
-                                  ? "nova"
-                                  : [
-                                        "goblin_gimmicks",
-                                        "a_mess_of_things",
-                                        "power_drain",
-                                        "running_interference",
-                                      ].includes(c.set_code || "")
-                                    ? "gob"
-                                    : "core")) ||
+                  : c.set_code === "crazy_gang"
+                    ? "ncrawler"
+                    : c.set_code === "hellfire"
+                      ? "magneto"
+                      : c.set_code === "arcade"
+                        ? "jubilee"
+                        : c.set_code === "reavers"
+                          ? "rogue"
+                          : c.set_code === "deathstrike"
+                            ? "wolv"
+                            : c.set_code === "shadow_king"
+                              ? "storm"
+                              : c.set_code === "ironspider_sinister"
+                                ? "spdr"
+                                : c.set_code === "inheritors"
+                                  ? "spiderham"
+                                  : c.set_code === "zzzax"
+                                    ? "ironheart"
+                                    : c.set_code === "armadillo"
+                                      ? "nova"
+                                      : [
+                                            "goblin_gimmicks",
+                                            "a_mess_of_things",
+                                            "power_drain",
+                                            "running_interference",
+                                          ].includes(c.set_code || "")
+                                        ? "gob"
+                                        : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -6952,6 +7234,8 @@ const reactionCards = [
 export function playable(s: GameState, p: Piece): string | null {
   if (deadpool.deadpoolTriggeredBlocked(s))
     return "The Merc with the Mouth prevents another player’s triggered card abilities during this turn.";
+  const nickRestriction = nickFury.nickFuryPlayRestriction(s, p, nickFuryPorts);
+  if (nickRestriction) return nickRestriction;
   const jubileeRestriction = jubilee.jubileePlayRestriction(s, p, jubileePorts);
   if (jubileeRestriction) return jubileeRestriction;
   const deadpoolRestriction = deadpool.deadpoolPlayRestriction(s, p);
@@ -7048,9 +7332,12 @@ export function playable(s: GameState, p: Piece): string | null {
     starLord.starLordPlayRestriction(s, p) ||
     gamora.gamoraPlayRestriction(s, p, gamoraPorts) ||
     drax.draxPlayRestriction(s, p, draxPorts) ||
+    magnetoHero.magnetoHeroPlayRestriction(s, p, magnetoHeroPorts) ||
     magik.magikPlayRestriction(s, p, magikPorts) ||
     domino.dominoPlayRestriction(s, p, dominoPorts) ||
     x23.x23PlayRestriction(s, p, x23Ports) ||
+    nightcrawler.nightcrawlerPlayRestriction(s, p, nightcrawlerPorts) ||
+    mariaHill.mariaHillPlayRestriction(s, p) ||
     iceman.icemanPlayRestriction(s, p, icemanPorts) ||
     gambit.gambitPlayRestriction(s, p, gambitPorts) ||
     cyclops.cyclopsPlayRestriction(s, p, cyclopsPorts) ||
@@ -7292,7 +7579,9 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
     allyTargets.length &&
     (maximumAllyUpgradeDiscount(s, p!) > 0 ||
       phoenix.phoenixAttachmentTargets(s, p, phoenixPorts) !== null ||
-      bishop.bishopAttachmentTargets(s, p, bishopPorts) !== null)
+      bishop.bishopAttachmentTargets(s, p, bishopPorts) !== null ||
+      nightcrawler.nightcrawlerAttachmentTargets(s, p, nightcrawlerPorts) !==
+        null)
   ) {
     choose(
       s,
@@ -7488,6 +7777,90 @@ function play(
   syncPaid = 0,
 ) {
   const c = card(p);
+  if (
+    ["48016", "49017"].includes(p.code) &&
+    !s.flags[`nightcrawlerMinionCostPaid:${p.id}`]
+  ) {
+    let origin = "hand";
+    const handIndex = s.player.hand.findIndex((q) => q.id === p.id);
+    if (handIndex >= 0) s.player.hand.splice(handIndex, 1);
+    else if (magik.magikPending(s, p)) origin = "magik";
+    else if (fromDeck && s.player.deck.some((q) => q.id === p.id)) {
+      origin = "deck";
+      s.player.deck.splice(
+        s.player.deck.findIndex((q) => q.id === p.id),
+        1,
+      );
+    } else {
+      const stored = ghostSpider.ghostSpiderTakeStoredForPlay(
+        s,
+        p.id,
+        ghostSpiderPorts,
+      );
+      need(stored, "The actual uncertain-cost event is no longer available.");
+      origin = "george";
+    }
+    if (!s.resolving.some((q) => q.id === p.id)) beginResolution(s, p);
+    s.flags[`nightcrawlerMinionCostOrigin:${p.id}`] = origin;
+    add(
+      s,
+      E("nightcrawlerMinionCostAttempt", {
+        piece: p,
+        resume: E("play", {
+          piece: p,
+          paid,
+          lightningX,
+          masterInvocationId,
+          attachedTarget,
+          agilityHandled,
+          overpaid,
+          paidForCard,
+          fromDeck,
+          generatedForCard,
+          novaDamageContext,
+          syncPaid,
+        }),
+      }),
+    );
+    return;
+  }
+  const nightcrawlerCosts = nightcrawler.nightcrawlerAdditionalCostOptions(
+    s,
+    p,
+    nightcrawlerPorts,
+  );
+  if (nightcrawlerCosts !== null) {
+    need(
+      nightcrawlerCosts.length,
+      "This event requires its actual additional cost.",
+    );
+    choose(
+      s,
+      `${c.name} · additional cost`,
+      "Pay the printed additional cost before playing.",
+      nightcrawlerCosts.map((o) => ({
+        ...o,
+        effects: [
+          ...o.effects,
+          E("play", {
+            piece: p,
+            paid,
+            lightningX,
+            masterInvocationId,
+            attachedTarget,
+            agilityHandled,
+            overpaid,
+            paidForCard,
+            fromDeck,
+            generatedForCard,
+            novaDamageContext,
+            syncPaid,
+          }),
+        ],
+      })),
+    );
+    return;
+  }
   if (p.code === "45016" && !s.flags[`bishopSidekickCost:${p.id}`]) {
     const candidates = bishop
       .bishopSidekicks(s)
@@ -7562,7 +7935,16 @@ function play(
   const storedGeorge = ghostSpider
     .ghostSpiderStoredPlayable(s, ghostSpiderPorts)
     .some((x) => x.id === p.id);
-  const stored = storedArrow || storedPanther || storedDefense || storedGeorge;
+  const stagedMinionCost =
+    !!s.flags[`nightcrawlerMinionCostPaid:${p.id}`] &&
+    s.resolving.some((q) => q.id === p.id);
+  const minionCostOrigin = s.flags[`nightcrawlerMinionCostOrigin:${p.id}`];
+  const stored =
+    storedArrow ||
+    storedPanther ||
+    storedDefense ||
+    storedGeorge ||
+    stagedMinionCost;
   const magikOrigin = magik.magikPending(s, p);
   const fromHand = s.player.hand.some((x) => x.id === p.id) || magikOrigin;
   const zone = magikOrigin
@@ -7597,6 +7979,11 @@ function play(
     );
   else if (magikOrigin)
     need(magik.magikTakePending(s, p.id), "The staged top-card play changed.");
+  else if (stagedMinionCost)
+    s.resolving.splice(
+      s.resolving.findIndex((q) => q.id === p.id),
+      1,
+    );
   else zone.splice(i, 1);
   const playToken = nativeCardPlayCommitted(s, p);
   const niBonus = niPack.novaIronheartPackAttackEventBonus(
@@ -7634,7 +8021,8 @@ function play(
       !storedArrow &&
       !storedPanther &&
       !storedDefense &&
-      !storedGeorge,
+      !storedGeorge &&
+      (!stagedMinionCost || minionCostOrigin === "hand"),
   };
   if (c.type_code !== "event")
     add(s, E("niNativePlayed", { receipt: niPlayed }));
@@ -7659,29 +8047,33 @@ function play(
     beginResolution(s, p);
     add(
       s,
-      ...venomPack.venomPackBeforeEvent(
+      ...magnetoHero.magnetoHeroBeforeEvent(
         s,
         p,
-        gmwPack.gmwPlayerPackBeforeEvent(
+        venomPack.venomPackBeforeEvent(
           s,
           p,
-          starLord.starLordBeforeEvent(
+          gmwPack.gmwPlayerPackBeforeEvent(
             s,
             p,
-            msMarvelBeforeEvent(s, p, [
-              E("eventResolve", {
-                piece: p,
-                paid,
-                paidForCard,
-                generatedForCard,
-                syncPaid,
-                novaDamageContext,
-                lightningX,
-                masterInvocationId,
-                eventId: p.id,
-                playToken,
-              }),
-            ]),
+            starLord.starLordBeforeEvent(
+              s,
+              p,
+              msMarvelBeforeEvent(s, p, [
+                E("eventResolve", {
+                  piece: p,
+                  paid,
+                  paidForCard,
+                  generatedForCard,
+                  syncPaid,
+                  novaDamageContext,
+                  lightningX,
+                  masterInvocationId,
+                  eventId: p.id,
+                  playToken,
+                }),
+              ]),
+            ),
           ),
         ),
       ),
@@ -7726,9 +8118,14 @@ function play(
       ...angel.angelCardEntered(s, p),
 
       ...magik.magikEntered(s, p),
+      ...(card(p).type_code === "ally"
+        ? []
+        : magnetoHero.magnetoHeroEntered(s, p, magnetoHeroPorts)),
       ...x23.x23Entered(s, p),
+      ...nightcrawler.nightcrawlerEntered(s, p),
       ...bishop.bishopEntered(s, p),
       ...iceman.icemanEntered(s, p),
+      ...mariaHill.mariaHillEntered(s, p),
       ...jubilee.jubileeEntered(s, p),
       ...deadpool.deadpoolCardEntered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
@@ -7920,11 +8317,17 @@ function allyEnter(
       fromHand,
     ),
   );
+  add(s, ...nightcrawler.nightcrawlerEntered(s, p));
   add(s, ...cyclops.cyclopsAllyEntered(s, p), ...bishop.bishopEntered(s, p));
-  add(s, ...iceman.icemanEntered(s, p, fromHand, true));
+  add(
+    s,
+    ...iceman.icemanEntered(s, p, fromHand, true),
+    ...mariaHill.mariaHillEntered(s, p),
+  );
   if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
     giveCharacterStatus(s, p, "tough");
   if (isTextBlank(s, p)) return;
+  add(s, ...magnetoHero.magnetoHeroEntered(s, p, magnetoHeroPorts));
   if (p.code === "41003") {
     add(s, ...psylocke.psylockeCardEntered(s, p, fromHand));
     return;
@@ -8072,6 +8475,11 @@ function allyEnter(
     add(s, ...ds);
     return;
   }
+  const nick = nickFury.nickFuryAllyEntered(s, p, nickFuryPorts);
+  if (nick !== null) {
+    add(s, ...nick);
+    return;
+  }
   const bw = blackWidowAllyEnter(s, p);
   if (bw !== null) {
     add(s, ...bw);
@@ -8177,6 +8585,7 @@ function event(
   syncPaid = 0,
 ) {
   const ant =
+    magnetoHero.magnetoHeroEvent(s, p) ??
     magik.magikEvent(s, p, magikPorts) ??
     (p.code === "45046"
       ? gamoraPack.gamoraPackEvent(s, { ...p, code: "18012" })
@@ -8184,10 +8593,13 @@ function event(
     (p.code === "45052"
       ? scarletPack.scarletWitchPackEvent(s, { ...p, code: "15019" }, paid)
       : null) ??
+    nightcrawler.nightcrawlerEvent(s, p) ??
+    nickFury.nickFuryEvent(s, p) ??
     jubilee.jubileeEvent(s, p) ??
     psylocke.psylockeEvent(s, p, paid) ??
     domino.dominoEvent(s, p) ??
     x23.x23Event(s, p) ??
+    mariaHill.mariaHillEvent(s, p) ??
     iceman.icemanEvent(s, p) ??
     gambit.gambitEvent(s, p) ??
     cyclops.cyclopsEvent(s, p) ??
@@ -8662,7 +9074,11 @@ function flip(
   if (counts) s.player.flipped = true;
   spdr.spdrChangedForm(s, previousForm, s.player.form);
   add(s, ...phoenix.phoenixFormChanged(s), ...bishop.bishopChangedForm(s));
-  add(s, ...iceman.icemanFormChanged(s));
+  add(
+    s,
+    ...iceman.icemanFormChanged(s),
+    ...magnetoHero.magnetoHeroFormChanged(s),
+  );
   add(s, ...rogue.rogueFormChanged(s, wasMutant, roguePorts));
   if (s.player.spiderHamIdentity)
     s.player.spiderHamIdentity.code =
@@ -8766,6 +9182,17 @@ export function abilityOptions(
       ? wideawake.projectWideawakeActionOptions(s, p.id, wideawakePorts)
       : []),
     ...magneto.magnetoActionOptions(s, p.id, magnetoPorts),
+    ...(p.code === "49027" &&
+    p.attachedTo === `hero:${s.activePlayerId}` &&
+    s.player.form === "alter" &&
+    !s.player.exhausted &&
+    !isTextBlank(s, p)
+      ? [
+          option("remove", "Exhaust Erik Lehnsherr · discard Old Grievances", [
+            E("magnetoHero:obligation-remove", { id: p.id }),
+          ]),
+        ]
+      : []),
     ...sentinels.sentinelsAbilityOptions(s, p.id, sentinelsPorts),
     ...zzzax.zzzaxActions(s, p, zzzaxPorts),
     ...goblinModuleAttachmentActions(s, p),
@@ -8916,13 +9343,20 @@ export function abilityOptions(
 }
 function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   const phoenixBonus = phoenix.phoenixAllyModifiers(s, p);
+  const magneticBonus = magnetoHero.magnetoHeroNewModifiers(
+    s,
+    p,
+    captainPackHasTrait,
+  );
   const noir = spdrPack.spdrPackAllyStats(s, p, spdrPackPorts);
   return (
+    magneticBonus[kind] +
     (kind === "thwart" && cable.cableXForceTeam(s, cablePorts) ? 1 : 0) +
     bishop.bishopCharacterBonus(
       controller(s, p.id) ? seatView(s, controller(s, p.id)!) : s,
       p.id,
     ) +
+    nightcrawler.nightcrawlerAllyBonus(s, p, kind) +
     deadpool.deadpoolAllyBonus(s, p) +
     gambit.gambitAllyBonus(s, p, kind) +
     cyclops.cyclopsCharacterModifiers(s, p.id)[kind] +
@@ -9000,9 +9434,46 @@ function ability(s: GameState, id: string, action = "special") {
       "This identity’s printed text box is blank.",
     );
   need(
-    !deadpool.deadpoolTriggeredBlocked(s),
+    !deadpool.deadpoolTriggeredBlocked(s) ||
+      s.player.inPlay.some((p) => p.id === id && p.code === "50029"),
     "The Merc with the Mouth prevents another player’s triggered card abilities during this turn.",
   );
+  const nightcrawlerOptions = nightcrawler.nightcrawlerAbilityOptions(
+    s,
+    id,
+    nightcrawlerPorts,
+  );
+  const nightcrawlerSelected =
+    action === "special"
+      ? nightcrawlerOptions[0]
+      : nightcrawlerOptions.find((o) => o.id === action);
+  if (nightcrawlerSelected) {
+    add(s, ...nightcrawlerSelected.effects);
+    return;
+  }
+  const nickOptions = nickFury.nickFuryAbilityOptions(s, id, nickFuryPorts);
+  const nickSelected =
+    action === "special" && nickOptions.length === 1
+      ? nickOptions[0]
+      : nickOptions.find((o) => o.id === action);
+  if (nickSelected) {
+    add(s, ...nickSelected.effects);
+    return;
+  }
+  const magneticOptions = magnetoHero.magnetoHeroAbilityOptions(
+    s,
+    id,
+    magnetoHeroPorts,
+  );
+  const magneticHeroSelected =
+    magneticOptions.find((o) => o.id === action) ||
+    (action === "special" && magneticOptions.length === 1
+      ? magneticOptions[0]
+      : undefined);
+  if (magneticHeroSelected) {
+    add(s, ...magneticHeroSelected.effects);
+    return;
+  }
   const jubileeOptions = jubilee.jubileeAbilityOptions(s, id, jubileePorts);
   const jubileeSelected =
     action === "special" && jubileeOptions.length === 1
@@ -9010,6 +9481,18 @@ function ability(s: GameState, id: string, action = "special") {
       : jubileeOptions.find((o) => o.id === action);
   if (jubileeSelected) {
     add(s, ...jubileeSelected.effects);
+    return;
+  }
+  const mariaOptions = [
+    ...mariaHill.mariaHillAbilityOptions(s, id, mariaHillPorts),
+    ...mariaHill.mariaHillHandOptions(s, id),
+  ];
+  const mariaSelected =
+    action === "special"
+      ? mariaOptions[0]
+      : mariaOptions.find((o) => o.id === action);
+  if (mariaSelected) {
+    add(s, ...mariaSelected.effects);
     return;
   }
   const deadpoolOptions = deadpool.deadpoolAbilityOptions(s, id, deadpoolPorts);
@@ -10092,6 +10575,21 @@ function openMsDamageWindow(s: GameState, packet: Effect): boolean {
       [packet],
       msPorts,
     ),
+    ...nickFury.nickFuryDamageOptions(
+      s,
+      {
+        target: "hero",
+        playerId: s.activePlayerId,
+        amount,
+        packet,
+        attack: !!(
+          packet.attack ||
+          packet.damageFromAttack ||
+          packet.enemyAttack
+        ),
+      },
+      [packet],
+    ),
     ...blackWidowDamageOptions(
       s,
       { target: "hero", playerId: s.activePlayerId, amount, packet },
@@ -10192,9 +10690,16 @@ function countActivationBoost(s: GameState, id: string, after: Effect[]): void {
   );
 }
 const bwPorts: BlackWidowPorts = {
+  practicedPlan: nickFury.nickFuryPracticedPlan,
+  preparationResolved: (s, p, after) =>
+    blackWidowPreparationResolved(
+      s,
+      p,
+      nickFury.nickFuryPreparationResolved(s, p, after),
+    ),
   queue: add,
   choose,
-  discardPiece,
+  discardPiece: nickDiscardPreparation,
   revealHidden,
   flip,
   shufflePlayerDeck: (s) => {
@@ -10395,6 +10900,12 @@ function allyUpgradeTargets(s: GameState, p: Piece) {
   );
 }
 function rawAllyUpgradeTargets(s: GameState, p: Piece) {
+  const nightcrawlerTargets = nightcrawler.nightcrawlerAttachmentTargets(
+    s,
+    p,
+    nightcrawlerPorts,
+  );
+  if (nightcrawlerTargets !== null) return nightcrawlerTargets;
   const bishopTargets = bishop.bishopAttachmentTargets(s, p, bishopPorts);
   if (bishopTargets !== null) return bishopTargets;
   const phoenixTargets = phoenix.phoenixAttachmentTargets(s, p, phoenixPorts);
@@ -11317,6 +11828,16 @@ const draxPackPorts: draxPack.DraxPackPorts = {
     need(p, "The defeated ally is no longer in play.");
     if (p!.id === sabretooth.sabretoothKelly(s)?.id || p!.code === "32088b") {
       movePieceFromPlay(s, id, false);
+      if (p && !s.flags.nickDiscardingPreparation) {
+        const owner = p.ownerId || s.activePlayerId;
+        const view = seatView(s, owner);
+        add(
+          s,
+          ...nickFury
+            .nickFuryPracticedPlan(view, p)
+            .map((q) => ({ ...q, actorId: owner })),
+        );
+      }
       return;
     }
     const owner =
@@ -11524,9 +12045,13 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
       ...angel.angelCardEntered(s, p),
       ...cable.cableCardEntered(s, p),
       ...magik.magikEntered(s, p),
+      ...(card(p).type_code === "ally"
+        ? []
+        : magnetoHero.magnetoHeroEntered(s, p, magnetoHeroPorts)),
       ...x23.x23Entered(s, p),
       ...bishop.bishopEntered(s, p),
       ...iceman.icemanEntered(s, p),
+      ...mariaHill.mariaHillEntered(s, p),
       ...deadpool.deadpoolCardEntered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
       ...wolverine
@@ -12262,11 +12787,17 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     return deadpool
       .deadpoolAbilityOptions(s, id, deadpoolPorts)
       .filter((o) => o.id === "game-history");
-  if (deadpool.deadpoolTriggeredBlocked(s)) return [];
+  if (deadpool.deadpoolTriggeredBlocked(s))
+    return mariaHill.mariaHillAbilityOptions(s, id, mariaHillPorts);
   return [
+    ...nightcrawler.nightcrawlerAbilityOptions(s, id, nightcrawlerPorts),
+    ...mariaHill.mariaHillAbilityOptions(s, id, mariaHillPorts),
+    ...mariaHill.mariaHillHandOptions(s, id),
     ...bishop.bishopAbilityOptions(s, id, bishopPorts),
+    ...magnetoHero.magnetoHeroAbilityOptions(s, id, magnetoHeroPorts),
     ...magik.magikAbilityOptions(s, id),
     ...jubilee.jubileeAbilityOptions(s, id, jubileePorts),
+    ...nickFury.nickFuryAbilityOptions(s, id, nickFuryPorts),
     ...cable.cableAbilityOptions(s, id, cablePorts),
     ...x23.x23AbilityOptions(s, id, x23Ports),
     ...deadpool.deadpoolAbilityOptions(s, id, deadpoolPorts),
@@ -12499,6 +13030,16 @@ const msPorts: MsMarvelPorts = {
     need(p, "The ally is no longer in play.");
     if (p!.id === sabretooth.sabretoothKelly(s)?.id || p!.code === "32088b") {
       movePieceFromPlay(s, id, false);
+      if (p && !s.flags.nickDiscardingPreparation) {
+        const owner = p.ownerId || s.activePlayerId;
+        const view = seatView(s, owner);
+        add(
+          s,
+          ...nickFury
+            .nickFuryPracticedPlan(view, p)
+            .map((q) => ({ ...q, actorId: owner })),
+        );
+      }
       return;
     }
     const owner = s.players.find((seat) => seat.id === p!.ownerId);
@@ -14611,10 +15152,12 @@ const masterMoldPorts: masterMold.MasterMoldPorts = {
   putMagneto: (s, p, playerId) => {
     Object.assign(p, resetPiece(p, true));
     delete p.ownerId;
-    need(
-      !uniqueConflict(s, card(p)),
-      "The unique Magneto ally is already in play.",
-    );
+    if (uniqueConflict(s, card(p))) {
+      // RRG 1.8, p.46: an effect putting a matching unique player card into
+      // play has no effect. Keep this actual, ownerless setup card set aside.
+      (seatView(s, playerId).player.setAside ||= []).push(p);
+      return;
+    }
     seatView(s, playerId).player.inPlay.push(p);
     add(s, E("allyEnter", { id: p.id, actorId: playerId, fromHand: false }));
   },
@@ -15189,6 +15732,18 @@ function minionEntered(s: GameState, p: Piece) {
     giveCharacterStatus(s, p, "tough");
   if (underlying) p.droneCard = underlying;
   p.engagedWith = s.activePlayerId;
+  for (const seat of s.players) {
+    const view = seatView(s, seat);
+    const pendingMinionCost = view.flags.nightcrawlerMinionCostPending;
+    if (typeof pendingMinionCost !== "string") continue;
+    const receipt = JSON.parse(pendingMinionCost) as {
+      eventId: string;
+      playerId: string;
+    };
+    view.flags[`nightcrawlerMinionCostPaid:${receipt.eventId}`] =
+      p.engagedWith === receipt.playerId;
+    view.flags[`nightcrawlerMinionCostMinion:${receipt.eventId}`] = p.id;
+  }
   s.resolving = s.resolving.filter((x) => x.id !== p.id);
   log(
     s,
@@ -15968,9 +16523,14 @@ function niNativeAchievement(
     }),
   );
 }
+function globalMagnetoHeroAttackAllowed(s: GameState, id: string) {
+  return magnetoHero.magnetoHeroCanAttack(s, id, "enemy");
+}
 function niAllyTargets(s: GameState, p: Piece, kind: "attack" | "thwart") {
-  return niAllyTargetsRaw(s, p, kind).filter(
-    (t) => kind !== "thwart" || jubilee.jubileeCanRemoveThreat(s, t.id, p.id),
+  return niAllyTargetsRaw(s, p, kind).filter((t) =>
+    kind === "attack"
+      ? magnetoHero.magnetoHeroCanAttack(s, t.id, p.id)
+      : jubilee.jubileeCanRemoveThreat(s, t.id, p.id),
   );
 }
 function niAllyTargetsRaw(s: GameState, p: Piece, kind: "attack" | "thwart") {
@@ -16352,6 +16912,7 @@ const ironheartPorts: ironheart.IronheartPorts = {
     removeEncounterInstance(s, p.id);
     p.dealtTo = playerId;
     s.encounter.dealt.push(p);
+    add(s, ...nickFury.nickFuryDealt(s));
   },
   enemyScheme: (s, id, continuation) =>
     add(
@@ -16747,9 +17308,13 @@ const nebulaPorts: nebula.NebulaPorts = {
         ...angel.angelCardEntered(s, p),
         ...cable.cableCardEntered(s, p),
         ...magik.magikEntered(s, p),
+        ...(card(p).type_code === "ally"
+          ? []
+          : magnetoHero.magnetoHeroEntered(s, p, magnetoHeroPorts)),
         ...x23.x23Entered(s, p),
         ...bishop.bishopEntered(s, p),
         ...iceman.icemanEntered(s, p),
+        ...mariaHill.mariaHillEntered(s, p),
         ...deadpool.deadpoolCardEntered(s, p),
         ...cyclops.cyclopsCardEntered(s, p),
         ...wolverine
@@ -17237,7 +17802,13 @@ export function nativeCanPutIntoPlay(s: GameState, p: Piece) {
 }
 function nativePutAttachmentTargets(s: GameState, p: Piece) {
   const native =
+    nightcrawler.nightcrawlerAttachmentTargets(s, p, nightcrawlerPorts) ??
     bishop.bishopAttachmentTargets(s, p, bishopPorts) ??
+    (p.code === "49007"
+      ? s.minions
+          .filter((m) => !captainPackHasTrait(s, m.id, "Elite"))
+          .map((m) => ({ id: m.id, label: card(m).name, code: m.code }))
+      : null) ??
     iceman.icemanAttachmentTargets(s, p, icemanPorts) ??
     x23.x23AttachmentTargets(s, p, x23Ports) ??
     cyclops.cyclopsAttachmentTargets(s, p, cyclopsPorts) ??
@@ -17339,9 +17910,13 @@ export function nativePutIntoPlay(
     ...angel.angelCardEntered(s, p),
     ...cable.cableCardEntered(s, p),
     ...magik.magikEntered(s, p),
+    ...(card(p).type_code === "ally"
+      ? []
+      : magnetoHero.magnetoHeroEntered(s, p, magnetoHeroPorts)),
     ...x23.x23Entered(s, p),
     ...bishop.bishopEntered(s, p),
     ...iceman.icemanEntered(s, p),
+    ...mariaHill.mariaHillEntered(s, p),
     ...deadpool.deadpoolCardEntered(s, p),
     ...cyclops.cyclopsCardEntered(s, p),
     ...phoenix.phoenixCardEntered(s, p),
@@ -17730,6 +18305,182 @@ const angelPorts: angel.AngelPorts = {
   dealEncounter,
 };
 
+const nightcrawlerPorts: nightcrawler.NightcrawlerPorts = {
+  damageBatch: spectrumPorts.damageBatch,
+  queue: add,
+  choose,
+  find,
+  enemies: (s, attack) => targets(s, "enemy", attack),
+  schemes: (s, thwart) => targets(s, "scheme", false, thwart),
+  characters: warMachinePackPorts.characters,
+  hasTrait: captainPackHasTrait,
+  characterThwart: (s, id) => {
+    const p = find(s, id);
+    return p && card(p).thwart === null && !card(p).thwart_star
+      ? 0
+      : valkyriePackPorts.characterThwart(s, id);
+  },
+  exhaust: warMachinePackPorts.exhaustCharacter,
+  canPay: (s, p) => canPay(s, cardCost(s, card(p), p), [], p.id, p.code),
+  canDiscard: (s, p) =>
+    !isPermanent(card(p)) && valkyrie.valkyrieCanDiscardAttachment(s, p),
+  canAttach: playerAttachmentTarget,
+  discard: discardPiece,
+  discardHand,
+  shuffle: (s) => {
+    revealHidden(s);
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  hidden: revealHidden,
+  reaction: gambitPorts.reaction,
+  pay: (s, title, cost, after) =>
+    requestPayment(
+      s,
+      title,
+      cost,
+      after,
+      [],
+      undefined,
+      true,
+      undefined,
+      true,
+      [],
+      false,
+      false,
+      false,
+      true,
+    ),
+  canDefend: (s) =>
+    !!s.attack &&
+    !attackTargetsEnemy(s, s.attack) &&
+    s.player.form === "hero" &&
+    vision.visionCanDefend(s) &&
+    shadowcat.shadowcatCanDefend(s) &&
+    !armadillo.armadilloDefenseBlocked(s, s.attack.attacker) &&
+    !magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank }),
+  bamfDefend: (s, after) => {
+    need(
+      nightcrawlerPorts.canDefend(s),
+      "Nightcrawler cannot defend this attack.",
+    );
+    const a = s.attack!;
+    need(
+      !a.defender || a.defender === "none",
+      "Another character already defends this attack.",
+    );
+    a.defender = "hero";
+    a.targetPlayerId = s.activePlayerId;
+    a.basicDefense = true;
+    a.eventDefense = true;
+    a.defense = heroStats(s).defense + (a.defenseBonus || 0);
+    log(s, "Bamf!: Nightcrawler defends without exhausting.");
+    add(s, E("defender", { id: "hero", withoutExhaust: true }), ...after);
+  },
+  cancelBoost: (s, id) => {
+    bwPorts.cancelBoostIcons(s, id);
+  },
+  numericBoost: bwPorts.numericBoostIcons,
+  canDamageCost: (s, id) => spdrPackPorts.canDealDamageCost(s, id, 1),
+  damageCost: (s, id, after) =>
+    spdrPackPorts.dealDamageCost(s, id, 1, id, after),
+  canChange: (s) =>
+    canChangeIdentityForm(s, s.player.form === "hero" ? "alter" : "hero"),
+  canReady: (s) => s.player.exhausted && canReadyIdentity(s),
+  ready: readyIdentity,
+  discardEncounterTop: (s) => mutagenPorts.discardTop(s).piece,
+  distributeThwart: (s, packets, after) => {
+    if (!packets.length) {
+      add(s, ...after);
+      return;
+    }
+    const before = new Set(s.queue);
+    waspPorts.thwartDistribution(s, packets);
+    const generated = s.queue.filter((q) => !before.has(q));
+    s.queue = s.queue.filter((q) => before.has(q));
+    add(s, ...generated, ...after);
+  },
+  distributeDamage: (s, packets) => {
+    if (packets.length)
+      niAttackProgram(
+        s,
+        [E("waspDistributedAttack", { packets, basic: false })],
+        [],
+      );
+  },
+};
+
+const nightcrawlerEncounterPorts: nightcrawlerEncounter.NightcrawlerEncounterPorts =
+  {
+    queue: add,
+    choose,
+    find,
+    makePiece,
+    hidden: revealHidden,
+    shuffleEncounter: mutagenPorts.shuffleEncounter,
+    discardHand,
+    discard: discardPiece,
+    discardEncounterControlled,
+    canDiscard: nightcrawlerPorts.canDiscard,
+    removeEncounter: removeEncounterInstance,
+    takeMinion: (s, p) => {
+      movePieceFromPlay(s, p.id, true, undefined, false, true);
+      for (const zone of [
+        s.removed,
+        s.encounter.discard,
+        ...s.players.map((seat) => seatView(s, seat).player.discard),
+      ]) {
+        const i = zone.findIndex((q) => q.id === p.id);
+        if (i >= 0) return zone.splice(i, 1)[0];
+      }
+      return undefined;
+    },
+    attach: (s, p, target) => {
+      removeEncounterInstance(s, p.id);
+      mutagenPorts.attach(s, p, target);
+    },
+    dealEncounter: (s, playerId) => {
+      dealEncounter(s, playerId);
+    },
+    canChangeToAlter: (s) => canChangeIdentityForm(s, "alter"),
+    random: (s, upper) => Math.floor(random(s) * upper),
+    characters: (s) =>
+      warMachinePackPorts.characters(s).map((t) => ({
+        ...t,
+        remainingHP: t.id.startsWith("hero:")
+          ? seatView(s, t.playerId).player.hp
+          : pieceHP(s, find(s, t.id)!) - find(s, t.id)!.damage,
+      })),
+    revealExistingMinion: (s, p, playerId) => {
+      const changed = p.engagedWith !== playerId;
+      p.engagedWith = playerId;
+      if (changed) {
+        const original = s.activePlayerId;
+        activateSeat(s, playerId);
+        add(
+          s,
+          ...masterMold.masterMoldMinionEngaged(
+            s,
+            { token: `engagement:${s.nextId++}`, minionId: p.id, playerId },
+            { isTextBlank },
+          ),
+          ...rogue.rogueMinionEngaged(s, p),
+          ...acolytes.acolytesEngaged(s, p),
+          ...ironspider.ironspiderSinisterEngagementResponses(s, p),
+          ...spiderHam.spiderHamMinionEngaged(s, p),
+          E("valkPackEngagementWindow", { id: p.id }),
+          ...thorEngagementResponses(s, p),
+        );
+        activateSeat(s, original);
+        if (
+          keyword(p, "Quickstrike", s) &&
+          seatView(s, playerId).player.form === "hero"
+        )
+          add(s, E("enemyAttack", { id: p.id, actorId: playerId }));
+      }
+    },
+    discardEncounterTop: nightcrawlerPorts.discardEncounterTop,
+  };
+
 const bishopPorts: bishop.BishopPorts = {
   queue: add,
   choose,
@@ -17777,6 +18528,190 @@ const bishopPorts: bishop.BishopPorts = {
     s.queue = s.queue.filter((e) => before.has(e));
     add(s, ...generated, { ...after, discarded });
   },
+};
+
+const magnetoHeroPorts: magnetoHero.MagnetoHeroPorts = {
+  queue: add,
+  choose,
+  find,
+  makePiece,
+  targets: (s, group, action) =>
+    targets(
+      s,
+      group,
+      group === "enemy" && !!action,
+      group === "scheme" ? !!action : true,
+    ),
+  hasTrait: captainPackHasTrait,
+  discard: discardPiece,
+  discardEncounterControlled,
+  canDiscard: (s, p) =>
+    !isPermanent(card(p)) && valkyrie.valkyrieCanDiscardAttachment(s, p),
+  discardCost: (s, id, after) => {
+    const p = find(s, id);
+    if (!p) return;
+    if (card(p).faction_code !== "encounter") {
+      zzzaxPorts.discardControlledCost(
+        s,
+        id,
+        E("magnetoHero:continue", { after }),
+      );
+      return;
+    }
+    const before = new Set(s.queue);
+    discardPiece(s, id);
+    const generated = s.queue.filter((e) => !before.has(e));
+    s.queue = s.queue.filter((e) => before.has(e));
+    add(s, ...generated, ...(!find(s, id) ? after : []));
+  },
+  discardTop: discardNativePlayerTop,
+  discardEncounterTop: mutagenPorts.discardTop,
+  mill,
+  takeDiscarded: (s, id) => {
+    for (const zone of [s.player.discard, s.player.deck]) {
+      const i = zone.findIndex((p) => p.id === id);
+      if (i >= 0) return zone.splice(i, 1)[0];
+    }
+  },
+  shuffle: (s) => {
+    s.player.deck = shuffle(s, s.player.deck);
+    revealHidden(s);
+  },
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  hidden: revealHidden,
+  feedback: domino.dominoFeedback,
+  canReady: (s) => s.player.exhausted && canReadyIdentity(s),
+  ready: (s) => {
+    readyIdentity(s);
+  },
+  maxHP: pieceHP,
+  heroMaxHP: maxHP,
+  allyPower: allyStat,
+  canPay,
+  cost: (s, p) => cardCost(s, card(p), p),
+  pay: (s, title, cost, req, after) =>
+    requestPayment(
+      s,
+      title,
+      cost,
+      after,
+      req,
+      undefined,
+      true,
+      undefined,
+      false,
+      [],
+      false,
+      false,
+      false,
+      true,
+    ),
+  reaction: (s, p, effects, after, commit = []) => {
+    requestPayment(
+      s,
+      card(p).name,
+      cardCost(s, card(p), p),
+      [
+        E("resolveHandEvent", {
+          id: p.id,
+          after: effects,
+          continuation: after,
+        }),
+      ],
+      [],
+      p,
+      true,
+      p.code,
+      false,
+      commit,
+    );
+    if (s.prompt?.cancelable)
+      s.prompt.cancellationQueue = [...after, ...s.queue];
+  },
+  canPlayAlly: (s, p, discount) =>
+    card(p).type_code === "ally" &&
+    antPackPorts.playableWithDiscount(s, p, discount),
+  playAlly: (s, p, discount) => antPackPorts.playFromHand(s, p.id, discount),
+  putMinion: (s, p, playerId, after) => {
+    const before = new Set(s.queue);
+    mutagenPorts.putMinion(s, p, playerId);
+    const generated = s.queue.filter((e) => !before.has(e));
+    s.queue = s.queue.filter((e) => before.has(e));
+    add(s, ...generated, ...after);
+  },
+  defeat: (s, id, source) => {
+    const p = find(s, id);
+    if (p) defeatCharacter(s, p, source);
+  },
+  keepObligation: gambitPorts.keepObligation,
+  reveal: (s, p) => {
+    removeEncounterInstance(s, p.id);
+    add(s, E("reveal", { piece: p }));
+  },
+  revealNemesis: (s, p, after) => {
+    for (const seat of s.players) {
+      const reserve = seatView(s, seat).player.setAside || [];
+      const i = reserve.findIndex((q) => q.id === p.id);
+      if (i >= 0) reserve.splice(i, 1);
+    }
+    removeEncounterInstance(s, p.id);
+    mutagenPorts.shuffleEncounter(s);
+    add(s, E("reveal", { piece: p }), ...after);
+  },
+  canActivate: (s, p) =>
+    !magnetoHero.magnetoHeroWrapped(s, p.id) &&
+    phoenix.phoenixCanActivate(s, p.id) &&
+    !allInPlay(s).some(
+      (q) => q.code === "44054" && q.attachedTo === p.id && !isTextBlank(s, q),
+    ),
+  activate: (s, id, playerId, after, omitBoost) => {
+    const p = find(s, id);
+    if (!p || !magnetoHeroPorts.canActivate(s, p)) {
+      if (after) add(s, { ...after, performed: false });
+      return;
+    }
+    const outerAttack = s.attack,
+      outerScheme = s.scheming,
+      previous = s.activePlayerId;
+    s.attack = null;
+    delete s.scheming;
+    activateSeat(s, playerId);
+    const completion = E("magnetoHeroActivationFinish", {
+      outerAttack,
+      outerScheme,
+      after,
+      actorId: previous,
+    });
+    const request: MutagenActivation = {
+      enemyId: id,
+      playerId,
+      kind: s.player.form === "hero" ? "attack" : "scheme",
+      modifier: 0,
+      after: completion,
+      omitNormalBoost: omitBoost,
+    };
+    if (request.kind === "attack") enemyAttack(s, id, undefined, request);
+    else enemyScheme(s, id, undefined, request);
+  },
+  assignBoost: (s, id, p) => {
+    const enemy = find(s, id),
+      actual = p || drawEncounter(s);
+    if (!enemy || !actual) return;
+    removeEncounterInstance(s, actual.id);
+    (enemy.inheritorBoosts ||= []).push(resetPiece(actual));
+  },
+  repeatActivation: (s, after) => {
+    const a = s.scheming || s.attack;
+    if (!a) return;
+    const original = a.activationAfter;
+    a.activationAfter = {
+      ...after,
+      enemy: a.attacker,
+      player: s.activePlayerId,
+      after: original,
+    };
+  },
+  batch: spectrumPorts.damageBatch,
 };
 
 const magikPorts: magik.MagikPorts = {
@@ -17918,6 +18853,82 @@ function icemanWallOrderWindow(s: GameState, packet: Effect, amount: number) {
   return true;
 }
 
+const mariaHillPorts: mariaHill.MariaHillPorts = {
+  queue: add,
+  choose,
+  find,
+  makePiece,
+  hasTrait: sinisterNativeHasTrait,
+  enemies: (s) => targets(s, "enemy", false),
+  schemes: (s) => targets(s, "scheme", false, false),
+  characters: (s) => targets(s, "controlled"),
+  canStatus: quicksilverPorts.canGiveStatus,
+  canReady: (s, id) =>
+    id === "hero"
+      ? canReadyIdentity(s)
+      : id.startsWith("hero:")
+        ? canReadyIdentity(seatView(s, id.slice(5)))
+        : !!find(s, id)?.exhausted &&
+          nova.novaCanReadyPiece(s, find(s, id)!, { isTextBlank }) &&
+          warMachinePackPorts.canReady(s, id),
+  ready: (s, id) => {
+    if (id === "hero") readyIdentity(s);
+    else if (id.startsWith("hero:")) readyIdentity(seatView(s, id.slice(5)));
+    else {
+      const p = find(s, id);
+      if (p && nova.novaCanReadyPiece(s, p, { isTextBlank }))
+        p.exhausted = false;
+    }
+  },
+  discard: discardPiece,
+  remove: (s, id) => movePieceFromPlay(s, id, true),
+  discardHand,
+  shuffle: (s) => {
+    revealHidden(s);
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  recycle: recyclePlayer,
+  hidden: revealHidden,
+  canPut: nativeCanPutIntoPlay,
+  put: (s, p, playerId) => {
+    const actor = s.activePlayerId;
+    for (const seat of s.players) {
+      const zone = seatView(s, seat).player.hand;
+      const i = zone.findIndex((q) => q.id === p.id);
+      if (i >= 0) zone.splice(i, 1);
+    }
+    activateSeat(s, playerId);
+    nativePutIntoPlay(s, p);
+    activateSeat(s, actor);
+  },
+  requestPayment: (s, title, cost, requirements, after) =>
+    requestPayment(s, title, cost, after, requirements, undefined, false),
+  restorePayment: (s, payment, queue, actorId) => {
+    if (actorId) activateSeat(s, actorId);
+    s.prompt = payment;
+    s.queue = queue;
+  },
+  canPay: (s, cost, requirements) => canPay(s, cost, requirements),
+  allyAttack: (s, p) => allyStat(s, p, "attack"),
+  keepObligation: gambitPorts.keepObligation,
+  cancelReveal: (s, p, after) => {
+    dominoPorts.cancelReveal(s, p);
+    add(s, ...after);
+  },
+  drawEncounter,
+  removeTough: (s, id) => {
+    const p = find(s, id);
+    if (p)
+      colossusNativeDiscardTough(
+        s,
+        [{ targetId: id, amount: statusCards(p, "tough") }],
+        [],
+      );
+  },
+  batch: spectrumPorts.damageBatch,
+};
+
 const icemanPorts: iceman.IcemanPorts = {
   characters: (s) => targets(s, "controlled"),
   queue: add,
@@ -17959,6 +18970,113 @@ const icemanPorts: iceman.IcemanPorts = {
   activate: (s, id) =>
     add(s, E(s.player.form === "hero" ? "enemyAttack" : "enemyScheme", { id })),
   batch: spectrumPorts.damageBatch,
+};
+
+function nickDiscardPreparation(s: GameState, id: string) {
+  s.flags.nickDiscardingPreparation = true;
+  try {
+    discardPiece(s, id);
+  } finally {
+    delete s.flags.nickDiscardingPreparation;
+  }
+}
+const nickFuryPorts: nickFury.NickFuryPorts = {
+  watchPaymentValid: (s, p, ids, id, count) => {
+    const sources = paymentSources(
+      s,
+      p.card?.id,
+      p.paymentTarget,
+      p.handOnly,
+      p.alliance,
+    ).map((source) =>
+      source.id === id
+        ? { ...source, resources: Array<Resource>(count).fill("mental") }
+        : source,
+    );
+    return (
+      ids.every((id) => sources.some((source) => source.id === id)) &&
+      paymentStatus(
+        sources,
+        ids,
+        p.cost || 0,
+        p.requirements,
+        p.retainOneOfIds,
+        p.sourceRequirement,
+        p.retainAlternatives,
+      ).ready
+    );
+  },
+  queue: add,
+  choose,
+  find,
+  makePiece,
+  hasTrait: captainPackHasTrait,
+  enemies: (s, a) => targets(s, "enemy", a),
+  schemes: (s, t) => targets(s, "scheme", false, t),
+  characters: (s) => [
+    ...playerOrder(s).flatMap((seat) => {
+      const v = seatView(s, seat);
+      return [
+        {
+          id: seat.id === s.activePlayerId ? "hero" : `hero:${seat.id}`,
+          label: heroCard(v).name,
+          code: heroCard(v).code,
+        },
+        ...v.player.inPlay
+          .filter((p) => card(p).type_code === "ally" || p.treatedAsAlly)
+          .map((p) => ({ id: p.id, label: card(p).name, code: p.code })),
+      ];
+    }),
+    ...[s.villain, ...s.minions].map((p) => ({
+      id: p.id,
+      label: card(p).name,
+      code: p.code,
+    })),
+  ],
+  canReady: canReadyIdentity,
+  canStatus: quicksilverPorts.canGiveStatus,
+  maxHP,
+  discard: nickDiscardPreparation,
+  shuffle: (s) => {
+    revealHidden(s);
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  revealHidden,
+  putMinion: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    p.engagedWith = playerId;
+    delete p.dealtTo;
+    s.minions.push(p);
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    minionEntered(s, p);
+    activateSeat(s, previous);
+  },
+  cancelReveal: bwPorts.cancelEncounter,
+  prevent: bwPorts.preventDamage,
+  preparationsResolved: (s, p, after) =>
+    blackWidowPreparationResolved(
+      s,
+      p,
+      nickFury.nickFuryPreparationResolved(s, p, after),
+    ),
+  attackProgram: bwPorts.attackProgram,
+  changeForm: (s) => {
+    add(s, ...wolverine.wolverineFormChanged(s));
+    if (
+      antPack.antManPackFormResponseOptions(s, antPackPorts).length ||
+      waspPack.waspPackFormResponseOptions(s, waspPackPorts).length
+    )
+      add(s, E("antFormResponses", { responses: [] }));
+    if (
+      mtsPlayerPack.mtsPlayerPackFormResponseOptions(s, [], mtsPlayerPackPorts)
+        .length
+    )
+      add(s, E("mtsPackFormResponses"));
+  },
+  changeCounters: (s, p, amount) =>
+    mariaHill.mariaHillChangeCounters(s, p, amount, mariaHillPorts),
 };
 
 const jubileePorts: jubilee.JubileePorts = {
@@ -18675,6 +19793,7 @@ const mutantGenesisPackPorts: mgPack.MutantGenesisPlayerPackPorts = {
       !seat.eliminated &&
       !p.exhausted &&
       card(p).type_code === "ally" &&
+      (p.code !== "50022" || isTextBlank(s, p)) &&
       !armadillo.armadilloDefenseBlocked(s, r.attackerId)
     );
   },
@@ -18716,6 +19835,16 @@ const mutantGenesisPackPorts: mgPack.MutantGenesisPlayerPackPorts = {
     s.flags[`spiderHamReturnHand:${id}`] = p!.ownerId || seat!.id;
     if (s.attack?.defender === id) s.attack.gmwReturnedDefender = id;
     movePieceFromPlay(s, id, false);
+    if (p && !s.flags.nickDiscardingPreparation) {
+      const owner = p.ownerId || s.activePlayerId;
+      const view = seatView(s, owner);
+      add(
+        s,
+        ...nickFury
+          .nickFuryPracticedPlan(view, p)
+          .map((q) => ({ ...q, actorId: owner })),
+      );
+    }
     delete s.flags[`niLeaveCommitted:${id}`];
     const generated = s.queue.filter((q) => !before.has(q));
     s.queue = s.queue.filter((q) => before.has(q));
@@ -18731,6 +19860,16 @@ const mutantGenesisPackPorts: mgPack.MutantGenesisPlayerPackPorts = {
     // Leave without defeat, retaining this physical minion and discarding its
     // actual attached player/encounter cards through their ordinary cleanup.
     movePieceFromPlay(s, id, false);
+    if (p && !s.flags.nickDiscardingPreparation) {
+      const owner = p.ownerId || s.activePlayerId;
+      const view = seatView(s, owner);
+      add(
+        s,
+        ...nickFury
+          .nickFuryPracticedPlan(view, p)
+          .map((q) => ({ ...q, actorId: owner })),
+      );
+    }
     delete s.flags[`niLeaveCommitted:${id}`];
     if (ownedCard) {
       // Official Magik ruling #175 and RRG1.8 Ownership and Control: a player
@@ -18904,6 +20043,11 @@ function mutantGenesisAttackOptions(
       )
       .filter((o) => !a.angelTauntPlayerId || o.image !== "32017");
     opts.push(...magik.magikAttackOptions(view, stage, after, magikPorts));
+    if (
+      stage === "attacks" &&
+      seat.id === (a.targetPlayerId || s.activePlayerId)
+    )
+      opts.push(...mariaHill.mariaHillLmdOptions(view, after));
     if (stage === "attacks")
       opts.push(
         ...angel.angelDefenseOptions(view, after, angelPorts),
@@ -19075,6 +20219,7 @@ function enemyAttack(
   colossusActivationReceipt?: colossus.ColossusActivationReceipt,
 ) {
   if (
+    magnetoHero.magnetoHeroWrapped(s, id) ||
     !phoenix.phoenixCanActivate(s, id) ||
     allInPlay(s).some(
       (p) => p.code === "44054" && p.attachedTo === id && !isTextBlank(s, p),
@@ -19135,6 +20280,17 @@ function enemyAttack(
     );
     log(s, `${card(p).name} loses stunned instead of attacking.`);
     canceled();
+    return;
+  }
+  if (!friendlySource && !originalTarget && nickFury.nickFuryStealth(s)) {
+    enemyScheme(s, id, extra, {
+      ...activation,
+      enemyId: id,
+      playerId: s.activePlayerId,
+      kind: "scheme",
+      modifier: activation?.modifier || 0,
+      nickStealthSuit: nickFury.nickFurySuit(s)!.id,
+    });
     return;
   }
   if (
@@ -19366,6 +20522,7 @@ function abortAttack(s: GameState) {
     s,
     ...antMan.antManEnemyActivated(s, a.attacker),
     ...iceman.icemanActivated(s, a.attacker),
+    ...mariaHill.mariaHillActivation(s, a.attacker),
     ...iceman.icemanAfterAttack(s, a.id),
     ...armadillo
       .armadilloActivationResponses(s, a.attacker)
@@ -19501,7 +20658,10 @@ function declareDefense(s: GameState) {
         ),
       );
     for (const ally of friends(view).filter(
-      (p) => !p.exhausted && !a.angelTauntPlayerId,
+      (p) =>
+        !p.exhausted &&
+        !a.angelTauntPlayerId &&
+        (p.code !== "50022" || isTextBlank(s, p)),
     ))
       opts.push(
         option(
@@ -19532,12 +20692,29 @@ function declareDefense(s: GameState) {
   );
 }
 function boostEffects(s: GameState, p: Piece) {
+  const nightcrawlerBoost = nightcrawlerEncounter.nightcrawlerEncounterBoost(
+    s,
+    p,
+  );
+  if (nightcrawlerBoost !== null) {
+    add(s, ...nightcrawlerBoost);
+    return;
+  }
+  const magnetic = magnetoHero.magnetoHeroBoost(s, p);
+  if (magnetic !== null) {
+    add(s, ...magnetic);
+    return;
+  }
   const icy = iceman.icemanBoost(s, p);
   if (icy !== null) {
     add(s, ...icy);
     return;
   }
   if (!s.scheming && s.attack?.angelIgnoreBoosts) return;
+  if (p.code === "50063") {
+    add(s, E("damage", { target: "hero", amount: 1, source: p.id }));
+    return;
+  }
   const magikBoost = magik.magikBoost(s, p);
   if (magikBoost !== null) {
     add(s, ...magikBoost);
@@ -19800,6 +20977,7 @@ function enemyScheme(
   colossusActivationReceipt?: colossus.ColossusActivationReceipt,
 ) {
   if (
+    magnetoHero.magnetoHeroWrapped(s, id) ||
     !phoenix.phoenixCanActivate(s, id) ||
     allInPlay(s).some(
       (p) => p.code === "44054" && p.attachedTo === id && !isTextBlank(s, p),
@@ -19876,6 +21054,39 @@ function enemyScheme(
     );
     return;
   }
+  if (!request?.nickInformantHandled && s.minions.some((q) => q.id === id)) {
+    const next = E("ghostNativeEnemyScheme", {
+      id,
+      extra,
+      request: {
+        ...request,
+        enemyId: id,
+        playerId: s.activePlayerId,
+        kind: "scheme",
+        modifier: request?.modifier || 0,
+        nickInformantHandled: true,
+      },
+      colossusActivationHandled: true,
+    });
+    const options = playerOrder(s).flatMap((seat) =>
+      nickFury
+        .nickFurySchemeOptions(seatView(s, seat), id, [next])
+        .map((o) => ({
+          ...o,
+          id: `${seat.id}:${o.id}`,
+          effects: o.effects.map((q) => ({ ...q, actorId: seat.id })),
+        })),
+    );
+    if (options.length) {
+      choose(
+        s,
+        "Minion schemes",
+        "Use Informant to remove threat with this activation?",
+        [...options, option("continue", "Continue scheme", [next])],
+      );
+      return;
+    }
+  }
   const moldReceipt: masterMold.MasterMoldSchemeReceipt = {
     token: `scheme${s.nextId++}`,
     enemyId: id,
@@ -19902,6 +21113,8 @@ function enemyScheme(
   }
   s.scheming = {
     id: moldReceipt.token,
+    nickStealthSuit: request?.nickStealthSuit,
+    nickInformant: !!s.flags[`nickInformant:${id}`],
     attacker: id,
     boostCodes: [],
     boostIds: [],
@@ -19977,6 +21190,15 @@ export function enemyStats(
     scheme: Math.max(0, enemySCH(s, p, playerId)),
   };
 }
+function nickStealthPlacement(s: GameState, e: Effect) {
+  if (!e.nickStealthSuit || e.nickStealthHandled || e.target !== "main") return;
+  const suit = find(s, e.nickStealthSuit);
+  if (suit && suit.counters <= 5 && e.amount > 0) {
+    suit.counters++;
+    e.amount--;
+  }
+  e.nickStealthHandled = true;
+}
 function finishScheme(s: GameState) {
   const activation = s.scheming;
   if (!activation) return;
@@ -19998,19 +21220,26 @@ function finishScheme(s: GameState) {
   log(s, `${card(p).name} schemes for ${amount} threat.`, "bad");
   activation.threatBefore = s.stats?.threatPlaced || 0;
   const after = [
-    E(s.flags[`phoenixManipulation:${activation.id}`] ? "thwart" : "threat", {
-      target:
-        p.code === "44033" &&
-        !isTextBlank(s, p) &&
-        s.sideSchemes.some((q) => q.code === "44034")
-          ? s.sideSchemes.find((q) => q.code === "44034")!.id
-          : phoenix.phoenixSchemeTarget(s, p),
-      amount:
-        amount +
-        Number(s.flags[`phoenixManipulationBonus:${activation.id}`] || 0),
-      additional: !!s.flags[`phoenixManipulation:${activation.id}`],
-      ignoreCrisis: true,
-    }),
+    E(
+      s.flags[`phoenixManipulation:${activation.id}`] ||
+        activation.nickInformant
+        ? "thwart"
+        : "threat",
+      {
+        nickStealthSuit: activation.nickStealthSuit,
+        target:
+          p.code === "44033" &&
+          !isTextBlank(s, p) &&
+          s.sideSchemes.some((q) => q.code === "44034")
+            ? s.sideSchemes.find((q) => q.code === "44034")!.id
+            : phoenix.phoenixSchemeTarget(s, p),
+        amount:
+          amount +
+          Number(s.flags[`phoenixManipulationBonus:${activation.id}`] || 0),
+        additional: !!s.flags[`phoenixManipulation:${activation.id}`],
+        ignoreCrisis: true,
+      },
+    ),
     ...(extra === "rage" ? [E("mill", { amount })] : []),
     ...(id === s.villain.id && villainAt(s, "01141").length
       ? s.sideSchemes.map((p) => E("threat", { target: p.id, amount: 1 }))
@@ -20033,11 +21262,20 @@ function finishScheme(s: GameState) {
       : []),
     ...antMan.antManEnemyActivated(s, id),
     ...iceman.icemanActivated(s, id),
+    ...mariaHill.mariaHillActivation(s, id),
     ...armadillo.armadilloActivationResponses(s, id).flatMap((r) => r.effects),
     ...spectrum.spectrumEnemyActivated(s, p, s.activePlayerId, spectrumPorts),
+    ...nightcrawlerEncounter.nightcrawlerEncounterMinionSchemed(
+      s,
+      id,
+      s.activePlayerId,
+    ),
     ...(activation.afterActivation || []),
     ...activation.boostIds.map((id) => E("finishResolution", { id })),
     E("scarletEnemyActivated", { id }),
+    ...(p.code === "50062" && !isTextBlank(s, p)
+      ? [E("damage", { target: "hero", amount: 1, source: p.id })]
+      : []),
     E("bwMinionSchemeResponses", { id }),
     E("endScheme"),
   ];
@@ -20627,6 +21865,7 @@ function finishAttackAfterDamage(
     }),
     ...antMan.antManEnemyActivated(s, a.attacker),
     ...iceman.icemanActivated(s, a.attacker),
+    ...mariaHill.mariaHillActivation(s, a.attacker),
     ...iceman.icemanAfterAttack(s, a.id),
     ...(a.afterActivation || []),
     ...(a.visionAfterAttack || []),
@@ -20669,6 +21908,7 @@ function finishAttackAfterDamage(
       {
         receipt: zeroReceipt,
         responses: [
+          ...nightcrawler.nightcrawlerDelayedResponses(s, a),
           ...bishop.bishopEnemyAttackFinished(s, a).map((effect, i) => ({
             id: `${a.id}:bishop-after:${i}`,
             sourceId: a.attacker,
@@ -20847,7 +22087,9 @@ function finishAttackAfterDamage(
       },
     ),
     ...rogue.rogueAfterEnemyAttack(s, a.attacker),
+    ...nightcrawlerEncounter.nightcrawlerEncounterAttackComplete(s, a),
     ...jubilee.jubileeEnemyAttacked(s, p, a.originalPlayerId || recipientId),
+    ...magnetoHero.magnetoHeroEnemyAttackFinished(s, p, recipientId, a.base),
     ...a.boostEffects,
     ...(a.boostIds || []).map((id) => E("finishResolution", { id })),
     E("scarletEnemyActivated", {
@@ -20883,6 +22125,7 @@ function finishAttackAfterDamage(
         heroDamage: a.identityDamage || 0,
         heroDefended: target === "hero" && a.defender !== "none",
         basicDefense: !!a.basicDefense,
+        defenderDamage: a.damage,
         neverBackDownCount:
           (a as typeof a & { neverBackDownCount?: number })
             .neverBackDownCount || 0,
@@ -21001,6 +22244,7 @@ function reveal(
           })),
       );
     opts.push(...angel.angelRevealOptions(s, p, angelPorts));
+    opts.push(...mariaHill.mariaHillTeamOptions(s, p, [], mariaHillPorts));
     for (const seat of playerOrder(s))
       opts.push(
         ...x23
@@ -21025,6 +22269,7 @@ function reveal(
             effects: o.effects.map((q) => ({ ...q, actorId: seat.id })),
           })),
       );
+    opts.push(...nickFury.nickFuryRevealOptions(s, p));
     const revealing = s.activePlayerId;
     for (const seat of playerOrder(s))
       opts.push(
@@ -21296,6 +22541,21 @@ function reveal(
     dealEncounter(s);
     return;
   }
+  if (!repeat && p.code === "50059") {
+    const holder = playerOrder(s).find((seat) => seat.heroId === "nick_fury");
+    if (holder) spectrumPorts.giveObligation(s, p, holder.id);
+    add(
+      s,
+      ...beginRevealWindow(
+        s,
+        p,
+        revealCard,
+        holder?.id || s.activePlayerId,
+        1 + goblinWhenRevealedCopies(s),
+      ),
+    );
+    return;
+  }
   if (!repeat && p.code === "47023") {
     const holder = playerOrder(s).find((seat) => seat.heroId === "jubilee");
     if (holder) spectrumPorts.giveObligation(s, p, holder.id);
@@ -21316,6 +22576,7 @@ function reveal(
   if (
     !repeat &&
     [
+      "48029",
       "46027",
       "46031",
       "32067",
@@ -21337,7 +22598,9 @@ function reveal(
   ) {
     add(
       s,
-      ...((iceman.icemanEncounter(s, p) ??
+      ...((nightcrawlerEncounter.nightcrawlerEncounter(s, p) ??
+        mariaHill.mariaHillEncounter(s, p) ??
+        iceman.icemanEncounter(s, p) ??
         magneto.magnetoReveal(s, p, { isTextBlank }) ??
         masterMold.masterMoldReveal(s, p, { isTextBlank }) ??
         wideawake.projectWideawakeReveal(s, p, { isTextBlank }) ??
@@ -21352,8 +22615,12 @@ function reveal(
   }
   if (
     !repeat &&
-    ((jubilee.JUBILEE_SCRIPT_CODES.includes(p.code) &&
+    (((nightcrawlerEncounter.NIGHTCRAWLER_ENCOUNTER_CODES.includes(p.code) ||
+      nickFury.NICK_FURY_SCRIPT_CODES.includes(p.code) ||
+      magnetoHero.MAGNETO_HERO_SCRIPT_CODES.includes(p.code)) &&
       ["minion", "side_scheme"].includes(c.type_code)) ||
+      (jubilee.JUBILEE_SCRIPT_CODES.includes(p.code) &&
+        ["minion", "side_scheme"].includes(c.type_code)) ||
       (rogue.REAVERS_SCRIPT_CODES.includes(p.code) &&
         c.type_code !== "attachment") ||
       ["38025", "38026"].includes(p.code) ||
@@ -21465,11 +22732,14 @@ function reveal(
       ...deadpool.DEADPOOL_SCRIPT_CODES,
       ...angel.ANGEL_SCRIPT_CODES,
       ...bishop.BISHOP_SCRIPT_CODES,
+      ...magnetoHero.MAGNETO_HERO_SCRIPT_CODES,
       ...magik.MAGIK_SCRIPT_CODES,
       ...cable.CABLE_SCRIPT_CODES,
       ...x23.X23_SCRIPT_CODES,
       ...iceman.ICEMAN_SCRIPT_CODES,
+      ...mariaHill.MARIA_HILL_SCRIPT_CODES,
       ...jubilee.JUBILEE_SCRIPT_CODES,
+      ...nickFury.NICK_FURY_SCRIPT_CODES,
       ...colossus.COLOSSUS_SCRIPT_CODES,
     ].some((code) => code === p.code) ||
       CARDS.some(
@@ -21537,9 +22807,13 @@ function reveal(
       psylocke.psylockeEncounterReveal(s, p) ??
       wolverine.wolverineEncounterReveal(s, p) ??
       bishop.bishopEncounter(s, p) ??
+      magnetoHero.magnetoHeroEncounter(s, p) ??
       magik.magikEncounter(s, p) ??
       cable.cableEncounter(s, p) ??
+      nightcrawlerEncounter.nightcrawlerEncounter(s, p) ??
+      mariaHill.mariaHillEncounter(s, p) ??
       iceman.icemanEncounter(s, p) ??
+      nickFury.nickFuryEncounter(s, p) ??
       jubilee.jubileeEncounter(s, p) ??
       x23.x23Encounter(s, p) ??
       deadpool.deadpoolEncounter(s, p) ??
@@ -21593,9 +22867,13 @@ function reveal(
     domino.dominoEncounter(s, p) ??
     psylocke.psylockeEncounterReveal(s, p) ??
     bishop.bishopEncounter(s, p) ??
+    magnetoHero.magnetoHeroEncounter(s, p) ??
     magik.magikEncounter(s, p) ??
     cable.cableEncounter(s, p) ??
+    nightcrawlerEncounter.nightcrawlerEncounter(s, p) ??
+    mariaHill.mariaHillEncounter(s, p) ??
     iceman.icemanEncounter(s, p) ??
+    nickFury.nickFuryEncounter(s, p) ??
     jubilee.jubileeEncounter(s, p) ??
     x23.x23Encounter(s, p) ??
     deadpool.deadpoolEncounter(s, p) ??
@@ -21872,6 +23150,10 @@ function reveal(
   if (keyword(p, "Surge")) add(s, E("surge", { sourceCode: p.code }));
 }
 function obligation(s: GameState, p: Piece) {
+  if (p.code === "48026") {
+    add(s, ...nightcrawlerEncounter.nightcrawlerEncounter(s, p)!);
+    return;
+  }
   if (p.code === "45025") {
     add(s, ...bishop.bishopEncounter(s, p)!);
     return;
@@ -21978,6 +23260,16 @@ function obligation(s: GameState, p: Piece) {
   );
 }
 function treachery(s: GameState, p: Piece) {
+  const nightcrawlerReveal = nightcrawlerEncounter.nightcrawlerEncounter(s, p);
+  if (nightcrawlerReveal !== null) {
+    add(s, ...nightcrawlerReveal);
+    return;
+  }
+  const mariaReveal = mariaHill.mariaHillEncounter(s, p);
+  if (mariaReveal !== null) {
+    add(s, ...mariaReveal);
+    return;
+  }
   const icemanReveal = iceman.icemanEncounter(s, p);
   if (icemanReveal !== null) {
     add(s, ...icemanReveal);
@@ -21991,6 +23283,11 @@ function treachery(s: GameState, p: Piece) {
   const psy = psylocke.psylockeEncounterReveal(s, p);
   if (psy !== null) {
     add(s, ...psy);
+    return;
+  }
+  const nreveal = nickFury.nickFuryEncounter(s, p);
+  if (nreveal !== null) {
+    add(s, ...nreveal);
     return;
   }
   const jreveal = jubilee.jubileeEncounter(s, p);
@@ -22015,9 +23312,13 @@ function treachery(s: GameState, p: Piece) {
   }
   const stormReveal =
     bishop.bishopEncounter(s, p) ??
+    magnetoHero.magnetoHeroEncounter(s, p) ??
     magik.magikEncounter(s, p) ??
     cable.cableEncounter(s, p) ??
+    nightcrawlerEncounter.nightcrawlerEncounter(s, p) ??
+    mariaHill.mariaHillEncounter(s, p) ??
     iceman.icemanEncounter(s, p) ??
+    nickFury.nickFuryEncounter(s, p) ??
     jubilee.jubileeEncounter(s, p) ??
     x23.x23Encounter(s, p) ??
     deadpool.deadpoolEncounter(s, p) ??
@@ -22302,9 +23603,25 @@ function treachery(s: GameState, p: Piece) {
       else surge();
       break;
     case "01190": {
+      const nightcrawlerNemesis =
+        nightcrawlerEncounter.nightcrawlerEncounterShadows(s);
+      if (nightcrawlerNemesis !== null) {
+        add(s, ...nightcrawlerNemesis);
+        break;
+      }
+      const magneticNemesis = magnetoHero.magnetoHeroShadows(s);
+      if (magneticNemesis !== null) {
+        add(s, ...magneticNemesis);
+        return;
+      }
       const magikNemesis = magik.magikShadows(s);
       if (magikNemesis !== null) {
         add(s, ...magikNemesis);
+        break;
+      }
+      const mariaNemesis = mariaHill.mariaHillShadows(s);
+      if (mariaNemesis) {
+        add(s, ...mariaNemesis);
         break;
       }
       const icemanNemesis = iceman.icemanShadows(s);
@@ -22360,6 +23677,11 @@ function treachery(s: GameState, p: Piece) {
       const cableNemesis = cable.cableShadows(s);
       if (cableNemesis !== null) {
         add(s, ...cableNemesis);
+        break;
+      }
+      const nnemesis = nickFury.nickFuryShadows(s);
+      if (nnemesis !== null) {
+        add(s, ...nnemesis);
         break;
       }
       const jnemesis = jubilee.jubileeShadows(s);
@@ -22592,7 +23914,71 @@ function resolve(s: GameState, e: Effect) {
     advanceVillain(s, e.source, e.attack, e.captured);
     return;
   }
+  if (magnetoHero.resolveMagnetoHeroEffect(s, e, magnetoHeroPorts)) return;
   if (magik.resolveMagikEffect(s, e, magikPorts)) return;
+  if (nightcrawler.resolveNightcrawlerEffect(s, e, nightcrawlerPorts)) return;
+  if (
+    nightcrawlerEncounter.resolveNightcrawlerEncounter(
+      s,
+      e,
+      nightcrawlerEncounterPorts,
+    )
+  )
+    return;
+  if (e.type === "nightcrawlerMinionCostAttempt") {
+    const event = s.resolving.find((p) => p.id === e.piece.id);
+    if (!event) return;
+    const maximum = s.encounter.deck.length;
+    let found: Piece | undefined;
+    for (let n = 0; n < maximum; n++) {
+      const discarded = mutagenPorts.discardTop(s).piece;
+      if (!discarded) break;
+      if (card(discarded).type_code === "minion") {
+        found = discarded;
+        break;
+      }
+    }
+    const before = new Set(s.queue);
+    if (found) {
+      s.flags.nightcrawlerMinionCostPending = JSON.stringify({
+        eventId: event.id,
+        playerId: s.activePlayerId,
+      });
+      mutagenPorts.putMinion(s, found, s.activePlayerId);
+      delete s.flags.nightcrawlerMinionCostPending;
+    }
+    const entry = s.queue.filter((q) => !before.has(q));
+    s.queue = s.queue.filter((q) => before.has(q));
+    add(
+      s,
+      ...entry,
+      E("nightcrawlerMinionCostComplete", { piece: event, resume: e.resume }),
+    );
+    return;
+  }
+  if (e.type === "nightcrawlerMinionCostComplete") {
+    if (s.flags[`nightcrawlerMinionCostPaid:${e.piece.id}`]) add(s, e.resume);
+    else {
+      log(
+        s,
+        `${card(e.piece).name}: the uncertain minion cost failed; discard without playing the event.`,
+      );
+      delete s.flags[`magikPending:${e.piece.id}`];
+      const previousCancel = s.flags[`ghostCancelled:${e.piece.id}`];
+      s.flags[`ghostCancelled:${e.piece.id}`] = true;
+      finishResolution(s, e.piece.id);
+      if (previousCancel === undefined)
+        delete s.flags[`ghostCancelled:${e.piece.id}`];
+      else s.flags[`ghostCancelled:${e.piece.id}`] = previousCancel;
+    }
+    return;
+  }
+  if (e.type === "nightcrawlerDefeat") {
+    const p = find(s, e.target);
+    if (p) defeatCharacter(s, p, e.source);
+    return;
+  }
+  if (mariaHill.resolveMariaHillEffect(s, e, mariaHillPorts)) return;
   if (iceman.resolveIcemanEffect(s, e, icemanPorts)) return;
   if (domino.resolveDominoEffect(s, e, dominoPorts)) return;
   if (gambit.resolveGambitEffect(s, e, gambitPorts)) return;
@@ -22612,6 +23998,7 @@ function resolve(s: GameState, e: Effect) {
   }
   if (bishop.resolveBishopEffect(s, e, bishopPorts)) return;
   if (cable.resolveCableEffect(s, e, cablePorts)) return;
+  if (nickFury.resolveNickFuryEffect(s, e, nickFuryPorts)) return;
   if (jubilee.resolveJubileeEffect(s, e, jubileePorts)) return;
   if (x23.resolveX23Effect(s, e, x23Ports)) return;
   if (deadpool.resolveDeadpoolEffect(s, e, deadpoolPorts)) return;
@@ -22749,8 +24136,11 @@ function resolve(s: GameState, e: Effect) {
           gambit.gambitEncounter(state, piece) ??
           cyclops.cyclopsEncounterReveal(state, piece) ??
           bishop.bishopEncounter(state, piece) ??
+          magnetoHero.magnetoHeroEncounter(state, piece) ??
           magik.magikEncounter(state, piece) ??
           cable.cableEncounter(state, piece) ??
+          nickFury.nickFuryEncounter(state, piece) ??
+          mariaHill.mariaHillEncounter(state, piece) ??
           jubilee.jubileeEncounter(state, piece) ??
           x23.x23Encounter(state, piece) ??
           deadpool.deadpoolEncounter(state, piece) ??
@@ -23045,7 +24435,19 @@ function resolve(s: GameState, e: Effect) {
         after,
         jubileePorts,
       );
-      const generalWindow = poolOptions.length > 0 || jubileeOptions.length > 0;
+      const nickOptions = nickFury
+        .nickFuryGatherOptions(s, {
+          ...e.snapshot,
+          basic: e.snapshot.basic && !e.nickGatherHandled,
+        })
+        .map((o) => ({
+          ...o,
+          effects: [...o.effects, { ...e, nickGatherHandled: true }],
+        }));
+      const generalWindow =
+        poolOptions.length > 0 ||
+        jubileeOptions.length > 0 ||
+        nickOptions.length > 0;
       const options = [
         ...ghostNativeEventOptions(s, e.eventId, after, true),
         ...scarletPack.scarletWitchPackAfterHeroThwart(
@@ -23056,6 +24458,7 @@ function resolve(s: GameState, e: Effect) {
         ),
         ...poolOptions,
         ...jubileeOptions,
+        ...nickOptions,
       ];
       if (options.length)
         choose(
@@ -23194,7 +24597,20 @@ function resolve(s: GameState, e: Effect) {
     }
     case "bwEntryResponses": {
       const p = find(s, e.id);
-      const options = p ? blackWidowMinionEntered(s, p, [e], bwPorts) : [];
+      const options = p
+        ? [
+            ...blackWidowMinionEntered(s, p, [e], bwPorts),
+            ...playerOrder(s).flatMap((seat) =>
+              nickFury
+                .nickFuryMinionOptions(seatView(s, seat), p, [e], nickFuryPorts)
+                .map((o) => ({
+                  ...o,
+                  id: `${seat.id}:${o.id}`,
+                  effects: o.effects.map((q) => ({ ...q, actorId: seat.id })),
+                })),
+            ),
+          ]
+        : [];
       if (options.length)
         choose(
           s,
@@ -23808,6 +25224,7 @@ function resolve(s: GameState, e: Effect) {
         s,
         ...spiderHam.spiderHamAfterBasicRecover(s, e.receipt, spiderHamPorts),
         ...deadpool.deadpoolRecovered(s),
+        ...nightcrawler.nightcrawlerRecovered(s),
         ...bishop.bishopRecovered(s),
         ...iceman.icemanRecovered(s),
         ...phoenix.phoenixRecovered(s),
@@ -23937,19 +25354,42 @@ function resolve(s: GameState, e: Effect) {
       }
       e.basicUseToken ||= `basic:${s.nextId++}`;
       e.basicWasHero ??= s.player.form === "hero";
-      s.player.exhausted = true;
+      if (!e.magnetoHeroExhaustPaid) s.player.exhausted = true;
       if (power === "attack") s.flags.basicAttack = true;
       const replaced =
         power === "attack" ? s.player.stunned : s.player.confused;
       const base = heroStats(s)[power];
       const continuation = {
         ...e,
+        magnetoHeroExhaustPaid: true,
         basic: true,
         piercing:
           e.piercing || (power === "attack" && magik.magikStats(s).piercing),
         amount: e.amount ?? base,
         basicStatAmount: e.basicStatAmount ?? base,
       };
+      if (!replaced && !e.magnetoHeroYouGotHandled) {
+        const opts = magnetoHero.magnetoHeroBasicOptions(
+          s,
+          continuation,
+          power,
+          magnetoHeroPorts,
+        );
+        if (opts.length) {
+          choose(
+            s,
+            `"You Got This!"`,
+            "Play a response to exhausting your hero?",
+            [
+              ...opts,
+              option("continue", "Continue", [
+                { ...continuation, magnetoHeroYouGotHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
+      }
       if (!replaced && !e.spdrBasicHandled) {
         const options = spdr.spdrBasicOptions(
           s,
@@ -25084,8 +26524,11 @@ function resolve(s: GameState, e: Effect) {
         ...angel.angelPlayerSideSchemeDefeated(s, p),
         ...cable.cableSideReward(s, p),
         ...x23.x23SchemeDefeated(s, p),
+        ...nightcrawler.nightcrawlerSchemeDefeated(s, p),
         ...iceman.icemanSchemeDefeated(s, p),
+        ...mariaHill.mariaHillSchemeDefeated(s, p),
         ...jubilee.jubileeSideReward(s, p),
+        ...magnetoHero.magnetoHeroSideDefeated(s, p),
       ];
       add(s, ...rewards.map((e) => ({ ...e, abilityControllerId })));
       break;
@@ -25473,6 +26916,13 @@ function resolve(s: GameState, e: Effect) {
       add(s, { ...e, type: "damage", attack: true });
       break;
     case "damage":
+      if (e.attack) {
+        const nickAttack = nickFury.nickFuryAttackWindow(s, e, nickFuryPorts);
+        if (nickAttack) {
+          add(s, ...nickAttack);
+          break;
+        }
+      }
       if (
         e.damageFromAttack &&
         !e.bishopConversionHandled &&
@@ -26307,6 +27757,27 @@ function resolve(s: GameState, e: Effect) {
     }
     case "threat":
       {
+        nickStealthPlacement(s, e);
+        if (!e.nickCameraHandled && e.amount > 0) {
+          const next = { ...e, nickCameraHandled: true };
+          const options = playerOrder(s).flatMap((seat) =>
+            nickFury
+              .nickFuryThreatOptions(seatView(s, seat), next)
+              .map((o) => ({
+                ...o,
+                id: `${seat.id}:${o.id}`,
+                effects: o.effects.map((q) => ({ ...q, actorId: seat.id })),
+              })),
+          );
+          if (options.length) {
+            choose(s, "Threat would be placed", "Use Eyepatch Camera?", [
+              ...options,
+              option("continue", "Place threat", [next]),
+            ]);
+            break;
+          }
+        }
+
         if (!e.jubileeHandled) {
           const packet = { ...e, jubileeHandled: true };
           const choices = playerOrder(s).flatMap((seat) =>
@@ -26396,6 +27867,7 @@ function resolve(s: GameState, e: Effect) {
       }
       break;
     case "thwart": {
+      nickStealthPlacement(s, e);
       const operative = gambit.gambitThwartWindow(s, e);
       if (operative) {
         add(s, ...operative);
@@ -26550,9 +28022,12 @@ function resolve(s: GameState, e: Effect) {
     case "discardHand":
       discardHand(s, e.id);
       break;
-    case "discardPiece":
-      discardPiece(s, e.id);
+    case "discardPiece": {
+      if (e.encounterDiscard)
+        discardEncounterControlled(s, e.id, e.source, e.after || []);
+      else discardPiece(s, e.id);
       break;
+    }
     case "counter": {
       const p = find(s, e.id);
       if (p) p.counters += e.amount;
@@ -27708,6 +29183,10 @@ function resolve(s: GameState, e: Effect) {
           );
       } else {
         const removed = thwartAction(s, e.target, amount, p.id);
+        if (p.code === "50036" && !isTextBlank(s, p) && Number(removed) > 0) {
+          const suit = nickFury.nickFurySuit(s);
+          if (suit) suit.counters += Number(removed);
+        }
         if (Number(removed) > 0) {
           const interrupts = s.queue.splice(0, s.queue.length - queuedBefore);
           add(
@@ -27881,6 +29360,7 @@ function resolve(s: GameState, e: Effect) {
           ...venomPack.venomPackAfterAllyThwart(s, p),
         );
       add(s, ...bishop.bishopAllyUsed(s, p));
+      add(s, ...mariaHill.mariaHillAllyUsed(s, p));
       add(s, ...draxPack.draxPackAfterAllyBasic(s, p));
       add(s, ...mtsPlayerPack.mtsPlayerPackAfterAllyBasic(s, p));
       add(s, ...hulkPackAllyResponse(s, p, !!e.attack));
@@ -28309,8 +29789,22 @@ function resolve(s: GameState, e: Effect) {
     case "finishScheme":
       finishScheme(s);
       break;
+    case "magnetoHeroActivationFinish": {
+      s.attack = e.outerAttack || null;
+      if (e.outerScheme) s.scheming = e.outerScheme;
+      else delete s.scheming;
+      if (e.after)
+        add(s, {
+          ...e.after,
+          performed: e.performed,
+          damagePlaced: e.damagePlaced,
+          threatPlaced: e.threatPlaced,
+        });
+      break;
+    }
     case "endScheme": {
       const activation = s.scheming;
+      if (activation) delete s.flags[`nickInformant:${activation.attacker}`];
       if (activation?.activationAfter)
         add(s, {
           ...activation.activationAfter,
@@ -28400,6 +29894,13 @@ function resolve(s: GameState, e: Effect) {
       );
       break;
     case "sinisterNativeRevealed":
+      add(
+        s,
+        ...mariaHill.mariaHillRevealed(s, {
+          id: e.receipt.pieceId,
+          code: e.receipt.code,
+        } as Piece),
+      );
       add(
         s,
         ...(sinisterPlayerPack.sinisterPlayerPackEncounterRevealed(
@@ -28571,6 +30072,7 @@ function resolve(s: GameState, e: Effect) {
           : []),
         ...antMan.antManEnemyActivated(s, a.attacker),
         ...iceman.icemanActivated(s, a.attacker),
+        ...mariaHill.mariaHillActivation(s, a.attacker),
         ...iceman.icemanAfterAttack(s, a.id),
         ...(a.completionRecorded && a.attackerSnapshot
           ? spectrum.spectrumEnemyActivated(
@@ -28863,6 +30365,11 @@ function resolve(s: GameState, e: Effect) {
             : [];
         options.push(
           ...scoped(seat.id, [
+            ...nightcrawler.nightcrawlerBamfOptions(
+              view,
+              [resume("nightcrawler-bamf")],
+              nightcrawlerPorts,
+            ),
             ...gambit.gambitAttackOptions(view, []).map((entry) => ({
               ...entry,
               effects: entry.effects.map((effect) => ({
@@ -28929,6 +30436,12 @@ function resolve(s: GameState, e: Effect) {
       );
       break;
     case "defender":
+      need(
+        !find(s, e.id) ||
+          find(s, e.id)!.code !== "50022" ||
+          isTextBlank(s, find(s, e.id)!),
+        "Grant Ward cannot defend.",
+      );
       if (e.id === "hero" && s.attack && !e.icemanFreezeHandled) {
         const packet = {
           ...e,
@@ -28937,7 +30450,7 @@ function resolve(s: GameState, e: Effect) {
         };
         const opts = iceman.icemanFreezeOptions(s, packet, icemanPorts);
         if (opts.length) {
-          s.player.exhausted = true;
+          if (!e.withoutExhaust) s.player.exhausted = true;
           choose(
             s,
             "Basic defense interrupts",
@@ -29018,7 +30531,8 @@ function resolve(s: GameState, e: Effect) {
             "Wrapped in Metal prevents this identity from defending.",
           );
           s.attack.basicDefense = true;
-          if (!e.icemanDefensePaid) s.player.exhausted = true;
+          if (!e.icemanDefensePaid && !e.withoutExhaust)
+            s.player.exhausted = true;
           s.attack.defenseBonus =
             (s.attack.defenseBonus || 0) +
             (e.amount === undefined ? 0 : e.amount - heroStats(s).defense);
@@ -29045,6 +30559,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     case "spectrumDefenseWindow": {
       const options = [
+        ...nightcrawler.nightcrawlerRiposteOptions(s, [], nightcrawlerPorts),
         ...gambit.gambitDefenseOptions(s, gambitPorts),
         ...spdr.spdrDefenseOptions(s, spdrPorts),
         ...spectrum.spectrumDefenseOptions(s, e.used || [], [], spectrumPorts),
@@ -29099,6 +30614,11 @@ function resolve(s: GameState, e: Effect) {
       }
       if (!e.expertChecked) {
         const options = [
+          ...nightcrawler.nightcrawlerRiposteOptions(
+            s,
+            [E("boostAttack")],
+            nightcrawlerPorts,
+          ),
           ...valkPack.valkyriePackDefenseOptions(
             s,
             [E("boostAttack")],
@@ -29205,7 +30725,24 @@ function resolve(s: GameState, e: Effect) {
         after,
         bwPorts,
       );
-      if (!e.scheme) options.push(...domino.dominoBoostOptions(s, e.piece));
+      if (!e.scheme) {
+        options.push(...domino.dominoBoostOptions(s, e.piece));
+        for (const seat of playerOrder(s))
+          options.push(
+            ...nightcrawler
+              .nightcrawlerBoostOptions(
+                seatView(s, seat),
+                e.piece,
+                after.map((q) => ({ ...q, actorId: original })),
+                nightcrawlerPorts,
+              )
+              .map((o) => ({
+                ...o,
+                id: `${seat.id}:${o.id}`,
+                effects: o.effects.map((q) => ({ actorId: seat.id, ...q })),
+              })),
+          );
+      }
       options.push(
         ...playerOrder(s).flatMap((seat) =>
           nebulaPack
@@ -29850,6 +31387,16 @@ function resolve(s: GameState, e: Effect) {
         );
       if (heroTarget)
         opts.unshift(
+          ...nickFury.nickFuryDamageOptions(
+            s,
+            {
+              target: "hero",
+              playerId: s.activePlayerId,
+              amount: nativeIncomingAttackDamage(s, a),
+              attack: true,
+            },
+            [E("damageWindow")],
+          ),
           ...blackWidowDamageOptions(
             s,
             {
@@ -30052,6 +31599,17 @@ function resolve(s: GameState, e: Effect) {
           ),
         );
         opts.unshift(
+          ...nickFury.nickFuryDamageOptions(
+            s,
+            {
+              target: "hero",
+              playerId: s.activePlayerId,
+              amount: excess,
+              attack: true,
+              packet: { type: "damage", kind: "overkill" },
+            },
+            [E("damageWindow")],
+          ),
           ...blackWidowDamageOptions(
             s,
             {
@@ -30188,7 +31746,37 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "defenseResponses": {
+      if (
+        !e.mariaAllyDefenseHandled &&
+        e.snapshot?.defender &&
+        !["hero", "none"].includes(e.snapshot.defender)
+      ) {
+        const p = find(s, e.snapshot.defender),
+          seat = p && controller(s, p.id);
+        const effects =
+          p && seat ? mariaHill.mariaHillAllyUsed(seatView(s, seat), p) : [];
+        if (effects.length) {
+          add(s, ...effects.map((q) => ({ ...q, actorId: seat!.id })), {
+            ...e,
+            mariaAllyDefenseHandled: true,
+          });
+          break;
+        }
+      }
+
       s.attack = null;
+      if (!e.nightcrawlerHandled) {
+        add(
+          s,
+          ...nightcrawler.nightcrawlerDefenseFinished(
+            s,
+            e.snapshot || {},
+            nightcrawlerPorts,
+          ),
+          { ...e, nightcrawlerHandled: true },
+        );
+        break;
+      }
       if (!e.psylockeHandled) {
         add(s, ...psylocke.psylockeDefenseFinished(s, e), {
           ...e,
@@ -30862,7 +32450,7 @@ function resolve(s: GameState, e: Effect) {
           option(
             p.id,
             card(p).name,
-            [E("discardPiece", { id: p.id })],
+            [E("discardPiece", { id: p.id, encounterDiscard: true })],
             undefined,
             p.code,
           ),
@@ -31061,6 +32649,13 @@ function resolve(s: GameState, e: Effect) {
       log(s, `${heroCard(s).name} and their cards are ready.`, "phase");
       break;
     case "beginVillain":
+      if (!e.mariaPhaseEnded) {
+        const effects = mariaHill.mariaHillPhaseEnd(s, true);
+        if (effects.length) {
+          add(s, ...effects, { ...e, mariaPhaseEnded: true });
+          break;
+        }
+      }
       if (!e.wideawakePlayerPhaseEnded) {
         const effects = wideawake.projectWideawakeEndPlayerPhase(s);
         if (effects.length) {
@@ -31381,6 +32976,14 @@ function resolve(s: GameState, e: Effect) {
       hawkeyePhaseEnded(s, hawkeyePorts);
       antMan.antManPhaseEnded(s);
       add(s, ...doctorStrangeRoundEnded(s));
+      add(
+        s,
+        ...playerOrder(s).flatMap((seat) =>
+          nickFury
+            .nickFuryRoundEnded(seatView(s, seat))
+            .map((q) => ({ ...q, actorId: seat.id })),
+        ),
+      );
       const prev = s.activePlayerId;
       for (const seat of playerOrder(s)) {
         activateSeat(s, seat.id);
@@ -31404,7 +33007,9 @@ function resolve(s: GameState, e: Effect) {
                 key === "angelInitialized" ||
                 key === "cableInitialized" ||
                 key === "x23Initialized" ||
+                key === "magnetoHeroInitialized" ||
                 key === "icemanInitialized" ||
+                key === "mariaInitialized" ||
                 key === "stormSetupComplete" ||
                 key.startsWith("valkyrie") ||
                 key.startsWith("vision") ||
@@ -31608,6 +33213,14 @@ function run(s: GameState) {
   ) {
     need(n++ < 600, "Effect loop exceeded its limit.");
     mystiqueNativeQueueHandEntries(s, mystiqueNativeObserveHands(s));
+    // A just-dealt response precedes an encounter reveal, while an accepted
+    // ability's cost, effects and responses finish before the next window.
+    const nickDealt = s.queue.findIndex((e) => e.nickDealtResponse);
+    if (
+      nickDealt > 0 &&
+      ["revealDealt", "revealNext", "reveal"].includes(s.queue[0].type)
+    )
+      s.queue.unshift(s.queue.splice(nickDealt, 1)[0]);
     const e = s.queue.shift()!;
     const actor = s.players.find(
       (p) => p.id === (e.actorId || s.activePlayerId),
@@ -31667,6 +33280,7 @@ function run(s: GameState) {
       e.type.startsWith("mastermold-native:") ||
       e.type.startsWith("zero-tolerance:") ||
       e.type.startsWith("sentinels:") ||
+      e.type.startsWith("magnetoHero:") ||
       e.type.startsWith("magneto:") ||
       e.type.startsWith("magneto-native:") ||
       e.type.startsWith("acolytes:") ||
@@ -31860,6 +33474,7 @@ export function dispatch(state: GameState, command: Command): GameState {
         "The next card is already revealed; finish playing this card.",
       );
       need(s.prompt?.cancelable, "This decision cannot be canceled.");
+      mariaHill.mariaHillClearPayment(s);
       const resume = s.prompt?.cancellationQueue;
       if (!resume?.some((e) => e.type === "restorePaymentPrompt"))
         starLord.starLordHandPlayFinished(s);
@@ -32002,6 +33617,19 @@ export function dispatch(state: GameState, command: Command): GameState {
                 wideawakePorts,
               ),
               ...magneto.magnetoActionOptions(s, p.id, magnetoPorts),
+              ...(p.code === "49027" &&
+              p.attachedTo === `hero:${s.activePlayerId}` &&
+              s.player.form === "alter" &&
+              !s.player.exhausted &&
+              !isTextBlank(s, p)
+                ? [
+                    option(
+                      "remove",
+                      "Exhaust Erik Lehnsherr · discard Old Grievances",
+                      [E("magnetoHero:obligation-remove", { id: p.id })],
+                    ),
+                  ]
+                : []),
               ...sentinels.sentinelsAbilityOptions(s, p.id, sentinelsPorts),
               ...sabretooth.sabretoothActionOptions(s, p.id, sabretoothPorts),
               ...zzzax.zzzaxActions(s, p, zzzaxPorts),

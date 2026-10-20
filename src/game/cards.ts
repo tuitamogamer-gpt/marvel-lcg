@@ -1,4 +1,7 @@
+import { nickFuryAerial } from "./nick-fury.js";
 import { bishopAllyHP, bishopCharacterBonus } from "./bishop.js";
+import { nightcrawlerStats } from "./nightcrawler.js";
+import { magnetoHeroStats, magnetoHeroNewModifiers } from "./magneto-hero.js";
 import { magikStats } from "./magik.js";
 import { icemanStats } from "./iceman.js";
 import { jubileeStats, jubileeEnemyHealth } from "./jubilee.js";
@@ -878,6 +881,62 @@ export const HEROES = [
     style: "Resource types · Justice",
     complexity: 2,
   },
+  {
+    id: "nightcrawler",
+    code: "48001a",
+    alter: "48001b",
+    name: "Nightcrawler",
+    identity: "Kurt Wagner",
+    aspect: "protection" as Aspect,
+    color: "#4554a0",
+    tag: "Bamf!",
+    description:
+      "Teleport between enemies, defend without exhausting, and answer every attack with your X-Men allies.",
+    style: "Teleportation and defense · Protection",
+    complexity: 2,
+  },
+  {
+    id: "magneto",
+    code: "49001a",
+    alter: "49001b",
+    name: "Magneto",
+    identity: "Erik Lehnsherr",
+    aspect: "leadership" as Aspect,
+    color: "#a53d56",
+    tag: "Master of magnetism.",
+    description:
+      "Pull Magnetic cards from your deck, shape the battlefield, and lead the next generation of mutants.",
+    style: "Magnetic powers · Leadership",
+    complexity: 2,
+  },
+  {
+    id: "maria_hill",
+    code: "50001a",
+    alter: "50001b",
+    name: "Maria Hill",
+    identity: "Maria Hill",
+    aspect: "leadership" as Aspect,
+    color: "#245d77",
+    tag: "Reassignment",
+    description:
+      "Command S.H.I.E.L.D. supports, move their counters, and coordinate your team.",
+    style: "S.H.I.E.L.D. supports · Leadership",
+    complexity: 3,
+  },
+  {
+    id: "nick_fury",
+    code: "50034a",
+    alter: "50034b",
+    name: "Nick Fury",
+    identity: "Nick Fury",
+    aspect: "justice" as Aspect,
+    color: "#426a79",
+    tag: "One eye on the mission.",
+    description:
+      "Gather intelligence in Stealth, then spend suit threat on an Assault.",
+    style: "Suit forms · Justice",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -1051,6 +1110,8 @@ export const MODULES = [
   },
   { id: "sauron", name: "Sauron", difficulty: 3 },
   { id: "arcade", name: "Arcade", difficulty: 3 },
+  { id: "crazy_gang", name: "The Crazy Gang", difficulty: 3 },
+  { id: "hellfire", name: "Hellfire", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -1225,13 +1286,17 @@ export function deckCodes(
       (hero === "cyclops" && aspect === "leadership") ||
       (hero === "storm" && aspect === "leadership") ||
       (hero === "bishop" && aspect === "leadership") ||
+      (hero === "maria_hill" && aspect === "leadership") ||
       (hero === "magik" && aspect === "aggression") ||
+      (hero === "magneto" && aspect === "leadership") ||
       (hero === "cable" && aspect === "leadership") ||
       (hero === "angel" && aspect === "protection") ||
       (hero === "x23" && aspect === "aggression") ||
       (hero === "iceman" && aspect === "aggression") ||
       (hero === "deadpool" && String(aspect) === "pool") ||
       (hero === "jubilee" && aspect === "justice") ||
+      (hero === "nightcrawler" && aspect === "protection") ||
+      (hero === "nick_fury" && aspect === "justice") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
       (hero === "rogue" && aspect === "protection") ||
@@ -1267,6 +1332,7 @@ export function deckCodes(
           (hero === "psylocke" && c.code === "41002a") ||
           (hero === "shadowcat" && c.code === "32031a") ||
           (hero === "phoenix" && c.code === "34002a") ||
+          (hero === "nick_fury" && c.code === "50035a") ||
           (hero === "vision" && c.code === "26002")),
     )
     .flatMap((c) => Array(c.quantity).fill(c.code)) as string[];
@@ -1398,7 +1464,9 @@ export function aerial(s: GameState, visited: string[] = []): boolean {
     (s.player.form === "hero" &&
       (has(s, "01017") || !!s.flags.aerial || thorStats(s).aerial)) ||
     (s.heroId === "angel" && s.player.form === "hero") ||
+    nickFuryAerial(s) ||
     icemanStats(s).aerial ||
+    magnetoHeroStats(s).aerial ||
     rogueModifiers(s).aerial ||
     rogueTraits(
       s,
@@ -1486,9 +1554,11 @@ export function heroStats(s: GameState) {
       bishopCharacterBonus(s, "hero") +
       cableStatBonus(s) +
       magikStats(s).attack +
+      magnetoHeroStats(s).attack +
       x23Stats(s).attack +
       icemanStats(s).attack +
       jubileeStats(s).attack +
+      nightcrawlerStats(s).attack +
       x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
@@ -1527,6 +1597,7 @@ export function heroStats(s: GameState) {
       bishopCharacterBonus(s, "hero") +
       cableStatBonus(s) +
       magikStats(s).thwart +
+      magnetoHeroStats(s).thwart +
       icemanStats(s).thwart +
       jubileeStats(s).thwart +
       x23Stats(s).thwart -
@@ -1542,8 +1613,10 @@ export function heroStats(s: GameState) {
       psylockeStats(s).defense +
       cableStatBonus(s) +
       magikStats(s).defense +
+      magnetoHeroStats(s).defense +
       x23Stats(s).defense +
       icemanStats(s).defense +
+      nightcrawlerStats(s).defense +
       (has(s, "01081") ? 1 : 0) +
       (has(s, "01016") ? (aerial(s) ? 2 : 1) : 0) +
       captainStats(s).def +
@@ -1568,6 +1641,7 @@ export function heroStats(s: GameState) {
     recover:
       card(HEROES.find((h) => h.id === s.heroId)!.alter).recover! +
       scriptedModifier(s, "recover") +
+      nightcrawlerStats(s).recover +
       hulkStats(s).recover +
       msMarvelStats(s).recover +
       visionAlterStats(s).recover +
@@ -1622,6 +1696,7 @@ export function enemyAttachmentModifier(
 export function pieceHP(s: GameState, p: Piece) {
   return (
     jubileeEnemyHealth(s, p) +
+    magnetoHeroNewModifiers(s, p, captainPackHasTrait).health +
     (p.code === "drone"
       ? (visionDroneStats(s, p)?.health ?? 1) +
         s.attachments.filter(

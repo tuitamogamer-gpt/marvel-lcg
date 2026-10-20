@@ -1234,7 +1234,16 @@ export function resolveMsMarvelEffect(
           trait(p.code, "Persona"),
       );
       if (!supports.length) ports.queue(s, E("surge"));
-      else if (supports.length === 1) ports.discardPiece(s, supports[0].id);
+      else if (supports.length === 1)
+        ports.queue(
+          s,
+          E("discardPiece", {
+            id: supports[0].id,
+            encounterDiscard: true,
+            source: e.piece.id,
+            after: e.after || [],
+          }),
+        );
       else
         ports.choose(
           s,
@@ -1244,7 +1253,14 @@ export function resolveMsMarvelEffect(
             option(
               p.id,
               cards.get(p.code)!.name,
-              [E("discardPiece", { id: p.id })],
+              [
+                E("discardPiece", {
+                  id: p.id,
+                  encounterDiscard: true,
+                  source: e.piece.id,
+                  after: e.after || [],
+                }),
+              ],
               p.code,
             ),
           ),

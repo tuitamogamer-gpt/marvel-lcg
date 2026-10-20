@@ -73,6 +73,9 @@ export interface Piece {
   deadpoolController?: string;
   /** Original controller of the physical ally transformed by Lost Child. */
   jubileeLostController?: string;
+  /** Cross-type Super Spies placements never pay the receiving card’s other costs. */
+  nickAllPurposeCounters?: number;
+  nickThreatTokens?: number;
   /** Player side schemes live in the common scheme area under owner control. */
   playerSideSchemeController?: string;
   /** Beguiled changes the actual ally's current type without changing its face. */
@@ -107,6 +110,8 @@ export interface Piece {
   stunCards?: number;
   confuseCards?: number;
   toughCards?: number;
+  /** Actual owned player card facedown as a Controlled Innocent. */
+  mariaControlled?: boolean;
   droneCard?: Piece;
   captured?: Piece[];
   bonusAtk?: number;
@@ -128,6 +133,7 @@ export interface Option {
   effects: Effect[];
 }
 export interface Prompt {
+  nickWatchSelections?: Record<string, number>;
   context?: ActionReview;
   kind: "choice" | "payment" | "select";
   title: string;
@@ -163,6 +169,7 @@ export interface Prompt {
   /** Actual already generated sources whose paid ability costs completed. */
   committedResources?: import("./payment.js").PaymentSource[];
   /** Whether an actual cost icon came from a selected resource-type hand card. */
+  mariaFundingPayment?: { sourceIds: string[]; fundingIds: string[] };
   bishopResourcePayment?: { sourceIds: string[]; usedResourceCard: boolean };
   wildAs?: Resource;
   selectAction?: Effect;
@@ -378,6 +385,8 @@ export interface GameState {
   removed: Piece[];
   resolving: Piece[];
   scheming?: {
+    nickStealthSuit?: string;
+    nickInformant?: boolean;
     id?: string;
     retainedBoostIds?: string[];
     modifier?: number;
@@ -442,6 +451,7 @@ export interface PlayerSeat {
 export interface ReviewCard {
   id: string;
   code?: string;
+  back?: "hero";
   name: string;
   label: string;
   detail: string;

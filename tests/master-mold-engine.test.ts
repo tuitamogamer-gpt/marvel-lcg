@@ -13,6 +13,7 @@ import {
   targets,
 } from "../src/game/engine.js";
 import { statusCards } from "../src/game/keywords.js";
+import type { MasterMoldGameState } from "../src/game/master-mold.js";
 import { activateSeat, controller, seatView } from "../src/game/team.js";
 import type { GameState, Piece } from "../src/game/types.js";
 import {
@@ -227,6 +228,79 @@ function attackTarget(s: GameState, target: string) {
 }
 
 describe("Master Mold original-source native setup and main scheme", () => {
+  it.each([
+    ["solo Magneto", ["magneto"], true],
+    ["Magneto in the second seat", ["spider_man", "magneto"], true],
+    ["an ordinary other hero", ["spider_man"], false],
+  ] as const)(
+    "continues setup with the same physical ally when playing %s",
+    (_name, heroIds, blocked) => {
+      const heroes = heroIds.map((heroId) => ({
+        heroId,
+        aspect:
+          heroId === "magneto" ? ("leadership" as const) : ("justice" as const),
+      }));
+      let s = newGame({
+        ...heroes[0],
+        heroes,
+        villainId: "master_mold",
+        module: "zero_tolerance",
+        difficulty: "standard",
+        seed: 321090,
+        pacing: "expert",
+      });
+      const id = (s as MasterMoldGameState).masterMold?.magnetoId;
+      expect(id).toBeTruthy();
+      (s as Fixture).masterMoldOriginalIds = physical(s).map((p) => p.id);
+      const assertSource = (state: GameState) => {
+        exact(state);
+        const sources = physical(state).filter((p) => p.id === id);
+        expect(sources).toHaveLength(1);
+        expect(sources[0].code).toBe("32172b");
+        expect(sources[0].ownerId).toBeUndefined();
+        expect((state as MasterMoldGameState).masterMold?.magnetoId).toBe(id);
+        const reserved = seatView(state, "p1").player.setAside || [];
+        expect(reserved.some((p) => p.id === id)).toBe(blocked);
+        const inPlay = state.players.flatMap(
+          (seat) => seatView(state, seat).player.inPlay,
+        );
+        expect(inPlay.filter((p) => p.id === id)).toHaveLength(blocked ? 0 : 1);
+        expect(controller(state, id!)?.id).toBe(blocked ? undefined : "p1");
+      };
+      // RRG 1.8 p.46: the blocked put has no effect; all remaining setup,
+      // including the actual Sentinel per player and opening hands, resolves.
+      assertSource(reload(s));
+      s = settle(s);
+      for (const _ of s.players) s = command(s, { type: "MULLIGAN", ids: [] });
+      s = settle(s);
+      expect(s.phase).toBe("player");
+      for (const seat of s.players) {
+        expect(seatView(s, seat).player.hand).toHaveLength(6);
+        expect(s.minions.filter((p) => p.engagedWith === seat.id)).toHaveLength(
+          1,
+        );
+      }
+      assertSource(reload(s));
+      if (heroIds.length > 1) {
+        s = settle(
+          native(s, {
+            type: "damage",
+            target: "hero:p1",
+            amount: seatView(s, "p1").player.hp,
+            source: "enemy",
+          }),
+        );
+        expect(s.players[0].eliminated).toBe(true);
+        expect(s.firstPlayerId).toBe("p2");
+        // A first-player change cannot transfer or retry the failed entry.
+        // Existing set-aside storage survives elimination with the same ID.
+        assertSource(reload(s));
+      }
+      s = settle(native(s, { type: "newRound" }));
+      assertSource(reload(s));
+    },
+  );
+
   it.each([false, true])(
     "puts one Sentinel per player into play and keeps fixed sets unique (team %s)",
     (team) => {

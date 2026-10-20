@@ -257,6 +257,10 @@ function fixture() {
         activateSeat(s, e.actorId);
       if (resolveNebulaEffect(s, e, ports)) continue;
       native.push(e);
+      if (e.type === "discardPiece") {
+        ports.discardPiece(s, e.id);
+        ports.queue(s, ...(e.after || []));
+      }
       if (e.type === "damage") {
         const target = find(s, e.target);
         if (target === s.villain) s.villain.hp -= e.amount;

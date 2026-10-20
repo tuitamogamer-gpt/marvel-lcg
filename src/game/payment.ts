@@ -1,8 +1,18 @@
+import { nickFuryResourceSources } from "./nick-fury.js";
+import {
+  magnetoHeroResourceSources,
+  magnetoHeroDamageCostAvailable,
+} from "./magneto-hero.js";
+import {
+  mariaHillOrgResources,
+  mariaHillResourceSources,
+} from "./maria-hill.js";
 import { magikResourceSources } from "./magik.js";
 import { jubileeResourceSources } from "./jubilee.js";
 import { cableResourceSources } from "./cable.js";
 import { x23ResourceSources } from "./x23.js";
 import { icemanResourceSources } from "./iceman.js";
+import { nightcrawlerResourceSources } from "./nightcrawler.js";
 import { deadpoolResources, deadpoolTriggeredBlocked } from "./deadpool.js";
 import { psylockeResourceSources } from "./psylocke.js";
 import { rogueResourceSources } from "./rogue.js";
@@ -81,7 +91,12 @@ export interface PaymentSource {
 /** TAKE costs require the full damage to reach the identity. Tough prevents
  * that damage, so it cannot be discarded to partially pay Symbiotic Bond. */
 export function venomPaymentDamageCostAvailable(s: GameState, amount: number) {
-  return amount > 0 && !s.player.tough && s.player.hp >= amount;
+  return (
+    amount > 0 &&
+    !s.player.tough &&
+    s.player.hp >= amount &&
+    magnetoHeroDamageCostAvailable(s)
+  );
 }
 
 /** Actual resources generated when spending this physical hand card. */
@@ -91,7 +106,9 @@ export function resourcesFor(
   target?: Card,
 ): Resource[] {
   const generated =
-    deadpoolResources(s, p, maxHP(s)) ?? mtsPlayerPackCardResources(s, p);
+    mariaHillOrgResources(s, p) ??
+    deadpoolResources(s, p, maxHP(s)) ??
+    mtsPlayerPackCardResources(s, p);
   return generated ?? zzzaxHandResources(s, p, resources(card(p), target));
 }
 
@@ -161,6 +178,7 @@ function localPaymentSources(
   sources.push(...psylockeResourceSources(s));
   sources.push(...x23ResourceSources(s));
   sources.push(...jubileeResourceSources(s));
+  sources.push(...nickFuryResourceSources(s, targetCode));
   sources.push(...stormResourceSources(s));
   sources.push(...thorResourceSources(s));
   sources.push(...waspPackResourceSources(s));
@@ -176,6 +194,9 @@ function localPaymentSources(
     }),
   );
   sources.push(...icemanResourceSources(s, targetCode));
+  sources.push(...nightcrawlerResourceSources(s, targetCode));
+  sources.push(...magnetoHeroResourceSources(s, targetCode));
+  sources.push(...mariaHillResourceSources(s));
   sources.push(...cyclopsResourceSources(s, targetCode));
   sources.push(...colossusResourceSources(s, { isTextBlank }));
   sources.push(...shadowcatResourceSources(s, targetCode, { isTextBlank }));
@@ -321,6 +342,24 @@ export function paymentSources(
     );
   }
   if (!handOnly) {
+    for (const seat of playerOrder(s)) {
+      if (seat.id === s.activePlayerId) continue;
+      for (const source of mariaHillResourceSources(
+        seatView(s, seat),
+        s.activePlayerId,
+      ))
+        if (
+          !sources.some(
+            (q) => q.localId === source.id && q.playerId === seat.id,
+          )
+        )
+          sources.push({
+            ...source,
+            id: `alliance:${seat.id}:${source.id}`,
+            localId: source.id,
+            playerId: seat.id,
+          });
+    }
     const jets = mutantGenesisPlayerPackResourceSources(s, s.activePlayerId, {
       isTextBlank,
       identityHasTrait: (state, trait) =>

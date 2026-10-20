@@ -205,6 +205,8 @@ describe("complete expansion rules inventory", () => {
       ["angel", 34],
       ["x23", 41],
       ["deadpool", 59],
+      ["ncrawler", 39],
+      ["magneto", 43],
     ] as const) {
       expect(
         coverage.products.find((pack: { code: string }) => pack.code === code),
@@ -305,6 +307,10 @@ describe("complete expansion rules inventory", () => {
       ["aoa", "magik"],
       ["iceman", "iceman"],
       ["jubilee", "jubilee"],
+      ["ncrawler", "nightcrawler"],
+      ["magneto", "magneto"],
+      ["aos", "maria_hill"],
+      ["aos", "nick_fury"],
     ])
       expect(
         inventory.heroes.find(
@@ -315,7 +321,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(24);
+    expect(MODULES).toHaveLength(26);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "deathstrike",
@@ -324,12 +330,14 @@ describe("complete expansion rules inventory", () => {
         "reavers",
         "sauron",
         "arcade",
+        "crazy_gang",
+        "hellfire",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2135);
-    expect(coverage.unsupportedFaces).toBe(2416);
-    expect(coverage.dedicatedFaces).toBe(1688);
-    expect(coverage.registeredHeroIds).toHaveLength(53);
+    expect(coverage.executableFaces).toBe(2272);
+    expect(coverage.unsupportedFaces).toBe(2279);
+    expect(coverage.dedicatedFaces).toBe(1832);
+    expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
     );
@@ -425,6 +433,75 @@ describe("complete expansion rules inventory", () => {
         unsupportedFaceCodes: [],
         installedCardClosure: true,
       });
+  });
+  it("closes all 148 fifth-batch source faces while retaining the Agents of SHIELD scenario and campaign gaps", () => {
+    const coverage = inventory.installedRegistryCoverage;
+    const shield = coverage.products.find(
+      (pack: { code: string }) => pack.code === "aos",
+    );
+    expect(shield).toMatchObject({
+      faceCount: 221,
+      executableFaces: 66,
+      installedCardClosure: false,
+    });
+    expect(shield.unsupportedFaceCodes).toEqual(
+      cards
+        .filter(
+          (entry: { pack_code: string; position: number }) =>
+            entry.pack_code === "aos" && entry.position > 63,
+        )
+        .map((entry: { code: string }) => entry.code)
+        .sort(),
+    );
+    expect(shield.unsupportedFaceCodes).toHaveLength(155);
+    const slice = cards.filter(
+      (entry: { pack_code: string; position: number }) =>
+        ["ncrawler", "magneto"].includes(entry.pack_code) ||
+        (entry.pack_code === "aos" && entry.position <= 63),
+    );
+    expect(slice).toHaveLength(148);
+    for (const face of slice)
+      expect(
+        audited.get(face.code)?.installedRegistry.executable,
+        face.code,
+      ).toBe(true);
+    // These eleven source faces were executable in the batch-four audit.
+    const alreadyRegistered = new Set([
+      "48019",
+      "48023",
+      "48024",
+      "48025",
+      "49011",
+      "49024",
+      "49025",
+      "49026",
+      "50025",
+      "50026",
+      "50027",
+    ]);
+    expect(
+      slice.filter(
+        (entry: { code: string }) => !alreadyRegistered.has(entry.code),
+      ),
+    ).toHaveLength(137);
+    expect(coverage.executableFaces - 2135).toBe(137);
+    expect(MODULES.slice(24).map((module) => module.id)).toEqual([
+      "crazy_gang",
+      "hellfire",
+    ]);
+    // Linked allies and Nick's reversible suit remain native dependencies even
+    // when the immutable import has no supplementary-map entry for Linked.
+    for (const code of [
+      "49033",
+      "49034",
+      "49035",
+      "49036",
+      "50024",
+      "50035a",
+      "50035b",
+    ])
+      expect(audited.get(code)?.installedRegistry.executable, code).toBe(true);
+    expect(coverage.campaignSupport).toEqual([]);
   });
   it("closes both NeXt Evolution hero sections while retaining the boxed scenario and campaign gaps", () => {
     const next = inventory.installedRegistryCoverage.products.find(
@@ -573,7 +650,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(121);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(126);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

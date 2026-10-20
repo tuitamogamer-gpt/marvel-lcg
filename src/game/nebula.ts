@@ -344,7 +344,7 @@ export function nebulaGamoraAttackEnded(
     ports.isTextBlank(s, source)
   )
     return [];
-  return [N("gamora-discard", { actorId: playerId })];
+  return [N("gamora-discard", { actorId: playerId, source: source.id })];
 }
 function upgrades(s: GameState, ports: NebulaPorts): Piece[] {
   return s.player.inPlay.filter(
@@ -886,7 +886,14 @@ export function resolveNebulaEffect(
             option(
               p.id,
               cards.get(p.code)!.name,
-              [N("discard-upgrade", { upgradeId: p.id, after })],
+              [
+                N("discard-upgrade", {
+                  upgradeId: p.id,
+                  encounterDiscard: true,
+                  source: e.source,
+                  after,
+                }),
+              ],
               p.code,
             ),
           ),
@@ -897,6 +904,18 @@ export function resolveNebulaEffect(
     case "nebula:discard-upgrade": {
       const p = upgrades(s, ports).find((p) => p.id === e.upgradeId);
       need(p, "Choose a discardable upgrade you control.");
+      if (e.encounterDiscard) {
+        ports.queue(
+          s,
+          E("discardPiece", {
+            id: p!.id,
+            encounterDiscard: true,
+            source: e.source,
+            after,
+          }),
+        );
+        break;
+      }
       ports.discardPiece(s, p!.id);
       if (e.attachmentId) {
         const attachment = s.attachments.find(

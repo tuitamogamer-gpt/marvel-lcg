@@ -26,6 +26,7 @@ type LocatedCard = {
   zone: string;
   owner: string;
   visible: boolean;
+  controlled?: boolean;
   exhausted: boolean;
   counters: number;
   attachedTo?: string;
@@ -44,7 +45,8 @@ function cardLocations(s: GameState) {
         code: p.code,
         zone,
         owner,
-        visible,
+        visible: visible && !p.mariaControlled,
+        controlled: p.mariaControlled,
         exhausted: p.exhausted,
         counters: p.counters,
         attachedTo: p.attachedTo,
@@ -677,7 +679,14 @@ export function recordReview(
   ])) {
     const a = before.locations[id],
       b = after.locations[id];
-    if (!a?.visible && !b?.visible && b?.zone !== "Dealt") continue;
+    if (
+      !a?.visible &&
+      !b?.visible &&
+      !a?.controlled &&
+      !b?.controlled &&
+      b?.zone !== "Dealt"
+    )
+      continue;
     if (
       a?.zone === b?.zone &&
       a?.owner === b?.owner &&
@@ -735,11 +744,14 @@ export function recordReview(
     cards.push({
       id,
       code: p.visible ? p.code : undefined,
-      name: p.visible
-        ? card(p.code).name
-        : p.zone === "Dealt"
-          ? "Facedown encounter"
-          : "Facedown card",
+      back: p.controlled ? "hero" : undefined,
+      name: p.controlled
+        ? "Controlled Innocent"
+        : p.visible
+          ? card(p.code).name
+          : p.zone === "Dealt"
+            ? "Facedown encounter"
+            : "Facedown card",
       label,
       kind,
       detail: host
@@ -923,6 +935,8 @@ export function recordReview(
     s.phase === "villain" &&
     (villainEffects.has(effect.type) ||
       (effect.type === "threat" && effect.target === "main"));
+  const publicCode = (piece?: Piece) =>
+    piece?.mariaControlled ? undefined : piece?.code;
   s.review = {
     id: ++s.reviewCount,
     title: effectTitle(effect),
@@ -938,8 +952,10 @@ export function recordReview(
       effect.sourceCode ||
       (payment ? before.paymentSubject : undefined) ||
       (revealing ? s.lastEncounter : undefined) ||
-      p?.code ||
-      before.locations[effect.id]?.code ||
+      publicCode(p) ||
+      (before.locations[effect.id]?.controlled
+        ? undefined
+        : before.locations[effect.id]?.code) ||
       ([
         "boostAttack",
         "revealBoost",
@@ -947,14 +963,18 @@ export function recordReview(
         "finishAttack",
         "defender",
       ].includes(effect.type)
-        ? [s.villain, ...s.minions].find((p) => p.id === s.attack?.attacker)
-            ?.code
+        ? publicCode(
+            [s.villain, ...s.minions].find((p) => p.id === s.attack?.attacker),
+          )
         : undefined) ||
       (["enemyScheme", "revealSchemeBoost", "finishScheme"].includes(
         effect.type,
       )
-        ? [s.villain, ...s.minions].find((p) => p.id === s.scheming?.attacker)
-            ?.code
+        ? publicCode(
+            [s.villain, ...s.minions].find(
+              (p) => p.id === s.scheming?.attacker,
+            ),
+          )
         : undefined) ||
       (villainDriven
         ? effect.type === "threat"

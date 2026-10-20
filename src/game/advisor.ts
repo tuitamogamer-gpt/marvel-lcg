@@ -632,6 +632,7 @@ export function advisePrompt(s: GameState): Advice | null {
         "take",
         "skip",
         "pass",
+        "done",
         "threat",
         "exhaust",
       ].includes(o.id),

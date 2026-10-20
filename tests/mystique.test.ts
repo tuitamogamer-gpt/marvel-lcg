@@ -175,6 +175,10 @@ function fixture(team = false) {
       const e = f.s.queue.shift()!;
       if (e.actorId) activateSeat(f.s, e.actorId);
       if (mystique.resolveMystiqueEffect(f.s, e, f.ports)) continue;
+      if (e.type === "discardPiece") {
+        f.ports.discardControlled(f.s, e.id, e.after || []);
+        continue;
+      }
       f.history.push(
         e.type === "surge"
           ? `surge:${e.actorId || f.s.activePlayerId}`

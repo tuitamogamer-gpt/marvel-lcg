@@ -49,7 +49,8 @@ describe("imported hero definitions and printed starter legality", () => {
   it("imported identities stay unautomated until their full runtime is installed", () => {
     expect(
       HERO_RUNTIME.filter((h) => h.scripted).map((h) => h.id),
-    ).toHaveLength(53);
+    ).toHaveLength(57);
+    expect(heroRuntime("maria_hill")?.scripted).toBe(true);
     expect(heroRuntime("captain_america")?.scripted).toBe(true);
     expect(heroRuntime("wsp")?.scripted).toBe(true);
     expect(heroRuntime("qsv")?.scripted).toBe(true);

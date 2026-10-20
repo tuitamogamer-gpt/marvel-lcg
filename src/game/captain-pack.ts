@@ -60,7 +60,9 @@ const traitList = (text = "") =>
     .filter(Boolean);
 const hasPrintedTrait = (c: Card | undefined, name: string) =>
   traitList(c?.traits).some(
-    (trait) => trait.toLowerCase() === name.toLowerCase(),
+    (trait) =>
+      trait.replace(/\.$/, "").toLowerCase() ===
+      name.replace(/\.$/, "").toLowerCase(),
   );
 const heroId = (s: GameState, target: string) =>
   target === "hero"
@@ -193,7 +195,9 @@ export function captainPackHasTrait(
         inPlay(s, target)!,
       ).some((trait) => trait.toLowerCase() === name.toLowerCase())) ||
     captainPackModifiers(s, target).traits.some(
-      (trait) => trait.toLowerCase() === name.toLowerCase(),
+      (trait) =>
+        trait.replace(/\.$/, "").toLowerCase() ===
+        name.replace(/\.$/, "").toLowerCase(),
     )
   );
 }

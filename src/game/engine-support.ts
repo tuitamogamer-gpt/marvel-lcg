@@ -1,4 +1,9 @@
+import { NICK_FURY_SCRIPT_CODES } from "./nick-fury.js";
+import { MARIA_HILL_SCRIPT_CODES } from "./maria-hill.js";
 import { BISHOP_SCRIPT_CODES } from "./bishop.js";
+import { NIGHTCRAWLER_SCRIPT_CODES } from "./nightcrawler.js";
+import { NIGHTCRAWLER_ENCOUNTER_CODES } from "./nightcrawler-encounters.js";
+import { MAGNETO_HERO_SCRIPT_CODES } from "./magneto-hero.js";
 import { MAGIK_SCRIPT_CODES } from "./magik.js";
 import { JUBILEE_SCRIPT_CODES } from "./jubilee.js";
 import { DOMINO_SCRIPT_CODES } from "./domino.js";
@@ -90,6 +95,7 @@ import { SPIDER_WOMAN_SCRIPT_CODES } from "./spider-woman.js";
 
 /** Modules installed in the dispatcher and verified by actual mission tests. */
 export const SCRIPTED_HERO_IDS = new Set([
+  "maria_hill",
   "spider_man",
   "captain_marvel",
   "iron_man",
@@ -143,8 +149,17 @@ export const SCRIPTED_HERO_IDS = new Set([
   "bishop",
   "magik",
   "jubilee",
+  "nightcrawler",
+  "nick_fury",
+  "magneto",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
+  ...NIGHTCRAWLER_SCRIPT_CODES,
+  "48017",
+  "48022",
+  ...NIGHTCRAWLER_ENCOUNTER_CODES,
+  ...MAGNETO_HERO_SCRIPT_CODES,
+  ...MARIA_HILL_SCRIPT_CODES,
   ...MAGIK_SCRIPT_CODES,
   ...CYCLOPS_SCRIPT_CODES,
   ...CYCLOPS_SHARED_SCRIPT_CODES,
@@ -158,6 +173,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ICEMAN_SCRIPT_CODES,
   ...DEADPOOL_SCRIPT_CODES,
   ...JUBILEE_SCRIPT_CODES,
+  ...NICK_FURY_SCRIPT_CODES,
   ...MAGNETO_SCRIPT_CODES,
   ...ACOLYTES_SCRIPT_CODES,
   ...MASTER_MOLD_SCRIPT_CODES,
