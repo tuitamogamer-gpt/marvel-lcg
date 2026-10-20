@@ -10,6 +10,7 @@ import { msMarvelAbilityOptions } from "../src/game/ms-marvel";
 import { describe, expect, it } from "vitest";
 import {
   HEROES,
+  DB,
   MODULES,
   VILLAINS,
   card,
@@ -46,6 +47,19 @@ import { seatView } from "../src/game/team";
 import type { Aspect, Command, GameState, Piece } from "../src/game/types";
 
 const ended = (s: GameState) => ["won", "lost"].includes(s.phase);
+// A declared front/back link owns one physical card. Lettered alternate
+// printings, such as Jubilee's three resource variants, remain distinct.
+const physicalFaces = new Map<string, Set<string>>();
+for (const definition of Object.values(DB)) {
+  if (!definition.back_link) continue;
+  const faces = new Set([
+    definition.code,
+    definition.back_link,
+    ...(physicalFaces.get(definition.code) || []),
+    ...(physicalFaces.get(definition.back_link) || []),
+  ]);
+  for (const code of faces) physicalFaces.set(code, faces);
+}
 const heroIds = [
   "captain_america",
   "hulk",
@@ -91,6 +105,10 @@ const heroIds = [
   "domino",
   "x23",
   "deadpool",
+  "bishop",
+  "magik",
+  "iceman",
+  "jubilee",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -280,6 +298,10 @@ function runMission(config: (typeof missions)[number]) {
     domino: 40,
     x23: 41,
     deadpool: 40,
+    bishop: 40,
+    magik: 40,
+    iceman: 40,
+    jubilee: 40,
   };
   if (Object.hasOwn(physicalSourceCounts, hero.id)) {
     expect(codes).toHaveLength(physicalSourceCounts[hero.id]);
@@ -320,6 +342,14 @@ function runMission(config: (typeof missions)[number]) {
         ),
       ]
     : [];
+  expect(
+    supplementary.map((p) => p.code).sort(),
+    "All original supplementary cards begin in physical zones",
+  ).toEqual(
+    Object.entries(heroSupplementaryCards(hero.id))
+      .flatMap(([code, count]) => Array(count).fill(code))
+      .sort(),
+  );
   if (hero.id === "spdr") {
     expect(identities).toHaveLength(2);
     expect(identities.map((p) => p.id).sort()).toEqual(
@@ -340,6 +370,11 @@ function runMission(config: (typeof missions)[number]) {
   const originalIds = new Set(
     [...initial, ...supplementary, ...identities, ...poolDependency].map(
       (p) => p.id,
+    ),
+  );
+  const originalFaces = new Map(
+    [...initial, ...supplementary, ...identities, ...poolDependency].map(
+      (p) => [p.id, physicalFaces.get(p.code) || new Set([p.code])],
     ),
   );
   expect(originalIds.size, "Original physical source IDs are distinct").toBe(
@@ -378,6 +413,11 @@ function runMission(config: (typeof missions)[number]) {
       new Set(pieces.map((p) => p.id)).size,
       "No duplicated physical player cards",
     ).toBe(total);
+    for (const p of pieces)
+      expect(
+        originalFaces.get(p.id)?.has(p.code),
+        `Original printing or its linked reverse for ${p.id} after ${trace.at(-1)}`,
+      ).toBe(true);
     // ownedPieces admits only original IDs. Equal total and distinct counts
     // therefore prove every original instance occurs exactly once.
     if (scenarioSet) {
@@ -561,9 +601,9 @@ describe("published expansion starters across every supported mission setting", 
         ),
     );
     expect(VILLAINS).toHaveLength(10);
-    expect(MODULES).toHaveLength(22);
-    expect(heroIds).toHaveLength(44);
-    expect(missions).toHaveLength(19096);
+    expect(MODULES).toHaveLength(24);
+    expect(heroIds).toHaveLength(48);
+    expect(missions).toHaveLength(22752);
     const key = (mission: (typeof missions)[number]) =>
       [
         mission.heroId,
@@ -579,9 +619,14 @@ describe("published expansion starters across every supported mission setting", 
     const retained = missions.filter(
       (mission) =>
         heroIds.indexOf(mission.heroId) < 32 &&
-        !["deathstrike", "shadow_king", "exodus", "reavers"].includes(
-          mission.module,
-        ),
+        ![
+          "deathstrike",
+          "shadow_king",
+          "exodus",
+          "reavers",
+          "sauron",
+          "arcade",
+        ].includes(mission.module),
     );
     expect(retained).toHaveLength(11328);
     expect(
@@ -590,7 +635,7 @@ describe("published expansion starters across every supported mission setting", 
     const previousImport = missions.filter(
       (mission) =>
         heroIds.indexOf(mission.heroId) < 36 &&
-        !["exodus", "reavers"].includes(mission.module),
+        !["exodus", "reavers", "sauron", "arcade"].includes(mission.module),
     );
     expect(previousImport).toHaveLength(14184);
     expect(
@@ -599,7 +644,9 @@ describe("published expansion starters across every supported mission setting", 
         .digest("hex"),
     ).toBe("88a7dfa4ec824a10b054097804b59c33d9bafb5f1f15f3e35dde99edec2463b3");
     const secondImport = missions.filter(
-      (mission) => heroIds.indexOf(mission.heroId) < 40,
+      (mission) =>
+        heroIds.indexOf(mission.heroId) < 40 &&
+        !["sauron", "arcade"].includes(mission.module),
     );
     expect(secondImport).toHaveLength(17360);
     expect(
@@ -607,14 +654,25 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(secondImport).join("\n"))
         .digest("hex"),
     ).toBe("81f2fa5fc4410fcd58139b13ade0c65cf7812111772eeb17299d72f9622ce255");
-    expect(new Set(missions.map(key)).size).toBe(19096);
-    expect(new Set(combined.map(key)).size).toBe(19096);
+    const thirdImport = missions.filter(
+      (mission) =>
+        heroIds.indexOf(mission.heroId) < 44 &&
+        !["sauron", "arcade"].includes(mission.module),
+    );
+    expect(thirdImport).toHaveLength(19096);
+    expect(
+      createHash("sha256")
+        .update(manifest(thirdImport).join("\n"))
+        .digest("hex"),
+    ).toBe("b3ee09ef91e3f0f528da00b9c5e541220bdd12344987c2d0fcac7600024daf66");
+    expect(new Set(missions.map(key)).size).toBe(22752);
+    expect(new Set(combined.map(key)).size).toBe(22752);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(4774);
-      expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(11);
+      expect(partition).toHaveLength(5688);
+      expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(12);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 4774 : 19096);
+    expect(selectedMissions).toHaveLength(isSharded ? 5688 : 22752);
   });
   for (const mission of selectedMissions)
     it(
