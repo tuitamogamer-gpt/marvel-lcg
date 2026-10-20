@@ -7,9 +7,11 @@ import {
   playable,
   nativeHeroAbilityOptions,
   nativeCanPutIntoPlay,
+  nativePutIntoPlay,
 } from "../src/game/engine.js";
 import {
   BISHOP_SCRIPT_CODES,
+  bishopCharacterBonus,
   bishopAttachmentTargets,
   bishopSuitUpUpgrade,
 } from "../src/game/bishop.js";
@@ -174,6 +176,22 @@ describe("Energy Absorption and Temporal form response", () => {
     s = attackDamage(s, 1);
     expect(s.prompt).toBeNull();
   });
+  it("cannot initiate a no-op Absorption when no player-deck cards remain", () => {
+    let s = base();
+    s.player.hand.push(...s.player.deck.splice(0));
+    s = attackDamage(s, 1);
+    expect(s.prompt).toBeNull();
+  });
+  it("Uniform cannot exhaust for a zero-healing response", () => {
+    let s = base();
+    const uniform = put(s, "45005");
+    hand(s, "45010");
+    s = native(s, { type: "bishop:uniform-window", id: uniform.id });
+    expect(s.prompt).toBeNull();
+    expect(s.player.inPlay.find((p) => p.id === uniform.id)?.exhausted).toBe(
+      false,
+    );
+  });
   it("does not trigger when Tough prevents all attack damage", () => {
     let s = base();
     s.player.tough = true;
@@ -245,7 +263,7 @@ describe("Energy Absorption and Temporal form response", () => {
     s = respond(s, /Energy Absorption/);
     // Choosing the response opens its own discard resolution before the attacker takes Retaliate.
     expect(
-      s.log.findIndex((l) => l.text.startsWith("Energy Absorption:")),
+      s.log.findIndex((l) => l.text.startsWith("Energy Absorption: discarded")),
     ).toBeGreaterThan(-1);
     s = finish(s);
     expect(s.villain.hp).toBe(hp - 1);
@@ -286,14 +304,72 @@ describe("Energy Conversion native defense", () => {
     expect(s.player.hp).toBe(12);
     expect(s.player.discard.some((p) => p.id === conversion.id)).toBe(true);
     expect(s.player.discard.some((p) => p.id === side.id)).toBe(true);
-    expect(s.log.some((l) => l.text.startsWith("Energy Absorption:"))).toBe(
-      false,
+    expect(
+      s.log.some((l) => l.text.startsWith("Energy Absorption: discarded")),
+    ).toBe(false);
+  });
+  it("a second no-op Conversion is not offered and attack allowance survives packet boundaries", () => {
+    let s = base();
+    const [first, second] = hand(s, "45009", "45009");
+    s = native(s, { type: "enemyAttack", id: s.villain.id });
+    s = respond(s, /Energy Conversion/);
+    s = pay(s, []);
+    expect(s.prompt?.options.some((o) => o.image === "45009")).not.toBe(true);
+    expect(s.player.hand.some((p) => p.id === second.id)).toBe(true);
+    const source = s.villain.id;
+    s = finish(
+      native(
+        s,
+        {
+          type: "damage",
+          target: "hero",
+          amount: 2,
+          damageFromAttack: true,
+          source,
+        },
+        {
+          type: "damage",
+          target: "hero",
+          amount: 2,
+          damageFromAttack: true,
+          source,
+        },
+      ),
     );
+    expect(s.player.hp).toBe(9);
+    expect(s.flags.bishopConversionDamage).toBe(3);
   });
   it("cannot be played as an ordinary player-phase action", () => {
     const s = base();
     const [p] = hand(s, "45009");
     expect(playable(s, p)).toBeTruthy();
+  });
+});
+describe("Bishop original-source public flow seed", () => {
+  it("seed45009 naturally recovers an actual resource after a basic attack and end turn", () => {
+    let s = newGame({
+      heroId: "bishop",
+      aspect: "leadership",
+      villainId: "rhino",
+      module: "bomb_scare",
+      seed: 45009,
+      pacing: "expert",
+    });
+    s = command(s, { type: "MULLIGAN", ids: [] });
+    s = finish(command(s, { type: "FLIP" }));
+    s = finish(
+      target(command(s, { type: "BASIC", action: "attack" }), s.villain.id),
+    );
+    const first = s.player.hand[0].id;
+    s = command(s, { type: "END_TURN", discard: [first] });
+    s = respond(s, /Energy Absorption/);
+    const receipt = s.log.find((l) =>
+      l.text.startsWith("Energy Absorption: discarded"),
+    );
+    expect(receipt?.text).toMatch(/returned [1-9]\d* resource cards/);
+    expect(s.player.hand.some((p) => card(p).type_code === "resource")).toBe(
+      true,
+    );
   });
 });
 describe("Bishop respects The Merc with the Mouth", () => {
@@ -572,8 +648,10 @@ describe("Sidekick, Advanced Suit, Side-by-Side and Suit Up", () => {
     up.attachedTo = p.id;
     p.exhausted = true;
     s.player.exhausted = true;
-    s = cast(s, "45016", "45022");
+    const pieces = hand(s, "45016", "45022");
+    s = play(s, pieces[0]);
     s = choose(s, p.id);
+    s = pay(s, [pieces[1]]);
     s = finish(choose(reload(s), "boost"));
     expect(s.player.exhausted).toBe(false);
     expect(s.player.inPlay.find((q) => q.id === p.id)?.exhausted).toBe(false);
@@ -587,6 +665,56 @@ describe("Sidekick, Advanced Suit, Side-by-Side and Suit Up", () => {
     expect(s.villain.hp).toBe(77);
     s.phase = "villain";
     expect(heroStats(s)).toMatchObject({ attack: 2, thwart: 2 });
+  });
+  it("cancelling Side-by-Side's payment leaves its sidekick exhausted and all costs unspent", () => {
+    let s = base();
+    const ally = put(s, "45002"),
+      title = put(s, "45015");
+    title.attachedTo = ally.id;
+    ally.exhausted = true;
+    const [event, resource] = hand(s, "45016", "45022");
+    s = choose(command(s, { type: "PLAY", id: event.id }), ally.id);
+    expect(s.prompt?.kind).toBe("payment");
+    expect(s.player.inPlay.find((p) => p.id === ally.id)?.exhausted).toBe(true);
+    s = command(s, { type: "CANCEL" });
+    expect(s.player.inPlay.find((p) => p.id === ally.id)?.exhausted).toBe(true);
+    expect(s.player.hand.some((p) => p.id === event.id)).toBe(true);
+    expect(s.player.hand.some((p) => p.id === resource.id)).toBe(true);
+  });
+  it("Side-by-Side's ally bonus follows control changes and resets on a new entry", () => {
+    let s = base(false, true);
+    const ally = put(s, "45002");
+    s = finish(native(s, { type: "bishop:side-bonus", id: ally.id }));
+    expect(bishopCharacterBonus(s, ally.id)).toBe(1);
+    const actual = s.player.inPlay.splice(
+      s.player.inPlay.findIndex((p) => p.id === ally.id),
+      1,
+    )[0];
+    seatView(s, "p2").player.inPlay.push(actual);
+    expect(bishopCharacterBonus(s, actual.id)).toBe(1);
+    seatView(s, "p2").player.inPlay.pop();
+    nativePutIntoPlay(s, actual);
+    s = finish(native(s, ...s.queue));
+    expect(bishopCharacterBonus(s, actual.id)).toBe(0);
+  });
+  it("free play also readies the sidekick before the card commits", () => {
+    let s = base();
+    const ally = put(s, "45002"),
+      title = put(s, "45015");
+    title.attachedTo = ally.id;
+    ally.exhausted = true;
+    s.player.exhausted = true;
+    const [event] = hand(s, "45016");
+    s = native(s, { type: "play", piece: event, paid: [] });
+    expect(s.prompt?.title).toBe("Side-by-Side · additional cost");
+    expect(s.player.hand.some((p) => p.id === event.id)).toBe(true);
+    s = choose(s, ally.id);
+    expect(s.prompt?.title).toBe("Side-by-Side");
+    expect(s.player.inPlay.find((p) => p.id === ally.id)?.exhausted).toBe(
+      false,
+    );
+    s = finish(choose(s, "heal"));
+    expect(s.player.exhausted).toBe(false);
   });
   it("rejects Side-by-Side without an exhausted readyable sidekick", () => {
     const s = base();

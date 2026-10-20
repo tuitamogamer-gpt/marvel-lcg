@@ -931,6 +931,7 @@ function beginResolution(s: GameState, p: Piece) {
 }
 function finishResolution(s: GameState, id: string) {
   delete s.flags[`bishopResourcePaid:${id}`];
+  delete s.flags[`bishopSidekickCost:${id}`];
   phoenix.phoenixEventFinished(s, id);
   gambit.gambitEventFinished(s, id);
   const index = s.resolving.findIndex((p) => p.id === id);
@@ -5103,6 +5104,56 @@ function requestPayment(
   abilityCost = false,
 ) {
   const paymentTarget = abilityCost ? targetCode : targetCode || piece?.code;
+  if (
+    !abilityCost &&
+    piece?.code === "45016" &&
+    !s.flags[`bishopSidekickCost:${piece.id}`] &&
+    !paymentCommit.some((e) => e.type === "bishop:sidekick-cost")
+  ) {
+    const candidates = bishop
+      .bishopSidekicks(s)
+      .filter((p) => bishopPorts.canReady(s, p.id));
+    need(
+      candidates.length,
+      "Side-by-Side requires an exhausted readyable sidekick.",
+    );
+    choose(
+      s,
+      "Side-by-Side · additional cost",
+      "Choose the sidekick to ready when the payment commits.",
+      candidates.map((p) =>
+        option(
+          p.id,
+          card(p).name,
+          [
+            E("payRequest", {
+              title,
+              cost,
+              after,
+              requirements,
+              piece,
+              cancelable,
+              targetCode,
+              forcePayment,
+              commit: [
+                ...paymentCommit,
+                { type: "bishop:sidekick-cost", id: p.id, eventId: piece.id },
+              ],
+              starLordCostHandled,
+              starLordApplyDiscount,
+              handOnly,
+              abilityCost,
+            }),
+          ],
+          undefined,
+          p.code,
+        ),
+      ),
+      cancelable,
+    );
+    return;
+  }
+
   need(
     !s.attack ||
       !armadillo.armadilloDefenseBlocked(s, s.attack.attacker) ||
@@ -7032,6 +7083,46 @@ function play(
   syncPaid = 0,
 ) {
   const c = card(p);
+  if (p.code === "45016" && !s.flags[`bishopSidekickCost:${p.id}`]) {
+    const candidates = bishop
+      .bishopSidekicks(s)
+      .filter((q) => bishopPorts.canReady(s, q.id));
+    need(
+      candidates.length,
+      "Side-by-Side requires its additional sidekick-ready cost.",
+    );
+    choose(
+      s,
+      "Side-by-Side · additional cost",
+      "Ready your exhausted sidekick before playing this event.",
+      candidates.map((q) =>
+        option(
+          q.id,
+          card(q).name,
+          [
+            { type: "bishop:sidekick-cost", id: q.id, eventId: p.id },
+            E("play", {
+              piece: p,
+              paid,
+              lightningX,
+              masterInvocationId,
+              attachedTarget,
+              agilityHandled,
+              overpaid,
+              paidForCard,
+              fromDeck,
+              generatedForCard,
+              novaDamageContext,
+              syncPaid,
+            }),
+          ],
+          undefined,
+          q.code,
+        ),
+      ),
+    );
+    return;
+  }
   const agility = !agilityHandled ? spiderWomanCardPlayed(s, c) : [];
   if (agility.length) {
     add(
@@ -17108,6 +17199,7 @@ const bishopPorts: bishop.BishopPorts = {
     }
   },
   heal,
+  maxHP,
   shuffle: (s) => warMachinePortsShufflePlayer(s, []),
   shuffleEncounter: mutagenPorts.shuffleEncounter,
   hidden: revealHidden,
@@ -19560,14 +19652,12 @@ function finishAttackAfterDamage(
       {
         receipt: zeroReceipt,
         responses: [
-          ...bishop
-            .bishopEnemyAttackFinished(s, a)
-            .map((effect, i) => ({
-              id: `${a.id}:bishop-after:${i}`,
-              sourceId: a.attacker,
-              title: "Trevor Fitzroy",
-              effects: [effect],
-            })),
+          ...bishop.bishopEnemyAttackFinished(s, a).map((effect, i) => ({
+            id: `${a.id}:bishop-after:${i}`,
+            sourceId: a.attacker,
+            title: "Trevor Fitzroy",
+            effects: [effect],
+          })),
           ...(find(s, a.attacker)?.code === "44036" &&
           !isTextBlank(s, find(s, a.attacker)!)
             ? [

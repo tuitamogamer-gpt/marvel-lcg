@@ -56,6 +56,7 @@ export interface BishopPorts {
   ready(s: GameState, id: string): void;
   canReady(s: GameState, id: string): boolean;
   heal(s: GameState, id: string, amount: number): void;
+  maxHP(s: GameState): number;
   shuffle(s: GameState): void;
   shuffleEncounter(s: GameState): void;
   hidden(s: GameState): void;
@@ -82,6 +83,7 @@ export function bishopDamageResponses(
   return !deadpoolTriggeredBlocked(s) &&
     target === "hero" &&
     amount > 0 &&
+    s.player.deck.length > 0 &&
     fromAttack &&
     s.heroId === "bishop" &&
     s.player.form === "hero" &&
@@ -99,7 +101,18 @@ export function bishopChangedForm(s: GameState): Effect[] {
     ? [optional("Temporally Displaced", [B("temporal")])]
     : [];
 }
+type BishopBonusPiece = Piece & {
+  bishopBonusPhase?: string;
+  bishopPowerBonus?: number;
+};
 export function bishopCharacterBonus(s: GameState, id: string) {
+  if (id !== "hero" && !id.startsWith("hero:")) {
+    const p = allInPlay(s).find((p) => p.id === id) as
+      BishopBonusPiece | undefined;
+    return p?.bishopBonusPhase === phase(s)
+      ? Number(p.bishopPowerBonus || 0)
+      : 0;
+  }
   const target = id === "hero" ? `hero:${s.activePlayerId}` : id;
   return playerOrder(s).reduce(
     (n, seat) =>
@@ -138,7 +151,7 @@ export function bishopAttachmentTargets(
     )
     .map((q) => ({ id: q.id, label: card(q).name, code: q.code }));
 }
-const sidekicks = (s: GameState) =>
+export const bishopSidekicks = (s: GameState) =>
   live(s, "45015").flatMap((p) => {
     const ally = s.player.inPlay.find(
       (q) => q.id === p.attachedTo && card(q).type_code === "ally",
@@ -147,7 +160,7 @@ const sidekicks = (s: GameState) =>
   });
 export function bishopRecovered(s: GameState): Effect[] {
   if (deadpoolTriggeredBlocked(s)) return [];
-  return sidekicks(s)
+  return bishopSidekicks(s)
     .filter((p) => p.damage > 0)
     .map((p) => optional("Sidekick", [E("heal", { target: p.id, amount: 2 })]));
 }
@@ -158,7 +171,10 @@ export function bishopPlayRestriction(
 ): string | null {
   if (p.code === "45009" && !s.attack)
     return "Energy Conversion requires an enemy attack.";
-  if (p.code === "45016" && !sidekicks(s).some((q) => ports.canReady(s, q.id)))
+  if (
+    p.code === "45016" &&
+    !bishopSidekicks(s).some((q) => ports.canReady(s, q.id))
+  )
     return "Side-by-Side requires readying your exhausted sidekick.";
   if (
     p.code === "45021" &&
@@ -292,7 +308,7 @@ export function bishopEvent(s: GameState, p: Piece): Effect[] | null {
     case "45009":
       return [B("conversion")];
     case "45016":
-      return [B("side-by-side")];
+      return [B("side-by-side", { eventId: p.id })];
     case "45017":
       return [B("suit-up")];
     default:
@@ -300,6 +316,8 @@ export function bishopEvent(s: GameState, p: Piece): Effect[] | null {
   }
 }
 export function bishopEntered(s: GameState, p: Piece): Effect[] {
+  delete (p as BishopBonusPiece).bishopBonusPhase;
+  delete (p as BishopBonusPiece).bishopPowerBonus;
   if (deadpoolTriggeredBlocked(s)) return [];
   return p.code === "45021" && !isTextBlank(s, p)
     ? [
@@ -315,7 +333,7 @@ export function bishopEntered(s: GameState, p: Piece): Effect[] {
 }
 export function bishopAllyUsed(s: GameState, p: Piece): Effect[] {
   if (deadpoolTriggeredBlocked(s)) return [];
-  return p.code === "45020" && !isTextBlank(s, p)
+  return s.player.deck.length > 0 && p.code === "45020" && !isTextBlank(s, p)
     ? [optional("Legion", [B("legion", { id: p.id })])]
     : [];
 }
@@ -363,6 +381,8 @@ export function bishopDefenseOptions(
     deadpoolTriggeredBlocked(s) ||
     s.player.form !== "hero" ||
     !s.attack ||
+    (s.flags.bishopConversionAttack === s.attack.id &&
+      !s.player.discard.some(resourceCard)) ||
     (s.attack.defender &&
       s.attack.defender !== "none" &&
       s.attack.defender !== "hero")
@@ -497,7 +517,13 @@ export function resolveBishopEffect(
     }
     case "bishop:uniform-window": {
       const p = ports.find(s, e.id);
-      if (p && !p.exhausted && !isTextBlank(s, p) && handResources(s).length)
+      if (
+        p &&
+        !p.exhausted &&
+        !isTextBlank(s, p) &&
+        s.player.hp < ports.maxHP(s) &&
+        handResources(s).length
+      )
         ports.queue(
           s,
           optional("Bishop's Uniform", [B("uniform", { id: p.id })]),
@@ -601,17 +627,37 @@ export function resolveBishopEffect(
       ports.declareDefense(s);
       const resources = s.player.discard.filter(resourceCard);
       for (const p of resources) s.player.deck.push(take(s, p.id)!);
-      ports.shuffle(s);
+      if (resources.length) ports.shuffle(s);
+      if (s.flags.bishopConversionAttack !== s.attack!.id)
+        s.flags.bishopConversionDamage = 0;
       s.flags.bishopConversionAttack = s.attack!.id!;
-      s.flags.bishopConversionDamage = 0;
+      break;
+    }
+    case "bishop:sidekick-cost": {
+      const p = bishopSidekicks(s).find((p) => p.id === e.id);
+      need(
+        p && ports.canReady(s, p.id),
+        "Side-by-Side must ready the actual exhausted sidekick as its additional cost.",
+      );
+      ports.ready(s, p!.id);
+      s.flags[`bishopSidekickCost:${e.eventId}`] = p!.id;
       break;
     }
     case "bishop:side-by-side":
+      if (typeof s.flags[`bishopSidekickCost:${e.eventId}`] === "string") {
+        ports.queue(
+          s,
+          B("side-by-side-effect", {
+            id: s.flags[`bishopSidekickCost:${e.eventId}`],
+          }),
+        );
+        break;
+      }
       ports.choose(
         s,
         "Side-by-Side",
         "Ready your sidekick as the cost.",
-        sidekicks(s)
+        bishopSidekicks(s)
           .filter((p) => ports.canReady(s, p.id))
           .map((p) =>
             O(
@@ -624,30 +670,39 @@ export function resolveBishopEffect(
       );
       break;
     case "bishop:side-by-side-paid": {
-      const p = sidekicks(s).find((p) => p.id === e.id);
+      const p = bishopSidekicks(s).find((p) => p.id === e.id);
       need(
         p && ports.canReady(s, p.id),
         "The actual sidekick must be exhausted and readyable.",
       );
       ports.ready(s, p!.id);
+      ports.queue(s, B("side-by-side-effect", { id: p!.id }));
+      break;
+    }
+    case "bishop:side-by-side-effect": {
       ports.ready(s, "hero");
       ports.choose(s, "Side-by-Side", "Choose a benefit for both characters.", [
         O("heal", "Heal 1 damage from both characters", [
           E("heal", { target: "hero", amount: 1 }),
-          E("heal", { target: p!.id, amount: 1 }),
+          E("heal", { target: e.id, amount: 1 }),
         ]),
         O("boost", "+1 THW and +1 ATK for both this phase", [
-          B("side-bonus", { id: p!.id }),
+          B("side-bonus", { id: e.id }),
         ]),
       ]);
       break;
     }
-    case "bishop:side-bonus":
-      for (const id of [`hero:${s.activePlayerId}`, e.id]) {
-        const key = `bishopSideBySide:${phase(s)}:${id}`;
-        s.flags[key] = Number(s.flags[key] || 0) + 1;
+    case "bishop:side-bonus": {
+      const key = `bishopSideBySide:${phase(s)}:hero:${s.activePlayerId}`;
+      s.flags[key] = Number(s.flags[key] || 0) + 1;
+      const ally = allInPlay(s).find((p) => p.id === e.id) as
+        BishopBonusPiece | undefined;
+      if (ally) {
+        ally.bishopPowerBonus = bishopCharacterBonus(s, ally.id) + 1;
+        ally.bishopBonusPhase = phase(s);
       }
       break;
+    }
     case "bishop:ready-bishop": {
       const seat = playerOrder(s).find(
         (seat) =>
