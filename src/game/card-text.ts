@@ -1,4 +1,4 @@
-import { magikTopPlayable } from "./magik.js";
+import { magikPending, magikTopPlayable } from "./magik.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import players from "../data/core-player.json" with { type: "json" };
 import type { Card, GameState, Piece } from "./types.js";
@@ -174,6 +174,21 @@ export function eventPlaySources(s: GameState): Piece[] {
       .filter((p) => p.code === "27007" && !isTextBlank(s, p))
       .flatMap((p) => (p.storedCards || []).filter(event)),
   ];
+}
+
+/** Revalidate a native event PLAY continuation after its source may have been
+ * staged for payment. Pending events are never added to availability lists. */
+export function eventPlaySource(s: GameState, id: string): Piece | undefined {
+  return (
+    eventPlaySources(s).find((p) => p.id === id) ||
+    s.resolving.find(
+      (p) =>
+        p.id === id &&
+        p.ownerId === s.activePlayerId &&
+        definitions.get(p.code)?.type_code === "event" &&
+        magikPending(s, p),
+    )
+  );
 }
 
 /** Actual Defense events available to this controller. Jocasta permits playing
