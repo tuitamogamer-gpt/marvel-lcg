@@ -30,7 +30,7 @@ const heroes = [
     name: "Magneto",
     aspect: "leadership",
     deckSize: 40,
-    seed: 49001,
+    seed: 49003,
     expectedSetup: [],
     expectedSupplementary: ["49033", "49034", "49035", "49036"],
   },
@@ -50,7 +50,7 @@ const heroes = [
     name: "Nick Fury",
     aspect: "justice",
     deckSize: 40,
-    seed: 50034,
+    seed: 50035,
     expectedSetup: ["50035a"],
     expectedSupplementary: [],
   },
@@ -594,9 +594,16 @@ async function playHandPiece(piece) {
     await slot.locator(`img[src="${imageFor(piece.code)}"]`).count(),
     1,
   );
-  await slot
-    .getByRole("button", { name: `Play now: ${card(piece).name}`, exact: true })
-    .click();
+  const play = slot.getByRole("button", {
+    name: `Play now: ${card(piece).name}`,
+    exact: true,
+  });
+  await play.hover();
+  await play.click();
+  await page.waitForFunction(
+    (saved) => localStorage.getItem("champions.save.v1") !== saved,
+    JSON.stringify(before),
+  );
   return settle();
 }
 
@@ -610,7 +617,13 @@ async function payPhysicalCards(
     !pending.prompt.requirements?.length,
     "This source flow uses ordinary printed costs",
   );
-  const available = paymentSources(pending);
+  const available = paymentSources(
+    pending,
+    pending.prompt.card?.id,
+    pending.prompt.paymentTarget,
+    pending.prompt.handOnly,
+    pending.prompt.alliance,
+  );
   const sources = available.filter((item) => item.kind === "card");
   const abilities = available.filter((item) => item.kind === "ability");
   const buttons = page.locator(
@@ -751,13 +764,61 @@ async function magneticPull(source, width, initial) {
   assert.deepEqual(after.player.setAside, before.player.setAside);
   await checkpoint("magneto-magnetic-pull", width, source, initial);
   await reload();
+  const bubble = (await save()).player.hand.find(
+    (piece) => piece.code === "49006",
+  );
+  assert.ok(bubble, "The natural source seed opens an actual Magnetic Bubble");
+  await playHandPiece(bubble);
+  const payment = await payPhysicalCards(source);
+  assert.equal(payment.cost, 3);
+  assert.equal(
+    payment.state.player.inPlay.find((piece) => piece.id === bubble.id)?.damage,
+    0,
+  );
   const damage = await basicAttack(source);
+  const beforeRound = await save();
+  const afterRound = await nextRound(source, (state) =>
+    !state.player.exhausted
+      ? state.prompt.options.find((option) =>
+          option.effects?.some(
+            (effect) => effect.type === "defender" && effect.id === "hero",
+          ),
+        )
+      : null,
+  );
+  const stored = afterRound.player.inPlay.find(
+    (piece) => piece.id === bubble.id,
+  );
+  assert.equal(
+    stored?.damage,
+    5,
+    "The same paid Bubble holds the actual two plus three incoming damage",
+  );
+  assert.equal(afterRound.player.hp, beforeRound.player.hp);
+  const badge = page
+    .locator(`.in-play-card[data-piece-id="${bubble.id}"]`)
+    .getByRole("img", { name: "Magnetic Bubble damage: 5 of 6", exact: true });
+  assert.ok(await badge.isVisible());
+  assert.equal((await badge.innerText()).replace(/\s/g, ""), "5/6DMG");
+  await checkpoint("magneto-magnetic-bubble-damage", width, source, initial);
+  await reload();
+  assert.ok(
+    await badge.isVisible(),
+    "Exact reload keeps the actual stored Bubble damage visible",
+  );
   return {
     action: "Magnetic Pull",
     discardedIds: discarded.map((piece) => piece.id),
     recoveredId: recovered.id,
     linkedReserveIds: reserve.map((piece) => piece.id),
     basicAttackDamage: damage,
+    bubble: {
+      id: bubble.id,
+      paidHandCardIds: payment.paidHandCardIds,
+      damage: 5,
+      capacity: 6,
+      preventedHpLoss: 5,
+    },
   };
 }
 

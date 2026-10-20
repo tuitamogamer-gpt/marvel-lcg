@@ -5679,14 +5679,14 @@ function Tabletop({
                                   {pieceHP(s, p) - p.damage}
                                 </span>
                               )}
-                              {p.code === "46008" && (
+                              {["46008", "49006"].includes(p.code) && (
                                 <span
                                   className="mini-token"
                                   role="img"
-                                  aria-label={`Ice Wall damage: ${p.damage} of 8`}
-                                  title={`Ice Wall damage: ${p.damage} of 8`}
+                                  aria-label={`${card(p).name} damage: ${p.damage} of ${p.code === "46008" ? 8 : 6}`}
+                                  title={`${card(p).name} damage: ${p.damage} of ${p.code === "46008" ? 8 : 6}`}
                                 >
-                                  {p.damage}/8
+                                  {p.damage}/{p.code === "46008" ? 8 : 6}
                                   <small>DMG</small>
                                 </span>
                               )}
@@ -5697,25 +5697,81 @@ function Tabletop({
                                   <small>STORED</small>
                                 </span>
                               )}
-                              {p.counters > 0 && (
-                                <span className="mini-token counter-token">
-                                  <PremiumToken kind="counter" />
+                              {(p.counters > 0 ||
+                                ["50035a", "50035b"].includes(p.code)) && (
+                                <span
+                                  className="mini-token counter-token"
+                                  role={
+                                    ["50035a", "50035b"].includes(p.code)
+                                      ? "img"
+                                      : undefined
+                                  }
+                                  aria-label={
+                                    ["50035a", "50035b"].includes(p.code)
+                                      ? `Suit threat: ${p.counters}`
+                                      : undefined
+                                  }
+                                  title={
+                                    ["50035a", "50035b"].includes(p.code)
+                                      ? `Suit threat: ${p.counters}`
+                                      : undefined
+                                  }
+                                >
+                                  <PremiumToken
+                                    kind={
+                                      ["50035a", "50035b"].includes(p.code)
+                                        ? "threat"
+                                        : "counter"
+                                    }
+                                  />
                                   {p.counters}
                                   <small>
-                                    {p.code === "01066"
-                                      ? "ARROWS"
-                                      : p.code === "01018"
-                                        ? "ENERGY"
-                                        : [
-                                              "16034",
-                                              "16036",
-                                              "16037",
-                                              "16038",
-                                              "16046",
-                                            ].includes(p.code)
-                                          ? "CHARGES"
-                                          : "USES"}
+                                    {["50035a", "50035b"].includes(p.code)
+                                      ? "THREAT"
+                                      : p.code === "01066"
+                                        ? "ARROWS"
+                                        : p.code === "01018"
+                                          ? "ENERGY"
+                                          : [
+                                                "16034",
+                                                "16036",
+                                                "16037",
+                                                "16038",
+                                                "16046",
+                                              ].includes(p.code)
+                                            ? "CHARGES"
+                                            : card(p).type_code === "support" &&
+                                                card(p).traits?.includes(
+                                                  "S.H.I.E.L.D.",
+                                                ) &&
+                                                !/Uses\s*\(/.test(
+                                                  card(p).text || "",
+                                                )
+                                              ? "ALL-PURPOSE"
+                                              : "USES"}
                                   </small>
+                                </span>
+                              )}
+                              {!!p.nickAllPurposeCounters && (
+                                <span
+                                  className="mini-token"
+                                  role="img"
+                                  aria-label={`All-purpose counters: ${p.nickAllPurposeCounters}`}
+                                  title={`All-purpose counters: ${p.nickAllPurposeCounters}`}
+                                >
+                                  {p.nickAllPurposeCounters}
+                                  <small>AP</small>
+                                </span>
+                              )}
+                              {!!p.nickThreatTokens && (
+                                <span
+                                  className="mini-token"
+                                  role="img"
+                                  aria-label={`Threat tokens: ${p.nickThreatTokens}`}
+                                  title={`Threat tokens: ${p.nickThreatTokens}`}
+                                >
+                                  <PremiumToken kind="threat" />
+                                  {p.nickThreatTokens}
                                 </span>
                               )}
                             </button>
