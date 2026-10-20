@@ -1,3 +1,4 @@
+import { rulesCode } from "./rules-code.js";
 import { eventPlaySources, isTextBlank } from "./card-text.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
@@ -169,7 +170,7 @@ export function thorSchemeLimitModifier(s: GameState) {
   return (
     allInPlay(s).filter(
       (p) =>
-        p.code === "06031" &&
+        rulesCode(p) === "06031" &&
         (p.attachedTo === "main" || p.attachedTo === "main:" + s.scheme.code),
     ).length * 4
   );
@@ -179,7 +180,7 @@ export function thorMainSchemeAdvances(s: GameState): Effect[] {
   return allInPlay(s)
     .filter(
       (p) =>
-        p.code === "06031" &&
+        rulesCode(p) === "06031" &&
         (p.attachedTo === "main" || p.attachedTo === "main:" + s.scheme.code),
     )
     .map((p) => E("discardPiece", { id: p.id }));
@@ -198,10 +199,10 @@ export function thorPlayRestriction(
   if (p.code === "06018" && !recipientSeats(s, p).length)
     return "Each player already controls Battle Fury.";
   if (
-    p.code === "06031" &&
+    rulesCode(p) === "06031" &&
     allInPlay(s).some(
       (p) =>
-        p.code === "06031" &&
+        rulesCode(p) === "06031" &&
         (p.attachedTo === "main" || p.attachedTo === "main:" + s.scheme.code),
     )
   )
@@ -363,7 +364,7 @@ export function thorAllyEnter(
 export function thorCardEntered(s: GameState, p: Piece): Effect[] {
   if (p.code === "06017") p.counters = 0;
   if (p.code === "06034") p.counters = 3;
-  if (p.code === "06031") p.attachedTo = "main:" + s.scheme.code;
+  if (rulesCode(p) === "06031") p.attachedTo = "main:" + s.scheme.code;
   return p.code === "06018" ? [T("control", { id: p.id })] : [];
 }
 export function thorAbilityOptions(s: GameState, id: string): Option[] {

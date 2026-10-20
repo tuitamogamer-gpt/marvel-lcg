@@ -1,3 +1,4 @@
+import { nickFuryAerial } from "./nick-fury.js";
 import { bishopAllyHP, bishopCharacterBonus } from "./bishop.js";
 import { nightcrawlerStats } from "./nightcrawler.js";
 import { magikStats } from "./magik.js";
@@ -893,6 +894,20 @@ export const HEROES = [
     style: "Teleportation and defense · Protection",
     complexity: 2,
   },
+  {
+    id: "nick_fury",
+    code: "50034a",
+    alter: "50034b",
+    name: "Nick Fury",
+    identity: "Nick Fury",
+    aspect: "justice" as Aspect,
+    color: "#426a79",
+    tag: "One eye on the mission.",
+    description:
+      "Gather intelligence in Stealth, then spend suit threat on an Assault.",
+    style: "Suit forms · Justice",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -1249,6 +1264,7 @@ export function deckCodes(
       (hero === "deadpool" && String(aspect) === "pool") ||
       (hero === "jubilee" && aspect === "justice") ||
       (hero === "nightcrawler" && aspect === "protection") ||
+      (hero === "nick_fury" && aspect === "justice") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
       (hero === "rogue" && aspect === "protection") ||
@@ -1415,6 +1431,7 @@ export function aerial(s: GameState, visited: string[] = []): boolean {
     (s.player.form === "hero" &&
       (has(s, "01017") || !!s.flags.aerial || thorStats(s).aerial)) ||
     (s.heroId === "angel" && s.player.form === "hero") ||
+    nickFuryAerial(s) ||
     icemanStats(s).aerial ||
     rogueModifiers(s).aerial ||
     rogueTraits(

@@ -117,6 +117,8 @@ export interface MutagenEnginePorts {
 }
 
 export interface MutagenActivation {
+  nickStealthSuit?: string;
+  nickInformantHandled?: boolean;
   enemyId: string;
   playerId: string;
   kind: "attack" | "scheme";

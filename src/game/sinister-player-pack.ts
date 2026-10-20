@@ -1,3 +1,4 @@
+import { rulesCode } from "./rules-code.js";
 import raw from "../data/catalog-cards.json" with { type: "json" };
 import { consumeStatus } from "./keywords.js";
 import { allInPlay, playerOrder, seatView } from "./team.js";
@@ -28,7 +29,7 @@ const need = (yes: unknown, text: string) => {
   if (!yes) throw Error(text);
 };
 const own = (s: GameState, id: string, code?: string) =>
-  s.player.inPlay.find((p) => p.id === id && (!code || p.code === code));
+  s.player.inPlay.find((p) => p.id === id && (!code || rulesCode(p) === code));
 const d = (p: Piece) => cards.get(p.code)!;
 const named = (p: Piece, name: string) => d(p)?.name === name;
 const eventReceiptKey = (token: string, id: string) =>
@@ -379,7 +380,7 @@ export function sinisterPlayerPackPlayRestriction(
   )
     return "Across the Spider-Verse needs a ready controlled Web-Warrior and an actual playable discard ally.";
   if (
-    ["27042", "27043"].includes(p.code) &&
+    ["27042", "27043"].includes(rulesCode(p)) &&
     !ports.controlledTraitCards(s, "S.H.I.E.L.D.", true).length
   )
     return "Exhaust a ready controlled S.H.I.E.L.D. card.";
@@ -441,7 +442,7 @@ export function sinisterPlayerPackEvent(
   paid: Resource[] = [],
   damage?: SinisterPlayerDamageReceipt,
 ): Effect[] | null {
-  switch (p.code) {
+  switch (rulesCode(p)) {
     case "27013":
       return [P("bait", { id: p.id })];
     case "27014":
@@ -604,7 +605,7 @@ export function sinisterPlayerPackCardPlayed(
   )
     return null;
   const ids = s.player.inPlay
-    .filter((p) => p.code === "27055" && !ports.isTextBlank(s, p))
+    .filter((p) => rulesCode(p) === "27055" && !ports.isTextBlank(s, p))
     .map((p) => p.id);
   return ids.length ? [P("sky-window", { receipt, ids, after })] : null;
 }

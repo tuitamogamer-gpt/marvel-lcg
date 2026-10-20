@@ -1,3 +1,4 @@
+import { rulesCode } from "./rules-code.js";
 import { isTextBlank } from "./card-text.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { controller, playerOrder, seatView } from "./team.js";
@@ -37,7 +38,7 @@ const trait = (p: Piece | string, value: string) =>
     .split(/\.\s*/)
     .includes(value);
 const own = (s: GameState, id: string, code?: string) =>
-  s.player.inPlay.find((p) => p.id === id && (!code || p.code === code));
+  s.player.inPlay.find((p) => p.id === id && (!code || rulesCode(p) === code));
 const enemy = (s: GameState, id: string) =>
   id === s.villain.id ? s.villain : s.minions.find((p) => p.id === id);
 const phaseKey = (s: GameState) => `${s.round}:${s.phase}`;
@@ -120,6 +121,8 @@ export interface BlackWidowAttackSnapshot {
 }
 export interface BlackWidowPorts {
   queue(s: GameState, ...effects: Effect[]): void;
+  practicedPlan?(s: GameState, p: Piece, after: Effect[]): Effect[];
+  preparationResolved?(s: GameState, p: Piece, after: Effect[]): Effect[];
   choose(s: GameState, title: string, text: string, options: Option[]): void;
   discardPiece(s: GameState, id: string): void;
   shufflePlayerDeck(s: GameState): void;
@@ -340,8 +343,8 @@ export function blackWidowEvent(
   return p.code === "08004" ? [B("dance", { step: 0, initiated: true })] : null;
 }
 export function blackWidowAllyEnter(s: GameState, p: Piece): Effect[] | null {
-  if (p.code === "08002" || p.code === "08012") return [];
-  if (p.code !== "08011") return null;
+  if (p.code === "08002" || rulesCode(p) === "08012") return [];
+  if (rulesCode(p) !== "08011") return null;
   const actorId = controller(s, p.id)?.id || s.activePlayerId;
   return [
     E("optional", {
@@ -532,7 +535,7 @@ export function blackWidowMinionSchemed(
   if (!s.minions.some((p) => p.id === minion.id)) return [];
   return playerOrder(s).flatMap((seat) =>
     seatView(s, seat)
-      .player.inPlay.filter((p) => p.code === "08012" && !p.exhausted)
+      .player.inPlay.filter((p) => rulesCode(p) === "08012" && !p.exhausted)
       .map((p) =>
         option(
           p.id,
@@ -759,7 +762,7 @@ export function resolveBlackWidowEffect(
       );
       break;
     case "bw:preparation": {
-      const p = own(s, e.id);
+      const p: Piece | undefined = e.nickPreparation || own(s, e.id);
       need(
         p && prep(p!),
         "The Preparation is no longer controlled by this player.",
@@ -831,7 +834,23 @@ export function resolveBlackWidowEffect(
               cards.get(e.piece.code)?.type_code === "treachery"),
           "This player is not revealing an eligible encounter.",
         );
-      ports.discardPiece(s, p!.id);
+      if (!e.nickPrepPaid) {
+        ports.discardPiece(s, p!.id);
+        if (ports.practicedPlan) {
+          ports.queue(
+            s,
+            ...ports.practicedPlan(s, p!, [
+              B("preparation", {
+                ...e,
+                type: "bw:preparation",
+                nickPrepPaid: true,
+                nickPreparation: { ...p! },
+              }),
+            ]),
+          );
+          break;
+        }
+      }
       // Current errata: replacement by Stunned means the ability did not
       // resolve, so neither Widowmaker nor Synth-Suit can respond (RRG66).
       if (attackPreps.has(p!.code) && s.player.stunned) {
@@ -839,7 +858,9 @@ export function resolveBlackWidowEffect(
         ports.queue(s, ...(e.after || []));
         break;
       }
-      const after = blackWidowPreparationResolved(s, p!, e.after || []);
+      const after = ports.preparationResolved
+        ? ports.preparationResolved(s, p!, e.after || [])
+        : blackWidowPreparationResolved(s, p!, e.after || []);
       switch (e.kind) {
         case "attacrobatics": {
           if (ports.countBoostIcons) {

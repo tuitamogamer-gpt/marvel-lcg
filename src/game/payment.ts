@@ -1,3 +1,4 @@
+import { nickFuryResourceSources } from "./nick-fury.js";
 import { magikResourceSources } from "./magik.js";
 import { jubileeResourceSources } from "./jubilee.js";
 import { cableResourceSources } from "./cable.js";
@@ -162,6 +163,7 @@ function localPaymentSources(
   sources.push(...psylockeResourceSources(s));
   sources.push(...x23ResourceSources(s));
   sources.push(...jubileeResourceSources(s));
+  sources.push(...nickFuryResourceSources(s, targetCode));
   sources.push(...stormResourceSources(s));
   sources.push(...thorResourceSources(s));
   sources.push(...waspPackResourceSources(s));

@@ -1,3 +1,4 @@
+import { NICK_FURY_SCRIPT_CODES } from "./nick-fury.js";
 import { BISHOP_SCRIPT_CODES } from "./bishop.js";
 import { NIGHTCRAWLER_SCRIPT_CODES } from "./nightcrawler.js";
 import { NIGHTCRAWLER_ENCOUNTER_CODES } from "./nightcrawler-encounters.js";
@@ -146,6 +147,7 @@ export const SCRIPTED_HERO_IDS = new Set([
   "magik",
   "jubilee",
   "nightcrawler",
+  "nick_fury",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...NIGHTCRAWLER_SCRIPT_CODES,
@@ -165,6 +167,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ICEMAN_SCRIPT_CODES,
   ...DEADPOOL_SCRIPT_CODES,
   ...JUBILEE_SCRIPT_CODES,
+  ...NICK_FURY_SCRIPT_CODES,
   ...MAGNETO_SCRIPT_CODES,
   ...ACOLYTES_SCRIPT_CODES,
   ...MASTER_MOLD_SCRIPT_CODES,

@@ -50,6 +50,7 @@ export function deckOptions(
       c.code !== "32031b" &&
       c.code !== "34002b" &&
       c.code !== "41002b" &&
+      c.code !== "50035b" &&
       !["43034", "43035", "43036", "43037", "46002"].includes(c.code) &&
       !identityCodes.has(c.code) &&
       !identityMatch(heroId, c) &&
@@ -136,6 +137,7 @@ export function deckErrors(
       "iceman",
       "jubilee",
       "nightcrawler",
+      "nick_fury",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

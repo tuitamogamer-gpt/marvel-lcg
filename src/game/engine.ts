@@ -1,3 +1,4 @@
+import * as nickFury from "./nick-fury.js";
 import * as bishop from "./bishop.js";
 import * as nightcrawler from "./nightcrawler.js";
 import * as nightcrawlerEncounter from "./nightcrawler-encounters.js";
@@ -161,6 +162,7 @@ import {
   blackWidowResourceSpent,
   blackWidowEvent,
   blackWidowAllyEnter,
+  blackWidowPreparationResolved,
   blackWidowBoostOptions,
   blackWidowRevealOptions,
   blackWidowMinionEntered,
@@ -586,6 +588,9 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     inherited.stalwart ||
     sabretooth.sabretoothModifiers(s, piece.id).stalwart
       ? { stalwart: true }
+      : {}),
+    ...(piece.code === "50060" && !isTextBlank(s, piece)
+      ? { toughLimit: Infinity }
       : {}),
     ...(magnetic.losesSteady ? { steady: false } : {}),
     ...(mansionAttack.mansionAttackModifiers(s, piece, { isTextBlank }).steady
@@ -1464,6 +1469,7 @@ function dealEncounter(s: GameState, playerId = s.activePlayerId) {
   if (p) {
     p.dealtTo = playerId;
     s.encounter.dealt.push(p);
+    add(s, ...nickFury.nickFuryDealt(s));
   }
 }
 function removedByPlayerElimination(s: GameState, p: Piece) {
@@ -1485,6 +1491,16 @@ function discardPiece(s: GameState, id: string) {
     "Powerful Enchantments prevents discarding this attachment.",
   );
   movePieceFromPlay(s, id, false);
+  if (p && !s.flags.nickDiscardingPreparation) {
+    const owner = p.ownerId || s.activePlayerId;
+    const view = seatView(s, owner);
+    add(
+      s,
+      ...nickFury
+        .nickFuryPracticedPlan(view, p)
+        .map((q) => ({ ...q, actorId: owner })),
+    );
+  }
 }
 function removePlayerCard(s: GameState, id: string) {
   const p = allInPlay(s).find((p) => p.id === id);
@@ -2441,7 +2457,7 @@ export function schemeLimit(s: GameState) {
     deadpool.deadpoolSchemeBonus(s) +
     allInPlay(s).filter(
       (p) =>
-        p.code === "06031" &&
+        rulesCode(p) === "06031" &&
         ["main", `main:${s.scheme.code}`].includes(p.attachedTo || ""),
     ).length *
       4;
@@ -3253,6 +3269,7 @@ function applyDamage(
     if (!traits.grootHandled) n -= groot.grootPreventDamage(s, "hero", n);
     if (n <= 0) return none;
     s.player.hp -= n;
+    add(s, ...nickFury.nickFuryDamaged(s, undefined, n, "hero"));
     if (
       (attack || traits.damageFromAttack) &&
       s.attack?.id &&
@@ -3315,6 +3332,7 @@ function applyDamage(
       textBlank: isTextBlank(s, m),
     };
   m.damage += n;
+  add(s, ...nickFury.nickFuryDamaged(s, m, n, target));
   track(
     s,
     s.minions.some((x) => x.id === m.id) ? "damageDealt" : "damageTaken",
@@ -4678,6 +4696,7 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
         ? 1
         : 0) -
       wolverine.wolverineCostReduction(s, physical || c, wolverinePorts) -
+      nickFury.nickFuryCostReduction(s, physical || c, captainPackHasTrait) -
       magik.magikDiscount(s, physical || {}) -
       cable.cableDiscount(s, physical || c, cablePorts) -
       deadpool.deadpoolDiscount(s, physical || c) -
@@ -4740,6 +4759,12 @@ function captainPackHasTrait(
   )
     return true;
   if (jubilee.jubileeEnemyTrait(s, target, trait)) return true;
+  if (
+    (target === "hero" || target === `hero:${s.activePlayerId}`) &&
+    trait === "Aerial" &&
+    nickFury.nickFuryAerial(s)
+  )
+    return true;
   if (
     trait.toLowerCase() === "x-force" &&
     angel.angelRecruitBonus(s, target) > 0
@@ -5034,6 +5059,15 @@ function attackAction(
     log(s, "The attack has no eligible target.");
     return;
   }
+  if (
+    source === "hero" &&
+    s.heroId === "nick_fury" &&
+    s.player.form === "hero" &&
+    !isTextBlank(s, heroCard(s)) &&
+    !deadpool.deadpoolTriggeredBlocked(s) &&
+    nickFury.nickFurySuit(s)?.code === "50035b"
+  )
+    nickFury.nickFuryChangeSuit(s, "assault", nickFuryPorts);
   const attacker = combatCharacter(s, source);
   const defender = combatCharacter(s, target);
   const previousEffects = new Set(s.queue);
@@ -5748,6 +5782,7 @@ function pay(
   const p = s.prompt!;
   need(p?.kind === "payment", "No payment is pending.");
   need(new Set(ids).size === ids.length, "Choose each resource source once.");
+  if (nickFury.nickFuryWatchPreflight(s, p, ids, wildAs, nickFuryPorts)) return;
   const sources = paymentSources(
     s,
     p.card?.id,
@@ -6288,6 +6323,8 @@ function pay(
         );
       } else if (nightcrawler.nightcrawlerSpendResource(s, id)) {
       } else if (iceman.icemanResourceSpent(s, id)) {
+      } else if (nickFury.nickFurySpendResource(s, id)) {
+        // The physical Watch/Jemma source commits its own exhaust/threat cost.
       } else if (jubilee.jubileeSpendResource(s, id)) {
       } else if (cable.cableSpendResource(s, id)) {
       } else if (rogue.rogueSpendResource(s, id)) {
@@ -6686,6 +6723,7 @@ export function newGame(config: {
     x23.x23Initialize(s, { makePiece });
     iceman.icemanInitialize(s, { makePiece });
     jubilee.jubileeInitialize(s, makePiece);
+    nickFury.nickFuryInitialize(s, makePiece);
     s.player.deck = shuffle(s, s.player.deck);
     doctorStrangeSetup(s, dsPorts);
     venom.venomInitializeNemesis(s, { makePiece });
@@ -7039,6 +7077,8 @@ const reactionCards = [
 export function playable(s: GameState, p: Piece): string | null {
   if (deadpool.deadpoolTriggeredBlocked(s))
     return "The Merc with the Mouth prevents another player’s triggered card abilities during this turn.";
+  const nickRestriction = nickFury.nickFuryPlayRestriction(s, p, nickFuryPorts);
+  if (nickRestriction) return nickRestriction;
   const jubileeRestriction = jubilee.jubileePlayRestriction(s, p, jubileePorts);
   if (jubileeRestriction) return jubileeRestriction;
   const deadpoolRestriction = deadpool.deadpoolPlayRestriction(s, p);
@@ -8263,6 +8303,11 @@ function allyEnter(
     add(s, ...ds);
     return;
   }
+  const nick = nickFury.nickFuryAllyEntered(s, p, nickFuryPorts);
+  if (nick !== null) {
+    add(s, ...nick);
+    return;
+  }
   const bw = blackWidowAllyEnter(s, p);
   if (bw !== null) {
     add(s, ...bw);
@@ -8376,6 +8421,7 @@ function event(
       ? scarletPack.scarletWitchPackEvent(s, { ...p, code: "15019" }, paid)
       : null) ??
     nightcrawler.nightcrawlerEvent(s, p) ??
+    nickFury.nickFuryEvent(s, p) ??
     jubilee.jubileeEvent(s, p) ??
     psylocke.psylockeEvent(s, p, paid) ??
     domino.dominoEvent(s, p) ??
@@ -9207,6 +9253,15 @@ function ability(s: GameState, id: string, action = "special") {
       : nightcrawlerOptions.find((o) => o.id === action);
   if (nightcrawlerSelected) {
     add(s, ...nightcrawlerSelected.effects);
+    return;
+  }
+  const nickOptions = nickFury.nickFuryAbilityOptions(s, id, nickFuryPorts);
+  const nickSelected =
+    action === "special" && nickOptions.length === 1
+      ? nickOptions[0]
+      : nickOptions.find((o) => o.id === action);
+  if (nickSelected) {
+    add(s, ...nickSelected.effects);
     return;
   }
   const jubileeOptions = jubilee.jubileeAbilityOptions(s, id, jubileePorts);
@@ -10298,6 +10353,21 @@ function openMsDamageWindow(s: GameState, packet: Effect): boolean {
       [packet],
       msPorts,
     ),
+    ...nickFury.nickFuryDamageOptions(
+      s,
+      {
+        target: "hero",
+        playerId: s.activePlayerId,
+        amount,
+        packet,
+        attack: !!(
+          packet.attack ||
+          packet.damageFromAttack ||
+          packet.enemyAttack
+        ),
+      },
+      [packet],
+    ),
     ...blackWidowDamageOptions(
       s,
       { target: "hero", playerId: s.activePlayerId, amount, packet },
@@ -10398,9 +10468,16 @@ function countActivationBoost(s: GameState, id: string, after: Effect[]): void {
   );
 }
 const bwPorts: BlackWidowPorts = {
+  practicedPlan: nickFury.nickFuryPracticedPlan,
+  preparationResolved: (s, p, after) =>
+    blackWidowPreparationResolved(
+      s,
+      p,
+      nickFury.nickFuryPreparationResolved(s, p, after),
+    ),
   queue: add,
   choose,
-  discardPiece,
+  discardPiece: nickDiscardPreparation,
   revealHidden,
   flip,
   shufflePlayerDeck: (s) => {
@@ -11529,6 +11606,16 @@ const draxPackPorts: draxPack.DraxPackPorts = {
     need(p, "The defeated ally is no longer in play.");
     if (p!.id === sabretooth.sabretoothKelly(s)?.id || p!.code === "32088b") {
       movePieceFromPlay(s, id, false);
+      if (p && !s.flags.nickDiscardingPreparation) {
+        const owner = p.ownerId || s.activePlayerId;
+        const view = seatView(s, owner);
+        add(
+          s,
+          ...nickFury
+            .nickFuryPracticedPlan(view, p)
+            .map((q) => ({ ...q, actorId: owner })),
+        );
+      }
       return;
     }
     const owner =
@@ -12480,6 +12567,7 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...bishop.bishopAbilityOptions(s, id, bishopPorts),
     ...magik.magikAbilityOptions(s, id),
     ...jubilee.jubileeAbilityOptions(s, id, jubileePorts),
+    ...nickFury.nickFuryAbilityOptions(s, id, nickFuryPorts),
     ...cable.cableAbilityOptions(s, id, cablePorts),
     ...x23.x23AbilityOptions(s, id, x23Ports),
     ...deadpool.deadpoolAbilityOptions(s, id, deadpoolPorts),
@@ -12712,6 +12800,16 @@ const msPorts: MsMarvelPorts = {
     need(p, "The ally is no longer in play.");
     if (p!.id === sabretooth.sabretoothKelly(s)?.id || p!.code === "32088b") {
       movePieceFromPlay(s, id, false);
+      if (p && !s.flags.nickDiscardingPreparation) {
+        const owner = p.ownerId || s.activePlayerId;
+        const view = seatView(s, owner);
+        add(
+          s,
+          ...nickFury
+            .nickFuryPracticedPlan(view, p)
+            .map((q) => ({ ...q, actorId: owner })),
+        );
+      }
       return;
     }
     const owner = s.players.find((seat) => seat.id === p!.ownerId);
@@ -16577,6 +16675,7 @@ const ironheartPorts: ironheart.IronheartPorts = {
     removeEncounterInstance(s, p.id);
     p.dealtTo = playerId;
     s.encounter.dealt.push(p);
+    add(s, ...nickFury.nickFuryDealt(s));
   },
   enemyScheme: (s, id, continuation) =>
     add(
@@ -18363,6 +18462,89 @@ const icemanPorts: iceman.IcemanPorts = {
   batch: spectrumPorts.damageBatch,
 };
 
+function nickDiscardPreparation(s: GameState, id: string) {
+  s.flags.nickDiscardingPreparation = true;
+  try {
+    discardPiece(s, id);
+  } finally {
+    delete s.flags.nickDiscardingPreparation;
+  }
+}
+const nickFuryPorts: nickFury.NickFuryPorts = {
+  queue: add,
+  choose,
+  find,
+  makePiece,
+  hasTrait: captainPackHasTrait,
+  enemies: (s, a) => targets(s, "enemy", a),
+  schemes: (s, t) => targets(s, "scheme", false, t),
+  characters: (s) => [
+    ...playerOrder(s).flatMap((seat) => {
+      const v = seatView(s, seat);
+      return [
+        {
+          id: seat.id === s.activePlayerId ? "hero" : `hero:${seat.id}`,
+          label: heroCard(v).name,
+          code: heroCard(v).code,
+        },
+        ...v.player.inPlay
+          .filter((p) => card(p).type_code === "ally" || p.treatedAsAlly)
+          .map((p) => ({ id: p.id, label: card(p).name, code: p.code })),
+      ];
+    }),
+    ...[s.villain, ...s.minions].map((p) => ({
+      id: p.id,
+      label: card(p).name,
+      code: p.code,
+    })),
+  ],
+  canReady: canReadyIdentity,
+  canStatus: quicksilverPorts.canGiveStatus,
+  maxHP,
+  discard: nickDiscardPreparation,
+  shuffle: (s) => {
+    revealHidden(s);
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  revealHidden,
+  putMinion: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    p.engagedWith = playerId;
+    delete p.dealtTo;
+    s.minions.push(p);
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    minionEntered(s, p);
+    activateSeat(s, previous);
+  },
+  cancelReveal: bwPorts.cancelEncounter,
+  prevent: bwPorts.preventDamage,
+  preparationsResolved: (s, p, after) =>
+    blackWidowPreparationResolved(
+      s,
+      p,
+      nickFury.nickFuryPreparationResolved(s, p, after),
+    ),
+  attackProgram: bwPorts.attackProgram,
+  changeForm: (s) => {
+    add(s, ...wolverine.wolverineFormChanged(s));
+    if (
+      antPack.antManPackFormResponseOptions(s, antPackPorts).length ||
+      waspPack.waspPackFormResponseOptions(s, waspPackPorts).length
+    )
+      add(s, E("antFormResponses", { responses: [] }));
+    if (
+      mtsPlayerPack.mtsPlayerPackFormResponseOptions(s, [], mtsPlayerPackPorts)
+        .length
+    )
+      add(s, E("mtsPackFormResponses"));
+  },
+  changeCounters: (s, p, amount) => {
+    p.counters += amount;
+  },
+};
+
 const jubileePorts: jubilee.JubileePorts = {
   queue: add,
   choose,
@@ -19118,6 +19300,16 @@ const mutantGenesisPackPorts: mgPack.MutantGenesisPlayerPackPorts = {
     s.flags[`spiderHamReturnHand:${id}`] = p!.ownerId || seat!.id;
     if (s.attack?.defender === id) s.attack.gmwReturnedDefender = id;
     movePieceFromPlay(s, id, false);
+    if (p && !s.flags.nickDiscardingPreparation) {
+      const owner = p.ownerId || s.activePlayerId;
+      const view = seatView(s, owner);
+      add(
+        s,
+        ...nickFury
+          .nickFuryPracticedPlan(view, p)
+          .map((q) => ({ ...q, actorId: owner })),
+      );
+    }
     delete s.flags[`niLeaveCommitted:${id}`];
     const generated = s.queue.filter((q) => !before.has(q));
     s.queue = s.queue.filter((q) => before.has(q));
@@ -19133,6 +19325,16 @@ const mutantGenesisPackPorts: mgPack.MutantGenesisPlayerPackPorts = {
     // Leave without defeat, retaining this physical minion and discarding its
     // actual attached player/encounter cards through their ordinary cleanup.
     movePieceFromPlay(s, id, false);
+    if (p && !s.flags.nickDiscardingPreparation) {
+      const owner = p.ownerId || s.activePlayerId;
+      const view = seatView(s, owner);
+      add(
+        s,
+        ...nickFury
+          .nickFuryPracticedPlan(view, p)
+          .map((q) => ({ ...q, actorId: owner })),
+      );
+    }
     delete s.flags[`niLeaveCommitted:${id}`];
     if (ownedCard) {
       // Official Magik ruling #175 and RRG1.8 Ownership and Control: a player
@@ -19537,6 +19739,17 @@ function enemyAttack(
     );
     log(s, `${card(p).name} loses stunned instead of attacking.`);
     canceled();
+    return;
+  }
+  if (!friendlySource && !originalTarget && nickFury.nickFuryStealth(s)) {
+    enemyScheme(s, id, extra, {
+      ...activation,
+      enemyId: id,
+      playerId: s.activePlayerId,
+      kind: "scheme",
+      modifier: activation?.modifier || 0,
+      nickStealthSuit: nickFury.nickFurySuit(s)!.id,
+    });
     return;
   }
   if (
@@ -19948,6 +20161,10 @@ function boostEffects(s: GameState, p: Piece) {
     return;
   }
   if (!s.scheming && s.attack?.angelIgnoreBoosts) return;
+  if (p.code === "50063") {
+    add(s, E("damage", { target: "hero", amount: 1, source: p.id }));
+    return;
+  }
   const magikBoost = magik.magikBoost(s, p);
   if (magikBoost !== null) {
     add(s, ...magikBoost);
@@ -20286,6 +20503,39 @@ function enemyScheme(
     );
     return;
   }
+  if (!request?.nickInformantHandled && s.minions.some((q) => q.id === id)) {
+    const next = E("ghostNativeEnemyScheme", {
+      id,
+      extra,
+      request: {
+        ...request,
+        enemyId: id,
+        playerId: s.activePlayerId,
+        kind: "scheme",
+        modifier: request?.modifier || 0,
+        nickInformantHandled: true,
+      },
+      colossusActivationHandled: true,
+    });
+    const options = playerOrder(s).flatMap((seat) =>
+      nickFury
+        .nickFurySchemeOptions(seatView(s, seat), id, [next])
+        .map((o) => ({
+          ...o,
+          id: `${seat.id}:${o.id}`,
+          effects: o.effects.map((q) => ({ ...q, actorId: seat.id })),
+        })),
+    );
+    if (options.length) {
+      choose(
+        s,
+        "Minion schemes",
+        "Use Informant to remove threat with this activation?",
+        [...options, option("continue", "Continue scheme", [next])],
+      );
+      return;
+    }
+  }
   const moldReceipt: masterMold.MasterMoldSchemeReceipt = {
     token: `scheme${s.nextId++}`,
     enemyId: id,
@@ -20312,6 +20562,8 @@ function enemyScheme(
   }
   s.scheming = {
     id: moldReceipt.token,
+    nickStealthSuit: request?.nickStealthSuit,
+    nickInformant: !!s.flags[`nickInformant:${id}`],
     attacker: id,
     boostCodes: [],
     boostIds: [],
@@ -20387,6 +20639,15 @@ export function enemyStats(
     scheme: Math.max(0, enemySCH(s, p, playerId)),
   };
 }
+function nickStealthPlacement(s: GameState, e: Effect) {
+  if (!e.nickStealthSuit || e.nickStealthHandled || e.target !== "main") return;
+  const suit = find(s, e.nickStealthSuit);
+  if (suit && suit.counters <= 5 && e.amount > 0) {
+    suit.counters++;
+    e.amount--;
+  }
+  e.nickStealthHandled = true;
+}
 function finishScheme(s: GameState) {
   const activation = s.scheming;
   if (!activation) return;
@@ -20408,19 +20669,26 @@ function finishScheme(s: GameState) {
   log(s, `${card(p).name} schemes for ${amount} threat.`, "bad");
   activation.threatBefore = s.stats?.threatPlaced || 0;
   const after = [
-    E(s.flags[`phoenixManipulation:${activation.id}`] ? "thwart" : "threat", {
-      target:
-        p.code === "44033" &&
-        !isTextBlank(s, p) &&
-        s.sideSchemes.some((q) => q.code === "44034")
-          ? s.sideSchemes.find((q) => q.code === "44034")!.id
-          : phoenix.phoenixSchemeTarget(s, p),
-      amount:
-        amount +
-        Number(s.flags[`phoenixManipulationBonus:${activation.id}`] || 0),
-      additional: !!s.flags[`phoenixManipulation:${activation.id}`],
-      ignoreCrisis: true,
-    }),
+    E(
+      s.flags[`phoenixManipulation:${activation.id}`] ||
+        activation.nickInformant
+        ? "thwart"
+        : "threat",
+      {
+        nickStealthSuit: activation.nickStealthSuit,
+        target:
+          p.code === "44033" &&
+          !isTextBlank(s, p) &&
+          s.sideSchemes.some((q) => q.code === "44034")
+            ? s.sideSchemes.find((q) => q.code === "44034")!.id
+            : phoenix.phoenixSchemeTarget(s, p),
+        amount:
+          amount +
+          Number(s.flags[`phoenixManipulationBonus:${activation.id}`] || 0),
+        additional: !!s.flags[`phoenixManipulation:${activation.id}`],
+        ignoreCrisis: true,
+      },
+    ),
     ...(extra === "rage" ? [E("mill", { amount })] : []),
     ...(id === s.villain.id && villainAt(s, "01141").length
       ? s.sideSchemes.map((p) => E("threat", { target: p.id, amount: 1 }))
@@ -20453,6 +20721,9 @@ function finishScheme(s: GameState) {
     ...(activation.afterActivation || []),
     ...activation.boostIds.map((id) => E("finishResolution", { id })),
     E("scarletEnemyActivated", { id }),
+    ...(p.code === "50062" && !isTextBlank(s, p)
+      ? [E("damage", { target: "hero", amount: 1, source: p.id })]
+      : []),
     E("bwMinionSchemeResponses", { id }),
     E("endScheme"),
   ];
@@ -21443,6 +21714,7 @@ function reveal(
             effects: o.effects.map((q) => ({ ...q, actorId: seat.id })),
           })),
       );
+    opts.push(...nickFury.nickFuryRevealOptions(s, p));
     const revealing = s.activePlayerId;
     for (const seat of playerOrder(s))
       opts.push(
@@ -21714,6 +21986,21 @@ function reveal(
     dealEncounter(s);
     return;
   }
+  if (!repeat && p.code === "50059") {
+    const holder = playerOrder(s).find((seat) => seat.heroId === "nick_fury");
+    if (holder) spectrumPorts.giveObligation(s, p, holder.id);
+    add(
+      s,
+      ...beginRevealWindow(
+        s,
+        p,
+        revealCard,
+        holder?.id || s.activePlayerId,
+        1 + goblinWhenRevealedCopies(s),
+      ),
+    );
+    return;
+  }
   if (!repeat && p.code === "47023") {
     const holder = playerOrder(s).find((seat) => seat.heroId === "jubilee");
     if (holder) spectrumPorts.giveObligation(s, p, holder.id);
@@ -21772,7 +22059,8 @@ function reveal(
   }
   if (
     !repeat &&
-    ((nightcrawlerEncounter.NIGHTCRAWLER_ENCOUNTER_CODES.includes(p.code) &&
+    (((nightcrawlerEncounter.NIGHTCRAWLER_ENCOUNTER_CODES.includes(p.code) ||
+      nickFury.NICK_FURY_SCRIPT_CODES.includes(p.code)) &&
       ["minion", "side_scheme"].includes(c.type_code)) ||
       (jubilee.JUBILEE_SCRIPT_CODES.includes(p.code) &&
         ["minion", "side_scheme"].includes(c.type_code)) ||
@@ -21892,6 +22180,7 @@ function reveal(
       ...x23.X23_SCRIPT_CODES,
       ...iceman.ICEMAN_SCRIPT_CODES,
       ...jubilee.JUBILEE_SCRIPT_CODES,
+      ...nickFury.NICK_FURY_SCRIPT_CODES,
       ...colossus.COLOSSUS_SCRIPT_CODES,
     ].some((code) => code === p.code) ||
       CARDS.some(
@@ -21963,6 +22252,7 @@ function reveal(
       cable.cableEncounter(s, p) ??
       nightcrawlerEncounter.nightcrawlerEncounter(s, p) ??
       iceman.icemanEncounter(s, p) ??
+      nickFury.nickFuryEncounter(s, p) ??
       jubilee.jubileeEncounter(s, p) ??
       x23.x23Encounter(s, p) ??
       deadpool.deadpoolEncounter(s, p) ??
@@ -22020,6 +22310,7 @@ function reveal(
     cable.cableEncounter(s, p) ??
     nightcrawlerEncounter.nightcrawlerEncounter(s, p) ??
     iceman.icemanEncounter(s, p) ??
+    nickFury.nickFuryEncounter(s, p) ??
     jubilee.jubileeEncounter(s, p) ??
     x23.x23Encounter(s, p) ??
     deadpool.deadpoolEncounter(s, p) ??
@@ -22426,6 +22717,11 @@ function treachery(s: GameState, p: Piece) {
     add(s, ...psy);
     return;
   }
+  const nreveal = nickFury.nickFuryEncounter(s, p);
+  if (nreveal !== null) {
+    add(s, ...nreveal);
+    return;
+  }
   const jreveal = jubilee.jubileeEncounter(s, p);
   if (jreveal !== null) {
     add(s, ...jreveal);
@@ -22452,6 +22748,7 @@ function treachery(s: GameState, p: Piece) {
     cable.cableEncounter(s, p) ??
     nightcrawlerEncounter.nightcrawlerEncounter(s, p) ??
     iceman.icemanEncounter(s, p) ??
+    nickFury.nickFuryEncounter(s, p) ??
     jubilee.jubileeEncounter(s, p) ??
     x23.x23Encounter(s, p) ??
     deadpool.deadpoolEncounter(s, p) ??
@@ -22802,6 +23099,11 @@ function treachery(s: GameState, p: Piece) {
         add(s, ...cableNemesis);
         break;
       }
+      const nnemesis = nickFury.nickFuryShadows(s);
+      if (nnemesis !== null) {
+        add(s, ...nnemesis);
+        break;
+      }
       const jnemesis = jubilee.jubileeShadows(s);
       if (jnemesis !== null) {
         add(s, ...jnemesis);
@@ -23114,6 +23416,7 @@ function resolve(s: GameState, e: Effect) {
   }
   if (bishop.resolveBishopEffect(s, e, bishopPorts)) return;
   if (cable.resolveCableEffect(s, e, cablePorts)) return;
+  if (nickFury.resolveNickFuryEffect(s, e, nickFuryPorts)) return;
   if (jubilee.resolveJubileeEffect(s, e, jubileePorts)) return;
   if (x23.resolveX23Effect(s, e, x23Ports)) return;
   if (deadpool.resolveDeadpoolEffect(s, e, deadpoolPorts)) return;
@@ -23253,6 +23556,7 @@ function resolve(s: GameState, e: Effect) {
           bishop.bishopEncounter(state, piece) ??
           magik.magikEncounter(state, piece) ??
           cable.cableEncounter(state, piece) ??
+          nickFury.nickFuryEncounter(state, piece) ??
           jubilee.jubileeEncounter(state, piece) ??
           x23.x23Encounter(state, piece) ??
           deadpool.deadpoolEncounter(state, piece) ??
@@ -23547,7 +23851,19 @@ function resolve(s: GameState, e: Effect) {
         after,
         jubileePorts,
       );
-      const generalWindow = poolOptions.length > 0 || jubileeOptions.length > 0;
+      const nickOptions = nickFury
+        .nickFuryGatherOptions(s, {
+          ...e.snapshot,
+          basic: e.snapshot.basic && !e.nickGatherHandled,
+        })
+        .map((o) => ({
+          ...o,
+          effects: [...o.effects, { ...e, nickGatherHandled: true }],
+        }));
+      const generalWindow =
+        poolOptions.length > 0 ||
+        jubileeOptions.length > 0 ||
+        nickOptions.length > 0;
       const options = [
         ...ghostNativeEventOptions(s, e.eventId, after, true),
         ...scarletPack.scarletWitchPackAfterHeroThwart(
@@ -23558,6 +23874,7 @@ function resolve(s: GameState, e: Effect) {
         ),
         ...poolOptions,
         ...jubileeOptions,
+        ...nickOptions,
       ];
       if (options.length)
         choose(
@@ -23696,7 +24013,20 @@ function resolve(s: GameState, e: Effect) {
     }
     case "bwEntryResponses": {
       const p = find(s, e.id);
-      const options = p ? blackWidowMinionEntered(s, p, [e], bwPorts) : [];
+      const options = p
+        ? [
+            ...blackWidowMinionEntered(s, p, [e], bwPorts),
+            ...playerOrder(s).flatMap((seat) =>
+              nickFury
+                .nickFuryMinionOptions(seatView(s, seat), p, [e], nickFuryPorts)
+                .map((o) => ({
+                  ...o,
+                  id: `${seat.id}:${o.id}`,
+                  effects: o.effects.map((q) => ({ ...q, actorId: seat.id })),
+                })),
+            ),
+          ]
+        : [];
       if (options.length)
         choose(
           s,
@@ -25977,6 +26307,13 @@ function resolve(s: GameState, e: Effect) {
       add(s, { ...e, type: "damage", attack: true });
       break;
     case "damage":
+      if (e.attack) {
+        const nickAttack = nickFury.nickFuryAttackWindow(s, e, nickFuryPorts);
+        if (nickAttack) {
+          add(s, ...nickAttack);
+          break;
+        }
+      }
       if (
         e.damageFromAttack &&
         !e.bishopConversionHandled &&
@@ -26811,6 +27148,27 @@ function resolve(s: GameState, e: Effect) {
     }
     case "threat":
       {
+        nickStealthPlacement(s, e);
+        if (!e.nickCameraHandled && e.amount > 0) {
+          const next = { ...e, nickCameraHandled: true };
+          const options = playerOrder(s).flatMap((seat) =>
+            nickFury
+              .nickFuryThreatOptions(seatView(s, seat), next)
+              .map((o) => ({
+                ...o,
+                id: `${seat.id}:${o.id}`,
+                effects: o.effects.map((q) => ({ ...q, actorId: seat.id })),
+              })),
+          );
+          if (options.length) {
+            choose(s, "Threat would be placed", "Use Eyepatch Camera?", [
+              ...options,
+              option("continue", "Place threat", [next]),
+            ]);
+            break;
+          }
+        }
+
         if (!e.jubileeHandled) {
           const packet = { ...e, jubileeHandled: true };
           const choices = playerOrder(s).flatMap((seat) =>
@@ -26900,6 +27258,7 @@ function resolve(s: GameState, e: Effect) {
       }
       break;
     case "thwart": {
+      nickStealthPlacement(s, e);
       const operative = gambit.gambitThwartWindow(s, e);
       if (operative) {
         add(s, ...operative);
@@ -28212,6 +28571,10 @@ function resolve(s: GameState, e: Effect) {
           );
       } else {
         const removed = thwartAction(s, e.target, amount, p.id);
+        if (p.code === "50036" && !isTextBlank(s, p) && Number(removed) > 0) {
+          const suit = nickFury.nickFurySuit(s);
+          if (suit) suit.counters += Number(removed);
+        }
         if (Number(removed) > 0) {
           const interrupts = s.queue.splice(0, s.queue.length - queuedBefore);
           add(
@@ -28815,6 +29178,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     case "endScheme": {
       const activation = s.scheming;
+      if (activation) delete s.flags[`nickInformant:${activation.attacker}`];
       if (activation?.activationAfter)
         add(s, {
           ...activation.activationAfter,
@@ -30383,6 +30747,16 @@ function resolve(s: GameState, e: Effect) {
         );
       if (heroTarget)
         opts.unshift(
+          ...nickFury.nickFuryDamageOptions(
+            s,
+            {
+              target: "hero",
+              playerId: s.activePlayerId,
+              amount: nativeIncomingAttackDamage(s, a),
+              attack: true,
+            },
+            [E("damageWindow")],
+          ),
           ...blackWidowDamageOptions(
             s,
             {
@@ -30585,6 +30959,17 @@ function resolve(s: GameState, e: Effect) {
           ),
         );
         opts.unshift(
+          ...nickFury.nickFuryDamageOptions(
+            s,
+            {
+              target: "hero",
+              playerId: s.activePlayerId,
+              amount: excess,
+              attack: true,
+              packet: { type: "damage", kind: "overkill" },
+            },
+            [E("damageWindow")],
+          ),
           ...blackWidowDamageOptions(
             s,
             {
@@ -31926,6 +32311,14 @@ function resolve(s: GameState, e: Effect) {
       hawkeyePhaseEnded(s, hawkeyePorts);
       antMan.antManPhaseEnded(s);
       add(s, ...doctorStrangeRoundEnded(s));
+      add(
+        s,
+        ...playerOrder(s).flatMap((seat) =>
+          nickFury
+            .nickFuryRoundEnded(seatView(s, seat))
+            .map((q) => ({ ...q, actorId: seat.id })),
+        ),
+      );
       const prev = s.activePlayerId;
       for (const seat of playerOrder(s)) {
         activateSeat(s, seat.id);
@@ -32153,6 +32546,9 @@ function run(s: GameState) {
   ) {
     need(n++ < 600, "Effect loop exceeded its limit.");
     mystiqueNativeQueueHandEntries(s, mystiqueNativeObserveHands(s));
+    // A just-dealt encounter’s responses precede the caller’s queued reveal.
+    const nickDealt = s.queue.findIndex((e) => e.nickDealtResponse);
+    if (nickDealt > 0) s.queue.unshift(s.queue.splice(nickDealt, 1)[0]);
     const e = s.queue.shift()!;
     const actor = s.players.find(
       (p) => p.id === (e.actorId || s.activePlayerId),

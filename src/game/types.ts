@@ -73,6 +73,9 @@ export interface Piece {
   deadpoolController?: string;
   /** Original controller of the physical ally transformed by Lost Child. */
   jubileeLostController?: string;
+  /** Cross-type Super Spies placements never pay the receiving card’s other costs. */
+  nickAllPurposeCounters?: number;
+  nickThreatTokens?: number;
   /** Player side schemes live in the common scheme area under owner control. */
   playerSideSchemeController?: string;
   /** Beguiled changes the actual ally's current type without changing its face. */
@@ -128,6 +131,7 @@ export interface Option {
   effects: Effect[];
 }
 export interface Prompt {
+  nickWatchSelections?: Record<string, number>;
   context?: ActionReview;
   kind: "choice" | "payment" | "select";
   title: string;
@@ -378,6 +382,8 @@ export interface GameState {
   removed: Piece[];
   resolving: Piece[];
   scheming?: {
+    nickStealthSuit?: string;
+    nickInformant?: boolean;
     id?: string;
     retainedBoostIds?: string[];
     modifier?: number;
