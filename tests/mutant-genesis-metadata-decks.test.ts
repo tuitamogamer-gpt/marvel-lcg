@@ -266,10 +266,16 @@ for (const spec of specs)
       expect(markup).toContain("Keep all 15 hero cards");
       expect(markup).toContain("25–35 aspect or basic cards");
       expect(markup).not.toContain('aria-label="Second aspect"');
-      for (const code of Object.keys(spec.required))
-        expect(markup).not.toContain(
-          `aria-label="Copies of ${card(code).name}"`,
+      const rows =
+        markup.match(/<div class="account-card-row">[\s\S]*?<\/div>/g) || [];
+      for (const code of Object.keys(spec.required)) {
+        const row = rows.find((row) =>
+          row.includes(`data-card-preview="${code}"`),
         );
+        expect(row, `Required printing ${code}`).toBeDefined();
+        expect(row).toContain('class="account-fixed-count"');
+        expect(row).not.toContain("<select");
+      }
       if (spec.id === "shadowcat") {
         expect(markup).toContain("1 Permanent setup card");
         expect(markup).toContain("Solid");

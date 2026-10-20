@@ -328,7 +328,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(coverage.executableFaces).toBe(2135);
     expect(coverage.unsupportedFaces).toBe(2416);
-    expect(coverage.dedicatedFaces).toBe(1561);
+    expect(coverage.dedicatedFaces).toBe(1688);
     expect(coverage.registeredHeroIds).toHaveLength(53);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
