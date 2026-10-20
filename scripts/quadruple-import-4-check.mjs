@@ -28,7 +28,7 @@ const heroes = [
     name: "Magik",
     aspect: "aggression",
     deckSize: 40,
-    seed: 45037,
+    seed: 45052,
   },
   {
     id: "iceman",
@@ -545,18 +545,24 @@ async function jubileeMallRat(source) {
   return after;
 }
 
-async function magikTopPlay(source) {
+async function magikTopPlay(source, width, initial) {
   const before = await save();
   const top = before.player.deck[0];
-  assert.ok(top, "Magik has a real top card");
-  assert.ok(
-    ["support", "upgrade"].includes(card(top).type_code),
-    "The fixed source seed exposes a no-target card for this bounded top-deck flow",
+  const next = before.player.deck[1];
+  const paid = before.player.hand.find((piece) => piece.code === "45031");
+  assert.equal(
+    top?.code,
+    "45033",
+    "The fixed source seed exposes the original Magik's Crown",
   );
   assert.equal(
     card(top).cost,
-    1,
-    "The fixed top card has a printed cost of one",
+    2,
+    "The top card has a printed resource cost of two",
+  );
+  assert.ok(
+    next && paid,
+    "The source has its actual next card and a physical hand payment",
   );
   const topPanel = page.locator(".magik-top-card");
   assert.equal(
@@ -568,47 +574,181 @@ async function magikTopPlay(source) {
     await topPanel.locator(`img[src="${imageFor(top.code)}"]`).count(),
     1,
   );
-  await topPanel.getByRole("button", { name: /Play from top.*cost 0/ }).click();
-  let state = await settle();
-  if (state.prompt?.kind === "payment") {
+  await topPanel.getByRole("button", { name: /Play from top.*cost 1/ }).click();
+  const pending = await settle();
+
+  async function assertStagedPayment(state) {
     assert.equal(
-      state.prompt.card.id,
+      state.prompt?.kind,
+      "payment",
+      "The paid top-deck play opens the native resource payment",
+    );
+    assert.equal(
+      state.prompt.card?.id,
       top.id,
-      "Payment retains the same top-deck card ID",
+      "Payment retains the original physical top-deck card",
     );
     assert.equal(
       state.prompt.cost,
-      0,
-      "Magik reduces the actual resource cost by one",
+      1,
+      "Magik reduces the printed cost from two to one",
     );
-    await page
-      .getByRole("button", { name: "Confirm payment", exact: true })
-      .click();
-    state = await settle();
+    assert.equal(
+      state.prompt.cancelable,
+      false,
+      "The revealed next card commits the staged play",
+    );
+    assert.ok(
+      state.resolving.some((piece) => piece.id === top.id),
+      "The same top card is staged outside the deck",
+    );
+    assert.deepEqual(
+      state.player.deck,
+      before.player.deck.slice(1),
+      "The next actual card is exposed before spending resources",
+    );
+    assert.equal(state.player.deck[0].id, next.id);
+    assert.deepEqual(
+      state.player.hand,
+      before.player.hand,
+      "No physical payment is spent before confirmation",
+    );
+    assert.equal(
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "Cancel", exact: true })
+        .count(),
+      0,
+      "The committed payment has no Cancel control",
+    );
+    const paymentTop = page.getByRole("dialog").locator(".magik-payment-top");
+    assert.ok(
+      await paymentTop.isVisible(),
+      "The newly revealed next card is readable inside the payment dialog",
+    );
+    assert.equal(
+      await paymentTop.locator(`img[src="${imageFor(next.code)}"]`).count(),
+      1,
+      "The payment preview uses the actual newly exposed card's artwork",
+    );
+    assert.equal(
+      await topPanel.locator(`img[src="${imageFor(next.code)}"]`).count(),
+      1,
+      "The public faceup-top panel also updates to the actual newly exposed card",
+    );
+    assert.equal(
+      await topPanel.locator(`img[src="${imageFor(top.code)}"]`).count(),
+      0,
+      "The staged Crown is no longer presented as the deck's top card",
+    );
+    assert.ok(
+      await page
+        .getByRole("button", { name: "Confirm payment", exact: true })
+        .isDisabled(),
+      "The discounted positive cost still requires an actual resource",
+    );
   }
+
+  await assertStagedPayment(pending);
+  await page.keyboard.press("Escape");
+  assert.deepEqual(
+    await save(),
+    pending,
+    "Escape cannot cancel a play after the next top card was revealed",
+  );
+  await page
+    .getByRole("dialog")
+    .locator(".magik-payment-top")
+    .getByRole("button", {
+      name: `Read faceup ${card(next).name}`,
+      exact: true,
+    })
+    .click();
+  assert.equal(
+    await page
+      .getByRole("dialog", { name: card(next).name, exact: true })
+      .count(),
+    1,
+  );
+  assert.equal(
+    await page
+      .getByRole("dialog")
+      .locator(`img[src="${imageFor(next.code)}"]`)
+      .count(),
+    1,
+  );
+  assert.deepEqual(
+    await save(),
+    pending,
+    "Reading the revealed next card does not change the committed payment",
+  );
+  await page
+    .getByRole("button", { name: "Back to payment", exact: true })
+    .click();
+  assert.deepEqual(
+    await save(),
+    pending,
+    "Returning from card inspection preserves the exact pending play",
+  );
+  current.stage = "magik-staged-top-card-payment";
+  await checkpoint("magik-staged-top-card-payment", width, source, initial);
+  await reload();
+  const reloaded = await save();
+  await assertStagedPayment(reloaded);
+  conserved(reloaded, source, initial, "Magik staged payment exact reload");
+  const resource = page.locator(".payment-source").filter({
+    has: page.locator(`img[src="${imageFor(paid.code)}"]`),
+  });
+  assert.equal(
+    await resource.count(),
+    1,
+    "The original hand Colossus supplies one physical payment choice",
+  );
+  assert.equal(await resource.getAttribute("aria-pressed"), "false");
+  await resource.click();
+  assert.equal(await resource.getAttribute("aria-pressed"), "true");
+  assert.equal(
+    await page.locator('.payment-source[aria-pressed="true"]').count(),
+    1,
+  );
+  await page
+    .getByRole("button", { name: "Confirm payment", exact: true })
+    .click();
   const after = await finishChoices(source);
   assert.ok(
     after.player.inPlay.some((piece) => piece.id === top.id),
-    "Magik plays the original physical top-deck card into play",
+    "Magik plays the same staged physical Crown into play",
   );
+  assert.ok(!after.resolving.some((piece) => piece.id === top.id));
   assert.deepEqual(
     after.player.hand,
-    before.player.hand,
-    "The zero-cost top-deck play spends no hand cards",
+    before.player.hand.filter((piece) => piece.id !== paid.id),
+    "The confirmed play spends only the selected actual hand card",
+  );
+  assert.ok(
+    after.player.discard.some((piece) => piece.id === paid.id),
+    "The same Colossus physical ID reaches the owner's discard pile as the payment",
   );
   assert.deepEqual(
     after.player.deck,
     before.player.deck.slice(1),
-    "The remaining deck retains its actual order",
+    "The revealed next card and remaining deck retain their physical order",
   );
-  const nextPlay = page
-    .locator(".magik-top-card")
-    .getByRole("button", { name: /Play from top/ });
+  const nextPlay = topPanel.getByRole("button", { name: /Play from top/ });
   assert.ok(
     await nextPlay.isDisabled(),
-    "The native once-per-phase top-deck play is spent",
+    "The actual once-per-phase top-deck play is spent",
   );
-  return after;
+  return {
+    state: after,
+    stagedCardId: top.id,
+    paidHandCardId: paid.id,
+    revealedNextId: next.id,
+    printedCost: 2,
+    paidCost: 1,
+    pendingReload: true,
+    noncancelable: true,
+  };
 }
 
 async function bishopAbsorption(source) {
@@ -868,7 +1008,11 @@ async function publicSource(source, width) {
   // Capture the actual available native controls before once-per-round use
   // hides them, including the public top-deck panel at mobile widths.
   await checkpoint(`${source.id}-hero-form`, width, source, initial);
-  if (source.id === "magik") state = await magikTopPlay(source);
+  let magikPayment = null;
+  if (source.id === "magik") {
+    magikPayment = await magikTopPlay(source, width, initial);
+    state = magikPayment.state;
+  }
   const beforeHp = state.villain.hp;
 
   current.stage = "basic-attack";
@@ -929,10 +1073,24 @@ async function publicSource(source, width) {
     basicAttackDamage: expectedDamage,
     nativeAbility: {
       bishop: "Energy Absorption after an actual enemy attack",
-      magik: "Actual top-deck play with once-per-phase discount",
+      magik:
+        "Paid top-deck play, revealed next card and exact committed-payment reload",
       iceman: "Freeze interrupt attaches the original reserve Frostbite",
       jubilee: "Mall Rat searches the original Shopping Spree",
     }[source.id],
+    ...(magikPayment
+      ? {
+          topDeckPayment: {
+            stagedCardId: magikPayment.stagedCardId,
+            paidHandCardId: magikPayment.paidHandCardId,
+            revealedNextId: magikPayment.revealedNextId,
+            printedCost: magikPayment.printedCost,
+            paidCost: magikPayment.paidCost,
+            pendingReload: magikPayment.pendingReload,
+            noncancelable: magikPayment.noncancelable,
+          },
+        }
+      : {}),
     ...(absorption
       ? {
           energyAbsorption: {
