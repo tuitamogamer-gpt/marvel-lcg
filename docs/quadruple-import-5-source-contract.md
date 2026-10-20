@@ -39,6 +39,8 @@ All eight original identity scans and both suit scans were visually checked agai
 
 All-purpose counters adopt the receiving card's defined counter type; without one, they remain all-purpose counters (official rulebook page 4). Threat tokens are a separate track. Super Spies permits a total of three all-purpose counters and/or threat tokens on S.H.I.E.L.D. supports and/or suit forms. Its printed wording does not restrict the pairing of token type and eligible card; counter conversion must never silently turn an all-purpose counter into threat or let a threat token pay a support's Uses cost.
 
+Rules Reference 1.8, page 27, supplies the full Linked rule: these allies cannot be included in any deck; set aside the printed product quantity for each deck containing New Recruits. This setup therefore also applies to other eligible heroes with that scheme. A player who takes control of a Linked card becomes its owner. A cooperative selection must preserve the same physical piece while changing its subsequent ownership and discard destination.
+
 ## Native rules and verification boundary
 
 The independent source-contract tests pin all 148 faces, 213 physical cards, four exact source maps, special setup distinctions, shared Super Spies quantities, obligations/nemeses, module boundaries and local artwork mappings. They deliberately do not depend on the new native modules. Passing them establishes source consistency rather than complete executable support.
