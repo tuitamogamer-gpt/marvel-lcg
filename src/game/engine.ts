@@ -18979,6 +18979,31 @@ function nickDiscardPreparation(s: GameState, id: string) {
   }
 }
 const nickFuryPorts: nickFury.NickFuryPorts = {
+  watchPaymentValid: (s, p, ids, id, count) => {
+    const sources = paymentSources(
+      s,
+      p.card?.id,
+      p.paymentTarget,
+      p.handOnly,
+      p.alliance,
+    ).map((source) =>
+      source.id === id
+        ? { ...source, resources: Array<Resource>(count).fill("mental") }
+        : source,
+    );
+    return (
+      ids.every((id) => sources.some((source) => source.id === id)) &&
+      paymentStatus(
+        sources,
+        ids,
+        p.cost || 0,
+        p.requirements,
+        p.retainOneOfIds,
+        p.sourceRequirement,
+        p.retainAlternatives,
+      ).ready
+    );
+  },
   queue: add,
   choose,
   find,
@@ -33186,9 +33211,14 @@ function run(s: GameState) {
   ) {
     need(n++ < 600, "Effect loop exceeded its limit.");
     mystiqueNativeQueueHandEntries(s, mystiqueNativeObserveHands(s));
-    // A just-dealt encounter’s responses precede the caller’s queued reveal.
+    // A just-dealt response precedes an encounter reveal, while an accepted
+    // ability's cost, effects and responses finish before the next window.
     const nickDealt = s.queue.findIndex((e) => e.nickDealtResponse);
-    if (nickDealt > 0) s.queue.unshift(s.queue.splice(nickDealt, 1)[0]);
+    if (
+      nickDealt > 0 &&
+      ["revealDealt", "revealNext", "reveal"].includes(s.queue[0].type)
+    )
+      s.queue.unshift(s.queue.splice(nickDealt, 1)[0]);
     const e = s.queue.shift()!;
     const actor = s.players.find(
       (p) => p.id === (e.actorId || s.activePlayerId),

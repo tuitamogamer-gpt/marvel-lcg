@@ -76,6 +76,13 @@ export interface NickFuryPorts {
   changeForm(s: GameState, from: string, to: string): void;
   attackProgram(s: GameState, effects: Effect[], after: Effect[]): void;
   changeCounters(s: GameState, p: Piece, amount: number): void;
+  watchPaymentValid(
+    s: GameState,
+    p: Prompt,
+    ids: string[],
+    id: string,
+    count: number,
+  ): boolean;
 }
 export const nickFurySuit = (s: GameState) =>
   active(s) ? s.player.inPlay.find(suitCard) : undefined;
@@ -170,21 +177,25 @@ export function nickFuryWatchPreflight(
   );
   if (!watch) return false;
   const count = Math.min(2, nickFurySuit(s)?.counters || 0);
+  const amounts = Array.from({ length: count }, (_, i) => i + 1).filter(
+    (amount) => ports.watchPaymentValid(s, p, ids, watch.id, amount),
+  );
+  if (!amounts.length) return false;
   ports.choose(
     s,
     "Fury's Watch",
     "Choose how much suit threat to remove when this payment commits.",
-    Array.from({ length: count }, (_, i) =>
+    amounts.map((amount) =>
       O(
-        String(i + 1),
-        `Remove ${i + 1} threat · ${i + 1} mental`,
+        String(amount),
+        `Remove ${amount} threat · ${amount} mental`,
         [
           E("commitPaymentAllocation", {
             payment: {
               ...p,
               nickWatchSelections: {
                 ...p.nickWatchSelections,
-                [watch.id]: i + 1,
+                [watch.id]: amount,
               },
             },
             ids,
@@ -498,12 +509,10 @@ export function nickFuryDealt(s: GameState): Effect[] {
     live(seatView(s, seat), "50051")
       .filter(() => !deadpoolTriggeredBlocked(seatView(s, seat)))
       .map((p) =>
-        E("optional", {
+        N("intelligence-window", {
           actorId: seat.id,
           nickDealtResponse: true,
-          title: "Intelligence",
-          text: "Discard Intelligence to inspect and swap dealt encounters and the encounter deck's top card?",
-          effects: [N("prep", { id: p.id, kind: "intelligence", after: [] })],
+          id: p.id,
         }),
       ),
   );
@@ -574,6 +583,25 @@ export function resolveNickFuryEffect(
   if (!e.type.startsWith("nick:")) return false;
   const kind = e.type.slice(5);
   switch (kind) {
+    case "intelligence-window": {
+      const p = live(s, "50051").find((p) => p.id === e.id);
+      if (!p) break;
+      ports.choose(
+        s,
+        "Intelligence",
+        "Discard Intelligence to inspect and swap dealt encounters and the encounter deck's top card?",
+        [
+          O(
+            "yes",
+            "Use ability",
+            [N("prep", { id: p.id, kind: "intelligence", after: [] })],
+            p.code,
+          ),
+          O("skip", "Pass", []),
+        ],
+      );
+      break;
+    }
     case "form":
       nickFuryChangeSuit(s, e.form, ports);
       break;

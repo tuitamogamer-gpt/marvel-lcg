@@ -6,6 +6,7 @@ import {
   nativeHeroAbilityOptions,
   playable,
   cardCost,
+  dispatch,
 } from "../src/game/engine.js";
 import { seatView, activateSeat } from "../src/game/team.js";
 import { isTextBlank } from "../src/game/card-text.js";
@@ -786,5 +787,100 @@ describe("Nick suspended attack continuations", () => {
     expect(s.player.hp).toBe(10);
     expect(s.player.inPlay.some((p) => p.id === ally.id)).toBe(false);
     expect(s.player.discard.some((p) => p.id === shield.id)).toBe(true);
+  });
+});
+
+describe("Nick dealt-response and selected-payment continuations", () => {
+  it("serializes one physical Intelligence through two dealt triggers and Secret Agent, then skips its stale window", () => {
+    let s = base();
+    s.scheme.threat = 5;
+    s.heroic = 1;
+    const intel = put(s, "50051"),
+      agent = put(s, "50046");
+    const encounters = Array.from({ length: 3 }, () => makePiece(s, "01120"));
+    s.encounter.deck = [...encounters];
+    s = native(s, { type: "dealEncounters" });
+    expect(s.encounter.dealt).toHaveLength(2);
+    s = choose(reload(s), "yes");
+    expect(s.prompt?.title).toBe("Intelligence");
+    expect(s.prompt?.options.some((o) => o.id === "done")).toBe(true);
+    expect(s.player.discard.filter((p) => p.id === intel.id)).toHaveLength(1);
+    s = choose(reload(s), "done");
+    expect(s.prompt?.title).toBe("After your Preparation resolves");
+    s = choose(reload(s), `${agent.id}:main`);
+    s = finish(s);
+    expect(s.scheme.threat).toBe(4);
+    expect(suit(s).counters).toBe(1);
+    expect(s.player.discard.filter((p) => p.id === intel.id)).toHaveLength(1);
+    expect(s.encounter.dealt).toHaveLength(0);
+    expect(s.minions).toHaveLength(2);
+    const zones = [
+      ...s.encounter.deck,
+      ...s.encounter.discard,
+      ...s.encounter.dealt,
+      ...s.minions,
+      ...s.resolving,
+    ];
+    for (const p of encounters)
+      expect(zones.filter((q) => q.id === p.id)).toHaveLength(1);
+    const invalid = dispatch(
+      {
+        ...reload(s),
+        queue: [
+          { type: "nick:prep", id: intel.id, kind: "intelligence", after: [] },
+        ],
+        prompt: {
+          kind: "choice",
+          title: "Retained invalid activation",
+          text: "",
+          options: [{ id: "go", label: "Resolve", effects: [] }],
+        },
+      },
+      { type: "CHOOSE", id: "go" },
+    );
+    expect(invalid.error).toBe("The actual Preparation is unavailable.");
+  });
+  it("Watch offers only2 for a cost2 card when the spare resource was not selected, and commits once after reload", () => {
+    let s = base();
+    const watch = put(s, "50044");
+    suit(s).counters = 2;
+    const [event, spare] = hand(s, "50053", "50058");
+    s = command(s, { type: "PLAY", id: event.id });
+    s = command(s, { type: "PAY", ids: [watch.id] });
+    expect(s.prompt?.title).toBe("Fury's Watch");
+    expect(s.prompt?.options.map((o) => o.id)).toEqual(["2"]);
+    expect(suit(s).counters).toBe(2);
+    expect(s.player.inPlay.find((p) => p.id === watch.id)?.exhausted).toBe(
+      false,
+    );
+    s = choose(reload(s), "2");
+    s = finish(s);
+    expect(suit(s).counters).toBe(0);
+    expect(s.player.inPlay.find((p) => p.id === watch.id)?.exhausted).toBe(
+      true,
+    );
+    expect(s.player.inPlay.filter((p) => p.id === event.id)).toHaveLength(1);
+    expect(s.player.hand.filter((p) => p.id === spare.id)).toHaveLength(1);
+  });
+  it("Watch retains the1 option when the same selected companion resource funds the remaining cost", () => {
+    let s = base();
+    const watch = put(s, "50044");
+    suit(s).counters = 2;
+    const [event, resource] = hand(s, "50053", "50058");
+    s = command(s, { type: "PLAY", id: event.id });
+    s = command(s, { type: "PAY", ids: [watch.id, resource.id] });
+    expect(s.prompt?.options.map((o) => o.id)).toEqual(["1", "2"]);
+    expect(suit(s).counters).toBe(2);
+    expect(s.player.hand.some((p) => p.id === resource.id)).toBe(true);
+    s = choose(reload(s), "1");
+    s = finish(s);
+    expect(suit(s).counters).toBe(1);
+    expect(s.player.inPlay.find((p) => p.id === watch.id)?.exhausted).toBe(
+      true,
+    );
+    expect(s.player.inPlay.filter((p) => p.id === event.id)).toHaveLength(1);
+    expect(s.player.discard.filter((p) => p.id === resource.id)).toHaveLength(
+      1,
+    );
   });
 });
