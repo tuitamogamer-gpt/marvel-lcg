@@ -1807,7 +1807,9 @@ export default function App() {
                     ? `One Permanent mass card stays outside the ${setupDeckSize}-card deck and enters play after you keep your opening hand. `
                     : hero.id === "psylocke"
                       ? `Your two Permanent Psi-Energy upgrades enter play Psi-Knife side up after your mulligan, outside the ${setupDeckSize}-card deck. `
-                      : `${setupCardCount} Permanent cards start in play outside the ${setupDeckSize}-card deck. `)}
+                      : hero.id === "spectrum"
+                        ? `${setupCardCount} Permanent energy forms start in play outside the ${setupDeckSize}-card deck. `
+                        : `${setupCardCount} Permanent cards start in play outside the ${setupDeckSize}-card deck. `)}
                 {hero.id === "rogue" &&
                   "Touched counts toward deck size and is set aside after your opening hand and mulligan. "}
                 {hero.id === "cable" &&
@@ -2630,7 +2632,9 @@ export default function App() {
                   ? "One reversible Solid / Phased mass card stays outside the 40-card deck and enters play Solid after you keep your opening hand."
                   : hero.id === "psylocke"
                     ? "Your two reversible Psi-Energy upgrades stay outside the 40-card deck and enter play Psi-Knife side up after your mulligan."
-                    : `${setupCardCount} Permanent cards start in play and stay outside the deck count.`}
+                    : hero.id === "spectrum"
+                      ? `${setupCardCount} Permanent energy forms start in play and stay outside the deck count.`
+                      : `${setupCardCount} Permanent cards start in play and stay outside the deck count.`}
             </p>
           )}
           {hero.id === "rogue" && (

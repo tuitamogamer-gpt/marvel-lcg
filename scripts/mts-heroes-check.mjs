@@ -10,6 +10,14 @@ const catalogDecks = JSON.parse(
     "utf8",
   ),
 );
+const catalogCards = new Map(
+  JSON.parse(
+    await readFile(
+      new URL("../src/data/catalog-cards.json", import.meta.url),
+      "utf8",
+    ),
+  ).map((definition) => [definition.code, definition]),
+);
 const sources = Object.fromEntries(
   [
     ["spectrum", "21001a", "Spectrum", "leadership"],
@@ -22,6 +30,7 @@ const sources = Object.fromEntries(
       {
         name,
         aspect,
+        aspects: deck.aspects,
         codes: Object.entries(deck.cards)
           .flatMap(([code, count]) => Array(count).fill(code))
           .sort(),
@@ -433,11 +442,26 @@ try {
         .click();
       if (id === "warlock") {
         const aspects = page.locator(".aspect-grid .aspect-option");
-        assert.equal(await aspects.count(), 4);
+        assert.equal(await aspects.count(), 5);
+        assert.equal(
+          await page.locator('.aspect-option[aria-pressed="true"]').count(),
+          4,
+          "Adam Warlock chooses exactly four of the five aspects",
+        );
         for (const button of await aspects.all()) {
           assert.equal(await button.isDisabled(), true);
-          assert.equal(await button.getAttribute("aria-pressed"), "true");
+          assert.equal(
+            await button.getAttribute("aria-pressed"),
+            /Pool/.test(await button.innerText()) ? "false" : "true",
+            "The original source chooses its four printed aspects and excludes Pool",
+          );
         }
+        assert.equal(
+          await page
+            .getByRole("combobox", { name: "Adam Warlock excluded aspect" })
+            .inputValue(),
+          "pool",
+        );
       }
       await page.getByRole("button", { name: /View 40-card deck/ }).click();
       assert.match(
@@ -462,12 +486,40 @@ try {
       assert.equal(state.heroId, id);
       assert.equal(state.aspect, source.aspect);
       assert.deepEqual([...state.players[0].deckCards].sort(), source.codes);
-      if (id === "warlock")
+      if (id === "warlock") {
+        assert.equal(source.codes.length, 40);
+        assert.deepEqual(
+          [...state.players[0].deckAspects].sort(),
+          [...source.aspects].sort(),
+          "The original source retains the four printed aspects",
+        );
+        const aspectCounts = source.aspects.map(
+          (aspect) =>
+            source.codes.filter(
+              (code) => catalogCards.get(code).faction_code === aspect,
+            ).length,
+        );
+        assert.ok(aspectCounts.every((count) => count > 0));
+        assert.equal(new Set(aspectCounts).size, 1, "Equal aspect quantities");
+        const nonSignature = source.codes
+          .map((code) => catalogCards.get(code))
+          .filter((definition) => definition.faction_code !== "hero");
+        assert.equal(
+          new Set(
+            nonSignature.map(
+              (definition) =>
+                `${definition.name}|${definition.subname || ""}|${definition.type_code}`,
+            ),
+          ).size,
+          nonSignature.length,
+          "Every non-signature logical source card is a singleton",
+        );
         assert.deepEqual(
           state.player.setAside.map((p) => p.code).sort(),
           ["21067", "21068", "21069", "21069", "21070"],
           "Warlock setup holds the five actual nemesis source pieces",
         );
+      }
       const physical = physicalCards(state);
       if (id === "spectrum") {
         assert.deepEqual(
