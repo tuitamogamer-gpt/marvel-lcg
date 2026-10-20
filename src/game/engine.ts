@@ -23037,6 +23037,15 @@ function resolve(s: GameState, e: Effect) {
         after,
         nebulaPackPorts,
       );
+      const jubileeOptions = jubilee.jubileeAfterThwartOptions(
+        s,
+        e.snapshot.removedAllThreat ??
+          (e.snapshot.beforeThreat > 0 &&
+            e.snapshot.removed === e.snapshot.beforeThreat),
+        after,
+        jubileePorts,
+      );
+      const generalWindow = poolOptions.length > 0 || jubileeOptions.length > 0;
       const options = [
         ...ghostNativeEventOptions(s, e.eventId, after, true),
         ...scarletPack.scarletWitchPackAfterHeroThwart(
@@ -23046,20 +23055,13 @@ function resolve(s: GameState, e: Effect) {
           scarletPackPorts,
         ),
         ...poolOptions,
-        ...jubilee.jubileeAfterThwartOptions(
-          s,
-          e.snapshot.removedAllThreat ??
-            (e.snapshot.beforeThreat > 0 &&
-              e.snapshot.removed === e.snapshot.beforeThreat),
-          after,
-          jubileePorts,
-        ),
+        ...jubileeOptions,
       ];
       if (options.length)
         choose(
           s,
-          options.length ? "After your hero thwarts" : "Turn the Tide",
-          poolOptions.length
+          generalWindow ? "After your hero thwarts" : "Turn the Tide",
+          generalWindow
             ? "Choose a response after this thwart, or continue."
             : "Respond after removing all threat from a scheme?",
           [...options, option("continue", "Continue", [])],
