@@ -156,6 +156,8 @@ export interface Prompt {
   abilityCost?: boolean;
   /** Actual already generated sources whose paid ability costs completed. */
   committedResources?: import("./payment.js").PaymentSource[];
+  /** Whether an actual cost icon came from a selected resource-type hand card. */
+  bishopResourcePayment?: { sourceIds: string[]; usedResourceCard: boolean };
   wildAs?: Resource;
   selectAction?: Effect;
 }

@@ -514,6 +514,34 @@ describe("Bishop allies and weapons", () => {
     expect(s.scheme.threat).toBe(12);
     expect(s.player.hand).toHaveLength(1);
   });
+  it("only grants Command Authority's draw when a Resource card pays part of the actual cost, even with identical overpaid icons", () => {
+    for (const usedResourceCard of [false, true]) {
+      let s = base();
+      const [event, resource, first, second] = hand(
+        s,
+        "45008",
+        "45022",
+        "45009",
+        "45009",
+      );
+      s = play(s, event, [resource, first, second]);
+      expect(s.prompt?.title).toBe("Allocate resource-card payment");
+      expect(s.player.hand.map((p) => p.id)).toEqual(
+        [event, resource, first, second].map((p) => p.id),
+      );
+      s = choose(
+        reload(s),
+        usedResourceCard ? "resource-card" : "other-sources",
+      );
+      s = finish(target(s, "main"));
+      expect(s.scheme.threat).toBe(12);
+      expect(s.player.hand).toHaveLength(Number(usedResourceCard));
+      for (const piece of [event, resource, first, second])
+        expect(s.player.discard.filter((p) => p.id === piece.id)).toHaveLength(
+          1,
+        );
+    }
+  });
   it("X23 ally readies after defeating an enemy and Cable draws after side-scheme defeat", () => {
     let s = base();
     const x = put(s, "45012"),

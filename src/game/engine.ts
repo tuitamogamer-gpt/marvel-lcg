@@ -323,6 +323,7 @@ import {
   paidResourceAllocations,
   generatedResourceAllocations,
   venomPaymentDamageCostAvailable,
+  type PaymentSource,
 } from "./payment.js";
 import { combatCharacter, recordCombat } from "./combat.js";
 import { deckErrors } from "./decks.js";
@@ -5462,6 +5463,59 @@ function requestPayment(
     wildAs: requirements[0] || "energy",
   };
 }
+function bishopResourceCardPaymentOptions(
+  selected: PaymentSource[],
+  cost: number,
+  requirements: Resource[],
+  wildAs: Resource,
+  paidForCard?: Resource[],
+  generatedForCard?: Resource[],
+): boolean[] {
+  const key = (resources: Resource[]) => [...resources].sort().join(":");
+  type Allocation = { generated: Resource[]; usedResourceCard: boolean };
+  let subsets = new Map<string, Allocation>([
+    ["false|", { generated: [], usedResourceCard: false }],
+  ]);
+  for (const source of selected) {
+    for (const resource of source.resources) {
+      const next = new Map(subsets);
+      for (const subset of subsets.values()) {
+        if (subset.generated.length >= cost) continue;
+        const generated = [...subset.generated, resource];
+        const usedResourceCard =
+          subset.usedResourceCard ||
+          (source.kind === "card" &&
+            card(source.code).type_code === "resource");
+        next.set(`${usedResourceCard}|${key(generated)}`, {
+          generated,
+          usedResourceCard,
+        });
+      }
+      subsets = next;
+    }
+  }
+  const possible = new Set<boolean>();
+  for (const subset of subsets.values()) {
+    if (
+      subset.generated.length !== cost ||
+      (generatedForCard && key(subset.generated) !== key(generatedForCard))
+    )
+      continue;
+    const paid = paidResourceAllocations(
+      subset.generated,
+      cost,
+      requirements,
+      wildAs,
+    );
+    if (
+      paid.some(
+        (allocation) => !paidForCard || key(allocation) === key(paidForCard),
+      )
+    )
+      possible.add(subset.usedResourceCard);
+  }
+  return [...possible].sort();
+}
 function pay(
   s: GameState,
   ids: string[],
@@ -5792,6 +5846,74 @@ function pay(
       return;
     } else syncPaid = [...counts][0] || 0;
   }
+  let bishopResourceCardPaid = false;
+  if (p.card && !p.abilityCost && ["45007", "45008"].includes(p.card.code)) {
+    const possible = bishopResourceCardPaymentOptions(
+      selected as PaymentSource[],
+      p.cost || 0,
+      req,
+      wildAs,
+      paidForCard,
+      generatedForCard,
+    );
+    const receipt = p.bishopResourcePayment;
+    if (
+      receipt &&
+      receipt.sourceIds.length === ids.length &&
+      receipt.sourceIds.every((id) => ids.includes(id))
+    ) {
+      need(
+        possible.includes(receipt.usedResourceCard),
+        "The selected resource-card allocation cannot pay this cost.",
+      );
+      bishopResourceCardPaid = receipt.usedResourceCard;
+    } else if (possible.length > 1) {
+      choose(
+        s,
+        "Allocate resource-card payment",
+        "Allocate the actual cost. All selected sources are spent; excess resources are overpaid.",
+        possible.map((usedResourceCard) =>
+          option(
+            usedResourceCard ? "resource-card" : "other-sources",
+            usedResourceCard
+              ? "Pay using a resource card"
+              : "Use other sources for the cost",
+            [
+              E("commitPaymentAllocation", {
+                payment: {
+                  ...p,
+                  bishopResourcePayment: {
+                    sourceIds: [...ids],
+                    usedResourceCard,
+                  },
+                },
+                ids,
+                wildAs,
+                paidForCard,
+                generatedForCard,
+                syncPaid,
+              }),
+            ],
+          ),
+        ),
+        true,
+      );
+      s.prompt!.cancellationQueue = [
+        E("restorePaymentPrompt", {
+          actorId: s.activePlayerId,
+          payment: p,
+          queue: [...s.queue],
+        }),
+      ];
+      return;
+    } else {
+      need(
+        possible.length,
+        "The selected sources cannot pay the actual event cost.",
+      );
+      bishopResourceCardPaid = possible[0];
+    }
+  }
   const clarity = selected.find(
     (info) =>
       info!.code === "31029" && !s.flags[`spdrClarityCommitted:${info!.id}`],
@@ -5829,8 +5951,11 @@ function pay(
     return;
   }
   const paymentActor = s.activePlayerId;
-  if (p.card && ["45007", "45008"].includes(p.card.code))
+  if (p.card && ["45007", "45008"].includes(p.card.code)) {
     delete s.flags[`bishopResourcePaid:${p.card.id}`];
+    if (bishopResourceCardPaid)
+      s.flags[`bishopResourcePaid:${p.card.id}`] = true;
+  }
   const contributors = new Set<string>([paymentActor]);
   for (const selectedSource of selected) {
     const info = selectedSource!;
@@ -5882,13 +6007,6 @@ function pay(
         // Counter resources are validated together and spent individually.
       } else if (s.player.hand.some((x) => x.id === id)) {
         const spent = discardHand(s, id);
-        if (
-          p.card &&
-          ["45007", "45008"].includes(p.card.code) &&
-          card(spent).type_code === "resource"
-        )
-          seatView(s, paymentActor).flags[`bishopResourcePaid:${p.card.id}`] =
-            true;
         phoenix.phoenixPayment(seatView(s, paymentActor), spent, p.card);
         spentResponses.push(...gambit.gambitPayment(s, spent));
         if (!p.abilityCost)
