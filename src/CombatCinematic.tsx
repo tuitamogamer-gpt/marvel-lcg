@@ -38,7 +38,13 @@ export function CombatCinematic({
           {event.enemy ? "ENEMY ATTACK" : "HERO ATTACK"}
         </span>
         <div className="combat-portrait combat-attacker">
-          <img src={imageFor(event.attacker.code)} alt="" />
+          {event.attacker.code === "back:hero" ? (
+            <span className="premium-card-back back-hero">
+              <span className="card-back-mark">MARVEL</span>
+            </span>
+          ) : (
+            <img src={imageFor(event.attacker.code)} alt="" />
+          )}
           <b>{event.attacker.name}</b>
         </div>
         <div className="combat-impact">
@@ -51,7 +57,13 @@ export function CombatCinematic({
           </span>
         </div>
         <div className="combat-portrait combat-target">
-          <img src={imageFor(event.target.code)} alt="" />
+          {event.target.code === "back:hero" ? (
+            <span className="premium-card-back back-hero">
+              <span className="card-back-mark">MARVEL</span>
+            </span>
+          ) : (
+            <img src={imageFor(event.target.code)} alt="" />
+          )}
           <b>{event.target.name}</b>
         </div>
         <div className="combat-ink-splinters">

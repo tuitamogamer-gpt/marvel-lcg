@@ -1,5 +1,6 @@
 import * as nickFury from "./nick-fury.js";
 import * as magnetoHero from "./magneto-hero.js";
+import * as mariaHill from "./maria-hill.js";
 import * as bishop from "./bishop.js";
 import * as nightcrawler from "./nightcrawler.js";
 import * as nightcrawlerEncounter from "./nightcrawler-encounters.js";
@@ -1512,6 +1513,14 @@ function discardPiece(s: GameState, id: string) {
         .map((q) => ({ ...q, actorId: owner })),
     );
   }
+}
+function discardEncounterControlled(
+  s: GameState,
+  id: string,
+  source?: string,
+  after: Effect[] = [],
+) {
+  mariaHill.mariaHillEncounterDiscard(s, id, source, mariaHillPorts, after);
 }
 function removePlayerCard(s: GameState, id: string) {
   const p = allInPlay(s).find((p) => p.id === id);
@@ -3715,6 +3724,7 @@ function defeatCharacter(
     (a) =>
       rulesCode(a) === "01007" && a.attachedTo === m.id && !isTextBlank(s, a),
   );
+  add(s, ...mariaHill.mariaHillControlledDefeated(s, m));
   const name = card(m).name;
   const textWasBlank = isTextBlank(s, m);
   const defeatedSentinel = minion && captainPackHasTrait(s, m.id, "Sentinel");
@@ -4376,7 +4386,11 @@ function defeatScheme(
     ),
   );
   add(s, ...nightcrawlerEncounter.nightcrawlerEncounterSchemeDefeated(s, p));
-  add(s, ...iceman.icemanSchemeDefeated(s, p));
+  add(
+    s,
+    ...iceman.icemanSchemeDefeated(s, p),
+    ...mariaHill.mariaHillSchemeDefeated(s, p),
+  );
   const nativeDefeat = sabretooth.sabretoothSideSchemeDefeated(
     s,
     p,
@@ -4533,7 +4547,7 @@ export function targets(
         ...s.minions.map((p) => ({
           id: p.id,
           label: card(p).name,
-          code: p.code,
+          code: p.mariaControlled ? undefined : p.code,
         })),
       ].filter(
         (t) =>
@@ -4548,7 +4562,7 @@ export function targets(
       return s.minions.map((p) => ({
         id: p.id,
         label: card(p).name,
-        code: p.code,
+        code: p.mariaControlled ? undefined : p.code,
       }));
     case "scheme":
       return [
@@ -4809,6 +4823,7 @@ function captainPackHasTrait(
     )
   )
     return true;
+  if (mariaHill.mariaHillTrait(s, target, trait)) return true;
   if (jubilee.jubileeEnemyTrait(s, target, trait)) return true;
   if (
     (target === "hero" || target === `hero:${s.activePlayerId}`) &&
@@ -5848,6 +5863,17 @@ function pay(
     jubilee.jubileePaymentPreflight(s, p.card, jubileePorts);
 
   need(selected.every(Boolean), "A selected resource is unavailable.");
+  if (
+    mariaHill.mariaHillOrgPreflight(
+      s,
+      p,
+      selected as PaymentSource[],
+      [...s.queue],
+      mariaHillPorts,
+    )
+  )
+    return;
+
   if (p.card && !p.abilityCost)
     mgPack.mutantGenesisPlayerPackPaymentPreflight(
       s,
@@ -6303,6 +6329,68 @@ function pay(
       bishopResourceCardPaid = possible[0];
     }
   }
+  let mariaFundingIds: string[] = [];
+  if (
+    p.card &&
+    !p.abilityCost &&
+    card(p.card).type_code === "support" &&
+    card(p.card).traits?.includes("S.H.I.E.L.D.")
+  ) {
+    const allocations = mariaHill.mariaHillFundingAllocations(
+      selected as PaymentSource[],
+      p.cost || 0,
+      req,
+      wildAs,
+      paidForCard,
+      generatedForCard,
+      explicitWilds,
+      paidResourceAllocations,
+    );
+    const receipt = p.mariaFundingPayment;
+    if (receipt && receipt.sourceIds.join("|") === ids.join("|")) {
+      need(
+        allocations.some((a) => a.join("|") === receipt.fundingIds.join("|")),
+        "The selected Special Funding origin cannot pay this cost.",
+      );
+      mariaFundingIds = receipt.fundingIds;
+    } else if (allocations.length > 1) {
+      choose(
+        s,
+        "Allocate Special Funding",
+        "Choose which selected physical Special Funding cards pay the actual cost; excess icons are overpaid.",
+        allocations.map((fundingIds, index) =>
+          option(
+            String(index),
+            fundingIds.length
+              ? `Use ${fundingIds.length} Special Funding card(s) for the cost`
+              : "Use other sources for the cost",
+            [
+              E("commitPaymentAllocation", {
+                payment: {
+                  ...p,
+                  mariaFundingPayment: { sourceIds: [...ids], fundingIds },
+                },
+                ids,
+                wildAs,
+                paidForCard,
+                generatedForCard,
+                syncPaid,
+              }),
+            ],
+          ),
+        ),
+        true,
+      );
+      s.prompt!.cancellationQueue = [
+        E("restorePaymentPrompt", {
+          actorId: s.activePlayerId,
+          payment: p,
+          queue: [...s.queue],
+        }),
+      ];
+      return;
+    } else mariaFundingIds = allocations[0] || [];
+  }
   const clarity = selected.find(
     (info) =>
       info!.code === "31029" && !s.flags[`spdrClarityCommitted:${info!.id}`],
@@ -6340,6 +6428,13 @@ function pay(
     return;
   }
   const paymentActor = s.activePlayerId;
+  if (p.card)
+    mariaHill.mariaHillRecordFunding(
+      s,
+      p.card,
+      selected as PaymentSource[],
+      mariaFundingIds,
+    );
   if (p.card && ["45007", "45008"].includes(p.card.code)) {
     delete s.flags[`bishopResourcePaid:${p.card.id}`];
     if (bishopResourceCardPaid)
@@ -6377,6 +6472,7 @@ function pay(
       } else if (nightcrawler.nightcrawlerSpendResource(s, id)) {
       } else if (magnetoHero.magnetoHeroResourceSpent(s, id)) {
         spentResponses.push(...domino.dominoFeedback(s));
+      } else if (mariaHill.mariaHillResourceSpent(s, id, mariaHillPorts)) {
       } else if (iceman.icemanResourceSpent(s, id)) {
       } else if (nickFury.nickFurySpendResource(s, id)) {
         // The physical Watch/Jemma source commits its own exhaust/threat cost.
@@ -6402,6 +6498,8 @@ function pay(
       } else if (spiderHam.spiderHamResourceSpent(s, id, spiderHamPorts)) {
         // Counter resources are validated together and spent individually.
       } else if (s.player.hand.some((x) => x.id === id)) {
+        const toSpend = s.player.hand.find((q) => q.id === id)!;
+        mariaHill.mariaHillOrgSpend(s, toSpend, mariaHillPorts);
         const spent = discardHand(s, id);
         phoenix.phoenixPayment(seatView(s, paymentActor), spent, p.card);
         spentResponses.push(...gambit.gambitPayment(s, spent));
@@ -6777,6 +6875,7 @@ export function newGame(config: {
     psylocke.psylockeInitialize(s, { makePiece });
     x23.x23Initialize(s, { makePiece });
     iceman.icemanInitialize(s, { makePiece });
+    mariaHill.mariaHillInitialize(s, { makePiece });
     jubilee.jubileeInitialize(s, makePiece);
     nickFury.nickFuryInitialize(s, makePiece);
     magnetoHero.magnetoHeroInitialize(s, makePiece);
@@ -7238,6 +7337,7 @@ export function playable(s: GameState, p: Piece): string | null {
     domino.dominoPlayRestriction(s, p, dominoPorts) ||
     x23.x23PlayRestriction(s, p, x23Ports) ||
     nightcrawler.nightcrawlerPlayRestriction(s, p, nightcrawlerPorts) ||
+    mariaHill.mariaHillPlayRestriction(s, p) ||
     iceman.icemanPlayRestriction(s, p, icemanPorts) ||
     gambit.gambitPlayRestriction(s, p, gambitPorts) ||
     cyclops.cyclopsPlayRestriction(s, p, cyclopsPorts) ||
@@ -8025,6 +8125,7 @@ function play(
       ...nightcrawler.nightcrawlerEntered(s, p),
       ...bishop.bishopEntered(s, p),
       ...iceman.icemanEntered(s, p),
+      ...mariaHill.mariaHillEntered(s, p),
       ...jubilee.jubileeEntered(s, p),
       ...deadpool.deadpoolCardEntered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
@@ -8218,7 +8319,11 @@ function allyEnter(
   );
   add(s, ...nightcrawler.nightcrawlerEntered(s, p));
   add(s, ...cyclops.cyclopsAllyEntered(s, p), ...bishop.bishopEntered(s, p));
-  add(s, ...iceman.icemanEntered(s, p, fromHand, true));
+  add(
+    s,
+    ...iceman.icemanEntered(s, p, fromHand, true),
+    ...mariaHill.mariaHillEntered(s, p),
+  );
   if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
     giveCharacterStatus(s, p, "tough");
   if (isTextBlank(s, p)) return;
@@ -8494,6 +8599,7 @@ function event(
     psylocke.psylockeEvent(s, p, paid) ??
     domino.dominoEvent(s, p) ??
     x23.x23Event(s, p) ??
+    mariaHill.mariaHillEvent(s, p) ??
     iceman.icemanEvent(s, p) ??
     gambit.gambitEvent(s, p) ??
     cyclops.cyclopsEvent(s, p) ??
@@ -9328,7 +9434,8 @@ function ability(s: GameState, id: string, action = "special") {
       "This identity’s printed text box is blank.",
     );
   need(
-    !deadpool.deadpoolTriggeredBlocked(s),
+    !deadpool.deadpoolTriggeredBlocked(s) ||
+      s.player.inPlay.some((p) => p.id === id && p.code === "50029"),
     "The Merc with the Mouth prevents another player’s triggered card abilities during this turn.",
   );
   const nightcrawlerOptions = nightcrawler.nightcrawlerAbilityOptions(
@@ -9374,6 +9481,18 @@ function ability(s: GameState, id: string, action = "special") {
       : jubileeOptions.find((o) => o.id === action);
   if (jubileeSelected) {
     add(s, ...jubileeSelected.effects);
+    return;
+  }
+  const mariaOptions = [
+    ...mariaHill.mariaHillAbilityOptions(s, id, mariaHillPorts),
+    ...mariaHill.mariaHillHandOptions(s, id),
+  ];
+  const mariaSelected =
+    action === "special"
+      ? mariaOptions[0]
+      : mariaOptions.find((o) => o.id === action);
+  if (mariaSelected) {
+    add(s, ...mariaSelected.effects);
     return;
   }
   const deadpoolOptions = deadpool.deadpoolAbilityOptions(s, id, deadpoolPorts);
@@ -11932,6 +12051,7 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
       ...x23.x23Entered(s, p),
       ...bishop.bishopEntered(s, p),
       ...iceman.icemanEntered(s, p),
+      ...mariaHill.mariaHillEntered(s, p),
       ...deadpool.deadpoolCardEntered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
       ...wolverine
@@ -12667,9 +12787,12 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     return deadpool
       .deadpoolAbilityOptions(s, id, deadpoolPorts)
       .filter((o) => o.id === "game-history");
-  if (deadpool.deadpoolTriggeredBlocked(s)) return [];
+  if (deadpool.deadpoolTriggeredBlocked(s))
+    return mariaHill.mariaHillAbilityOptions(s, id, mariaHillPorts);
   return [
     ...nightcrawler.nightcrawlerAbilityOptions(s, id, nightcrawlerPorts),
+    ...mariaHill.mariaHillAbilityOptions(s, id, mariaHillPorts),
+    ...mariaHill.mariaHillHandOptions(s, id),
     ...bishop.bishopAbilityOptions(s, id, bishopPorts),
     ...magnetoHero.magnetoHeroAbilityOptions(s, id, magnetoHeroPorts),
     ...magik.magikAbilityOptions(s, id),
@@ -17189,6 +17312,7 @@ const nebulaPorts: nebula.NebulaPorts = {
         ...x23.x23Entered(s, p),
         ...bishop.bishopEntered(s, p),
         ...iceman.icemanEntered(s, p),
+        ...mariaHill.mariaHillEntered(s, p),
         ...deadpool.deadpoolCardEntered(s, p),
         ...cyclops.cyclopsCardEntered(s, p),
         ...wolverine
@@ -17790,6 +17914,7 @@ export function nativePutIntoPlay(
     ...x23.x23Entered(s, p),
     ...bishop.bishopEntered(s, p),
     ...iceman.icemanEntered(s, p),
+    ...mariaHill.mariaHillEntered(s, p),
     ...deadpool.deadpoolCardEntered(s, p),
     ...cyclops.cyclopsCardEntered(s, p),
     ...phoenix.phoenixCardEntered(s, p),
@@ -18726,6 +18851,82 @@ function icemanWallOrderWindow(s: GameState, packet: Effect, amount: number) {
   return true;
 }
 
+const mariaHillPorts: mariaHill.MariaHillPorts = {
+  queue: add,
+  choose,
+  find,
+  makePiece,
+  hasTrait: sinisterNativeHasTrait,
+  enemies: (s) => targets(s, "enemy", false),
+  schemes: (s) => targets(s, "scheme", false, false),
+  characters: (s) => targets(s, "controlled"),
+  canStatus: quicksilverPorts.canGiveStatus,
+  canReady: (s, id) =>
+    id === "hero"
+      ? canReadyIdentity(s)
+      : id.startsWith("hero:")
+        ? canReadyIdentity(seatView(s, id.slice(5)))
+        : !!find(s, id)?.exhausted &&
+          nova.novaCanReadyPiece(s, find(s, id)!, { isTextBlank }) &&
+          warMachinePackPorts.canReady(s, id),
+  ready: (s, id) => {
+    if (id === "hero") readyIdentity(s);
+    else if (id.startsWith("hero:")) readyIdentity(seatView(s, id.slice(5)));
+    else {
+      const p = find(s, id);
+      if (p && nova.novaCanReadyPiece(s, p, { isTextBlank }))
+        p.exhausted = false;
+    }
+  },
+  discard: discardPiece,
+  remove: (s, id) => movePieceFromPlay(s, id, true),
+  discardHand,
+  shuffle: (s) => {
+    revealHidden(s);
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  recycle: recyclePlayer,
+  hidden: revealHidden,
+  canPut: nativeCanPutIntoPlay,
+  put: (s, p, playerId) => {
+    const actor = s.activePlayerId;
+    for (const seat of s.players) {
+      const zone = seatView(s, seat).player.hand;
+      const i = zone.findIndex((q) => q.id === p.id);
+      if (i >= 0) zone.splice(i, 1);
+    }
+    activateSeat(s, playerId);
+    nativePutIntoPlay(s, p);
+    activateSeat(s, actor);
+  },
+  requestPayment: (s, title, cost, requirements, after) =>
+    requestPayment(s, title, cost, after, requirements, undefined, false),
+  restorePayment: (s, payment, queue, actorId) => {
+    if (actorId) activateSeat(s, actorId);
+    s.prompt = payment;
+    s.queue = queue;
+  },
+  canPay: (s, cost, requirements) => canPay(s, cost, requirements),
+  allyAttack: (s, p) => allyStat(s, p, "attack"),
+  keepObligation: gambitPorts.keepObligation,
+  cancelReveal: (s, p, after) => {
+    dominoPorts.cancelReveal(s, p);
+    add(s, ...after);
+  },
+  drawEncounter,
+  removeTough: (s, id) => {
+    const p = find(s, id);
+    if (p)
+      colossusNativeDiscardTough(
+        s,
+        [{ targetId: id, amount: statusCards(p, "tough") }],
+        [],
+      );
+  },
+  batch: spectrumPorts.damageBatch,
+};
+
 const icemanPorts: iceman.IcemanPorts = {
   characters: (s) => targets(s, "controlled"),
   queue: add,
@@ -19566,6 +19767,7 @@ const mutantGenesisPackPorts: mgPack.MutantGenesisPlayerPackPorts = {
       !seat.eliminated &&
       !p.exhausted &&
       card(p).type_code === "ally" &&
+      (p.code !== "50022" || isTextBlank(s, p)) &&
       !armadillo.armadilloDefenseBlocked(s, r.attackerId)
     );
   },
@@ -19815,6 +20017,11 @@ function mutantGenesisAttackOptions(
       )
       .filter((o) => !a.angelTauntPlayerId || o.image !== "32017");
     opts.push(...magik.magikAttackOptions(view, stage, after, magikPorts));
+    if (
+      stage === "attacks" &&
+      seat.id === (a.targetPlayerId || s.activePlayerId)
+    )
+      opts.push(...mariaHill.mariaHillLmdOptions(view, after));
     if (stage === "attacks")
       opts.push(
         ...angel.angelDefenseOptions(view, after, angelPorts),
@@ -20289,6 +20496,7 @@ function abortAttack(s: GameState) {
     s,
     ...antMan.antManEnemyActivated(s, a.attacker),
     ...iceman.icemanActivated(s, a.attacker),
+    ...mariaHill.mariaHillActivation(s, a.attacker),
     ...iceman.icemanAfterAttack(s, a.id),
     ...armadillo
       .armadilloActivationResponses(s, a.attacker)
@@ -20424,7 +20632,10 @@ function declareDefense(s: GameState) {
         ),
       );
     for (const ally of friends(view).filter(
-      (p) => !p.exhausted && !a.angelTauntPlayerId,
+      (p) =>
+        !p.exhausted &&
+        !a.angelTauntPlayerId &&
+        (p.code !== "50022" || isTextBlank(s, p)),
     ))
       opts.push(
         option(
@@ -21025,6 +21236,7 @@ function finishScheme(s: GameState) {
       : []),
     ...antMan.antManEnemyActivated(s, id),
     ...iceman.icemanActivated(s, id),
+    ...mariaHill.mariaHillActivation(s, id),
     ...armadillo.armadilloActivationResponses(s, id).flatMap((r) => r.effects),
     ...spectrum.spectrumEnemyActivated(s, p, s.activePlayerId, spectrumPorts),
     ...nightcrawlerEncounter.nightcrawlerEncounterMinionSchemed(
@@ -21627,6 +21839,7 @@ function finishAttackAfterDamage(
     }),
     ...antMan.antManEnemyActivated(s, a.attacker),
     ...iceman.icemanActivated(s, a.attacker),
+    ...mariaHill.mariaHillActivation(s, a.attacker),
     ...iceman.icemanAfterAttack(s, a.id),
     ...(a.afterActivation || []),
     ...(a.visionAfterAttack || []),
@@ -22005,6 +22218,7 @@ function reveal(
           })),
       );
     opts.push(...angel.angelRevealOptions(s, p, angelPorts));
+    opts.push(...mariaHill.mariaHillTeamOptions(s, p, [], mariaHillPorts));
     for (const seat of playerOrder(s))
       opts.push(
         ...x23
@@ -22359,6 +22573,7 @@ function reveal(
     add(
       s,
       ...((nightcrawlerEncounter.nightcrawlerEncounter(s, p) ??
+        mariaHill.mariaHillEncounter(s, p) ??
         iceman.icemanEncounter(s, p) ??
         magneto.magnetoReveal(s, p, { isTextBlank }) ??
         masterMold.masterMoldReveal(s, p, { isTextBlank }) ??
@@ -22496,6 +22711,7 @@ function reveal(
       ...cable.CABLE_SCRIPT_CODES,
       ...x23.X23_SCRIPT_CODES,
       ...iceman.ICEMAN_SCRIPT_CODES,
+      ...mariaHill.MARIA_HILL_SCRIPT_CODES,
       ...jubilee.JUBILEE_SCRIPT_CODES,
       ...nickFury.NICK_FURY_SCRIPT_CODES,
       ...colossus.COLOSSUS_SCRIPT_CODES,
@@ -22569,6 +22785,7 @@ function reveal(
       magik.magikEncounter(s, p) ??
       cable.cableEncounter(s, p) ??
       nightcrawlerEncounter.nightcrawlerEncounter(s, p) ??
+      mariaHill.mariaHillEncounter(s, p) ??
       iceman.icemanEncounter(s, p) ??
       nickFury.nickFuryEncounter(s, p) ??
       jubilee.jubileeEncounter(s, p) ??
@@ -22628,6 +22845,7 @@ function reveal(
     magik.magikEncounter(s, p) ??
     cable.cableEncounter(s, p) ??
     nightcrawlerEncounter.nightcrawlerEncounter(s, p) ??
+    mariaHill.mariaHillEncounter(s, p) ??
     iceman.icemanEncounter(s, p) ??
     nickFury.nickFuryEncounter(s, p) ??
     jubilee.jubileeEncounter(s, p) ??
@@ -23021,6 +23239,11 @@ function treachery(s: GameState, p: Piece) {
     add(s, ...nightcrawlerReveal);
     return;
   }
+  const mariaReveal = mariaHill.mariaHillEncounter(s, p);
+  if (mariaReveal !== null) {
+    add(s, ...mariaReveal);
+    return;
+  }
   const icemanReveal = iceman.icemanEncounter(s, p);
   if (icemanReveal !== null) {
     add(s, ...icemanReveal);
@@ -23067,6 +23290,7 @@ function treachery(s: GameState, p: Piece) {
     magik.magikEncounter(s, p) ??
     cable.cableEncounter(s, p) ??
     nightcrawlerEncounter.nightcrawlerEncounter(s, p) ??
+    mariaHill.mariaHillEncounter(s, p) ??
     iceman.icemanEncounter(s, p) ??
     nickFury.nickFuryEncounter(s, p) ??
     jubilee.jubileeEncounter(s, p) ??
@@ -23367,6 +23591,11 @@ function treachery(s: GameState, p: Piece) {
       const magikNemesis = magik.magikShadows(s);
       if (magikNemesis !== null) {
         add(s, ...magikNemesis);
+        break;
+      }
+      const mariaNemesis = mariaHill.mariaHillShadows(s);
+      if (mariaNemesis) {
+        add(s, ...mariaNemesis);
         break;
       }
       const icemanNemesis = iceman.icemanShadows(s);
@@ -23723,6 +23952,7 @@ function resolve(s: GameState, e: Effect) {
     if (p) defeatCharacter(s, p, e.source);
     return;
   }
+  if (mariaHill.resolveMariaHillEffect(s, e, mariaHillPorts)) return;
   if (iceman.resolveIcemanEffect(s, e, icemanPorts)) return;
   if (domino.resolveDominoEffect(s, e, dominoPorts)) return;
   if (gambit.resolveGambitEffect(s, e, gambitPorts)) return;
@@ -23884,6 +24114,7 @@ function resolve(s: GameState, e: Effect) {
           magik.magikEncounter(state, piece) ??
           cable.cableEncounter(state, piece) ??
           nickFury.nickFuryEncounter(state, piece) ??
+          mariaHill.mariaHillEncounter(state, piece) ??
           jubilee.jubileeEncounter(state, piece) ??
           x23.x23Encounter(state, piece) ??
           deadpool.deadpoolEncounter(state, piece) ??
@@ -26269,6 +26500,7 @@ function resolve(s: GameState, e: Effect) {
         ...x23.x23SchemeDefeated(s, p),
         ...nightcrawler.nightcrawlerSchemeDefeated(s, p),
         ...iceman.icemanSchemeDefeated(s, p),
+        ...mariaHill.mariaHillSchemeDefeated(s, p),
         ...jubilee.jubileeSideReward(s, p),
         ...magnetoHero.magnetoHeroSideDefeated(s, p),
       ];
@@ -27764,9 +27996,12 @@ function resolve(s: GameState, e: Effect) {
     case "discardHand":
       discardHand(s, e.id);
       break;
-    case "discardPiece":
-      discardPiece(s, e.id);
+    case "discardPiece": {
+      if (e.encounterDiscard)
+        discardEncounterControlled(s, e.id, e.source, e.after || []);
+      else discardPiece(s, e.id);
       break;
+    }
     case "counter": {
       const p = find(s, e.id);
       if (p) p.counters += e.amount;
@@ -29099,6 +29334,7 @@ function resolve(s: GameState, e: Effect) {
           ...venomPack.venomPackAfterAllyThwart(s, p),
         );
       add(s, ...bishop.bishopAllyUsed(s, p));
+      add(s, ...mariaHill.mariaHillAllyUsed(s, p));
       add(s, ...draxPack.draxPackAfterAllyBasic(s, p));
       add(s, ...mtsPlayerPack.mtsPlayerPackAfterAllyBasic(s, p));
       add(s, ...hulkPackAllyResponse(s, p, !!e.attack));
@@ -29634,6 +29870,13 @@ function resolve(s: GameState, e: Effect) {
     case "sinisterNativeRevealed":
       add(
         s,
+        ...mariaHill.mariaHillRevealed(s, {
+          id: e.receipt.pieceId,
+          code: e.receipt.code,
+        } as Piece),
+      );
+      add(
+        s,
         ...(sinisterPlayerPack.sinisterPlayerPackEncounterRevealed(
           s,
           e.receipt,
@@ -29803,6 +30046,7 @@ function resolve(s: GameState, e: Effect) {
           : []),
         ...antMan.antManEnemyActivated(s, a.attacker),
         ...iceman.icemanActivated(s, a.attacker),
+        ...mariaHill.mariaHillActivation(s, a.attacker),
         ...iceman.icemanAfterAttack(s, a.id),
         ...(a.completionRecorded && a.attackerSnapshot
           ? spectrum.spectrumEnemyActivated(
@@ -30166,6 +30410,12 @@ function resolve(s: GameState, e: Effect) {
       );
       break;
     case "defender":
+      need(
+        !find(s, e.id) ||
+          find(s, e.id)!.code !== "50022" ||
+          isTextBlank(s, find(s, e.id)!),
+        "Grant Ward cannot defend.",
+      );
       if (e.id === "hero" && s.attack && !e.icemanFreezeHandled) {
         const packet = {
           ...e,
@@ -31470,6 +31720,24 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "defenseResponses": {
+      if (
+        !e.mariaAllyDefenseHandled &&
+        e.snapshot?.defender &&
+        !["hero", "none"].includes(e.snapshot.defender)
+      ) {
+        const p = find(s, e.snapshot.defender),
+          seat = p && controller(s, p.id);
+        const effects =
+          p && seat ? mariaHill.mariaHillAllyUsed(seatView(s, seat), p) : [];
+        if (effects.length) {
+          add(s, ...effects.map((q) => ({ ...q, actorId: seat!.id })), {
+            ...e,
+            mariaAllyDefenseHandled: true,
+          });
+          break;
+        }
+      }
+
       s.attack = null;
       if (!e.nightcrawlerHandled) {
         add(
@@ -32156,7 +32424,7 @@ function resolve(s: GameState, e: Effect) {
           option(
             p.id,
             card(p).name,
-            [E("discardPiece", { id: p.id })],
+            [E("discardPiece", { id: p.id, encounterDiscard: true })],
             undefined,
             p.code,
           ),
@@ -32355,6 +32623,13 @@ function resolve(s: GameState, e: Effect) {
       log(s, `${heroCard(s).name} and their cards are ready.`, "phase");
       break;
     case "beginVillain":
+      if (!e.mariaPhaseEnded) {
+        const effects = mariaHill.mariaHillPhaseEnd(s, true);
+        if (effects.length) {
+          add(s, ...effects, { ...e, mariaPhaseEnded: true });
+          break;
+        }
+      }
       if (!e.wideawakePlayerPhaseEnded) {
         const effects = wideawake.projectWideawakeEndPlayerPhase(s);
         if (effects.length) {
@@ -32708,6 +32983,7 @@ function resolve(s: GameState, e: Effect) {
                 key === "x23Initialized" ||
                 key === "magnetoHeroInitialized" ||
                 key === "icemanInitialized" ||
+                key === "mariaInitialized" ||
                 key === "stormSetupComplete" ||
                 key.startsWith("valkyrie") ||
                 key.startsWith("vision") ||
@@ -33167,6 +33443,7 @@ export function dispatch(state: GameState, command: Command): GameState {
         "The next card is already revealed; finish playing this card.",
       );
       need(s.prompt?.cancelable, "This decision cannot be canceled.");
+      mariaHill.mariaHillClearPayment(s);
       const resume = s.prompt?.cancellationQueue;
       if (!resume?.some((e) => e.type === "restorePaymentPrompt"))
         starLord.starLordHandPlayFinished(s);

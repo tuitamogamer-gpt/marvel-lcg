@@ -2526,13 +2526,22 @@ export default function App() {
         </Modal>
       )}
       {inspect && (
-        <Modal title={card(inspect.code).name} onClose={() => setInspect(null)}>
+        <Modal
+          title={card(inspect.piece || inspect.code).name}
+          onClose={() => setInspect(null)}
+        >
           <div className="inspect-content">
-            <CardImage code={inspect.code} />
+            {inspect.piece?.mariaControlled ? (
+              <CardBack kind="hero" />
+            ) : (
+              <CardImage code={inspect.code} />
+            )}
             <div>
               <span className="card-type">
-                {card(inspect.code).faction_code || "card"} ·{" "}
-                {(card(inspect.code).type_code || "card").replace("_", " ")}
+                {card(inspect.piece || inspect.code).faction_code || "card"} ·{" "}
+                {(
+                  card(inspect.piece || inspect.code).type_code || "card"
+                ).replace("_", " ")}
               </span>
               {inspectedEnergyForm && (
                 <p className="modal-intro" role="status">
@@ -2548,39 +2557,45 @@ export default function App() {
                 </p>
               )}
               <p className="rules-text">
-                {plain(card(inspect.code).text) ||
-                  (card(inspect.code).type_code === "resource"
+                {plain(card(inspect.piece || inspect.code).text) ||
+                  (card(inspect.piece || inspect.code).type_code === "resource"
                     ? "A resource card. Spend it when paying a resource cost."
                     : "No printed rules text on this face.")}
               </p>
-              <KeywordGuide text={card(inspect.code).text} />
-              <ProductSource code={inspect.code} />
-              {card(inspect.code).errata && (
+              <KeywordGuide text={card(inspect.piece || inspect.code).text} />
+              {!inspect.piece?.mariaControlled && (
+                <ProductSource code={inspect.code} />
+              )}
+              {card(inspect.piece || inspect.code).errata && (
                 <p className="hint">
                   Updated card text ·{" "}
                   <a
                     className="text-link"
-                    href={card(inspect.code).errata!.url}
+                    href={card(inspect.piece || inspect.code).errata!.url}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    {card(inspect.code).errata!.reference}
+                    {card(inspect.piece || inspect.code).errata!.reference}
                   </a>
                   . The card image shows the original printing.
                 </p>
               )}
               <div className="inspect-resources">
-                <ResourceIcons items={resources(card(inspect.code))} />
-                <span>{card(inspect.code).traits}</span>
+                <ResourceIcons
+                  items={resources(card(inspect.piece || inspect.code))}
+                />
+                <span>{card(inspect.piece || inspect.code).traits}</span>
               </div>
-              <a
-                className="text-link"
-                href={`https://marvelcdb.com/card/${inspect.code}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                View on MarvelCDB <ArrowUpRight size={15} />
-              </a>
+              {!inspect.piece?.mariaControlled && (
+                <a
+                  className="text-link"
+                  href={`https://marvelcdb.com/card/${inspect.code}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View on MarvelCDB <ArrowUpRight size={15} />
+                </a>
+              )}
               {inspect.hand && game && inspect.piece && (
                 <>
                   <p className="hint">
@@ -2590,7 +2605,7 @@ export default function App() {
                         : game,
                       inspect.piece,
                     ) ||
-                      `Pay ${cardCost(game, card(inspect.code), inspect.piece)} resources to play this card.`}
+                      `Pay ${cardCost(game, card(inspect.piece || inspect.code), inspect.piece)} resources to play this card.`}
                   </p>
                   <button
                     className="primary-button"
@@ -3599,7 +3614,9 @@ function AttackParticipants({
           key={i}
         >
           <small>{i ? attack.label : "ATTACKER"}</small>
-          {inspect ? (
+          {participant.code === "back:hero" ? (
+            <CardBack kind="hero" />
+          ) : inspect ? (
             <button
               aria-label={`Inspect ${participant.name} · ${i ? "attack target" : "attacker"}`}
               onClick={() => inspect({ code: participant.code })}
@@ -3792,7 +3809,7 @@ function ReviewDetails({
                   </button>
                 ) : (
                   <div className="review-card-back">
-                    <CardBack kind="encounter" />
+                    <CardBack kind={c.back || "encounter"} />
                     <span>FACE DOWN</span>
                   </div>
                 )}
@@ -5112,10 +5129,14 @@ function Tabletop({
                       <button
                         className="enemy-tile"
                         key={p.id}
-                        onClick={() => inspect({ code: p.code })}
+                        onClick={() => inspect({ code: p.code, piece: p })}
                       >
                         <span className="minion-card-face">
-                          <CardImage code={p.code} />
+                          {p.mariaControlled ? (
+                            <CardBack kind="hero" />
+                          ) : (
+                            <CardImage code={p.code} />
+                          )}
                           {p.damage > 0 && (
                             <span
                               className="minion-damage"

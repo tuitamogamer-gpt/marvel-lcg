@@ -923,6 +923,20 @@ export const HEROES = [
     style: "Magnetic powers · Leadership",
     complexity: 2,
   },
+  {
+    id: "maria_hill",
+    code: "50001a",
+    alter: "50001b",
+    name: "Maria Hill",
+    identity: "Maria Hill",
+    aspect: "leadership" as Aspect,
+    color: "#245d77",
+    tag: "Reassignment",
+    description:
+      "Command S.H.I.E.L.D. supports, move their counters, and coordinate your team.",
+    style: "S.H.I.E.L.D. supports · Leadership",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -1272,6 +1286,7 @@ export function deckCodes(
       (hero === "cyclops" && aspect === "leadership") ||
       (hero === "storm" && aspect === "leadership") ||
       (hero === "bishop" && aspect === "leadership") ||
+      (hero === "maria_hill" && aspect === "leadership") ||
       (hero === "magik" && aspect === "aggression") ||
       (hero === "magneto" && aspect === "leadership") ||
       (hero === "cable" && aspect === "leadership") ||

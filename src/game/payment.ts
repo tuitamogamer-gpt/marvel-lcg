@@ -3,6 +3,10 @@ import {
   magnetoHeroResourceSources,
   magnetoHeroDamageCostAvailable,
 } from "./magneto-hero.js";
+import {
+  mariaHillOrgResources,
+  mariaHillResourceSources,
+} from "./maria-hill.js";
 import { magikResourceSources } from "./magik.js";
 import { jubileeResourceSources } from "./jubilee.js";
 import { cableResourceSources } from "./cable.js";
@@ -102,7 +106,9 @@ export function resourcesFor(
   target?: Card,
 ): Resource[] {
   const generated =
-    deadpoolResources(s, p, maxHP(s)) ?? mtsPlayerPackCardResources(s, p);
+    mariaHillOrgResources(s, p) ??
+    deadpoolResources(s, p, maxHP(s)) ??
+    mtsPlayerPackCardResources(s, p);
   return generated ?? zzzaxHandResources(s, p, resources(card(p), target));
 }
 
@@ -190,6 +196,7 @@ function localPaymentSources(
   sources.push(...icemanResourceSources(s, targetCode));
   sources.push(...nightcrawlerResourceSources(s, targetCode));
   sources.push(...magnetoHeroResourceSources(s, targetCode));
+  sources.push(...mariaHillResourceSources(s));
   sources.push(...cyclopsResourceSources(s, targetCode));
   sources.push(...colossusResourceSources(s, { isTextBlank }));
   sources.push(...shadowcatResourceSources(s, targetCode, { isTextBlank }));
@@ -335,6 +342,24 @@ export function paymentSources(
     );
   }
   if (!handOnly) {
+    for (const seat of playerOrder(s)) {
+      if (seat.id === s.activePlayerId) continue;
+      for (const source of mariaHillResourceSources(
+        seatView(s, seat),
+        s.activePlayerId,
+      ))
+        if (
+          !sources.some(
+            (q) => q.localId === source.id && q.playerId === seat.id,
+          )
+        )
+          sources.push({
+            ...source,
+            id: `alliance:${seat.id}:${source.id}`,
+            localId: source.id,
+            playerId: seat.id,
+          });
+    }
     const jets = mutantGenesisPlayerPackResourceSources(s, s.activePlayerId, {
       isTextBlank,
       identityHasTrait: (state, trait) =>

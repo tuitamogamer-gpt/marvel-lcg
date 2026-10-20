@@ -15,7 +15,7 @@ export function combatCharacter(s: GameState, id: string) {
   ].find((p) => p.id === id);
   if (!p) return undefined;
   return {
-    code: p.code,
+    code: p.mariaControlled ? "back:hero" : p.code,
     name: card(p).name,
     hp: p.id === s.villain.id ? s.villain.hp : pieceHP(s, p) - p.damage,
   };

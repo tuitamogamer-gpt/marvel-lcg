@@ -57,6 +57,27 @@ DB.drone = {
 };
 export const card = (piece: Piece | string): Card => {
   const printed = DB[typeof piece === "string" ? piece : piece.code];
+  if (typeof piece !== "string" && piece.mariaControlled)
+    return {
+      ...printed,
+      name: "Controlled Innocent",
+      subname: undefined,
+      faction_code: "",
+      cost: undefined,
+      resource_energy: 0,
+      resource_mental: 0,
+      resource_physical: 0,
+      resource_wild: 0,
+      type_code: "minion",
+      text: "",
+      traits: "Controlled.",
+      attack: 1,
+      scheme: 1,
+      health: 1,
+      attack_star: false,
+      scheme_star: false,
+      is_unique: false,
+    };
   if (typeof piece !== "string" && piece.treatedAsAlly)
     return {
       ...printed,

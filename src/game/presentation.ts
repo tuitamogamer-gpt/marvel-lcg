@@ -39,7 +39,10 @@ export function attackContext(s: GameState, attack: Attack | null = s.attack) {
   const ally = pieces.find((p) => p.id === attack.defender);
   const target = ally ? card(ally) : identity;
   return {
-    attacker: { code: attacker.code, name: card(attacker).name },
+    attacker: {
+      code: attacker.mariaControlled ? "back:hero" : attacker.code,
+      name: card(attacker).name,
+    },
     target: { code: target.code, name: target.name, playerId: seat.id },
     identity: { code: identity.code, name: identity.name },
     label: ally

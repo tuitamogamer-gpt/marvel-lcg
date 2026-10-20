@@ -50,6 +50,7 @@ describe("imported hero definitions and printed starter legality", () => {
     expect(
       HERO_RUNTIME.filter((h) => h.scripted).map((h) => h.id),
     ).toHaveLength(57);
+    expect(heroRuntime("maria_hill")?.scripted).toBe(true);
     expect(heroRuntime("captain_america")?.scripted).toBe(true);
     expect(heroRuntime("wsp")?.scripted).toBe(true);
     expect(heroRuntime("qsv")?.scripted).toBe(true);

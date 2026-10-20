@@ -110,6 +110,8 @@ export interface Piece {
   stunCards?: number;
   confuseCards?: number;
   toughCards?: number;
+  /** Actual owned player card facedown as a Controlled Innocent. */
+  mariaControlled?: boolean;
   droneCard?: Piece;
   captured?: Piece[];
   bonusAtk?: number;
@@ -167,6 +169,7 @@ export interface Prompt {
   /** Actual already generated sources whose paid ability costs completed. */
   committedResources?: import("./payment.js").PaymentSource[];
   /** Whether an actual cost icon came from a selected resource-type hand card. */
+  mariaFundingPayment?: { sourceIds: string[]; fundingIds: string[] };
   bishopResourcePayment?: { sourceIds: string[]; usedResourceCard: boolean };
   wildAs?: Resource;
   selectAction?: Effect;
@@ -448,6 +451,7 @@ export interface PlayerSeat {
 export interface ReviewCard {
   id: string;
   code?: string;
+  back?: "hero";
   name: string;
   label: string;
   detail: string;

@@ -6,6 +6,7 @@ import {
   heroDeckAspects,
   heroRequiredCards,
   heroAllowsOffAspectEvent,
+  heroAllowsOffAspectShieldSupport,
   heroDeckRule,
   heroRuntime,
   isPermanent,
@@ -80,6 +81,7 @@ export function deckOptions(
         c.pack_code === heroPack) ||
         selectedAspects.includes(c.faction_code as Aspect) ||
         heroAllowsOffAspectEvent(heroId, c) ||
+        heroAllowsOffAspectShieldSupport(heroId, c) ||
         (heroId === "cable" &&
           c.type_code === "player_side_scheme" &&
           c.faction_code !== "hero") ||
@@ -149,6 +151,7 @@ export function deckErrors(
       "nightcrawler",
       "nick_fury",
       "magneto",
+      "maria_hill",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

@@ -206,6 +206,7 @@ export const heroStarterCodes = (idOrCode: string) =>
 export function heroStarterAspects(idOrCode: string): HeroAspect[] {
   const hero = heroRuntime(idOrCode);
   if (!hero) return [];
+  if (hero.id === "maria_hill") return ["leadership"];
   if (hero.deckRule.aspects === "four-equal-singleton") return [...fourAspects];
   const counts = new Map<HeroAspect, number>();
   for (const code of heroStarterCodes(idOrCode)) {
@@ -504,4 +505,16 @@ export function validateHeroDeck(
     aspects,
     errors: [...new Set(errors)],
   };
+}
+
+export function heroAllowsOffAspectShieldSupport(
+  idOrCode: string,
+  c: Card,
+): boolean {
+  return (
+    heroDeckRule(idOrCode)?.exception === "three-shield-supports" &&
+    c.type_code === "support" &&
+    hasTrait(c, "S.H.I.E.L.D") &&
+    HERO_ASPECTS.includes(c.faction_code as HeroAspect)
+  );
 }
