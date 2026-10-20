@@ -368,8 +368,14 @@ export function ContentBrowser({
   const deckSize = deck?.deckSize ?? codes.length - setupCount;
   const deckAspect =
     ASPECTS.find((aspect) => aspect.id === deck?.aspect)?.id ||
-    (["spider_woman", "gam", "warlock", "cyclops", "cable"].includes(hero.id) &&
-    deck?.aspect === "multi"
+    ([
+      "spider_woman",
+      "gam",
+      "warlock",
+      "cyclops",
+      "cable",
+      "maria_hill",
+    ].includes(hero.id) && deck?.aspect === "multi"
       ? ASPECTS.find((aspect) => aspect.id === heroStarterAspects(hero.id)[0])
           ?.id
       : undefined);
@@ -389,6 +395,7 @@ export function ContentBrowser({
       "wolverine",
       "psylocke",
       "x23",
+      "nick_fury",
     ].includes(hero.id) &&
       Object.entries(deck?.setupCards || {}).every(
         ([code, count]) => nativeSetup[code] === count,
