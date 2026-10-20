@@ -315,7 +315,9 @@ describe("batch four: independent immutable source contract", () => {
       const source = sourceDecks.find(
         (deck) => deck.heroCode === `${spec.first}a`,
       )!;
-      expect(source.cards["46002"]).toBeUndefined();
+      expect(
+        (source.cards as Record<string, number | undefined>)["46002"],
+      ).toBeUndefined();
     }
   });
 
