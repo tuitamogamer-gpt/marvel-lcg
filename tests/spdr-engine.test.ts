@@ -1334,3 +1334,57 @@ describe("SP//dr obligation, nemesis and actual resource-generation responses", 
     exact(failed);
   });
 });
+
+describe("SP//dr Sync Ratio with independent Jubilee Wild declarations", () => {
+  it.each([
+    ["mental", true],
+    ["energy", false],
+  ] as const)(
+    "only counts the actual Interface icon in the %s + physical cost subset",
+    (paidWild, shouldStun) => {
+      let s = base("jubilee");
+      const glasses = source(s, "47005", "p2");
+      s.player.inPlay.push(glasses);
+      const host = put(s, "31010");
+      const [event, physical] = hand(s, "31006", "31024");
+      const coat = source(s, "47004", "p2");
+      s.player.hand.push(coat);
+      const before = all(s)
+        .map((p) => p.id)
+        .sort();
+      s = command(s, { type: "PLAY", id: event.id });
+      const sourceIds = [sync(s, host), coat.id, physical.id];
+      s = command(reload(s), { type: "PAY", ids: sourceIds });
+      expect(s.prompt?.title).toBe("Declare Wild resource");
+      s = choose(reload(s), "mental");
+      expect(s.player.inPlay.find((p) => p.id === host.id)?.exhausted).toBe(
+        false,
+      );
+      s = choose(reload(s), "energy");
+      expect(s.prompt?.title).toBe("Allocate payment resources");
+      const paid = [paidWild, "physical"].sort().join(":");
+      const allocation = s.prompt!.options.find((o) =>
+        o.effects.some(
+          (e) =>
+            e.type === "commitPaymentAllocation" &&
+            [...e.paidForCard].sort().join(":") === paid,
+        ),
+      )!;
+      expect(allocation).toBeDefined();
+      s = choose(reload(s), allocation.id);
+      expect(s.prompt?.title).not.toBe("Allocate Sync Ratio resources");
+      s = settle(target(reload(s), s.villain.id));
+      expect(s.villain.hp).toBe(45);
+      expect(s.villain.stunned).toBe(shouldStun);
+      expect(actual(s, host).exhausted).toBe(true);
+      expect(actual(s, coat).ownerId).toBe("p2");
+      expect(s.player.discard.some((p) => p.id === physical.id)).toBe(true);
+      expect(
+        all(reload(s))
+          .map((p) => p.id)
+          .sort(),
+      ).toEqual(before);
+      exact(s);
+    },
+  );
+});
