@@ -71,6 +71,8 @@ export interface Piece {
   deadpoolSpaces?: number[];
   deadpoolMinion?: boolean;
   deadpoolController?: string;
+  /** Original controller of the physical ally transformed by Lost Child. */
+  jubileeLostController?: string;
   /** Player side schemes live in the common scheme area under owner control. */
   playerSideSchemeController?: string;
   /** Beguiled changes the actual ally's current type without changing its face. */
@@ -130,6 +132,9 @@ export interface Prompt {
   kind: "choice" | "payment" | "select";
   title: string;
   text: string;
+  /** Explicit per-icon E/M/P/W declarations, before any resource is spent. */
+  jubileeWildAssignments?: Resource[];
+  jubileePaymentSourceIds?: string[];
   options: Option[];
   min?: number;
   max?: number;
@@ -268,6 +273,8 @@ export interface GameState {
   currentResponseGroup?: string;
   currentResponseMandatory?: boolean;
   currentRevealWindowId?: string;
+  /** Controller of a delegated player-side-scheme ability, separate from its recipient. */
+  currentAbilityControllerId?: string;
   boostCancellations?: Record<string, { icons?: boolean; ability?: boolean }>;
   revealWindows?: Record<string, import("./reveal-window").RevealWindow>;
   pendingMainCompletion?: boolean;

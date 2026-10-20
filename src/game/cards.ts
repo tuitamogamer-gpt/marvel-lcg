@@ -1,6 +1,7 @@
 import { bishopAllyHP, bishopCharacterBonus } from "./bishop.js";
 import { magikStats } from "./magik.js";
 import { icemanStats } from "./iceman.js";
+import { jubileeStats, jubileeEnemyHealth } from "./jubilee.js";
 import { cableStatBonus } from "./cable.js";
 import { deadpoolAttackBonus, deadpoolHandBonus } from "./deadpool.js";
 import { psylockeStats, psylockePowerOfMind } from "./psylocke.js";
@@ -863,6 +864,20 @@ export const HEROES = [
     style: "Frostbite and Ice powers · Aggression",
     complexity: 2,
   },
+  {
+    id: "jubilee",
+    code: "47001a",
+    alter: "47001b",
+    name: "Jubilee",
+    identity: "Jubilation Lee",
+    aspect: "justice" as Aspect,
+    color: "#dba72c",
+    tag: "Make every spark count.",
+    description:
+      "Combine different resources, dazzle your enemies, and find the perfect Item on a Shopping Spree.",
+    style: "Resource types · Justice",
+    complexity: 2,
+  },
 ];
 export const VILLAINS = [
   {
@@ -1035,6 +1050,7 @@ export const MODULES = [
       "Cybernetic mercenaries coordinate attacks and reinforce each other.",
   },
   { id: "sauron", name: "Sauron", difficulty: 3 },
+  { id: "arcade", name: "Arcade", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -1215,6 +1231,7 @@ export function deckCodes(
       (hero === "x23" && aspect === "aggression") ||
       (hero === "iceman" && aspect === "aggression") ||
       (hero === "deadpool" && String(aspect) === "pool") ||
+      (hero === "jubilee" && aspect === "justice") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
       (hero === "rogue" && aspect === "protection") ||
@@ -1471,6 +1488,7 @@ export function heroStats(s: GameState) {
       magikStats(s).attack +
       x23Stats(s).attack +
       icemanStats(s).attack +
+      jubileeStats(s).attack +
       x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
@@ -1509,8 +1527,9 @@ export function heroStats(s: GameState) {
       bishopCharacterBonus(s, "hero") +
       cableStatBonus(s) +
       magikStats(s).thwart +
-      x23Stats(s).thwart +
-      icemanStats(s).thwart -
+      icemanStats(s).thwart +
+      jubileeStats(s).thwart +
+      x23Stats(s).thwart -
       x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
@@ -1602,6 +1621,7 @@ export function enemyAttachmentModifier(
 
 export function pieceHP(s: GameState, p: Piece) {
   return (
+    jubileeEnemyHealth(s, p) +
     (p.code === "drone"
       ? (visionDroneStats(s, p)?.health ?? 1) +
         s.attachments.filter(

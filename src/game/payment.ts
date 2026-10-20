@@ -1,4 +1,5 @@
 import { magikResourceSources } from "./magik.js";
+import { jubileeResourceSources } from "./jubilee.js";
 import { cableResourceSources } from "./cable.js";
 import { x23ResourceSources } from "./x23.js";
 import { icemanResourceSources } from "./iceman.js";
@@ -159,6 +160,7 @@ function localPaymentSources(
   sources.push(...cableResourceSources(s));
   sources.push(...psylockeResourceSources(s));
   sources.push(...x23ResourceSources(s));
+  sources.push(...jubileeResourceSources(s));
   sources.push(...stormResourceSources(s));
   sources.push(...thorResourceSources(s));
   sources.push(...waspPackResourceSources(s));
@@ -584,6 +586,7 @@ export function generatedResourceAllocations(
   cost: number,
   requirements: Resource[] = [],
   wildAs: Resource = "energy",
+  explicitAssignment?: Resource[],
 ): { paid: Resource[]; generated: Resource[]; spent: Resource[] }[] {
   const types: Resource[] = ["energy", "mental", "physical", "wild"];
   const initial = types.map((type) => printed.filter((r) => r === type).length);
@@ -591,9 +594,35 @@ export function generatedResourceAllocations(
   let assignments: { counts: number[]; pairs: Pair[] }[] = [
     { counts: initial, pairs: [] },
   ];
+  if (explicitAssignment) {
+    if (
+      explicitAssignment.length !== printed.length ||
+      printed.some((r, i) => r !== "wild" && explicitAssignment[i] !== r) ||
+      explicitAssignment.some((r) => !types.includes(r))
+    )
+      return [];
+    if (
+      types.some(
+        (r) =>
+          explicitAssignment.filter((v) => v === r).length <
+          requirements.filter((v) => v === r).length,
+      )
+    )
+      return [];
+    assignments = [
+      {
+        counts: [0, 0, 0, 0],
+        pairs: printed.map((generated, i) => ({
+          generated,
+          paid: explicitAssignment[i],
+        })),
+      },
+    ];
+  }
+
   // Requirements constrain the WHOLE SPEND, including excess generation. Keep
   // each wildcard's compulsory type before choosing which resources pay cost.
-  for (const required of requirements) {
+  for (const required of explicitAssignment ? [] : requirements) {
     const next: typeof assignments = [];
     for (const assignment of assignments) {
       for (const generated of new Set<Resource>([required, "wild"])) {

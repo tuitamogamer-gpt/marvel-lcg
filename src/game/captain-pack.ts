@@ -4,6 +4,7 @@ import { uniqueConflict } from "./unique.js";
 import { waspAllyTraits } from "./wasp.js";
 import {
   defenseEventSources,
+  isPrintedTraitsBlank,
   isTextBlank,
   textActiveState,
 } from "./card-text.js";
@@ -167,7 +168,7 @@ export function captainPackHasTrait(
         )
       : cards.get(inPlay(s, target)?.code || "");
   return (
-    hasPrintedTrait(c, name) ||
+    (!isPrintedTraitsBlank(s, inPlay(s, target)) && hasPrintedTrait(c, name)) ||
     (!!view &&
       view.heroId === "cable" &&
       name === "Psionic" &&

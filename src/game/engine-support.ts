@@ -1,5 +1,6 @@
 import { BISHOP_SCRIPT_CODES } from "./bishop.js";
 import { MAGIK_SCRIPT_CODES } from "./magik.js";
+import { JUBILEE_SCRIPT_CODES } from "./jubilee.js";
 import { DOMINO_SCRIPT_CODES } from "./domino.js";
 import { CABLE_SCRIPT_CODES } from "./cable.js";
 import { X23_SCRIPT_CODES } from "./x23.js";
@@ -141,6 +142,7 @@ export const SCRIPTED_HERO_IDS = new Set([
   "deadpool",
   "bishop",
   "magik",
+  "jubilee",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...MAGIK_SCRIPT_CODES,
@@ -155,6 +157,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...X23_SCRIPT_CODES,
   ...ICEMAN_SCRIPT_CODES,
   ...DEADPOOL_SCRIPT_CODES,
+  ...JUBILEE_SCRIPT_CODES,
   ...MAGNETO_SCRIPT_CODES,
   ...ACOLYTES_SCRIPT_CODES,
   ...MASTER_MOLD_SCRIPT_CODES,

@@ -13,6 +13,18 @@ const seatViewForBlank = (s: GameState, id: string) =>
     ? s.player
     : s.players.find((seat) => seat.id === id)!.player;
 
+/** Lost Child blanks the complete printed text box, including printed traits.
+ * Externally granted traits, including Regressed, remain separate effects. */
+export function isPrintedTraitsBlank(s: GameState, p: Piece | undefined) {
+  return !!(
+    p?.treatedAsMinion &&
+    p.jubileeLostController &&
+    s.attachments.some(
+      (a) => a.code === "47027" && a.attachedTo === p.id && !isTextBlank(s, a),
+    )
+  );
+}
+
 /** Tech Theft blanks printed text, while retaining stats, traits and icons. */
 export function isTextBlank(
   s: GameState,
