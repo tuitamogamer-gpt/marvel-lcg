@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { advisePrompt } from "../src/game/advisor.js";
 import {
   newGame,
   makePiece,
@@ -513,7 +514,7 @@ describe("Nick source pool and cross-pack interactions", () => {
     expect(s.player.hand.some((q) => q.id === p.id)).toBe(true);
     expect(suit(s).counters).toBe(0);
   });
-  it("Intelligence looks at all dealt physical encounters and swaps the deck top without changing recipients", () => {
+  it("Intelligence swaps physical encounters without changing recipients and the advisor finishes looking within four choices", () => {
     let s = base(false, true);
     const intel = put(s, "50051");
     const first = makePiece(s, "01122"),
@@ -524,7 +525,12 @@ describe("Nick source pool and cross-pack interactions", () => {
     expect(s.prompt?.title).toBe("Intelligence");
     s = choose(reload(s), "0");
     s = choose(reload(s), "1");
-    s = choose(s, "done");
+    for (let i = 0; s.prompt && i < 4; i++) {
+      const advice = advisePrompt(reload(s));
+      expect(advice).not.toBeNull();
+      s = command(s, advice!.command);
+    }
+    expect(s.prompt).toBeNull();
     s = finish(s);
     expect(s.encounter.deck[0].id).toBe(first.id);
     expect(s.encounter.dealt.find((p) => p.id === top.id)?.dealtTo).toBe("p2");
