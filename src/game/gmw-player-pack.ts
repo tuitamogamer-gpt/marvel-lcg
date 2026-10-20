@@ -31,7 +31,8 @@ const need = (v: unknown, message: string) => {
 };
 const own = (s: GameState, id: string, code?: string) =>
   s.player.inPlay.find(
-    (p) => p.id === id && (!code || p.code === code) && !isTextBlank(s, p),
+    (p) =>
+      p.id === id && (!code || rulesCode(p) === code) && !isTextBlank(s, p),
   );
 const text = (p: Piece) => cards.get(p.code)!;
 const trait = (c: Card, name: string) =>
@@ -182,8 +183,8 @@ export function gmwPlayerPackPlayRestriction(
   )
     return "Every player already controls Dauntless.";
   if (
-    ["16024", "16052"].includes(p.code) &&
-    s.player.inPlay.some((other) => other.code === p.code)
+    ["16024", "16052"].includes(rulesCode(p)) &&
+    s.player.inPlay.some((other) => rulesCode(other) === rulesCode(p))
   )
     return "Max 1 per player.";
   if (

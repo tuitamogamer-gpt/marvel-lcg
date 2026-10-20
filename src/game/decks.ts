@@ -51,7 +51,17 @@ export function deckOptions(
       c.code !== "34002b" &&
       c.code !== "41002b" &&
       c.code !== "50035b" &&
-      !["43034", "43035", "43036", "43037", "46002"].includes(c.code) &&
+      ![
+        "43034",
+        "43035",
+        "43036",
+        "43037",
+        "46002",
+        "49033",
+        "49034",
+        "49035",
+        "49036",
+      ].includes(c.code) &&
       !identityCodes.has(c.code) &&
       !identityMatch(heroId, c) &&
       (hasExecutableScript(c) ||
@@ -138,6 +148,7 @@ export function deckErrors(
       "jubilee",
       "nightcrawler",
       "nick_fury",
+      "magneto",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

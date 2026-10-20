@@ -1,4 +1,8 @@
 import { nickFuryResourceSources } from "./nick-fury.js";
+import {
+  magnetoHeroResourceSources,
+  magnetoHeroDamageCostAvailable,
+} from "./magneto-hero.js";
 import { magikResourceSources } from "./magik.js";
 import { jubileeResourceSources } from "./jubilee.js";
 import { cableResourceSources } from "./cable.js";
@@ -83,7 +87,12 @@ export interface PaymentSource {
 /** TAKE costs require the full damage to reach the identity. Tough prevents
  * that damage, so it cannot be discarded to partially pay Symbiotic Bond. */
 export function venomPaymentDamageCostAvailable(s: GameState, amount: number) {
-  return amount > 0 && !s.player.tough && s.player.hp >= amount;
+  return (
+    amount > 0 &&
+    !s.player.tough &&
+    s.player.hp >= amount &&
+    magnetoHeroDamageCostAvailable(s)
+  );
 }
 
 /** Actual resources generated when spending this physical hand card. */
@@ -180,6 +189,7 @@ function localPaymentSources(
   );
   sources.push(...icemanResourceSources(s, targetCode));
   sources.push(...nightcrawlerResourceSources(s, targetCode));
+  sources.push(...magnetoHeroResourceSources(s, targetCode));
   sources.push(...cyclopsResourceSources(s, targetCode));
   sources.push(...colossusResourceSources(s, { isTextBlank }));
   sources.push(...shadowcatResourceSources(s, targetCode, { isTextBlank }));

@@ -5,6 +5,15 @@ const url =
 /** Keep imported printing text intact. Apply published rules corrections in the
  * playable database and card inspector, independently of module registration. */
 export function expansionErrata(c: Card): Card {
+  if (c.code === "49010")
+    return {
+      ...c,
+      text: "<b>Hero Action</b>: Discard a minion with Wrapped in Metal attached. Then, deal 5 damage to an enemy and stun it.",
+      errata: {
+        reference: "FFG Rules Reference 1.8, p. 69",
+        url: url.replace("#page=66", "#page=69"),
+      },
+    };
   if (c.code === "45017")
     return {
       ...c,

@@ -125,7 +125,17 @@ export const HERO_RUNTIME: HeroRuntime[] = (
               "43037": 1,
             },
           }
-        : sourceStarter;
+        : sourceStarter.heroCode === "49001a"
+          ? {
+              ...sourceStarter,
+              supplementaryCards: {
+                "49033": 1,
+                "49034": 1,
+                "49035": 1,
+                "49036": 1,
+              },
+            }
+          : sourceStarter;
   const front = byCode.get(starter.heroCode)!;
   const id = front.set_code!;
   const forms = cards.filter(
@@ -370,6 +380,8 @@ export function validateHeroDeck(
   >;
   for (const [index, code] of codes.entries()) {
     const c = known[index];
+    if (["49033", "49034", "49035", "49036"].includes(code))
+      errors.push("Linked New allies cannot be included in a deck.");
     if (["43034", "43035", "43036", "43037"].includes(code))
       errors.push(
         "Linked Specialization upgrades cannot be included in a deck.",
