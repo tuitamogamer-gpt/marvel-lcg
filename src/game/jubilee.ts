@@ -415,7 +415,7 @@ export function jubileeTrapDefeated(s: GameState, p: Piece): Effect[] {
     return [E("damage", { target: "hero", amount: 2, source: p.id })];
   if (p.code === "47032")
     return s.player.stunned
-      ? [J("trap-discard")]
+      ? [J("trap-discard", { source: p.id })]
       : [E("status", { target: "hero", status: "stunned" })];
   if (p.code === "47033")
     return s.player.confused
@@ -1434,7 +1434,19 @@ export function resolveJubileeEffect(
           "Arcade's Funhouse",
           "Discard an ally or upgrade you control.",
           choices.map((p) =>
-            O(p.id, card(p).name, [J("discard", { id: p.id })], p.code),
+            O(
+              p.id,
+              card(p).name,
+              [
+                E("discardPiece", {
+                  id: p.id,
+                  encounterDiscard: true,
+                  source: e.source,
+                  after: e.after || [],
+                }),
+              ],
+              p.code,
+            ),
           ),
         );
       break;

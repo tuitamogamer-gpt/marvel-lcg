@@ -755,7 +755,7 @@ export function resolveRocketEffect(
             label: definition(p).name,
             code: p.code,
           })),
-          R("obligation-upgrade"),
+          R("obligation-upgrade", { source: e.piece.id }),
           ports,
         );
       break;
@@ -765,7 +765,26 @@ export function resolveRocketEffect(
         highestUpgrades(s).some((p) => p.id === e.target),
         "Discard one of your highest cost upgrades.",
       );
-      ports.discardPiece(s, e.target);
+      ports.queue(
+        s,
+        E("discardPiece", {
+          id: e.target,
+          encounterDiscard: true,
+          source: e.source,
+          after: [
+            R("obligation-discarded", { id: e.target, after: e.after || [] }),
+          ],
+        }),
+      );
+      break;
+    case "rocket:obligation-discarded":
+      ports.queue(
+        s,
+        ...(s.player.inPlay.some((p) => p.id === e.id)
+          ? [E("surge", { sourceCode: "16053" })]
+          : []),
+        ...(e.after || []),
+      );
       break;
     case "rocket:bazooka": {
       const p = s.attachments.find((p) => p.id === e.id && p.code === "16056");
