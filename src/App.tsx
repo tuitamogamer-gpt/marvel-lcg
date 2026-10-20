@@ -40,7 +40,6 @@ import {
   spectrumEnergyForm,
   spectrumFormFaceup,
 } from "./game/spectrum";
-import { riskyBlankPower } from "./game/risky-business";
 import { zeroToleranceIsPermanent } from "./game/zero-tolerance";
 import { projectWideawakeBombCount } from "./game/project-wideawake";
 import { magnetoDamageCap, magnetoIdentityRestricted } from "./game/magneto";
@@ -161,7 +160,6 @@ import {
   imageFor,
   maxHP,
   pieceHP,
-  enemyAttachmentModifier,
   plain,
   resources,
   scenarioModules,
@@ -4744,25 +4742,13 @@ function Tabletop({
                   <div className="enemy-stats stat-row">
                     <StatToken
                       kind="attack"
-                      value={
-                        s.villainId === "mansion_attack"
-                          ? enemyStats(s, s.villain).attack
-                          : riskyBlankPower(s, "attack", s.villain.id)
-                            ? 0
-                            : (card(s.villain).attack || 0) +
-                              enemyAttachmentModifier(s, s.villain.id, "attack")
-                      }
+                      value={enemyStats(s, s.villain).attack}
                       label="ATK"
                       compact
                     />
                     <StatToken
                       kind="threat"
-                      value={
-                        riskyBlankPower(s, "scheme", s.villain.id)
-                          ? 0
-                          : (card(s.villain).scheme || 0) +
-                            enemyAttachmentModifier(s, s.villain.id, "scheme")
-                      }
+                      value={enemyStats(s, s.villain).scheme}
                       label="SCH"
                       compact
                     />

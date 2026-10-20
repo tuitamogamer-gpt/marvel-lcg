@@ -545,6 +545,27 @@ async function jubileeMallRat(source) {
   return after;
 }
 
+async function assertVillainStats(attack, scheme, label) {
+  const stats = page.locator(".villain-info .enemy-stats");
+  for (const [kind, name, expected] of [
+    ["attack", "ATK", attack],
+    ["threat", "SCH", scheme],
+  ]) {
+    const token = stats.locator(`.stat-token.${kind}`);
+    assert.ok(await token.isVisible(), `${label}: visible ${name} token`);
+    assert.equal(
+      await token.getAttribute("aria-label"),
+      `${name}: ${expected}`,
+      `${label}: accessible ${name} matches the native current power`,
+    );
+    assert.equal(
+      await token.locator(".token-value strong").innerText(),
+      String(expected),
+      `${label}: displayed ${name} matches the native current power`,
+    );
+  }
+}
+
 async function magikTopPlay(source, width, initial) {
   const before = await save();
   const top = before.player.deck[0];
@@ -1014,6 +1035,8 @@ async function publicSource(source, width) {
     state = magikPayment.state;
   }
   const beforeHp = state.villain.hp;
+  if (source.id === "iceman")
+    await assertVillainStats(2, 1, "Rhino before Frostbite");
 
   current.stage = "basic-attack";
   await page.locator(".attack-action").click();
@@ -1054,6 +1077,7 @@ async function publicSource(source, width) {
       initial.extras.some((piece) => piece.id === attached[0].id),
       "Freeze uses the same owned reserve card",
     );
+    await assertVillainStats(1, 0, "Frostbite lowers Rhino's current powers");
   }
   if (source.id === "bishop") {
     current.stage = "energy-absorption";
@@ -1063,6 +1087,12 @@ async function publicSource(source, width) {
   await checkpoint(`${source.id}-basic-attack`, width, source, initial);
   await reload();
   conserved(await save(), source, initial, "completed attack reload");
+  if (source.id === "iceman")
+    await assertVillainStats(
+      1,
+      0,
+      "The same Frostbite power reduction survives reload",
+    );
   checks.push({
     hero: source.id,
     width,
@@ -1078,6 +1108,15 @@ async function publicSource(source, width) {
       iceman: "Freeze interrupt attaches the original reserve Frostbite",
       jubilee: "Mall Rat searches the original Shopping Spree",
     }[source.id],
+    ...(source.id === "iceman"
+      ? {
+          displayedEnemyStats: {
+            attack: 1,
+            scheme: 0,
+            verifiedAfterReload: true,
+          },
+        }
+      : {}),
     ...(magikPayment
       ? {
           topDeckPayment: {
