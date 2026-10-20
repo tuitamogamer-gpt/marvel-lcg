@@ -36,6 +36,7 @@ import {
   captainThwartBlocked,
 } from "../src/game/captain-america";
 import { hulkAbilityOptions } from "../src/game/hulk";
+import { magikTopPlayable } from "../src/game/magik";
 import { uniqueConflict } from "../src/game/unique";
 import {
   heroStarterAspects,
@@ -502,7 +503,12 @@ function runMission(config: (typeof missions)[number]) {
       if (!s.player.flipped && canChangeIdentityForm(s)) act({ type: "FLIP" });
     }
     for (let actions = 0; actions < 8 && !ended(s); actions++) {
-      const next = [...s.player.hand, ...hawkeyeStoredPlayable(s)]
+      const top = magikTopPlayable(s);
+      const next = [
+        ...s.player.hand,
+        ...hawkeyeStoredPlayable(s),
+        ...(top ? [top] : []),
+      ]
         .filter((p) => playable(s, p) === null)
         .sort((a, b) => {
           const value = (p: Piece) =>
