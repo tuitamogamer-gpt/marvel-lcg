@@ -1,5 +1,6 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
-import { isTextBlank } from "./card-text.js";
+import { eventPlaySource, eventPlaySources, isTextBlank } from "./card-text.js";
+import { magikBeginTopPlay, magikTopPlayable } from "./magik.js";
 import { clearStatuses } from "./keywords.js";
 import { allInPlay, playerOrder, seatView } from "./team.js";
 import type { AntManPorts } from "./ant-man.js";
@@ -64,7 +65,14 @@ export const WOLVERINE_RULES_SOURCE =
 
 export interface WolverinePorts extends AntManPorts {
   makePiece(s: GameState, code: string): Piece;
-  playMeanSwing(s: GameState, p: Piece, after: Effect[]): void;
+  cardCost(s: GameState, p: Piece): number;
+  recyclePlayer(s: GameState): void;
+  playMeanSwing(
+    s: GameState,
+    p: Piece,
+    effects: Effect[],
+    after: Effect[],
+  ): void;
   damageBatch(
     s: GameState,
     ids: string[],
@@ -508,7 +516,11 @@ export function wolverineAttackOptions(
       ),
     );
   if (packet.basic)
-    for (const p of s.player.hand.filter((p) => p.code === "35019"))
+    for (const p of eventPlaySources(s).filter(
+      (p) =>
+        p.code === "35019" &&
+        ports.canPay(s, ports.cardCost(s, p), [], p.id, p.code),
+    ))
       for (const q of s.player.inPlay.filter(
         (q) =>
           card(q).type_code === "upgrade" && trait(q, "Weapon") && !q.exhausted,
@@ -954,20 +966,35 @@ export function resolveWolverineEffect(
       break;
     }
     case "wolverine:mean-swing": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "35019"),
+      const p = eventPlaySource(s, e.id),
         weapon = own(s, e.weaponId);
       need(
         p &&
+          p.code === "35019" &&
+          ports.canPay(s, ports.cardCost(s, p), [], p.id, p.code) &&
           weapon &&
           trait(weapon, "Weapon") &&
           !weapon.exhausted &&
           e.packet.basic,
         "Mean Swing needs an actual ready Weapon and basic attack.",
       );
+      if (magikTopPlayable(s)?.id === p!.id) {
+        magikBeginTopPlay(s, p!);
+        ports.recyclePlayer(s);
+        ports.revealHidden(s);
+      }
       weapon!.exhausted = true;
-      ports.playMeanSwing(s, p!, [
-        { ...e.packet, amount: e.packet.amount + 3 },
-      ]);
+      ports.playMeanSwing(
+        s,
+        p!,
+        [W("mean-swing-bonus", { token: e.packet.wolverineAttackToken })],
+        [{ ...e.packet }],
+      );
+      break;
+    }
+    case "wolverine:mean-swing-bonus": {
+      const key = `wolverineWarriorBonus:${e.token}`;
+      s.flags[key] = Number(s.flags[key] || 0) + 3;
       break;
     }
     case "wolverine:psylocke": {

@@ -1,6 +1,6 @@
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller } from "./team.js";
-import { isTextBlank } from "./card-text.js";
+import { eventPlaySource, eventPlaySources, isTextBlank } from "./card-text.js";
 import type { AntManPackTarget } from "./ant-man-pack.js";
 import type { PaymentSource } from "./payment.js";
 import type { Card, Effect, GameState, Option, Piece } from "./types.js";
@@ -292,7 +292,7 @@ export function gamoraPackFirstHitOptions(
 ): Option[] {
   if (s.player.form !== "hero" || !s.minions.some((p) => p.id === minion.id))
     return [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter(
       (p) =>
         p.code === "18015" &&
@@ -323,7 +323,7 @@ export function gamoraPackAfterDefenseOptions(
     s.player.form !== "hero"
   )
     return [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter(
       (p) =>
         p.code === "18031" &&
@@ -497,10 +497,11 @@ export function resolveGamoraPackEffect(
       break;
     }
     case "gamora-pack:first-hit-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "18015"),
+      const p = eventPlaySource(s, e.id),
         minion = s.minions.find((m) => m.id === e.minionId);
       need(
         p &&
+          p.code === "18015" &&
           minion &&
           gamoraPackFirstHitOptions(s, minion, e.after || [], ports).some(
             (o) => o.id === p.id,
@@ -534,9 +535,10 @@ export function resolveGamoraPackEffect(
       break;
     }
     case "gamora-pack:grit-pay": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "18031");
+      const p = eventPlaySource(s, e.id);
       need(
         p &&
+          p.code === "18031" &&
           s.player.form === "hero" &&
           ports.canPay(s, ports.cardCost(s, p), p.id, p.code),
         "True Grit is unavailable.",

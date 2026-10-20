@@ -2,7 +2,7 @@ import { magikTopPlayable } from "./magik.js";
 import { rulesCode } from "./rules-code.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller } from "./team.js";
-import { isTextBlank } from "./card-text.js";
+import { eventPlaySource, eventPlaySources, isTextBlank } from "./card-text.js";
 import type {
   Card,
   Effect,
@@ -321,7 +321,7 @@ function responseCards(
   ports: AntManPackPorts,
 ) {
   return s.player.form === "hero"
-    ? s.player.hand.filter(
+    ? eventPlaySources(s).filter(
         (p) =>
           codes.includes(p.code) &&
           (p.code !== "12031" ||
@@ -506,10 +506,10 @@ export function resolveAntManPackEffect(
       break;
     }
     case "ant-pack:form-paid": {
-      const p = s.player.hand.find((p) => p.id === e.id);
+      const p = eventPlaySource(s, e.id);
       need(
         p && ["12016", "12031"].includes(p.code),
-        "The response card is no longer in hand.",
+        "The response card is no longer available to play.",
       );
       ports.queue(
         s,
