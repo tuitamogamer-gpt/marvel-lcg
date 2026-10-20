@@ -413,11 +413,12 @@ function runMission(config: (typeof missions)[number]) {
       new Set(pieces.map((p) => p.id)).size,
       "No duplicated physical player cards",
     ).toBe(total);
-    for (const p of pieces)
-      expect(
-        originalFaces.get(p.id)?.has(p.code),
-        `Original printing or its linked reverse for ${p.id} after ${trace.at(-1)}`,
-      ).toBe(true);
+    expect(
+      pieces
+        .filter((p) => !originalFaces.get(p.id)?.has(p.code))
+        .map((p) => ({ id: p.id, code: p.code })),
+      `Every original printing or its linked reverse after ${trace.at(-1)}`,
+    ).toEqual([]);
     // ownedPieces admits only original IDs. Equal total and distinct counts
     // therefore prove every original instance occurs exactly once.
     if (scenarioSet) {
