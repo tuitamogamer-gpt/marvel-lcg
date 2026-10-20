@@ -17114,6 +17114,7 @@ const psylockePorts: psylocke.PsylockePorts = {
 };
 const wolverinePorts: wolverine.WolverinePorts = {
   ...antManPorts,
+  recyclePlayer,
   attackProgram: niAttackProgram,
   makePiece,
   maxHP,
