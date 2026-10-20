@@ -9732,7 +9732,7 @@ const hulkPackPorts = {
     seatView(s, target!).player.inPlay.push(p);
   },
   moveThreat: thwart,
-  cardCost: (s: GameState, p: Piece) => cardCost(s, card(p)),
+  cardCost: (s: GameState, p: Piece) => cardCost(s, card(p), p),
   canPay: (s: GameState, cost: number, exclude: string, targetCode: string) =>
     canPay(s, cost, [], exclude, targetCode),
 };
@@ -10271,7 +10271,7 @@ const dsPorts: DoctorStrangePorts = {
     }
     return p;
   },
-  cardCost: (s, p) => cardCost(s, card(p)),
+  cardCost: (s, p) => cardCost(s, card(p), p),
   canPay: (s, cost, exclude, target) => canPay(s, cost, [], exclude, target),
   pay: (s, title, cost, requirements, after, piece, targetCode) =>
     requestPayment(
@@ -10617,7 +10617,7 @@ const antPackPorts: antPack.AntManPackPorts = {
 const waspPorts: wasp.WaspPorts = {
   ...antManPorts,
   select,
-  cardCost: (s, p) => cardCost(s, card(p)),
+  cardCost: (s, p) => cardCost(s, card(p), p),
   heroStat: (s, power) => heroStats(s)[power],
   basicThwartUsesAttack: x23.x23Assault,
   shufflePlayerDeck: hawkeyePorts.shufflePlayerDeck,
@@ -12207,7 +12207,7 @@ const msPorts: MsMarvelPorts = {
     activateSeat(s, previous);
     return cards;
   },
-  cardCost: (s, p) => cardCost(s, card(p)),
+  cardCost: (s, p) => cardCost(s, card(p), p),
   canPay: (s, cost, exclude, target, req = []) =>
     canPay(s, cost, req, exclude, target),
   pay: (s, title, cost, req, after, p, target) =>
@@ -15216,6 +15216,7 @@ const sinisterPlayerPackPorts: sinisterPlayerPack.SinisterPlayerPackPorts = {
   cardCost: (s, p) => cardCost(s, card(p), p),
   handPlayableCards: (s) => [
     ...s.player.hand,
+    ...[magik.magikTopPlayable(s)].filter((p): p is Piece => !!p),
     ...visionPack.visionPackStoredPlayable(s, visionPackPorts),
     ...ghostSpider.ghostSpiderStoredPlayable(s, ghostSpiderPorts),
   ],
@@ -16921,6 +16922,7 @@ const wolverinePorts: wolverine.WolverinePorts = {
   canPlayIgnoringCost: (s, p) => scarletPorts.canPlayIgnoringCost(s, p),
   playIgnoringCost: (s, p, after) => scarletPorts.playIgnoringCost(s, p, after),
   playMeanSwing: (s, p, after) => {
+    if (magik.magikPending(s, p)) recyclePlayer(s);
     add(s, ...after);
     play(s, p, []);
   },
@@ -17436,6 +17438,13 @@ const angelPorts: angel.AngelPorts = {
       {
         ...s,
         phase: "player",
+        flags: {
+          ...s.flags,
+          magikTopPhase:
+            s.flags.magikTopPhase === `${s.round}:${s.phase}`
+              ? `${s.round}:player`
+              : false,
+        },
         prompt: null,
         review: null,
         turnPlayerId: s.activePlayerId,
@@ -19648,7 +19657,7 @@ function schemeWindow(
   const opts: Option[] = [];
   if (id === s.villain.id)
     for (const seat of playerOrder(s)) {
-      const emergency = seatView(s, seat).player.hand.find(
+      const emergency = eventPlaySources(seatView(s, seat)).find(
         (p) => rulesCode(p) === "01085",
       );
       if (emergency)
@@ -22162,7 +22171,7 @@ function resolve(s: GameState, e: Effect) {
   if (
     e.type === "wasp:basic-resolve" &&
     !e.thorWindowHandled &&
-    s.player.hand.some((p) =>
+    eventPlaySources(s).some((p) =>
       e.power === "attack"
         ? ["06015", "06032", "33017"].includes(p.code)
         : ["06032", "33017"].includes(p.code),
@@ -25142,7 +25151,7 @@ function resolve(s: GameState, e: Effect) {
         eventPlaySources(s).some(
           (p) =>
             p.code === "09037" &&
-            canPay(s, cardCost(s, card(p)), [], p.id, p.code),
+            canPay(s, cardCost(s, card(p), p), [], p.id, p.code),
         )
       ) {
         add(s, ...doctorStrangeBasicAttackWindow(s, e, dsPorts));
@@ -25151,7 +25160,7 @@ function resolve(s: GameState, e: Effect) {
       if (
         e.basic &&
         !e.thorWindowHandled &&
-        s.player.hand.some((p) =>
+        eventPlaySources(s).some((p) =>
           ["06015", "06032", "33017"].includes(p.code),
         ) &&
         !s.player.stunned
@@ -25841,7 +25850,7 @@ function resolve(s: GameState, e: Effect) {
       if (
         e.basic &&
         !e.thorWindowHandled &&
-        s.player.hand.some((p) => ["06032", "33017"].includes(p.code)) &&
+        eventPlaySources(s).some((p) => ["06032", "33017"].includes(p.code)) &&
         !s.player.confused
       ) {
         add(

@@ -94,7 +94,9 @@ export function magikTopPlayable(s: GameState): Piece | undefined {
 }
 export function magikPending(s: GameState, p: { id?: string }) {
   return (
-    !!s.flags[`magikPending:${p.id}`] && s.resolving.some((q) => q.id === p.id)
+    s.flags[`magikPending:${p.id}`] === phase(s) &&
+    s.flags.magikTopPhase !== phase(s) &&
+    s.resolving.some((q) => q.id === p.id)
   );
 }
 export function magikDiscount(s: GameState, p: { id?: string }) {

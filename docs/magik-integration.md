@@ -15,6 +15,8 @@ The registry has 29 dedicated Magik-section faces plus the exact Core-equivalent
 
 The visible table has a separate faceup-top panel. The fair planner retains the current public top while sampling the remaining hidden deck; it stops retaining that card when the identity is blanked. Scrying's looked-at cards remain known during its saved selection. Showing the next card crosses the existing hidden-information boundary.
 
+Native event availability and paid continuation use separate views. `eventPlaySources` offers actual currently playable sources; `eventPlaySource` additionally validates an active player's already staged event by its physical ID. Staged cards cannot be offered as new plays, and an invalid owner or phase cannot retain the discount. Basic attack and thwart packets refresh their current statistics after a top-play interrupt changes the public resource icons.
+
 ## Native rules
 
 Illyana's optional Spell interrupt resolves before her form change and uses one actual discarded Spell. Limbo offers its saved hand/top swap both as an Action and at the beginning of the villain phase. Scrying allocates the looked-at cards to draw, discard and top instructions, including the published one/two-card cases. Its draw uses the native draw path and its actual event stays on the table until resolution finishes. Stepping Disc readies the hero and selects an original Magik card other than Stepping Disc.

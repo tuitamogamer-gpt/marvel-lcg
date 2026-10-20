@@ -13,6 +13,7 @@ import {
   abilityOptions,
 } from "../src/game/engine.js";
 import { hasExecutableScript } from "../src/game/script-registry.js";
+import { eventPlaySource, eventPlaySources } from "../src/game/card-text.js";
 import { magikRevealedTop, magikTopPlayable } from "../src/game/magik.js";
 import { fairClone, candidates } from "../src/game/lookahead.js";
 import { activateSeat, seatView, syncSeat } from "../src/game/team.js";
@@ -918,5 +919,95 @@ describe("Magik original source and native execution", () => {
     s = finish(pay(s, [r, a, b]));
     expect(s.player.hp).toBe(9);
     expect(s.player.inPlay.find((q) => q.id === p.id)?.damage).toBe(0);
+  });
+  it("plays Emergency from the faceup top during an enemy scheme", () => {
+    let s = base();
+    s.scheme.threat = 0;
+    const p = top(s, "01085");
+    s.phase = "villain";
+    s = native(s, { type: "enemyScheme", id: s.villain.id });
+    s = finish(respond(s, /Emergency/));
+    expect(s.scheme.threat).toBe(0);
+    expect(s.player.discard.some((q) => q.id === p.id)).toBe(true);
+    expect(magikTopPlayable(s)).toBeUndefined();
+  });
+  it("plays Defiance from the faceup top in a facedown boost window", () => {
+    let s = base();
+    const p = top(s, "26018"),
+      boost = makePiece(s, "01103");
+    s.encounter.deck.unshift(boost);
+    s.phase = "villain";
+    s = native(s, { type: "enemyAttack", id: s.villain.id });
+    s = finish(respond(s, /Defiance/));
+    expect(s.player.hp).toBe(8);
+    expect(s.encounter.discard.some((q) => q.id === boost.id)).toBe(true);
+    expect(s.player.discard.some((q) => q.id === p.id)).toBe(true);
+    expect(magikTopPlayable(s)).toBeUndefined();
+  });
+  it("validates a staged event by owned physical ID without offering it as a new play", () => {
+    let s = base();
+    hand(s, "45048");
+    const p = top(s, "45039");
+    expect(eventPlaySource(s, p.id)?.id).toBe(p.id);
+    s = command(s, { type: "PLAY", id: p.id });
+    expect(s.prompt?.kind).toBe("payment");
+    expect(eventPlaySource(reload(s), p.id)?.id).toBe(p.id);
+    expect(eventPlaySources(s).some((q) => q.id === p.id)).toBe(false);
+    const foreign = reload(s);
+    foreign.resolving.find((q) => q.id === p.id)!.ownerId = "p2";
+    expect(eventPlaySource(foreign, p.id)).toBeUndefined();
+    const stale = reload(s);
+    stale.phase = "villain";
+    expect(eventPlaySource(stale, p.id)).toBeUndefined();
+    expect(cardCost(stale, card(p), p)).toBe(2);
+  });
+  it("plays top Mean Swing for its actual Weapon cost and refreshes Soulsword's changing ATK", () => {
+    let s = base();
+    const sword = put(s, "45034");
+    top(s, "45039");
+    const p = top(s, "06015"),
+      hp = s.villain.hp;
+    expect(heroStats(s).attack).toBe(3);
+    s = command(s, { type: "BASIC", action: "attack" });
+    s = choose(s, p.id);
+    s = finish(choose(reload(s), sword.id));
+    expect(s.villain.hp).toBe(hp - 5);
+    expect(heroStats(s).attack).toBe(2);
+    expect(s.player.inPlay.find((q) => q.id === sword.id)?.exhausted).toBe(
+      true,
+    );
+    expect(s.player.discard.some((q) => q.id === p.id)).toBe(true);
+  });
+  it.each(["06032", "33017"])(
+    "plays top Teamwork %s during a basic thwart and refreshes Crown's THW",
+    (code) => {
+      let s = base();
+      put(s, "45033");
+      const ally = put(s, "45031");
+      top(s, "45039");
+      const p = top(s, code);
+      s.scheme.threat = 6;
+      expect(heroStats(s).thwart).toBe(1);
+      s = command(s, { type: "BASIC", action: "thwart" });
+      s = choose(s, p.id);
+      s = finish(choose(reload(s), ally.id));
+      expect(s.scheme.threat).toBe(2);
+      expect(heroStats(s).thwart).toBe(2);
+      expect(s.player.inPlay.find((q) => q.id === ally.id)).toMatchObject({
+        exhausted: true,
+        damage: 0,
+      });
+      expect(s.player.discard.some((q) => q.id === p.id)).toBe(true);
+    },
+  );
+  it("plays top Skilled Strike without spending the hidden next top as a resource", () => {
+    let s = base();
+    const p = top(s, "09037"),
+      hp = s.villain.hp;
+    s = command(s, { type: "BASIC", action: "attack" });
+    s = finish(choose(s, p.id));
+    expect(s.villain.hp).toBe(hp - 4);
+    expect(s.player.hand).toEqual([]);
+    expect(s.player.discard.some((q) => q.id === p.id)).toBe(true);
   });
 });

@@ -367,7 +367,7 @@ export function planPrompt(
 function describe(s: GameState, c: Command) {
   switch (c.type) {
     case "PLAY":
-      return `Play ${card(s.player.hand.find((p) => p.id === c.id)!).name}`;
+      return `Play ${card([...s.player.hand, ...[magikTopPlayable(s)].filter((p): p is Piece => !!p)].find((p) => p.id === c.id)!).name}`;
     case "BASIC":
       return c.action === "attack"
         ? "Basic attack"
