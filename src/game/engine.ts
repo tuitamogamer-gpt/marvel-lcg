@@ -18417,7 +18417,7 @@ const nightcrawlerEncounterPorts: nightcrawlerEncounter.NightcrawlerEncounterPor
     shuffleEncounter: mutagenPorts.shuffleEncounter,
     discardHand,
     discard: discardPiece,
-    discardEncounterControlled: (s, id, _source) => discardPiece(s, id),
+    discardEncounterControlled,
     canDiscard: nightcrawlerPorts.canDiscard,
     removeEncounter: removeEncounterInstance,
     takeMinion: (s, p) => {
@@ -18542,7 +18542,7 @@ const magnetoHeroPorts: magnetoHero.MagnetoHeroPorts = {
     ),
   hasTrait: captainPackHasTrait,
   discard: discardPiece,
-  discardEncounterControlled: (s, id, _source) => discardPiece(s, id),
+  discardEncounterControlled,
   canDiscard: (s, p) =>
     !isPermanent(card(p)) && valkyrie.valkyrieCanDiscardAttachment(s, p),
   discardCost: (s, id, after) => {
@@ -19048,9 +19048,8 @@ const nickFuryPorts: nickFury.NickFuryPorts = {
     )
       add(s, E("mtsPackFormResponses"));
   },
-  changeCounters: (s, p, amount) => {
-    p.counters += amount;
-  },
+  changeCounters: (s, p, amount) =>
+    mariaHill.mariaHillChangeCounters(s, p, amount, mariaHillPorts),
 };
 
 const jubileePorts: jubilee.JubileePorts = {

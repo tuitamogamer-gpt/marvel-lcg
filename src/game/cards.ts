@@ -896,20 +896,6 @@ export const HEROES = [
     complexity: 2,
   },
   {
-    id: "nick_fury",
-    code: "50034a",
-    alter: "50034b",
-    name: "Nick Fury",
-    identity: "Nick Fury",
-    aspect: "justice" as Aspect,
-    color: "#426a79",
-    tag: "One eye on the mission.",
-    description:
-      "Gather intelligence in Stealth, then spend suit threat on an Assault.",
-    style: "Suit forms · Justice",
-    complexity: 3,
-  },
-  {
     id: "magneto",
     code: "49001a",
     alter: "49001b",
@@ -935,6 +921,20 @@ export const HEROES = [
     description:
       "Command S.H.I.E.L.D. supports, move their counters, and coordinate your team.",
     style: "S.H.I.E.L.D. supports · Leadership",
+    complexity: 3,
+  },
+  {
+    id: "nick_fury",
+    code: "50034a",
+    alter: "50034b",
+    name: "Nick Fury",
+    identity: "Nick Fury",
+    aspect: "justice" as Aspect,
+    color: "#426a79",
+    tag: "One eye on the mission.",
+    description:
+      "Gather intelligence in Stealth, then spend suit threat on an Assault.",
+    style: "Suit forms · Justice",
     complexity: 3,
   },
 ];
