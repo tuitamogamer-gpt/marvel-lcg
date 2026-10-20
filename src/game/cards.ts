@@ -1332,6 +1332,7 @@ export function deckCodes(
           (hero === "psylocke" && c.code === "41002a") ||
           (hero === "shadowcat" && c.code === "32031a") ||
           (hero === "phoenix" && c.code === "34002a") ||
+          (hero === "nick_fury" && c.code === "50035a") ||
           (hero === "vision" && c.code === "26002")),
     )
     .flatMap((c) => Array(c.quantity).fill(c.code)) as string[];
