@@ -264453,7 +264453,7 @@
     "src/game/script-registry.ts": "6914c40870648556608434bd91e7ba4570f9f7c522037b97b082cd9bac33aeb3",
     "src/game/keywords.ts": "773badc9609fc065a43227235c04609b4525e25cf25bdebe3bc216411a2e693d",
     "src/game/engine-support.ts": "ffe2fc27b2f7a46759144e1c2bfea9a4c456a7429e7610476d4685039a284574",
-    "src/game/cards.ts": "64dfa098228fa788c2a0324ace1af6ab10f081e798dd9cccda6151dd17c5406c",
+    "src/game/cards.ts": "f6f867c00539ae33014ade5e3cf8557bb65e6f3911064ea3e9a6b3f4f8d1f349",
     "src/game/catalog.ts": "ba1475c5bcebc37b7da34da94ff272044c5a1b27e5b3646ca1ef8ab314318012",
     "src/game/combat.ts": "bb9c574ac2821ce2a7e0f111c03351d6557eed8e6e73b640a5a9e2b6227ad3e0",
     "src/game/presentation.ts": "a5eb46d7c758350a8c5f63139425d4d4a31dfd7370b1ad9cadb781b3892bc721",
