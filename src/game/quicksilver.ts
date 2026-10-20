@@ -1,3 +1,4 @@
+import { icemanSchemeIcon } from "./iceman.js";
 import { printedCardMetadata } from "./printed-card-metadata.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
@@ -185,7 +186,7 @@ const doubleSchemes = (s: GameState, ports: QuicksilverPorts) =>
     .filter(
       (target) =>
         target.id !== "main" ||
-        !s.sideSchemes.some((p) => definition(p)?.scheme_crisis),
+        !s.sideSchemes.some((p) => icemanSchemeIcon(s, p, "scheme_crisis")),
     );
 export function quicksilverAbilityOptions(
   s: GameState,

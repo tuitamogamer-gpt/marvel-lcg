@@ -1,4 +1,5 @@
 import { magikTopPlayable } from "./magik.js";
+import { rulesCode } from "./rules-code.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller } from "./team.js";
 import { isTextBlank } from "./card-text.js";
@@ -251,7 +252,10 @@ export function antManPackAbilityOptions(
 ): Option[] {
   const p = s.player.inPlay.find(
     (p) =>
-      p.id === id && p.code === "12024" && !p.exhausted && !isTextBlank(s, p),
+      p.id === id &&
+      rulesCode(p) === "12024" &&
+      !p.exhausted &&
+      !isTextBlank(s, p),
   );
   return p && s.player.form === "hero" && teamCards(s, ports).length
     ? [
@@ -441,7 +445,7 @@ export function resolveAntManPackEffect(
       const support = s.player.inPlay.find(
         (p) =>
           p.id === e.id &&
-          p.code === "12024" &&
+          rulesCode(p) === "12024" &&
           !p.exhausted &&
           !isTextBlank(s, p),
       );

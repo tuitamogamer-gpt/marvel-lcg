@@ -1,5 +1,6 @@
 import { bishopAllyHP, bishopCharacterBonus } from "./bishop.js";
 import { magikStats } from "./magik.js";
+import { icemanStats } from "./iceman.js";
 import { cableStatBonus } from "./cable.js";
 import { deadpoolAttackBonus, deadpoolHandBonus } from "./deadpool.js";
 import { psylockeStats, psylockePowerOfMind } from "./psylocke.js";
@@ -848,6 +849,20 @@ export const HEROES = [
     style: "Top-deck spells · Aggression",
     complexity: 3,
   },
+  {
+    id: "iceman",
+    code: "46001a",
+    alter: "46001b",
+    name: "Iceman",
+    identity: "Bobby Drake",
+    aspect: "aggression" as Aspect,
+    color: "#72b9d4",
+    tag: "Freeze!",
+    description:
+      "Attach Frostbite to slow enemies, build ice defenses, and strike with your frozen powers.",
+    style: "Frostbite and Ice powers · Aggression",
+    complexity: 2,
+  },
 ];
 export const VILLAINS = [
   {
@@ -1019,6 +1034,7 @@ export const MODULES = [
     description:
       "Cybernetic mercenaries coordinate attacks and reinforce each other.",
   },
+  { id: "sauron", name: "Sauron", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -1197,6 +1213,7 @@ export function deckCodes(
       (hero === "cable" && aspect === "leadership") ||
       (hero === "angel" && aspect === "protection") ||
       (hero === "x23" && aspect === "aggression") ||
+      (hero === "iceman" && aspect === "aggression") ||
       (hero === "deadpool" && String(aspect) === "pool") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
@@ -1347,6 +1364,7 @@ export function maxHP(s: GameState) {
     cyclopsCharacterModifiers(s, "hero").health +
     wolverineStats(s).health +
     x23Stats(s).health +
+    icemanStats(s).health +
     hulkStats(s).health +
     msMarvelStats(s).health +
     rocketMaxHpBonus(s) +
@@ -1363,6 +1381,7 @@ export function aerial(s: GameState, visited: string[] = []): boolean {
     (s.player.form === "hero" &&
       (has(s, "01017") || !!s.flags.aerial || thorStats(s).aerial)) ||
     (s.heroId === "angel" && s.player.form === "hero") ||
+    icemanStats(s).aerial ||
     rogueModifiers(s).aerial ||
     rogueTraits(
       s,
@@ -1451,6 +1470,7 @@ export function heroStats(s: GameState) {
       cableStatBonus(s) +
       magikStats(s).attack +
       x23Stats(s).attack +
+      icemanStats(s).attack +
       x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
@@ -1489,7 +1509,8 @@ export function heroStats(s: GameState) {
       bishopCharacterBonus(s, "hero") +
       cableStatBonus(s) +
       magikStats(s).thwart +
-      x23Stats(s).thwart -
+      x23Stats(s).thwart +
+      icemanStats(s).thwart -
       x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
       starLordPackModifiers(s, "hero").thwart +
@@ -1503,6 +1524,7 @@ export function heroStats(s: GameState) {
       cableStatBonus(s) +
       magikStats(s).defense +
       x23Stats(s).defense +
+      icemanStats(s).defense +
       (has(s, "01081") ? 1 : 0) +
       (has(s, "01016") ? (aerial(s) ? 2 : 1) : 0) +
       captainStats(s).def +

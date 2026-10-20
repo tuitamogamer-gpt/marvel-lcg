@@ -1,3 +1,4 @@
+import { icemanSchemeIcon } from "./iceman.js";
 import { rulesCode } from "./rules-code.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
@@ -103,7 +104,7 @@ export interface HulkPackPorts {
 
 function schemeTargets(s: GameState): HulkPackTarget[] {
   return [
-    ...(!s.sideSchemes.some((p) => cards.get(p.code)?.scheme_crisis) &&
+    ...(!s.sideSchemes.some((p) => icemanSchemeIcon(s, p, "scheme_crisis")) &&
     s.scheme.code !== "01139b" &&
     s.scheme.threat > 0
       ? [

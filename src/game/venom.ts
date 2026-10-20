@@ -1,3 +1,4 @@
+import { icemanSchemeIcon } from "./iceman.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { defenseEventSources, isTextBlank } from "./card-text.js";
 import { playerOrder, seatView } from "./team.js";
@@ -283,7 +284,7 @@ function schemeTargets(
   ports: VenomPorts,
 ): AntManTarget[] {
   const crisis = s.sideSchemes.some(
-    (p) => definition(p)?.scheme_crisis && !isTextBlank(s, p),
+    (p) => icemanSchemeIcon(s, p, "scheme_crisis") && !isTextBlank(s, p),
   );
   return ports
     .schemeTargets(s, thwart)

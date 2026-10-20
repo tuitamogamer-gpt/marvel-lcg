@@ -1,3 +1,4 @@
+import { icemanSchemeIcon } from "./iceman.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { isTextBlank } from "./card-text.js";
@@ -426,7 +427,9 @@ const hexSchemes = (s: GameState, ports: ScarletWitchPorts) =>
     .filter(
       (p) =>
         p.id !== "main" ||
-        !s.sideSchemes.some((scheme) => definition(scheme)?.scheme_crisis),
+        !s.sideSchemes.some((scheme) =>
+          icemanSchemeIcon(s, scheme, "scheme_crisis"),
+        ),
     );
 function hexStatuses(s: GameState, ports: ScarletWitchPorts) {
   const characters = [

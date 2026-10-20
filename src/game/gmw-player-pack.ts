@@ -1,3 +1,4 @@
+import { rulesCode } from "./rules-code.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { defenseEventSources, isTextBlank } from "./card-text.js";
@@ -205,7 +206,7 @@ export function gmwPlayerPackPlayRestriction(
 }
 
 export function gmwPlayerPackEvent(s: GameState, p: Piece): Effect[] | null {
-  switch (p.code) {
+  switch (rulesCode(p)) {
     case "16013":
       return [];
     case "16014":
@@ -248,7 +249,7 @@ export function gmwPlayerPackBeforeEvent(
   p: Piece,
   after: Effect[],
 ): Effect[] {
-  return p.code === "16043" ? [P("looking-cost", { after })] : after;
+  return rulesCode(p) === "16043" ? [P("looking-cost", { after })] : after;
 }
 
 export function gmwPlayerPackAbilityOptions(

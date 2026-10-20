@@ -25,6 +25,7 @@ export interface Card {
   attack?: number;
   attack_star?: boolean;
   thwart?: number;
+  thwart_star?: boolean;
   defense?: number;
   recover?: number;
   health?: number;

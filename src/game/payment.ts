@@ -1,6 +1,7 @@
 import { magikResourceSources } from "./magik.js";
 import { cableResourceSources } from "./cable.js";
 import { x23ResourceSources } from "./x23.js";
+import { icemanResourceSources } from "./iceman.js";
 import { deadpoolResources, deadpoolTriggeredBlocked } from "./deadpool.js";
 import { psylockeResourceSources } from "./psylocke.js";
 import { rogueResourceSources } from "./rogue.js";
@@ -172,6 +173,7 @@ function localPaymentSources(
       canTakeDamageCost: venomPaymentDamageCostAvailable,
     }),
   );
+  sources.push(...icemanResourceSources(s, targetCode));
   sources.push(...cyclopsResourceSources(s, targetCode));
   sources.push(...colossusResourceSources(s, { isTextBlank }));
   sources.push(...shadowcatResourceSources(s, targetCode, { isTextBlank }));

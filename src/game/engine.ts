@@ -1,5 +1,6 @@
 import * as bishop from "./bishop.js";
 import * as magik from "./magik.js";
+import * as iceman from "./iceman.js";
 import * as domino from "./domino.js";
 import * as cable from "./cable.js";
 import * as x23 from "./x23.js";
@@ -1134,6 +1135,10 @@ function putAllyFromHand(s: GameState, id: string) {
   );
 }
 function attachPackUpgrade(s: GameState, upgradeId: string, target: string) {
+  need(
+    iceman.icemanCanAttachUpgrade(s, target),
+    "Snow Clone cannot have upgrades attached.",
+  );
   const p = find(s, upgradeId),
     source = controller(s, upgradeId);
   const targetSeat = target.startsWith("hero:")
@@ -1618,6 +1623,7 @@ function movePieceFromPlay(
     }
   }
   if (!p) return;
+  iceman.icemanEnemyLeft(s, id);
   rogue.rogueCardLeft(s, id);
   wideawake.projectWideawakeEnemyLeftPlay(s, id);
   if (
@@ -1694,7 +1700,7 @@ function movePieceFromPlay(
     ...allInPlay(s),
     ...s.attachments,
     ...(sabretooth.sabretoothKelly(s) ? [sabretooth.sabretoothKelly(s)!] : []),
-  ].filter((a) => a.attachedTo === id))
+  ].filter((a) => a.attachedTo === id && !isPermanent(card(a))))
     discardPiece(s, a.id);
   if (p.code === "drone") {
     if (p.droneCard) {
@@ -1760,7 +1766,7 @@ function movePieceFromPlay(
       p.code === "16035" ||
       p.code === "25007" ||
       p.code === "27191" ||
-      ["29012", "29013", "35004", "43009", "43036"].includes(p.code) ||
+      ["29012", "29013", "35004", "43009", "43036", "46004"].includes(p.code) ||
       (p.code === "22035" && p.attachedTo?.startsWith("hero:")) ||
       (p.code === "03025" && p.attachedTo?.startsWith("hero:"))
     )
@@ -2445,6 +2451,11 @@ function playerHealingTarget(s: GameState, target: string): boolean {
   return (find(s, target)?.damage || 0) > 0;
 }
 function playerAttachmentTarget(s: GameState, source: Piece, target: string) {
+  if (
+    card(source).type_code === "upgrade" &&
+    !iceman.icemanCanAttachUpgrade(s, target)
+  )
+    return false;
   return (
     target !== sabretooth.sabretoothKelly(s)?.id ||
     sabretooth.sabretoothKellyCanAttach(s, card(source))
@@ -2706,6 +2717,12 @@ function dealDamage(
       msMarvelEventAmountModifier(s, s.currentEventId, "damage") +
       Number(s.flags[`niHoned:${s.currentEventId}`] || 0) +
       mgPack.mutantGenesisPlayerPackAttackEventBonus(s, s.currentEventId || "");
+  if (
+    !traits.noDamageInstance &&
+    ["hero", `hero:${s.activePlayerId}`, s.currentEventId].includes(source) &&
+    [s.villain, ...s.minions].some((p) => p.id === target)
+  )
+    n += iceman.icemanAttackEventBonus(s, s.currentEventId);
   if (attack && !traits.noDamageInstance)
     n += psylocke.psylockeDamageBonus(s, source, target);
   if (
@@ -3129,6 +3146,11 @@ function applyDamage(
     log(s, "Tough prevents the damage.");
     return none;
   }
+  if (
+    traits.enemyAttack &&
+    iceman.icemanWall(s, target, n, source, icemanPorts)
+  )
+    return none;
   const cableAlly = allInPlay(s).find((p) => p.id === target);
   if (
     cableAlly &&
@@ -3519,6 +3541,31 @@ function defeatCharacter(
     return true;
   }
   if (gambit.gambitShield(s, m, { discard: discardPiece })) return false;
+  if (minion && !s.flags[`icemanSuppress:${m.id}`]) {
+    const interrupts = iceman.icemanMinionDefeated(
+      s,
+      m,
+      nativeIdentityDamageSource(s, source) || source,
+      attack,
+      maxHP(s),
+    );
+    if (interrupts.length) {
+      s.flags[`icemanSuppress:${m.id}`] = true;
+      m.pendingDefeat = true;
+      add(
+        s,
+        ...interrupts,
+        E("finishDefeat", {
+          id: m.id,
+          source,
+          attack,
+          enemyAttack,
+          valkyrieReceipts: receipts,
+        }),
+      );
+      return true;
+    }
+  }
   const tracers = allInPlay(s).filter(
     (a) =>
       rulesCode(a) === "01007" && a.attachedTo === m.id && !isTextBlank(s, a),
@@ -3565,6 +3612,7 @@ function defeatCharacter(
       }),
     );
   delete s.flags[`x23Deathstrike:${m.id}`];
+  delete s.flags[`icemanSuppress:${m.id}`];
   delete s.flags[`acolytesDefeat:${m.id}`];
   delete s.flags[`magnetoDefeat:${m.id}`];
   log(s, `${name} is defeated.`, "good");
@@ -4070,7 +4118,9 @@ function thwart(
       (!ignoreCrisis &&
         !nebula.nebulaIgnoresRestrictions(s).crisis &&
         (deadpool.deadpoolPlayerIcons(s, "scheme_crisis") > 0 ||
-          s.sideSchemes.some((p) => card(p).scheme_crisis))) ||
+          s.sideSchemes.some((p) =>
+            iceman.icemanSchemeIcon(s, p, "scheme_crisis"),
+          ))) ||
       rulesCode(s.scheme) === "01139b"
     ) {
       log(s, "Threat cannot be removed from the main scheme.");
@@ -4166,6 +4216,7 @@ function defeatScheme(
       shadowcatPorts,
     ),
   );
+  add(s, ...iceman.icemanSchemeDefeated(s, p));
   const nativeDefeat = sabretooth.sabretoothSideSchemeDefeated(
     s,
     p,
@@ -4337,7 +4388,9 @@ export function targets(
       return [
         ...((!(
           deadpool.deadpoolPlayerIcons(s, "scheme_crisis") > 0 ||
-          s.sideSchemes.some((p) => card(p).scheme_crisis)
+          s.sideSchemes.some((p) =>
+            iceman.icemanSchemeIcon(s, p, "scheme_crisis"),
+          )
         ) ||
           nebula.nebulaIgnoresRestrictions(s).crisis ||
           shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts)) &&
@@ -4731,7 +4784,9 @@ function shadowcatNativeIgnoreReceipts(
     );
     capture(
       "crisis",
-      s.sideSchemes.filter((p) => card(p).scheme_crisis).map((p) => p.id),
+      s.sideSchemes
+        .filter((p) => iceman.icemanSchemeIcon(s, p, "scheme_crisis"))
+        .map((p) => p.id),
     );
   }
   return receipts;
@@ -5985,6 +6040,7 @@ function pay(
         spentResponses.push(
           ...(magik.magikResourceSpent(s, id, magikPorts) || []),
         );
+      } else if (iceman.icemanResourceSpent(s, id)) {
       } else if (cable.cableSpendResource(s, id)) {
       } else if (rogue.rogueSpendResource(s, id)) {
         // The physical X-Gene exhausts only when payment commits.
@@ -6379,6 +6435,7 @@ export function newGame(config: {
     wolverine.wolverineInitialize(s, { makePiece });
     psylocke.psylockeInitialize(s, { makePiece });
     x23.x23Initialize(s, { makePiece });
+    iceman.icemanInitialize(s, { makePiece });
     s.player.deck = shuffle(s, s.player.deck);
     doctorStrangeSetup(s, dsPorts);
     venom.venomInitializeNemesis(s, { makePiece });
@@ -6430,28 +6487,30 @@ export function newGame(config: {
               ? "mut_gen"
               : c.set_code === "exodus"
                 ? "gambit"
-                : c.set_code === "reavers"
-                  ? "rogue"
-                  : c.set_code === "deathstrike"
-                    ? "wolv"
-                    : c.set_code === "shadow_king"
-                      ? "storm"
-                      : c.set_code === "ironspider_sinister"
-                        ? "spdr"
-                        : c.set_code === "inheritors"
-                          ? "spiderham"
-                          : c.set_code === "zzzax"
-                            ? "ironheart"
-                            : c.set_code === "armadillo"
-                              ? "nova"
-                              : [
-                                    "goblin_gimmicks",
-                                    "a_mess_of_things",
-                                    "power_drain",
-                                    "running_interference",
-                                  ].includes(c.set_code || "")
-                                ? "gob"
-                                : "core")) ||
+                : c.set_code === "sauron"
+                  ? "iceman"
+                  : c.set_code === "reavers"
+                    ? "rogue"
+                    : c.set_code === "deathstrike"
+                      ? "wolv"
+                      : c.set_code === "shadow_king"
+                        ? "storm"
+                        : c.set_code === "ironspider_sinister"
+                          ? "spdr"
+                          : c.set_code === "inheritors"
+                            ? "spiderham"
+                            : c.set_code === "zzzax"
+                              ? "ironheart"
+                              : c.set_code === "armadillo"
+                                ? "nova"
+                                : [
+                                      "goblin_gimmicks",
+                                      "a_mess_of_things",
+                                      "power_drain",
+                                      "running_interference",
+                                    ].includes(c.set_code || "")
+                                  ? "gob"
+                                  : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -6822,6 +6881,7 @@ export function playable(s: GameState, p: Piece): string | null {
     magik.magikPlayRestriction(s, p, magikPorts) ||
     domino.dominoPlayRestriction(s, p, dominoPorts) ||
     x23.x23PlayRestriction(s, p, x23Ports) ||
+    iceman.icemanPlayRestriction(s, p, icemanPorts) ||
     gambit.gambitPlayRestriction(s, p, gambitPorts) ||
     cyclops.cyclopsPlayRestriction(s, p, cyclopsPorts) ||
     psylocke.psylockePlayRestriction(s, p, psylockePorts) ||
@@ -7024,7 +7084,9 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
         ? Array(cost).fill("physical")
         : p.code === "15012" &&
             !s.player.confused &&
-            s.sideSchemes.some((scheme) => card(scheme).scheme_crisis)
+            s.sideSchemes.some((scheme) =>
+              iceman.icemanSchemeIcon(s, scheme, "scheme_crisis"),
+            )
           ? ["mental"]
           : sinisterPlayRequirements(p);
     const ordinary = canPay(
@@ -7158,7 +7220,9 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
       ? Array(cost).fill("physical")
       : p!.code === "15012" &&
           !s.player.confused &&
-          s.sideSchemes.some((piece) => card(piece).scheme_crisis)
+          s.sideSchemes.some((piece) =>
+            iceman.icemanSchemeIcon(s, piece, "scheme_crisis"),
+          )
         ? ["mental"]
         : sinisterPlayRequirements(p!);
   need(
@@ -7479,6 +7543,7 @@ function play(
       ...magik.magikEntered(s, p),
       ...x23.x23Entered(s, p),
       ...bishop.bishopEntered(s, p),
+      ...iceman.icemanEntered(s, p),
       ...deadpool.deadpoolCardEntered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
       ...phoenix.phoenixCardEntered(s, p),
@@ -7531,7 +7596,7 @@ function play(
       p.code === "16035" ||
       p.code === "25007" ||
       p.code === "27191" ||
-      ["29012", "29013", "35004", "43009", "43036"].includes(p.code)
+      ["29012", "29013", "35004", "43009", "43036", "46004"].includes(p.code)
     )
       s.player.hp += maxHP(s) - healthBefore;
     if (["01057", "01065", "01081"].includes(rulesCode(p)) && s.playerCount > 1)
@@ -7670,6 +7735,7 @@ function allyEnter(
     ),
   );
   add(s, ...cyclops.cyclopsAllyEntered(s, p), ...bishop.bishopEntered(s, p));
+  add(s, ...iceman.icemanEntered(s, p, fromHand, true));
   if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
     giveCharacterStatus(s, p, "tough");
   if (isTextBlank(s, p)) return;
@@ -7935,6 +8001,7 @@ function event(
     psylocke.psylockeEvent(s, p, paid) ??
     domino.dominoEvent(s, p) ??
     x23.x23Event(s, p) ??
+    iceman.icemanEvent(s, p) ??
     gambit.gambitEvent(s, p) ??
     cyclops.cyclopsEvent(s, p) ??
     rogue.rogueEvent(s, p) ??
@@ -8384,6 +8451,7 @@ function flip(
   if (counts) s.player.flipped = true;
   spdr.spdrChangedForm(s, previousForm, s.player.form);
   add(s, ...phoenix.phoenixFormChanged(s), ...bishop.bishopChangedForm(s));
+  add(s, ...iceman.icemanFormChanged(s));
   add(s, ...rogue.rogueFormChanged(s, wasMutant, roguePorts));
   if (s.player.spiderHamIdentity)
     s.player.spiderHamIdentity.code =
@@ -8522,28 +8590,34 @@ export function abilityOptions(
       {
         id: "attack",
         label: `Attack ${allyStat(s, p, "attack")}`,
-        disabled: p.exhausted
-          ? "Exhausted"
-          : p.code === "03014" && !s.player.hand.length
-            ? "Discard one card from hand to attack."
-            : p.code === "18019" &&
-                !p.stunned &&
-                !targets(s, "enemy", true).some((target) =>
-                  gamoraPack.gamoraPackAllyCanAttack(s, p, target.id),
-                )
-              ? "No legal enemy to attack."
-              : undefined,
+        disabled:
+          c.attack === null && !c.attack_star
+            ? "A printed dash prevents attacking."
+            : p.exhausted
+              ? "Exhausted"
+              : p.code === "03014" && !s.player.hand.length
+                ? "Discard one card from hand to attack."
+                : p.code === "18019" &&
+                    !p.stunned &&
+                    !targets(s, "enemy", true).some((target) =>
+                      gamoraPack.gamoraPackAllyCanAttack(s, p, target.id),
+                    )
+                  ? "No legal enemy to attack."
+                  : undefined,
       },
       {
         id: "thwart",
         label: `Thwart ${allyStat(s, p, "thwart")}`,
-        disabled: p.exhausted
-          ? "Exhausted"
-          : !p.confused &&
-              s.sideSchemes.some((p) => p.code === "32108") &&
-              !niAllyTargets(s, p, "thwart").length
-            ? "There are no eligible schemes to thwart."
-            : undefined,
+        disabled:
+          c.thwart === null && !c.thwart_star
+            ? "A printed dash prevents thwarting."
+            : p.exhausted
+              ? "Exhausted"
+              : !p.confused &&
+                  s.sideSchemes.some((p) => p.code === "32108") &&
+                  !niAllyTargets(s, p, "thwart").length
+                ? "There are no eligible schemes to thwart."
+                : undefined,
       },
       ...scriptedOptions,
       ...wideawake
@@ -9846,7 +9920,10 @@ function activationAmplify(s: GameState): number {
       ...(s.environments || []),
     ]
       .filter(
-        (p) => !isTextBlank(s, p) && !(p.code === "34030" && p.counters === 0),
+        (p) =>
+          !isTextBlank(s, p) &&
+          !iceman.icemanSchemeIconsSuppressed(s, p) &&
+          !(p.code === "34030" && p.counters === 0),
       )
       .map(card),
   ];
@@ -9883,7 +9960,13 @@ function countActivationBoost(s: GameState, id: string, after: Effect[]): void {
       s,
       [p],
       [E("scarletBoostCounted", { id, after })],
-      { sourceTitle: "Boost icons", amplify: activationAmplify(s) },
+      {
+        sourceTitle: "Boost icons",
+        amplify: activationAmplify(s),
+        numericOverrides: [
+          (card(p).boost || 0) + iceman.icemanBoostExtra(s, p.id),
+        ],
+      },
     ),
   );
 }
@@ -9907,10 +9990,11 @@ const bwPorts: BlackWidowPorts = {
   enemyTargets: (s, attack) => targets(s, "enemy", attack),
   attackProgram: (s, effects, after) => {
     const id = `program${s.nextId++}`;
-    const eventId =
-      s.resolving.find((p) => p.id === s.currentEventId)?.code === "08004"
-        ? s.currentEventId
-        : undefined;
+    const eventId = s.resolving.some(
+      (p) => p.id === s.currentEventId && card(p).type_code === "event",
+    )
+      ? s.currentEventId
+      : undefined;
     add(
       s,
       ...effects.map((e) => ({
@@ -9934,6 +10018,7 @@ const bwPorts: BlackWidowPorts = {
       ? 0
       : ((s.scheming || s.attack)?.boostValues?.[id] ??
           (card(p).boost || 0) +
+            iceman.icemanBoostExtra(s, p.id) +
             scarletWitch.scarletWitchBoostIconBonus(textActiveState(s)) +
             activationAmplify(s));
   },
@@ -10785,7 +10870,9 @@ const scarletPorts: scarletWitch.ScarletWitchPorts = {
     if (
       p.code === "15012" &&
       !s.player.confused &&
-      s.sideSchemes.some((piece) => card(piece).scheme_crisis)
+      s.sideSchemes.some((piece) =>
+        iceman.icemanSchemeIcon(s, piece, "scheme_crisis"),
+      )
     )
       return false;
     return !playable(view, p);
@@ -11218,6 +11305,7 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
       ...magik.magikEntered(s, p),
       ...x23.x23Entered(s, p),
       ...bishop.bishopEntered(s, p),
+      ...iceman.icemanEntered(s, p),
       ...deadpool.deadpoolCardEntered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
       ...wolverine
@@ -11925,7 +12013,7 @@ const gmwPorts: gmwPack.GmwPlayerPackPorts = {
     s.scheme.threat > 0 &&
     !(
       deadpool.deadpoolPlayerIcons(s, "scheme_crisis") > 0 ||
-      s.sideSchemes.some((p) => card(p).scheme_crisis)
+      s.sideSchemes.some((p) => iceman.icemanSchemeIcon(s, p, "scheme_crisis"))
     ) &&
     rulesCode(s.scheme) !== "01139b" &&
     !hulkThreatLocked(s, "main"),
@@ -13744,7 +13832,11 @@ const mansionAttackPorts: mansionAttack.MansionAttackPorts = {
     s.mansionAttack!.activeVillainRetired = false;
     // Permanent attachments survive the villain change with their original IDs.
     for (const a of [...allInPlay(s), ...s.attachments])
-      if (a.attachedTo === previous.id && isPermanent(card(a)))
+      if (
+        a.attachedTo === previous.id &&
+        isPermanent(card(a)) &&
+        a.code !== "46002"
+      )
         a.attachedTo = p.id;
     if (keyword(p, "Toughness", s)) giveCharacterStatus(s, p, "tough");
     revealHidden(s);
@@ -13772,6 +13864,7 @@ const mansionAttackPorts: mansionAttack.MansionAttackPorts = {
   addToVictory: (s, p) => {
     if (card(p).type_code === "villain") {
       mansionAttackEndDepartedActivation(s, p.id);
+      iceman.icemanEnemyLeft(s, p.id);
       for (const a of [...allInPlay(s), ...s.attachments])
         if (a.attachedTo === p.id && !isPermanent(card(a)))
           discardPiece(s, a.id);
@@ -13787,6 +13880,7 @@ const mansionAttackPorts: mansionAttack.MansionAttackPorts = {
   },
   removeDefeatedVillain: (s, p) => {
     mansionAttackEndDepartedActivation(s, p.id);
+    iceman.icemanEnemyLeft(s, p.id);
     for (const a of [...allInPlay(s), ...s.attachments])
       if (a.attachedTo === p.id && !isPermanent(card(a))) discardPiece(s, a.id);
     wideawake.projectWideawakeEnemyLeftPlay(s, p.id);
@@ -15670,7 +15764,9 @@ function niAllyTargets(s: GameState, p: Piece, kind: "attack" | "thwart") {
         ? t.id !== s.villain.id ||
           !engaged(s).some((m) => keyword(m, "Guard", s))
         : t.id !== "main" ||
-          (!s.sideSchemes.some((ss) => card(ss).scheme_crisis) &&
+          (!s.sideSchemes.some((ss) =>
+            iceman.icemanSchemeIcon(s, ss, "scheme_crisis"),
+          ) &&
             !engaged(s).some((m) => keyword(m, "Patrol", s))),
     );
   }
@@ -16216,7 +16312,9 @@ const visionPorts: vision.VisionPorts = {
       !ordinary.some((p) => p.id === "main") &&
       (!(
         deadpool.deadpoolPlayerIcons(s, "scheme_crisis") > 0 ||
-        s.sideSchemes.some((p) => card(p).scheme_crisis)
+        s.sideSchemes.some((p) =>
+          iceman.icemanSchemeIcon(s, p, "scheme_crisis"),
+        )
       ) ||
         ignoreCrisis ||
         nebula.nebulaIgnoresRestrictions(s).crisis) &&
@@ -16420,6 +16518,7 @@ const nebulaPorts: nebula.NebulaPorts = {
         ...magik.magikEntered(s, p),
         ...x23.x23Entered(s, p),
         ...bishop.bishopEntered(s, p),
+        ...iceman.icemanEntered(s, p),
         ...deadpool.deadpoolCardEntered(s, p),
         ...cyclops.cyclopsCardEntered(s, p),
         ...wolverine
@@ -16891,6 +16990,7 @@ export function nativeCanPutIntoPlay(s: GameState, p: Piece) {
 function nativePutAttachmentTargets(s: GameState, p: Piece) {
   const native =
     bishop.bishopAttachmentTargets(s, p, bishopPorts) ??
+    iceman.icemanAttachmentTargets(s, p, icemanPorts) ??
     x23.x23AttachmentTargets(s, p, x23Ports) ??
     cyclops.cyclopsAttachmentTargets(s, p, cyclopsPorts) ??
     phoenix.phoenixAttachmentTargets(s, p, phoenixPorts) ??
@@ -16993,6 +17093,7 @@ export function nativePutIntoPlay(
     ...magik.magikEntered(s, p),
     ...x23.x23Entered(s, p),
     ...bishop.bishopEntered(s, p),
+    ...iceman.icemanEntered(s, p),
     ...deadpool.deadpoolCardEntered(s, p),
     ...cyclops.cyclopsCardEntered(s, p),
     ...phoenix.phoenixCardEntered(s, p),
@@ -17533,6 +17634,76 @@ const magikPorts: magik.MagikPorts = {
   feedback: domino.dominoFeedback,
   cancelReveal: dominoPorts.cancelReveal,
   drawEncounter,
+};
+
+function icemanWallOrderWindow(s: GameState, packet: Effect, amount: number) {
+  if (
+    packet.icemanWallOrder ||
+    amount <= 0 ||
+    s.player.tough ||
+    !iceman.icemanHasWall(s) ||
+    !groot.grootGrowthCounters(s) ||
+    s.heroId !== "groot" ||
+    s.player.form !== "hero"
+  )
+    return false;
+  choose(
+    s,
+    "Forced damage interrupts",
+    "Choose which forced interrupt resolves first. Ice Wall can replace all damage before Flora Colossus spends growth counters.",
+    [
+      option("wall", "Ice Wall first", [
+        { ...packet, icemanWallOrder: "wall" },
+      ]),
+      option("groot", "Flora Colossus first", [
+        { ...packet, icemanWallOrder: "groot" },
+      ]),
+    ],
+  );
+  return true;
+}
+
+const icemanPorts: iceman.IcemanPorts = {
+  characters: (s) => targets(s, "controlled"),
+  queue: add,
+  choose,
+  find,
+  makePiece,
+  enemies: (s, attack) => targets(s, "enemy", attack),
+  schemes: (s, thwart) => targets(s, "scheme", false, thwart),
+  hasTrait: sinisterNativeHasTrait,
+  canPay: angelPorts.canPay,
+  reaction: gambitPorts.reaction,
+  discard: discardPiece,
+  discardHand,
+  mill,
+  drawOne: (s) => {
+    const before = new Set(s.player.hand.map((p) => p.id));
+    draw(s, 1);
+    return s.player.hand.find((p) => !before.has(p.id));
+  },
+  shuffle: (s) => {
+    revealHidden(s);
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  hidden: revealHidden,
+  canReady: (s) => s.player.exhausted && canReadyIdentity(s),
+  ready: (s) => {
+    readyIdentity(s);
+  },
+  heal,
+  attachEncounter: (s, p, target) => {
+    removeEncounterInstance(s, p.id);
+    p.attachedTo = target;
+    s.attachments.push(p);
+  },
+  keepObligation: gambitPorts.keepObligation,
+  discardEncounterTop: (s) => mutagenPorts.discardTop(s).piece,
+  putMinion: (s, p) => mutagenPorts.putMinion(s, p, s.activePlayerId),
+  activate: (s, id) =>
+    add(s, E(s.player.form === "hero" ? "enemyAttack" : "enemyScheme", { id })),
+  batch: spectrumPorts.damageBatch,
 };
 
 const x23Ports: x23.X23Ports = {
@@ -18525,6 +18696,10 @@ function enemyAttack(
     )
   )
     return;
+  if (!friendlySource && iceman.icemanFrozenSolid(s, id, icemanPorts)) {
+    canceled();
+    return;
+  }
   const web = allInPlay(s).find(
     (a) => rulesCode(a) === "01009" && a.attachedTo === id,
   );
@@ -18647,6 +18822,7 @@ function enemyAttack(
     delete s.flags.deadpoolFrontAwaiting;
   }
   add(s, ...cyclops.cyclopsEnemyAttackStarted(s, id));
+  if (!friendlySource) add(s, ...iceman.icemanAttackStarted(s, id));
   add(s, ...wolverine.wolverineEnemyAttackStarted(s, id));
   add(s, ...colossus.colossusEnemyAttackStarted(s, id, colossusPorts));
   // Forced entry and its responses precede every optional initiation interrupt.
@@ -18715,6 +18891,8 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
       : 0) +
     bonus +
     x23.x23EnemyAttackModifier(s, p.id) +
+    iceman.icemanEnemyModifier(s, p.id) +
+    iceman.icemanFlamethrowerBonus(s, p.id) +
     attachments +
     ironheart.ironheartEnemyStats(s, p, { isTextBlank }).attack +
     blackWidowEnemyModifier(s, p, originalPlayerId) +
@@ -18735,6 +18913,8 @@ function abortAttack(s: GameState) {
   add(
     s,
     ...antMan.antManEnemyActivated(s, a.attacker),
+    ...iceman.icemanActivated(s, a.attacker),
+    ...iceman.icemanAfterAttack(s, a.id),
     ...armadillo
       .armadilloActivationResponses(s, a.attacker)
       .flatMap((r) => r.effects),
@@ -18900,6 +19080,11 @@ function declareDefense(s: GameState) {
   );
 }
 function boostEffects(s: GameState, p: Piece) {
+  const icy = iceman.icemanBoost(s, p);
+  if (icy !== null) {
+    add(s, ...icy);
+    return;
+  }
   if (!s.scheming && s.attack?.angelIgnoreBoosts) return;
   const magikBoost = magik.magikBoost(s, p);
   if (magikBoost !== null) {
@@ -19211,6 +19396,16 @@ function enemyScheme(
     )
   )
     return;
+  if (iceman.icemanFrozenSolid(s, id, icemanPorts)) {
+    if (request?.after)
+      add(s, {
+        ...request.after,
+        performed: false,
+        damagePlaced: 0,
+        threatPlaced: 0,
+      });
+    return;
+  }
   const replacement = riskyActivationReplacement(s, "scheme", id);
   if (replacement) {
     add(
@@ -19281,7 +19476,8 @@ function enemySCH(s: GameState, p: Piece, playerId: string): number {
       0) +
     blackWidowEnemyModifier(s, p, playerId) +
     ironheart.ironheartEnemyStats(s, p, { isTextBlank }).scheme +
-    enemyAttachmentModifier(s, p.id, "scheme")
+    enemyAttachmentModifier(s, p.id, "scheme") +
+    iceman.icemanEnemyModifier(s, p.id)
   );
 }
 export function enemyStats(
@@ -19383,6 +19579,7 @@ function finishScheme(s: GameState) {
       ? [E("heal", { target: p.id, amount: p.damage })]
       : []),
     ...antMan.antManEnemyActivated(s, id),
+    ...iceman.icemanActivated(s, id),
     ...armadillo.armadilloActivationResponses(s, id).flatMap((r) => r.effects),
     ...spectrum.spectrumEnemyActivated(s, p, s.activePlayerId, spectrumPorts),
     ...(activation.afterActivation || []),
@@ -19573,7 +19770,11 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
       : find(s, target)
         ? pieceHP(s, find(s, target)!) - find(s, target)!.damage
         : 0;
-  if (p && damage > 0 && angel.angelIndirectAttack(s, p)) {
+  if (
+    p &&
+    damage > 0 &&
+    (angel.angelIndirectAttack(s, p) || iceman.icemanPyroIndirect(s, p))
+  ) {
     add(
       s,
       E("indirect", {
@@ -19583,7 +19784,7 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
         zzzaxBatchId: `angel-attack:${s.nextId++}`,
         zzzaxBatchOwner: s.activePlayerId,
         attackDamage: true,
-        exhaustDamaged: true,
+        exhaustDamaged: !iceman.icemanPyroIndirect(s, p),
         zzzaxAfter: E("ironspiderAttackComplete", {
           attack: structuredClone(a),
           target,
@@ -19972,6 +20173,8 @@ function finishAttackAfterDamage(
       enemyTextBlank: !p || isTextBlank(s, p),
     }),
     ...antMan.antManEnemyActivated(s, a.attacker),
+    ...iceman.icemanActivated(s, a.attacker),
+    ...iceman.icemanAfterAttack(s, a.id),
     ...(a.afterActivation || []),
     ...(a.visionAfterAttack || []),
     ...(a.attackDamageReceipts
@@ -20644,6 +20847,8 @@ function reveal(
   if (
     !repeat &&
     [
+      "46027",
+      "46031",
       "32067",
       "32068",
       "32077",
@@ -20663,7 +20868,8 @@ function reveal(
   ) {
     add(
       s,
-      ...((magneto.magnetoReveal(s, p, { isTextBlank }) ??
+      ...((iceman.icemanEncounter(s, p) ??
+        magneto.magnetoReveal(s, p, { isTextBlank }) ??
         masterMold.masterMoldReveal(s, p, { isTextBlank }) ??
         wideawake.projectWideawakeReveal(s, p, { isTextBlank }) ??
         zeroTolerance.zeroToleranceReveal(s, p, zeroTolerancePorts) ??
@@ -20791,6 +20997,7 @@ function reveal(
       ...magik.MAGIK_SCRIPT_CODES,
       ...cable.CABLE_SCRIPT_CODES,
       ...x23.X23_SCRIPT_CODES,
+      ...iceman.ICEMAN_SCRIPT_CODES,
       ...colossus.COLOSSUS_SCRIPT_CODES,
     ].some((code) => code === p.code) ||
       CARDS.some(
@@ -20856,6 +21063,7 @@ function reveal(
       bishop.bishopEncounter(s, p) ??
       magik.magikEncounter(s, p) ??
       cable.cableEncounter(s, p) ??
+      iceman.icemanEncounter(s, p) ??
       x23.x23Encounter(s, p) ??
       deadpool.deadpoolEncounter(s, p) ??
       angel.angelEncounter(s, p) ??
@@ -20910,6 +21118,7 @@ function reveal(
     bishop.bishopEncounter(s, p) ??
     magik.magikEncounter(s, p) ??
     cable.cableEncounter(s, p) ??
+    iceman.icemanEncounter(s, p) ??
     x23.x23Encounter(s, p) ??
     deadpool.deadpoolEncounter(s, p) ??
     angel.angelEncounter(s, p) ??
@@ -21189,6 +21398,10 @@ function obligation(s: GameState, p: Piece) {
     add(s, ...bishop.bishopEncounter(s, p)!);
     return;
   }
+  if (p.code === "46024") {
+    add(s, ...iceman.icemanEncounter(s, p)!);
+    return;
+  }
   if (p.code === "40031") {
     add(s, ...cable.cableEncounter(s, p)!);
     return;
@@ -21287,6 +21500,11 @@ function obligation(s: GameState, p: Piece) {
   );
 }
 function treachery(s: GameState, p: Piece) {
+  const icemanReveal = iceman.icemanEncounter(s, p);
+  if (icemanReveal !== null) {
+    add(s, ...icemanReveal);
+    return;
+  }
   const deadpoolReveal = deadpool.deadpoolEncounter(s, p);
   if (deadpoolReveal !== null) {
     add(s, ...deadpoolReveal);
@@ -21316,6 +21534,7 @@ function treachery(s: GameState, p: Piece) {
     bishop.bishopEncounter(s, p) ??
     magik.magikEncounter(s, p) ??
     cable.cableEncounter(s, p) ??
+    iceman.icemanEncounter(s, p) ??
     x23.x23Encounter(s, p) ??
     deadpool.deadpoolEncounter(s, p) ??
     angel.angelEncounter(s, p) ??
@@ -21604,6 +21823,11 @@ function treachery(s: GameState, p: Piece) {
         add(s, ...magikNemesis);
         break;
       }
+      const icemanNemesis = iceman.icemanShadows(s);
+      if (icemanNemesis !== null) {
+        add(s, ...icemanNemesis);
+        break;
+      }
       const dominoNemesis = domino.dominoShadows(s);
       if (dominoNemesis !== null) {
         add(s, ...dominoNemesis);
@@ -21880,6 +22104,7 @@ function resolve(s: GameState, e: Effect) {
     return;
   }
   if (magik.resolveMagikEffect(s, e, magikPorts)) return;
+  if (iceman.resolveIcemanEffect(s, e, icemanPorts)) return;
   if (domino.resolveDominoEffect(s, e, dominoPorts)) return;
   if (gambit.resolveGambitEffect(s, e, gambitPorts)) return;
   if (cyclops.resolveCyclopsEffect(s, e, cyclopsPorts)) return;
@@ -24301,6 +24526,7 @@ function resolve(s: GameState, e: Effect) {
         ...angel.angelPlayerSideSchemeDefeated(s, p),
         ...cable.cableSideReward(s, p),
         ...x23.x23SchemeDefeated(s, p),
+        ...iceman.icemanSchemeDefeated(s, p),
       );
       break;
     }
@@ -24699,6 +24925,23 @@ function resolve(s: GameState, e: Effect) {
         e.amount = bishop.bishopLimitAttackDamage(view, e.amount);
         e.bishopConversionHandled = true;
       }
+      if (e.basic && e.attack && !s.player.stunned && !e.icemanBasicPassed) {
+        const opts = iceman.icemanBasicAttackOptions(s, e, icemanPorts);
+        if (opts.length) {
+          choose(
+            s,
+            "Basic attack interrupts",
+            "Use Freeze! or Surprise Move before this basic attack?",
+            [
+              ...opts,
+              option("continue", "Continue attack", [
+                { ...e, icemanBasicPassed: true },
+              ]),
+            ],
+          );
+          break;
+        }
+      }
       if (!s.player.stunned) {
         const options = domino.dominoRangedOptions(s, {
           ...e,
@@ -24977,6 +25220,16 @@ function resolve(s: GameState, e: Effect) {
       if (e.target === "hero" && e.damageDealt === undefined)
         e.damageDealt = e.amount;
       if (e.target === "hero" && !e.grootDamageHandled) {
+        if (e.damageFromAttack && icemanWallOrderWindow(s, e, e.amount)) break;
+        if (
+          e.damageFromAttack &&
+          e.icemanWallOrder !== "groot" &&
+          !s.player.tough &&
+          iceman.icemanWall(s, "hero", e.amount, e.source, icemanPorts)
+        ) {
+          e.amount = 0;
+          e.grootDamageHandled = true;
+        }
         if (
           e.attack &&
           e.amount > 0 &&
@@ -24988,7 +25241,9 @@ function resolve(s: GameState, e: Effect) {
             [{ targetId: "hero", amount: statusCards(s.player, "tough") }],
             [],
           );
-        const prevented = groot.grootPreventDamage(s, "hero", e.amount);
+        const prevented = e.grootDamageHandled
+          ? 0
+          : groot.grootPreventDamage(s, "hero", e.amount);
         e.amount = Math.max(0, e.amount - prevented);
         e.grootDamageHandled = true;
         if (prevented)
@@ -26307,6 +26562,13 @@ function resolve(s: GameState, e: Effect) {
       const p = find(s, e.id);
       if (!p) break;
       const attack = e.kind === "attack";
+      const printed = card(p);
+      need(
+        attack
+          ? printed.attack !== null || printed.attack_star
+          : printed.thwart !== null || printed.thwart_star,
+        "A printed dash prevents using this basic power.",
+      );
       if (x23.x23Shatterstar(s, p, e, x23Ports)) break;
       const xopts = x23.x23AllyOptions(s, p, e, x23Ports);
       if (xopts.length) {
@@ -26719,7 +26981,11 @@ function resolve(s: GameState, e: Effect) {
       );
       if (e.sinisterPowerToken)
         delete s.flags[`sinisterPower:${e.sinisterPowerToken}`];
+      const icemanSnowReduction = attack
+        ? iceman.icemanSnowCloneReduction(s, p, e.target)
+        : 0;
       const amount =
+        (attack ? iceman.icemanSharkGirlBonus(s, p, e.target) : 0) +
         Number(e.stormBonus || 0) +
         sinisterBonus +
         (e.amount ?? allyStat(s, p, attack ? "attack" : "thwart") - bonus) +
@@ -26904,7 +27170,8 @@ function resolve(s: GameState, e: Effect) {
                   (card(p).attack_cost || 0) +
                     Number(!!e.cyclopsDust) -
                     Number(e.cyclopsConsequenceReduction || 0) -
-                    psylocke.psylockeConsequence(s, p, e.target, true) +
+                    psylocke.psylockeConsequence(s, p, e.target, true) -
+                    icemanSnowReduction +
                     captainPackModifiers(s, p.id).consequentialAttack +
                     Number(e.stormHavok || 0) +
                     Number(
@@ -27685,6 +27952,8 @@ function resolve(s: GameState, e: Effect) {
             ]
           : []),
         ...antMan.antManEnemyActivated(s, a.attacker),
+        ...iceman.icemanActivated(s, a.attacker),
+        ...iceman.icemanAfterAttack(s, a.id),
         ...(a.completionRecorded && a.attackerSnapshot
           ? spectrum.spectrumEnemyActivated(
               s,
@@ -28042,6 +28311,29 @@ function resolve(s: GameState, e: Effect) {
       );
       break;
     case "defender":
+      if (e.id === "hero" && s.attack && !e.icemanFreezeHandled) {
+        const packet = {
+          ...e,
+          target: s.attack.attacker,
+          icemanDefensePaid: true,
+        };
+        const opts = iceman.icemanFreezeOptions(s, packet, icemanPorts);
+        if (opts.length) {
+          s.player.exhausted = true;
+          choose(
+            s,
+            "Basic defense interrupts",
+            "Use Freeze! before defending?",
+            [
+              ...opts,
+              option("continue", "Continue defense", [
+                { ...packet, icemanFreezeHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
+      }
       if (e.id === "hero") {
         const packet = { ...e, amount: e.amount ?? heroStats(s).defense };
         const opts = domino.dominoBasicOptions(s, packet);
@@ -28095,7 +28387,7 @@ function resolve(s: GameState, e: Effect) {
             "Wrapped in Metal prevents this identity from defending.",
           );
           s.attack.basicDefense = true;
-          s.player.exhausted = true;
+          if (!e.icemanDefensePaid) s.player.exhausted = true;
           s.attack.defenseBonus =
             (s.attack.defenseBonus || 0) +
             (e.amount === undefined ? 0 : e.amount - heroStats(s).defense);
@@ -28556,6 +28848,17 @@ function resolve(s: GameState, e: Effect) {
         : nativeIncomingAttackDamage(s, a);
       mutantGenesisIncomingPiercing(s, damageTarget, incoming);
       if (heroTarget && !a.grootDamageHandled) {
+        if (icemanWallOrderWindow(s, e, incoming)) break;
+        if (
+          e.icemanWallOrder !== "groot" &&
+          !s.player.tough &&
+          iceman.icemanWall(s, "hero", incoming, a.attacker, icemanPorts)
+        ) {
+          a.prevented += incoming;
+          a.grootDamageHandled = true;
+          add(s, E("finishAttack"));
+          break;
+        }
         const prevented = groot.grootPreventDamage(s, "hero", incoming);
         a.prevented += prevented;
         a.grootDamageHandled = true;
@@ -28618,6 +28921,17 @@ function resolve(s: GameState, e: Effect) {
                   (a.identityPrevented || 0),
               )
             : 0;
+        if (icemanWallOrderWindow(s, e, excess)) break;
+        if (
+          e.icemanWallOrder !== "groot" &&
+          !s.player.tough &&
+          iceman.icemanWall(s, "hero", excess, a.attacker, icemanPorts)
+        ) {
+          a.identityPrevented = (a.identityPrevented || 0) + excess;
+          a.grootOverkillHandled = true;
+          add(s, { ...e });
+          break;
+        }
         const prevented = groot.grootPreventDamage(s, "hero", excess);
         a.identityPrevented = (a.identityPrevented || 0) + prevented;
         a.grootOverkillHandled = true;
@@ -30215,7 +30529,7 @@ function resolve(s: GameState, e: Effect) {
     case "villainStepOne":
       log(
         s,
-        `Place ${escalation(s)} threat for ${s.playerCount} starting hero(es), plus ${s.encounter.acceleration + inheritorsAcceleration(s) + s.sideSchemes.reduce((n, p) => n + (card(p).scheme_acceleration || 0) + ironheart.ironheartSchemeIcons(s, p, { isTextBlank }).acceleration + Number(p.accelerationTokens || 0), 0)} acceleration.`,
+        `Place ${escalation(s)} threat for ${s.playerCount} starting hero(es), plus ${s.encounter.acceleration + inheritorsAcceleration(s) + s.sideSchemes.reduce((n, p) => n + iceman.icemanSchemeIcon(s, p, "scheme_acceleration") + ironheart.ironheartSchemeIcons(s, p, { isTextBlank }).acceleration + Number(p.accelerationTokens || 0), 0)} acceleration.`,
         "bad",
       );
       add(
@@ -30234,7 +30548,7 @@ function resolve(s: GameState, e: Effect) {
             s.sideSchemes.reduce(
               (n, p) =>
                 n +
-                (card(p).scheme_acceleration || 0) +
+                iceman.icemanSchemeIcon(s, p, "scheme_acceleration") +
                 ironheart.ironheartSchemeIcons(s, p, { isTextBlank })
                   .acceleration +
                 Number(p.accelerationTokens || 0),
@@ -30333,7 +30647,7 @@ function resolve(s: GameState, e: Effect) {
         s.sideSchemes.reduce(
           (n, p) =>
             n +
-            (card(p).scheme_hazard || 0) +
+            iceman.icemanSchemeIcon(s, p, "scheme_hazard") +
             ironheart.ironheartSchemeIcons(s, p, { isTextBlank }).hazard,
           0,
         );
@@ -30459,6 +30773,7 @@ function resolve(s: GameState, e: Effect) {
                 key === "angelInitialized" ||
                 key === "cableInitialized" ||
                 key === "x23Initialized" ||
+                key === "icemanInitialized" ||
                 key === "stormSetupComplete" ||
                 key.startsWith("valkyrie") ||
                 key.startsWith("vision") ||
@@ -31008,6 +31323,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               s,
               ...deadpool.deadpoolRecovered(s),
               ...bishop.bishopRecovered(s),
+              ...iceman.icemanRecovered(s),
             );
             add(
               s,

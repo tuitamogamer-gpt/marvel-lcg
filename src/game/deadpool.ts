@@ -1,3 +1,4 @@
+import { icemanSchemeIconsSuppressed, icemanSchemeIcon } from "./iceman.js";
 import { card, CATALOG_CARDS } from "./card-definitions.js";
 import { isTextBlank } from "./card-text.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
@@ -146,7 +147,18 @@ export function deadpoolIcons(s: GameState) {
         ...s.attachments,
         ...(s.environments || []),
         ...allInPlay(s),
-      ].map((p) => [p.id, card(p)]),
+      ].map((p) => [
+        p.id,
+        icemanSchemeIconsSuppressed(s, p)
+          ? {
+              ...card(p),
+              scheme_crisis: 0,
+              scheme_acceleration: 0,
+              scheme_amplify: 0,
+              scheme_hazard: 0,
+            }
+          : card(p),
+      ]),
     ).values(),
   ];
   const count = (key: keyof Card) =>
@@ -168,7 +180,7 @@ export function deadpoolPlayerIcons(
     | "scheme_amplify"
     | "scheme_hazard",
 ) {
-  return allInPlay(s).reduce((n, p) => n + Number(card(p)[key] || 0), 0);
+  return allInPlay(s).reduce((n, p) => n + icemanSchemeIcon(s, p, key), 0);
 }
 export function deadpoolResources(
   s: GameState,
