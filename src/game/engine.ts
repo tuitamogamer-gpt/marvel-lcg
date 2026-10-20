@@ -1,3 +1,4 @@
+import * as bishop from "./bishop.js";
 import * as domino from "./domino.js";
 import * as cable from "./cable.js";
 import * as x23 from "./x23.js";
@@ -66,7 +67,7 @@ import * as magneto from "./magneto.js";
 import * as mansionAttack from "./mansion-attack.js";
 import * as zeroTolerance from "./zero-tolerance.js";
 import * as nebula from "./nebula.js";
-import { heroDeckAspects, isPermanent } from "./hero-runtime.js";
+import { heroDeckAspects, heroRuntime, isPermanent } from "./hero-runtime.js";
 import * as venomPack from "./venom-pack.js";
 import * as mtsPlayerPack from "./mts-player-pack.js";
 import * as nebulaPack from "./nebula-pack.js";
@@ -929,6 +930,7 @@ function beginResolution(s: GameState, p: Piece) {
   if (!s.resolving.some((x) => x.id === p.id)) s.resolving.push(p);
 }
 function finishResolution(s: GameState, id: string) {
+  delete s.flags[`bishopResourcePaid:${id}`];
   phoenix.phoenixEventFinished(s, id);
   gambit.gambitEventFinished(s, id);
   const index = s.resolving.findIndex((p) => p.id === id);
@@ -2798,6 +2800,15 @@ function dealDamage(
       x23Ports,
     ),
   );
+  add(
+    s,
+    ...bishop.bishopDamageResponses(
+      s,
+      target,
+      result.actualDamage,
+      attack || !!traits.damageFromAttack,
+    ),
+  );
   if (s.currentEventId && attack)
     s.flags[`shadowcatDealt:${s.currentEventId}:${target}`] =
       result.damageDealt > 0 || (!replaced && dealt === 0);
@@ -3117,6 +3128,13 @@ function applyDamage(
     if (!traits.grootHandled) n -= groot.grootPreventDamage(s, "hero", n);
     if (n <= 0) return none;
     s.player.hp -= n;
+    if (
+      (attack || traits.damageFromAttack) &&
+      s.attack?.id &&
+      s.flags.bishopConversionAttack === s.attack.id
+    )
+      s.flags.bishopConversionDamage =
+        Number(s.flags.bishopConversionDamage || 0) + n;
     deadpool.deadpoolDamageTaken(s);
     if (s.player.hp <= 0 && traits.enemyAttack)
       s.flags.wolverineLethalAttack = true;
@@ -3501,6 +3519,8 @@ function defeatCharacter(
   const sabretoothDefeat = (m as SabretoothAttackDefeatPiece)
     .sabretoothAttackDefeatReceipt;
   if (!minion) recordMilesEnemyAttackDefeat(s, source, enemyAttack);
+  if (minion) add(s, ...bishop.bishopDefeated(s, m, source, true, attack));
+  else if (enemyAttack) add(s, ...bishop.bishopEnemyAllyDefeated(s, source));
   if (!minion)
     recordZeroToleranceAllyDefeat(s, m, source, enemyAttack, allyController);
   if (!minion && ["32088b", "32172b"].includes(m.code) && !textWasBlank)
@@ -3681,6 +3701,15 @@ function advanceVillain(
     "enemy-defeat",
     `${s.villain.id}:${s.villain.stage}`,
   );
+  const bishopX23 = allInPlay(s).find(
+    (p) => p.id === source && p.code === "45012" && !isTextBlank(s, p),
+  );
+  if (attack && bishopX23)
+    add(s, {
+      type: "bishop:ready-window",
+      id: bishopX23.id,
+      actorId: controller(s, bishopX23.id)?.id || s.activePlayerId,
+    });
   if (s.villainId === "mansion_attack") {
     if (s.villain.pendingDefeat || s.mansionAttack?.activeVillainRetired)
       return;
@@ -4106,7 +4135,11 @@ function defeatScheme(
   add(s, ...storm.stormSideDefeated(s, p));
   if (!isTextBlank(s, p)) add(s, ...gambit.gambitSchemeDefeated(s, p));
   add(s, ...rogue.rogueSchemeDefeated(s, p));
-  add(s, ...warMachine.warMachineSchemeDefeated(s, p));
+  add(
+    s,
+    ...warMachine.warMachineSchemeDefeated(s, p),
+    ...bishop.bishopDefeated(s, p, source, false, false),
+  );
   add(
     s,
     ...shadowcat.shadowcatSideSchemeDefeated(
@@ -4923,7 +4956,12 @@ function thwartAction(
       : s.sideSchemes.find((piece) => piece.id === target)?.counters || 0;
   const wasHero = source === "hero" && s.player.form === "hero";
   const previousQueue = new Set(s.queue);
+  const bishopCable =
+    source !== "hero" && (p as Piece).code === "45011" && target !== "main";
+  if (bishopCable) s.flags[`bishopCableThwart:${target}`] = source;
   const removed = thwart(s, target, n, ignoreCrisis, source);
+  if (bishopCable && removed < beforeThreat)
+    delete s.flags[`bishopCableThwart:${target}`];
   if (removed > 0)
     add(
       s,
@@ -5712,6 +5750,8 @@ function pay(
     return;
   }
   const paymentActor = s.activePlayerId;
+  if (p.card && ["45007", "45008"].includes(p.card.code))
+    delete s.flags[`bishopResourcePaid:${p.card.id}`];
   const contributors = new Set<string>([paymentActor]);
   for (const selectedSource of selected) {
     const info = selectedSource!;
@@ -5759,6 +5799,13 @@ function pay(
         // Counter resources are validated together and spent individually.
       } else if (s.player.hand.some((x) => x.id === id)) {
         const spent = discardHand(s, id);
+        if (
+          p.card &&
+          ["45007", "45008"].includes(p.card.code) &&
+          card(spent).type_code === "resource"
+        )
+          seatView(s, paymentActor).flags[`bishopResourcePaid:${p.card.id}`] =
+            true;
         phoenix.phoenixPayment(seatView(s, paymentActor), spent, p.card);
         spentResponses.push(...gambit.gambitPayment(s, spent));
         if (!p.abilityCost)
@@ -6154,6 +6201,7 @@ export function newGame(config: {
     domino.dominoInitialize(s, makePiece);
     angel.angelInitialize(s, { makePiece });
     cable.cableInitialize(s, { makePiece });
+    bishop.bishopInitialize(s, makePiece);
     deadpool.deadpoolInitialize(s, makePiece);
     colossus.colossusInitializeNemesis(s, { makePiece });
     ironheart.ironheartInitialize(s, { makePiece });
@@ -6576,6 +6624,7 @@ export function playable(s: GameState, p: Piece): string | null {
     psylocke.psylockePlayRestriction(s, p, psylockePorts) ||
     rogue.roguePlayRestriction(s, p, roguePorts) ||
     wolverine.wolverinePlayRestriction(s, p, wolverinePorts) ||
+    bishop.bishopPlayRestriction(s, p, bishopPorts) ||
     cable.cablePlayRestriction(s, p) ||
     angel.angelPlayRestriction(s, p, angelPorts) ||
     storm.stormPlayRestriction(s, p, stormPorts) ||
@@ -6796,7 +6845,8 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
   if (
     allyTargets.length &&
     (maximumAllyUpgradeDiscount(s, p!) > 0 ||
-      phoenix.phoenixAttachmentTargets(s, p, phoenixPorts) !== null)
+      phoenix.phoenixAttachmentTargets(s, p, phoenixPorts) !== null ||
+      bishop.bishopAttachmentTargets(s, p, bishopPorts) !== null)
   ) {
     choose(
       s,
@@ -7174,6 +7224,7 @@ function play(
       ...angel.angelCardEntered(s, p),
 
       ...x23.x23Entered(s, p),
+      ...bishop.bishopEntered(s, p),
       ...deadpool.deadpoolCardEntered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
       ...phoenix.phoenixCardEntered(s, p),
@@ -7364,7 +7415,7 @@ function allyEnter(
       fromHand,
     ),
   );
-  add(s, ...cyclops.cyclopsAllyEntered(s, p));
+  add(s, ...cyclops.cyclopsAllyEntered(s, p), ...bishop.bishopEntered(s, p));
   if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
     giveCharacterStatus(s, p, "tough");
   if (isTextBlank(s, p)) return;
@@ -7627,6 +7678,7 @@ function event(
     cyclops.cyclopsEvent(s, p) ??
     rogue.rogueEvent(s, p) ??
     wolverine.wolverineEvent(s, p) ??
+    bishop.bishopEvent(s, p) ??
     cable.cableEvent(s, p) ??
     deadpool.deadpoolEvent(s, p) ??
     angel.angelEvent(s, p) ??
@@ -8062,7 +8114,7 @@ function flip(
   }
   if (counts) s.player.flipped = true;
   spdr.spdrChangedForm(s, previousForm, s.player.form);
-  add(s, ...phoenix.phoenixFormChanged(s));
+  add(s, ...phoenix.phoenixFormChanged(s), ...bishop.bishopChangedForm(s));
   add(s, ...rogue.rogueFormChanged(s, wasMutant, roguePorts));
   if (s.player.spiderHamIdentity)
     s.player.spiderHamIdentity.code =
@@ -8312,6 +8364,10 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
   const noir = spdrPack.spdrPackAllyStats(s, p, spdrPackPorts);
   return (
     (kind === "thwart" && cable.cableXForceTeam(s, cablePorts) ? 1 : 0) +
+    bishop.bishopCharacterBonus(
+      controller(s, p.id) ? seatView(s, controller(s, p.id)!) : s,
+      p.id,
+    ) +
     deadpool.deadpoolAllyBonus(s, p) +
     gambit.gambitAllyBonus(s, p, kind) +
     cyclops.cyclopsCharacterModifiers(s, p.id)[kind] +
@@ -8399,6 +8455,15 @@ function ability(s: GameState, id: string, action = "special") {
       : deadpoolOptions.find((o) => o.id === action);
   if (deadpoolSelected) {
     add(s, ...deadpoolSelected.effects);
+    return;
+  }
+  const bishopOptions = bishop.bishopAbilityOptions(s, id, bishopPorts);
+  const bishopSelected =
+    action === undefined || action === "special"
+      ? bishopOptions[0]
+      : bishopOptions.find((o) => o.id === action);
+  if (bishopSelected) {
+    add(s, ...bishopSelected.effects);
     return;
   }
   const cableOptions = cable.cableAbilityOptions(s, id, cablePorts);
@@ -9746,6 +9811,8 @@ function allyUpgradeTargets(s: GameState, p: Piece) {
   );
 }
 function rawAllyUpgradeTargets(s: GameState, p: Piece) {
+  const bishopTargets = bishop.bishopAttachmentTargets(s, p, bishopPorts);
+  if (bishopTargets !== null) return bishopTargets;
   const phoenixTargets = phoenix.phoenixAttachmentTargets(s, p, phoenixPorts);
   if (phoenixTargets !== null) return phoenixTargets;
   const mutantTargets = mgPack.mutantGenesisPlayerPackAttachmentTargets(
@@ -10867,6 +10934,7 @@ const warMachinePackPorts: warmPack.WarMachinePackPorts = {
       ...angel.angelCardEntered(s, p),
       ...cable.cableCardEntered(s, p),
       ...x23.x23Entered(s, p),
+      ...bishop.bishopEntered(s, p),
       ...deadpool.deadpoolCardEntered(s, p),
       ...cyclops.cyclopsCardEntered(s, p),
       ...wolverine
@@ -11604,6 +11672,7 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
       .filter((o) => o.id === "game-history");
   if (deadpool.deadpoolTriggeredBlocked(s)) return [];
   return [
+    ...bishop.bishopAbilityOptions(s, id, bishopPorts),
     ...cable.cableAbilityOptions(s, id, cablePorts),
     ...x23.x23AbilityOptions(s, id, x23Ports),
     ...deadpool.deadpoolAbilityOptions(s, id, deadpoolPorts),
@@ -16065,6 +16134,7 @@ const nebulaPorts: nebula.NebulaPorts = {
         ...angel.angelCardEntered(s, p),
         ...cable.cableCardEntered(s, p),
         ...x23.x23Entered(s, p),
+        ...bishop.bishopEntered(s, p),
         ...deadpool.deadpoolCardEntered(s, p),
         ...cyclops.cyclopsCardEntered(s, p),
         ...wolverine
@@ -16535,6 +16605,7 @@ export function nativeCanPutIntoPlay(s: GameState, p: Piece) {
 }
 function nativePutAttachmentTargets(s: GameState, p: Piece) {
   const native =
+    bishop.bishopAttachmentTargets(s, p, bishopPorts) ??
     x23.x23AttachmentTargets(s, p, x23Ports) ??
     cyclops.cyclopsAttachmentTargets(s, p, cyclopsPorts) ??
     phoenix.phoenixAttachmentTargets(s, p, phoenixPorts) ??
@@ -16635,6 +16706,7 @@ export function nativePutIntoPlay(
     ...angel.angelCardEntered(s, p),
     ...cable.cableCardEntered(s, p),
     ...x23.x23Entered(s, p),
+    ...bishop.bishopEntered(s, p),
     ...deadpool.deadpoolCardEntered(s, p),
     ...cyclops.cyclopsCardEntered(s, p),
     ...phoenix.phoenixCardEntered(s, p),
@@ -17014,6 +17086,45 @@ const angelPorts: angel.AngelPorts = {
   },
   discardPlayerCards: mill,
   dealEncounter,
+};
+
+const bishopPorts: bishop.BishopPorts = {
+  queue: add,
+  choose,
+  find,
+  makePiece,
+  discardHand,
+  discard: discardPiece,
+  canReady: (s, id) =>
+    id === "hero"
+      ? s.player.exhausted && canReadyIdentity(s)
+      : !!find(s, id)?.exhausted && warMachinePackPorts.canReady(s, id),
+  ready: (s, id) => {
+    if (id === "hero") {
+      if (canReadyIdentity(s)) readyIdentity(s);
+    } else {
+      const p = find(s, id);
+      if (p && warMachinePackPorts.canReady(s, id)) p.exhausted = false;
+    }
+  },
+  heal,
+  shuffle: (s) => warMachinePortsShufflePlayer(s, []),
+  shuffleEncounter: mutagenPorts.shuffleEncounter,
+  hidden: revealHidden,
+  hasTrait: captainPackHasTrait,
+  identitySpecific: (p) => !!heroRuntime(card(p).set_code || ""),
+  canPay: angelPorts.canPay,
+  reaction: gambitPorts.reaction,
+  declareDefense: psylockePorts.declareDefense,
+  canChangeToAlter: (s) => canChangeIdentityForm(s, "alter"),
+  log,
+  mill: (s, amount, after) => {
+    const before = new Set(s.queue);
+    const discarded = mill(s, amount);
+    const generated = s.queue.filter((e) => !before.has(e));
+    s.queue = s.queue.filter((e) => before.has(e));
+    add(s, ...generated, { ...after, discarded });
+  },
 };
 
 const x23Ports: x23.X23Ports = {
@@ -18944,6 +19055,18 @@ type SabretoothAttackDefeatPiece = Piece & {
     sourceIds: string[];
   };
 };
+function nativeIncomingAttackDamage(
+  s: GameState,
+  a: NonNullable<GameState["attack"]>,
+) {
+  const raw = Math.max(0, a.base - a.defense);
+  return Math.max(
+    0,
+    (enemyAttackDamageTarget(s, a) === "hero"
+      ? bishop.bishopLimitAttackDamage(s, raw)
+      : raw) - a.prevented,
+  );
+}
 function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
   if (s.attack)
     for (const seat of playerOrder(s)) {
@@ -18977,7 +19100,7 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
     const result = attackAction(
       s,
       a.originalTarget,
-      Math.max(0, a.base - a.defense - a.prevented),
+      nativeIncomingAttackDamage(s, a),
       a.attacker,
       !!a.overkill || !!sourceKeyword(s, a.attacker, "Overkill"),
       false,
@@ -18998,7 +19121,7 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
   const damage =
     a.gmwReturnedDefender === target || a.preventAllDamage
       ? 0
-      : Math.max(0, a.base - a.defense - a.prevented);
+      : nativeIncomingAttackDamage(s, a);
   const before =
     target === "hero"
       ? s.player.hp
@@ -19120,6 +19243,7 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
     {
       grootHandled: !!a.grootDamageHandled,
       enemyAttack: true,
+      damageFromAttack: true,
       damageDealt: Math.max(0, a.base - a.defense),
     },
   );
@@ -19160,7 +19284,9 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
   const generated = s.queue.filter((q) => !beforeDamageQueue.has(q));
   if (
     generated.some(
-      (q) => q.type === "optional" && q.title === "Spider-Nonsense",
+      (q) =>
+        q.type === "optional" &&
+        ["Spider-Nonsense", "Energy Absorption"].includes(q.title),
     )
   ) {
     s.queue = s.queue.filter((q) => beforeDamageQueue.has(q));
@@ -19434,6 +19560,14 @@ function finishAttackAfterDamage(
       {
         receipt: zeroReceipt,
         responses: [
+          ...bishop
+            .bishopEnemyAttackFinished(s, a)
+            .map((effect, i) => ({
+              id: `${a.id}:bishop-after:${i}`,
+              sourceId: a.attacker,
+              title: "Trevor Fitzroy",
+              effects: [effect],
+            })),
           ...(find(s, a.attacker)?.code === "44036" &&
           !isTextBlank(s, find(s, a.attacker)!)
             ? [
@@ -19696,7 +19830,8 @@ function reveal(
   // interrupt window so its first-card limit is consumed exactly once.
   const knifeSurge = repeat
     ? 0
-    : (savedKnifeSurge ?? starLord.starLordTreacherySurge(s, p));
+    : (savedKnifeSurge ??
+      starLord.starLordTreacherySurge(s, p) + bishop.bishopRevealSurge(s, p));
   if (!repeat && !skip)
     add(
       s,
@@ -20188,6 +20323,7 @@ function reveal(
       ...storm.STORM_SCRIPT_CODES,
       ...deadpool.DEADPOOL_SCRIPT_CODES,
       ...angel.ANGEL_SCRIPT_CODES,
+      ...bishop.BISHOP_SCRIPT_CODES,
       ...cable.CABLE_SCRIPT_CODES,
       ...x23.X23_SCRIPT_CODES,
       ...colossus.COLOSSUS_SCRIPT_CODES,
@@ -20252,6 +20388,7 @@ function reveal(
       cyclops.cyclopsEncounterReveal(s, p) ??
       psylocke.psylockeEncounterReveal(s, p) ??
       wolverine.wolverineEncounterReveal(s, p) ??
+      bishop.bishopEncounter(s, p) ??
       cable.cableEncounter(s, p) ??
       x23.x23Encounter(s, p) ??
       deadpool.deadpoolEncounter(s, p) ??
@@ -20304,6 +20441,7 @@ function reveal(
   const rise =
     domino.dominoEncounter(s, p) ??
     psylocke.psylockeEncounterReveal(s, p) ??
+    bishop.bishopEncounter(s, p) ??
     cable.cableEncounter(s, p) ??
     x23.x23Encounter(s, p) ??
     deadpool.deadpoolEncounter(s, p) ??
@@ -20580,6 +20718,10 @@ function reveal(
   if (keyword(p, "Surge")) add(s, E("surge", { sourceCode: p.code }));
 }
 function obligation(s: GameState, p: Piece) {
+  if (p.code === "45025") {
+    add(s, ...bishop.bishopEncounter(s, p)!);
+    return;
+  }
   if (p.code === "40031") {
     add(s, ...cable.cableEncounter(s, p)!);
     return;
@@ -20704,6 +20846,7 @@ function treachery(s: GameState, p: Piece) {
     return;
   }
   const stormReveal =
+    bishop.bishopEncounter(s, p) ??
     cable.cableEncounter(s, p) ??
     x23.x23Encounter(s, p) ??
     deadpool.deadpoolEncounter(s, p) ??
@@ -21028,6 +21171,11 @@ function treachery(s: GameState, p: Piece) {
         add(s, ...wolverineNemesis);
         return;
       }
+      const bishopNemesis = bishop.bishopShadows(s);
+      if (bishopNemesis !== null) {
+        add(s, ...bishopNemesis);
+        break;
+      }
       const cableNemesis = cable.cableShadows(s);
       if (cableNemesis !== null) {
         add(s, ...cableNemesis);
@@ -21274,6 +21422,7 @@ function resolve(s: GameState, e: Effect) {
     else attachPackUpgrade(s, e.id, e.target);
     return;
   }
+  if (bishop.resolveBishopEffect(s, e, bishopPorts)) return;
   if (cable.resolveCableEffect(s, e, cablePorts)) return;
   if (x23.resolveX23Effect(s, e, x23Ports)) return;
   if (deadpool.resolveDeadpoolEffect(s, e, deadpoolPorts)) return;
@@ -21410,6 +21559,7 @@ function resolve(s: GameState, e: Effect) {
           nova.novaEncounterReveal(state, piece) ??
           gambit.gambitEncounter(state, piece) ??
           cyclops.cyclopsEncounterReveal(state, piece) ??
+          bishop.bishopEncounter(state, piece) ??
           cable.cableEncounter(state, piece) ??
           x23.x23Encounter(state, piece) ??
           deadpool.deadpoolEncounter(state, piece) ??
@@ -22420,6 +22570,25 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "basicPower": {
+      const bishopPacket = {
+        ...e,
+        amount: e.amount ?? heroStats(s)[e.power as "attack" | "thwart"],
+      };
+      const bishopOptions = bishop.bishopBasicOptions(s, bishopPacket);
+      if (bishopOptions.length) {
+        choose(
+          s,
+          "Super-Charged",
+          "Discard an upgrade to boost this basic attack?",
+          [
+            ...bishopOptions,
+            option("continue", "Continue", [
+              { ...bishopPacket, bishopChargedHandled: true },
+            ]),
+          ],
+        );
+        break;
+      }
       if (!(e.power === "attack" ? s.player.stunned : s.player.confused)) {
         const packet = {
           ...e,
@@ -24024,6 +24193,18 @@ function resolve(s: GameState, e: Effect) {
       add(s, { ...e, type: "damage", attack: true });
       break;
     case "damage":
+      if (
+        e.damageFromAttack &&
+        !e.bishopConversionHandled &&
+        (e.target === "hero" || e.target?.startsWith("hero:"))
+      ) {
+        const view = e.target.startsWith("hero:")
+          ? seatView(s, e.target.slice(5))
+          : s;
+        e.damageDealt ??= e.amount;
+        e.amount = bishop.bishopLimitAttackDamage(view, e.amount);
+        e.bishopConversionHandled = true;
+      }
       if (!s.player.stunned) {
         const options = domino.dominoRangedOptions(s, {
           ...e,
@@ -26306,6 +26487,7 @@ function resolve(s: GameState, e: Effect) {
           ...scarletPack.scarletWitchPackAfterAllyThwart(s, p),
           ...venomPack.venomPackAfterAllyThwart(s, p),
         );
+      add(s, ...bishop.bishopAllyUsed(s, p));
       add(s, ...draxPack.draxPackAfterAllyBasic(s, p));
       add(s, ...mtsPlayerPack.mtsPlayerPackAfterAllyBasic(s, p));
       add(s, ...hulkPackAllyResponse(s, p, !!e.attack));
@@ -27298,6 +27480,13 @@ function resolve(s: GameState, e: Effect) {
                   .x23DefenseOptions(view, [packet], x23Ports)
                   .filter((o) => !usedIds.includes(o.id))
               : []),
+            ...(!friendlySource
+              ? bishop.bishopDefenseOptions(
+                  view,
+                  [resume("bishop-conversion")],
+                  bishopPorts,
+                )
+              : []),
             ...nova,
             ...mockingbird,
             ...firstHit,
@@ -27729,7 +27918,7 @@ function resolve(s: GameState, e: Effect) {
       const redirect = s.flags[`phoenixMisdirection:${a.id}`];
       if (typeof redirect === "string") {
         delete s.flags[`phoenixMisdirection:${a.id}`];
-        const amount = Math.max(0, a.base - a.defense - a.prevented);
+        const amount = nativeIncomingAttackDamage(s, a);
         a.prevented += amount;
         add(
           s,
@@ -27753,7 +27942,7 @@ function resolve(s: GameState, e: Effect) {
           {
             attack: true,
             target: "hero",
-            amount: Math.max(0, a.base - a.defense - a.prevented),
+            amount: nativeIncomingAttackDamage(s, a),
             attackWindow: true,
             type: "damage",
           },
@@ -27776,7 +27965,7 @@ function resolve(s: GameState, e: Effect) {
           ...e,
           target: damageTarget,
           kind: "attack",
-          amount: Math.max(0, a.base - a.defense - a.prevented),
+          amount: nativeIncomingAttackDamage(s, a),
         },
         phoenixPorts,
       );
@@ -27806,7 +27995,7 @@ function resolve(s: GameState, e: Effect) {
           ironspider.ironspiderSinisterAttackDamageReplacement(
             s,
             attackingPiece,
-            Math.max(0, a.base - a.defense - a.prevented),
+            nativeIncomingAttackDamage(s, a),
             E("ironspiderAttackComplete", {
               attack: a,
               target: damageTarget,
@@ -27824,7 +28013,7 @@ function resolve(s: GameState, e: Effect) {
         const recipient = find(s, damageTarget);
         if (recipient)
           a.prevented += Math.min(
-            Math.max(0, a.base - a.defense - a.prevented),
+            nativeIncomingAttackDamage(s, a),
             visionPack.visionPackAttackDamageReduction(
               s,
               recipient,
@@ -27835,7 +28024,7 @@ function resolve(s: GameState, e: Effect) {
       }
       if (heroTarget && !a.nebulaDamageHandled) {
         const prevented = Math.min(
-          Math.max(0, a.base - a.defense - a.prevented),
+          nativeIncomingAttackDamage(s, a),
           nebula.nebulaAttackDamageReduction(s) +
             vision.visionAttackDamageReduction(s) +
             niPack.novaIronheartPackAttackDamageReduction(
@@ -27856,7 +28045,7 @@ function resolve(s: GameState, e: Effect) {
       const receiving = heroTarget ? s.player : find(s, damageTarget);
       const incoming = a.preventAllDamage
         ? 0
-        : Math.max(0, a.base - a.defense - a.prevented);
+        : nativeIncomingAttackDamage(s, a);
       mutantGenesisIncomingPiercing(s, damageTarget, incoming);
       if (heroTarget && !a.grootDamageHandled) {
         const prevented = groot.grootPreventDamage(s, "hero", incoming);
@@ -27938,7 +28127,7 @@ function resolve(s: GameState, e: Effect) {
             type: "damageWindow",
             target: "hero",
             kind: "attack",
-            amount: Math.max(0, a.base - a.defense - a.prevented),
+            amount: nativeIncomingAttackDamage(s, a),
           },
           spdrPackPorts,
         );
@@ -27985,7 +28174,7 @@ function resolve(s: GameState, e: Effect) {
               {
                 type: "attackDamage",
                 target: "hero",
-                amount: Math.max(0, a.base - a.defense - a.prevented),
+                amount: nativeIncomingAttackDamage(s, a),
                 kind: "attack",
                 attacker: a.attacker,
               },
@@ -28001,14 +28190,14 @@ function resolve(s: GameState, e: Effect) {
                 kind: "attack",
                 target: heroTarget ? "hero" : damageTarget,
                 attack: true,
-                amount: Math.max(0, a.base - a.defense - a.prevented),
+                amount: nativeIncomingAttackDamage(s, a),
               },
               [E("damageWindow")],
             )
           : []),
         option(
           "resolve",
-          `Resolve ${Math.max(0, a.base - a.defense - a.prevented)} damage`,
+          `Resolve ${nativeIncomingAttackDamage(s, a)} damage`,
           [E("finishAttack")],
         ),
       ];
@@ -28021,7 +28210,7 @@ function resolve(s: GameState, e: Effect) {
               kind: "attack",
               target: heroTarget ? "hero" : damageTarget,
               attack: true,
-              amount: Math.max(0, a.base - a.defense - a.prevented),
+              amount: nativeIncomingAttackDamage(s, a),
               attacker: a.attacker,
             },
             [E("damageWindow")],
@@ -28032,7 +28221,7 @@ function resolve(s: GameState, e: Effect) {
           ...mutantGenesisDamageOptions(
             s,
             damageTarget,
-            Math.max(0, a.base - a.defense - a.prevented),
+            nativeIncomingAttackDamage(s, a),
             [E("damageWindow", { actorId: a.targetPlayerId })],
           ),
         );
@@ -28096,7 +28285,7 @@ function resolve(s: GameState, e: Effect) {
               kind: "attack",
               target: heroTarget ? "hero" : shieldTarget,
               attack: true,
-              amount: Math.max(0, a.base - a.defense - a.prevented),
+              amount: nativeIncomingAttackDamage(s, a),
               attacker: a.attacker,
             },
             [E("damageWindow")],
@@ -28109,7 +28298,7 @@ function resolve(s: GameState, e: Effect) {
           target: "hero",
           attack: true,
         };
-        const amount = Math.max(0, a.base - a.defense - a.prevented);
+        const amount = nativeIncomingAttackDamage(s, a);
         opts.unshift(
           ...drax.draxDamageOptions(
             s,
@@ -28153,7 +28342,7 @@ function resolve(s: GameState, e: Effect) {
           ...scarletWitch.scarletWitchDamageOptions(
             s,
             { type: "attackDamage", kind: "attack", target: shieldTarget },
-            Math.max(0, a.base - a.defense - a.prevented),
+            nativeIncomingAttackDamage(s, a),
             [E("damageWindow")],
             scarletPorts,
           ),
@@ -28163,7 +28352,7 @@ function resolve(s: GameState, e: Effect) {
           ...gmwPack.gmwPlayerPackDamageOptions(
             s,
             { type: "attackDamage", kind: "attack", target: "hero" },
-            Math.max(0, a.base - a.defense - a.prevented),
+            nativeIncomingAttackDamage(s, a),
             [E("damageWindow")],
             gmwPorts,
           ),
@@ -28175,7 +28364,7 @@ function resolve(s: GameState, e: Effect) {
             {
               target: "hero",
               playerId: s.activePlayerId,
-              amount: Math.max(0, a.base - a.defense - a.prevented),
+              amount: nativeIncomingAttackDamage(s, a),
               attack: true,
               source: a.attacker,
             },
@@ -28188,7 +28377,7 @@ function resolve(s: GameState, e: Effect) {
           ...wasp.waspDamageOptions(
             s,
             undefined,
-            Math.max(0, a.base - a.defense - a.prevented),
+            nativeIncomingAttackDamage(s, a),
             [E("damageWindow")],
             waspPorts,
           ),
@@ -28200,7 +28389,7 @@ function resolve(s: GameState, e: Effect) {
             {
               target: "hero",
               playerId: s.activePlayerId,
-              amount: Math.max(0, a.base - a.defense - a.prevented),
+              amount: nativeIncomingAttackDamage(s, a),
               attack: true,
             },
             [E("damageWindow")],
@@ -28213,7 +28402,7 @@ function resolve(s: GameState, e: Effect) {
             {
               target: "hero",
               playerId: s.activePlayerId,
-              amount: Math.max(0, a.base - a.defense - a.prevented),
+              amount: nativeIncomingAttackDamage(s, a),
               attack: true,
             },
             [E("damageWindow")],
@@ -28225,7 +28414,7 @@ function resolve(s: GameState, e: Effect) {
             s,
             {
               target: "hero",
-              amount: Math.max(0, a.base - a.defense - a.prevented),
+              amount: nativeIncomingAttackDamage(s, a),
               attack: true,
             },
             [E("damageWindow")],
@@ -28446,11 +28635,11 @@ function resolve(s: GameState, e: Effect) {
             })),
         );
       }
-      if (heroTarget && a.base - a.defense - a.prevented > 0)
+      if (heroTarget && nativeIncomingAttackDamage(s, a) > 0)
         opts.unshift(
           ...captainShieldBlockOptions(s, [
             E("preventAttack", {
-              amount: Math.max(0, a.base - a.defense - a.prevented),
+              amount: nativeIncomingAttackDamage(s, a),
             }),
             E("finishAttack"),
           ]),
@@ -28459,7 +28648,7 @@ function resolve(s: GameState, e: Effect) {
         heroTarget &&
         !s.player.tough &&
         s.player.form === "hero" &&
-        a.base - a.defense - a.prevented > 0
+        nativeIncomingAttackDamage(s, a) > 0
       ) {
         const back = defenseEventSources(s).find(
           (p) => rulesCode(p) === "01003",
@@ -30299,7 +30488,11 @@ export function dispatch(state: GameState, command: Command): GameState {
               else heal(s, "hero", stats.recover);
             }
             add(s, ...phoenix.phoenixRecovered(s), ...x23.x23Recovered(s));
-            add(s, ...deadpool.deadpoolRecovered(s));
+            add(
+              s,
+              ...deadpool.deadpoolRecovered(s),
+              ...bishop.bishopRecovered(s),
+            );
             add(
               s,
               ...spiderHam.spiderHamAfterBasicRecover(

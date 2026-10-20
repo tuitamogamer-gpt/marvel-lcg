@@ -131,6 +131,7 @@ export function deckErrors(
       "domino",
       "angel",
       "cable",
+      "bishop",
       "x23",
     ].includes(heroId)
   ) {

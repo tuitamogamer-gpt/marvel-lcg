@@ -5,6 +5,17 @@ const url =
 /** Keep imported printing text intact. Apply published rules corrections in the
  * playable database and card inspector, independently of module registration. */
 export function expansionErrata(c: Card): Card {
+  if (c.code === "45017")
+    return {
+      ...c,
+      text: c.text?.replace("that ally", "an ally"),
+      errata: {
+        reference:
+          "FFG Suit Up clarification, October 10, 2025 (planned erratum)",
+        url: "https://hallofheroeslcg.com/latest-ffg-rulings-post-rrg-1-6/",
+      },
+    };
+
   if (["38001a", "38001b", "38007", "38026"].includes(c.code)) {
     // Printed face labels are reversed relative to these catalog codes:
     // 38001a is Rogue and 38001b is Anna Marie. Keep the original import intact.

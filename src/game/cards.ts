@@ -1,3 +1,4 @@
+import { bishopAllyHP, bishopCharacterBonus } from "./bishop.js";
 import { cableStatBonus } from "./cable.js";
 import { deadpoolAttackBonus, deadpoolHandBonus } from "./deadpool.js";
 import { psylockeStats, psylockePowerOfMind } from "./psylocke.js";
@@ -818,6 +819,20 @@ export const HEROES = [
     style: "Health and acceleration · Pool",
     complexity: 3,
   },
+  {
+    id: "bishop",
+    code: "45001a",
+    alter: "45001b",
+    name: "Bishop",
+    identity: "Lucas Bishop",
+    aspect: "leadership" as Aspect,
+    color: "#d4a82c",
+    tag: "Turn their power against them.",
+    description:
+      "Absorb attack damage into stored resources, lead your Temporal allies, and unleash charged attacks.",
+    style: "Energy Absorption · Leadership",
+    complexity: 3,
+  },
 ];
 export const VILLAINS = [
   {
@@ -1162,6 +1177,7 @@ export function deckCodes(
       (hero === "spdr" && aspect === "protection") ||
       (hero === "cyclops" && aspect === "leadership") ||
       (hero === "storm" && aspect === "leadership") ||
+      (hero === "bishop" && aspect === "leadership") ||
       (hero === "cable" && aspect === "leadership") ||
       (hero === "angel" && aspect === "protection") ||
       (hero === "x23" && aspect === "aggression") ||
@@ -1415,6 +1431,7 @@ export function heroStats(s: GameState) {
       phoenixStats(s).attack +
       wolverineStats(s).attack +
       psylockeStats(s).attack +
+      bishopCharacterBonus(s, "hero") +
       cableStatBonus(s) +
       x23Stats(s).attack +
       x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
@@ -1452,6 +1469,7 @@ export function heroStats(s: GameState) {
       rogueModifiers(s).thwart +
       phoenixStats(s).thwart +
       psylockeStats(s).thwart +
+      bishopCharacterBonus(s, "hero") +
       cableStatBonus(s) +
       x23Stats(s).thwart -
       x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
@@ -1560,6 +1578,7 @@ export function pieceHP(s: GameState, p: Piece) {
     (p.code === "40068" && !isTextBlank(s, p) ? p.counters : 0) +
     scriptedModifier(s, "health", p) +
     angelRecruitBonus(s, p.id) +
+    bishopAllyHP(s, p) +
     phoenixAllyModifiers(s, p).health +
     stormAllyHP(s, p) +
     hawkeyeAllyMaxHP(s, p) +
