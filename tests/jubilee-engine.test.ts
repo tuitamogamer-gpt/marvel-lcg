@@ -808,6 +808,70 @@ describe("Jubilee shared player-card timing and cooperative choices", () => {
     expect(nativeHeroAbilityOptions(s, phone.id)).toEqual([]);
     expect(phone.counters).toBe(3);
   });
+  it.each(["01050", "46003"])(
+    "Cell Phone excludes %s's printed THW dash before its charge is paid",
+    (code) => {
+      let s = base();
+      const phone = put(s, "47019"),
+        ally = put(s, code);
+      phone.counters = 3;
+      s.player.exhausted = true;
+      const before = reload(s);
+      s = command(s, { type: "ABILITY", id: phone.id, action: "cell-phone" });
+      s = choose(reload(s), "p1");
+      expect(s.prompt?.options.some((o) => o.id === `${ally.id}:thwart`)).toBe(
+        false,
+      );
+      expect(s.prompt?.options.some((o) => o.id === `${ally.id}:attack`)).toBe(
+        true,
+      );
+      expect(s.player.inPlay.find((p) => p.id === ally.id)?.exhausted).toBe(
+        false,
+      );
+      const failed = dispatch(reload(s), {
+        type: "CHOOSE",
+        id: `${ally.id}:thwart`,
+      });
+      expect(failed.error).toBeDefined();
+      expect(failed.prompt).toEqual(s.prompt);
+      expect(failed.player.inPlay).toEqual(s.player.inPlay);
+      expect(
+        before.player.inPlay.find((p) => p.id === phone.id)?.counters,
+      ).toBe(3);
+      expect(s.player.inPlay.find((p) => p.id === phone.id)?.counters).toBe(2);
+    },
+  );
+  it("Cell Phone uses the same Mind-Controlled minion's converted ally THW and ordinary consequence", () => {
+    let s = base();
+    const phone = put(s, "47019");
+    phone.counters = 3;
+    const enemy = minion(s, "01101");
+    const pieces = hand(s, "34009", "47010a", "01088");
+    s = command(s, { type: "PLAY", id: pieces[0].id });
+    s = target(s, enemy.id);
+    s = command(reload(s), {
+      type: "PAY",
+      ids: pieces.slice(1).map((p) => p.id),
+    });
+    s = finish(s);
+    expect(s.player.inPlay.find((p) => p.id === enemy.id)?.treatedAsAlly).toBe(
+      true,
+    );
+    expect(card(s.player.inPlay.find((p) => p.id === enemy.id)!)).toMatchObject(
+      { type_code: "ally", thwart: 0 },
+    );
+    s.player.exhausted = true;
+    s = command(s, { type: "ABILITY", id: phone.id, action: "cell-phone" });
+    s = choose(reload(s), "p1");
+    s = choose(reload(s), `${enemy.id}:thwart`);
+    s = finish(target(s, "main"));
+    expect(s.scheme.threat).toBe(4);
+    expect(s.player.inPlay.find((p) => p.id === enemy.id)).toMatchObject({
+      exhausted: true,
+      damage: 1,
+    });
+    expect(s.player.inPlay.find((p) => p.id === phone.id)?.counters).toBe(2);
+  });
   it("Cell Phone gives exactly one appropriate +1 to an Assault basic thwart", () => {
     let s = base();
     const scheme = side(s, "47016", 10);

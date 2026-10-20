@@ -18083,7 +18083,7 @@ const jubileePorts: jubilee.JubileePorts = {
       return [];
     return (["attack", "thwart"] as const).filter(
       (power) =>
-        card(p)[power] !== undefined &&
+        (card(p)[power] != null || card(p)[`${power}_star`]) &&
         (p[power === "attack" ? "stunned" : "confused"] ||
           niAllyTargets(s, p, power).some(
             (t) =>
