@@ -232,7 +232,9 @@ export function rogueFormChanged(
     ports.findTouched(s);
   if (!wasMutant || s.player.form !== "hero") return [];
   return allInPlay(s)
-    .filter((p) => p.code === "38018" && !p.exhausted && !isTextBlank(s, p))
+    .filter(
+      (p) => rulesCode(p) === "38018" && !p.exhausted && !isTextBlank(s, p),
+    )
     .map((p) =>
       E("optional", {
         title: "Moira MacTaggert",

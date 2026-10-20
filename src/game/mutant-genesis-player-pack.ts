@@ -1,4 +1,5 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
+import { rulesCode } from "./rules-code.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import type { AntManTarget } from "./ant-man.js";
 import type { PaymentSource } from "./payment.js";
@@ -547,7 +548,7 @@ export function mutantGenesisPlayerPackAttackOptions(
       if (s.flags[responseKey(receipt.token, p.id)]) return false;
       if (
         receipt.stage === "initiated"
-          ? p.code !== "32014"
+          ? rulesCode(p) !== "32014"
           : !["32017", "32021", "32050"].includes(p.code)
       )
         return false;
@@ -968,7 +969,7 @@ export function resolveMutantGenesisPlayerPackEffect(
         );
       } else {
         ports.claimDefense(s, e.receipt);
-        if (e.code !== "32014") ports.preventAttack(s, e.receipt);
+        if (rulesCode(e.code) !== "32014") ports.preventAttack(s, e.receipt);
         ports.queue(
           s,
           E("damage", {

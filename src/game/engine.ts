@@ -1,4 +1,6 @@
 import * as bishop from "./bishop.js";
+import * as nightcrawler from "./nightcrawler.js";
+import * as nightcrawlerEncounter from "./nightcrawler-encounters.js";
 import * as magik from "./magik.js";
 import * as iceman from "./iceman.js";
 import * as jubilee from "./jubilee.js";
@@ -718,6 +720,12 @@ function readyIdentity(s: GameState) {
   return true;
 }
 function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
+  if (
+    name === "Piercing" &&
+    nightcrawlerEncounter.nightcrawlerEncounterEnemyModifiers(s, source)
+      .piercing
+  )
+    return 1;
   if (source.startsWith("hero:"))
     return sourceKeyword(seatView(s, source.slice(5)), "hero", name);
   if (source === "hero")
@@ -743,7 +751,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         ? 1
         : 0) +
       (name === "Retaliate"
-        ? magik.magikStats(s).retaliate +
+        ? nightcrawler.nightcrawlerStats(s).retaliate +
+          magik.magikStats(s).retaliate +
           x23.x23Stats(s).retaliate +
           psylocke.psylockeStats(s).retaliate +
           (s.attack?.angelRetaliatePlayerId === s.activePlayerId
@@ -942,6 +951,10 @@ function beginResolution(s: GameState, p: Piece) {
   if (!s.resolving.some((x) => x.id === p.id)) s.resolving.push(p);
 }
 function finishResolution(s: GameState, id: string) {
+  delete s.flags[`nightcrawlerCost:${id}`];
+  delete s.flags[`nightcrawlerMinionCostPaid:${id}`];
+  delete s.flags[`nightcrawlerMinionCostMinion:${id}`];
+  delete s.flags[`nightcrawlerMinionCostOrigin:${id}`];
   delete s.flags[`bishopResourcePaid:${id}`];
   delete s.flags[`bishopSidekickCost:${id}`];
   phoenix.phoenixEventFinished(s, id);
@@ -1147,6 +1160,10 @@ function attachPackUpgrade(s: GameState, upgradeId: string, target: string) {
   );
   const p = find(s, upgradeId),
     source = controller(s, upgradeId);
+  need(
+    !p || nightcrawlerEncounter.nightcrawlerEncounterCanAttach(s, target, p),
+    "Azazel cannot have upgrades attached.",
+  );
   const targetSeat = target.startsWith("hero:")
     ? s.players.find((seat) => seat.id === target.slice(5))
     : controller(s, target);
@@ -1485,12 +1502,14 @@ function movePieceFromPlay(
   removed: boolean,
   setAsideOwnerId?: string,
   victory = false,
+  movement = false,
 ) {
   const controlling = controller(s, id);
   const viewBefore = controlling ? seatView(s, controlling) : s;
   const healthBefore = maxHP(viewBefore);
   const removedSource = find(s, id);
   if (
+    !movement &&
     removedSource &&
     gambit.gambitShield(s, removedSource, { discard: discardPiece })
   )
@@ -1826,8 +1845,11 @@ function restrictedLimitExceeded(s: GameState) {
     (p) =>
       keyword(p, "Restricted") || (p.code === "44055" && !isTextBlank(s, p)),
   );
-  const general = 2 + venom.venomRestrictedAllowance(s);
-  const weight = (p: Piece) => (p.code === "44055" ? 2 : 1);
+  const general =
+    2 +
+    venom.venomRestrictedAllowance(s) +
+    nightcrawler.nightcrawlerStats(s).restricted;
+  const weight = (p: Piece) => (["44055", "48004"].includes(p.code) ? 2 : 1);
   const weapons = restricted
     .filter(
       (p) =>
@@ -2510,6 +2532,8 @@ function playerHealingTarget(s: GameState, target: string): boolean {
   return (find(s, target)?.damage || 0) > 0;
 }
 function playerAttachmentTarget(s: GameState, source: Piece, target: string) {
+  if (!nightcrawlerEncounter.nightcrawlerEncounterCanAttach(s, target, source))
+    return false;
   if (
     card(source).type_code === "upgrade" &&
     !iceman.icemanCanAttachUpgrade(s, target)
@@ -3644,6 +3668,7 @@ function defeatCharacter(
   const allyController = controller(s, m.id)?.id;
   const sabretoothDefeat = (m as SabretoothAttackDefeatPiece)
     .sabretoothAttackDefeatReceipt;
+  if (minion) add(s, ...nightcrawler.nightcrawlerDefeated(s, source));
   if (!minion) recordMilesEnemyAttackDefeat(s, source, enemyAttack);
   if (minion) add(s, ...bishop.bishopDefeated(s, m, source, true, attack));
   else if (enemyAttack) add(s, ...bishop.bishopEnemyAllyDefeated(s, source));
@@ -3651,6 +3676,15 @@ function defeatCharacter(
     recordZeroToleranceAllyDefeat(s, m, source, enemyAttack, allyController);
   if (!minion && ["32088b", "32172b"].includes(m.code) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
+  else if (
+    nightcrawlerEncounter.nightcrawlerEncounterExecutionerRemoves(
+      s,
+      m,
+      source,
+      enemyAttack,
+    )
+  )
+    movePieceFromPlay(s, m.id, true);
   else discardPiece(s, m.id);
   if (!textWasBlank)
     add(s, ...deadpool.deadpoolDefeated(s, m, source, allyController));
@@ -3822,6 +3856,7 @@ function advanceVillain(
     );
     return;
   }
+  add(s, ...nightcrawler.nightcrawlerDefeated(s, source));
   add(s, ...receipts.flatMap((r) => valkyrie.valkyrieEnemyDefeated(s, r)));
   niNativeAchievement(
     s,
@@ -4286,6 +4321,7 @@ function defeatScheme(
       shadowcatPorts,
     ),
   );
+  add(s, ...nightcrawlerEncounter.nightcrawlerEncounterSchemeDefeated(s, p));
   add(s, ...iceman.icemanSchemeDefeated(s, p));
   const nativeDefeat = sabretooth.sabretoothSideSchemeDefeated(
     s,
@@ -4697,6 +4733,12 @@ function captainPackHasTrait(
   target: string,
   trait: string,
 ): boolean {
+  if (
+    nightcrawler.nightcrawlerHasTrait(s, target, trait, (id, t) =>
+      captainPackHasTrait(s, id, t),
+    )
+  )
+    return true;
   if (jubilee.jubileeEnemyTrait(s, target, trait)) return true;
   if (
     trait.toLowerCase() === "x-force" &&
@@ -5260,6 +5302,47 @@ function requestPayment(
   }
   if (magik.magikHasPending(s)) cancelable = false;
   const paymentTarget = abilityCost ? targetCode : targetCode || piece?.code;
+  if (
+    !abilityCost &&
+    piece &&
+    !paymentCommit.some((e) => e.type === "nightcrawler:cost")
+  ) {
+    const costs = nightcrawler.nightcrawlerAdditionalCostOptions(
+      s,
+      piece,
+      nightcrawlerPorts,
+    );
+    if (costs !== null) {
+      need(costs.length, "This event requires its actual additional cost.");
+      choose(
+        s,
+        `${card(piece).name} · additional cost`,
+        "Choose the printed cost to commit with payment.",
+        costs.map((o) => ({
+          ...o,
+          effects: [
+            E("payRequest", {
+              title,
+              cost,
+              after,
+              requirements,
+              piece,
+              cancelable,
+              targetCode,
+              forcePayment,
+              commit: [...paymentCommit, ...o.effects],
+              starLordCostHandled,
+              starLordApplyDiscount,
+              handOnly,
+              abilityCost,
+            }),
+          ],
+        })),
+        cancelable,
+      );
+      return;
+    }
+  }
   if (
     !abilityCost &&
     piece?.code === "45016" &&
@@ -6203,6 +6286,7 @@ function pay(
         spentResponses.push(
           ...(magik.magikResourceSpent(s, id, magikPorts) || []),
         );
+      } else if (nightcrawler.nightcrawlerSpendResource(s, id)) {
       } else if (iceman.icemanResourceSpent(s, id)) {
       } else if (jubilee.jubileeSpendResource(s, id)) {
       } else if (cable.cableSpendResource(s, id)) {
@@ -6626,6 +6710,7 @@ export function newGame(config: {
     magik.magikInitialize(s, makePiece);
     angel.angelInitialize(s, { makePiece });
     cable.cableInitialize(s, { makePiece });
+    nightcrawlerEncounter.nightcrawlerEncounterInitialize(s, makePiece);
     bishop.bishopInitialize(s, makePiece);
     deadpool.deadpoolInitialize(s, makePiece);
     colossus.colossusInitializeNemesis(s, { makePiece });
@@ -6655,30 +6740,32 @@ export function newGame(config: {
                 ? "gambit"
                 : c.set_code === "sauron"
                   ? "iceman"
-                  : c.set_code === "arcade"
-                    ? "jubilee"
-                    : c.set_code === "reavers"
-                      ? "rogue"
-                      : c.set_code === "deathstrike"
-                        ? "wolv"
-                        : c.set_code === "shadow_king"
-                          ? "storm"
-                          : c.set_code === "ironspider_sinister"
-                            ? "spdr"
-                            : c.set_code === "inheritors"
-                              ? "spiderham"
-                              : c.set_code === "zzzax"
-                                ? "ironheart"
-                                : c.set_code === "armadillo"
-                                  ? "nova"
-                                  : [
-                                        "goblin_gimmicks",
-                                        "a_mess_of_things",
-                                        "power_drain",
-                                        "running_interference",
-                                      ].includes(c.set_code || "")
-                                    ? "gob"
-                                    : "core")) ||
+                  : c.set_code === "crazy_gang"
+                    ? "ncrawler"
+                    : c.set_code === "arcade"
+                      ? "jubilee"
+                      : c.set_code === "reavers"
+                        ? "rogue"
+                        : c.set_code === "deathstrike"
+                          ? "wolv"
+                          : c.set_code === "shadow_king"
+                            ? "storm"
+                            : c.set_code === "ironspider_sinister"
+                              ? "spdr"
+                              : c.set_code === "inheritors"
+                                ? "spiderham"
+                                : c.set_code === "zzzax"
+                                  ? "ironheart"
+                                  : c.set_code === "armadillo"
+                                    ? "nova"
+                                    : [
+                                          "goblin_gimmicks",
+                                          "a_mess_of_things",
+                                          "power_drain",
+                                          "running_interference",
+                                        ].includes(c.set_code || "")
+                                      ? "gob"
+                                      : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -7051,6 +7138,7 @@ export function playable(s: GameState, p: Piece): string | null {
     magik.magikPlayRestriction(s, p, magikPorts) ||
     domino.dominoPlayRestriction(s, p, dominoPorts) ||
     x23.x23PlayRestriction(s, p, x23Ports) ||
+    nightcrawler.nightcrawlerPlayRestriction(s, p, nightcrawlerPorts) ||
     iceman.icemanPlayRestriction(s, p, icemanPorts) ||
     gambit.gambitPlayRestriction(s, p, gambitPorts) ||
     cyclops.cyclopsPlayRestriction(s, p, cyclopsPorts) ||
@@ -7292,7 +7380,9 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
     allyTargets.length &&
     (maximumAllyUpgradeDiscount(s, p!) > 0 ||
       phoenix.phoenixAttachmentTargets(s, p, phoenixPorts) !== null ||
-      bishop.bishopAttachmentTargets(s, p, bishopPorts) !== null)
+      bishop.bishopAttachmentTargets(s, p, bishopPorts) !== null ||
+      nightcrawler.nightcrawlerAttachmentTargets(s, p, nightcrawlerPorts) !==
+        null)
   ) {
     choose(
       s,
@@ -7488,6 +7578,90 @@ function play(
   syncPaid = 0,
 ) {
   const c = card(p);
+  if (
+    ["48016", "49017"].includes(p.code) &&
+    !s.flags[`nightcrawlerMinionCostPaid:${p.id}`]
+  ) {
+    let origin = "hand";
+    const handIndex = s.player.hand.findIndex((q) => q.id === p.id);
+    if (handIndex >= 0) s.player.hand.splice(handIndex, 1);
+    else if (magik.magikPending(s, p)) origin = "magik";
+    else if (fromDeck && s.player.deck.some((q) => q.id === p.id)) {
+      origin = "deck";
+      s.player.deck.splice(
+        s.player.deck.findIndex((q) => q.id === p.id),
+        1,
+      );
+    } else {
+      const stored = ghostSpider.ghostSpiderTakeStoredForPlay(
+        s,
+        p.id,
+        ghostSpiderPorts,
+      );
+      need(stored, "The actual uncertain-cost event is no longer available.");
+      origin = "george";
+    }
+    if (!s.resolving.some((q) => q.id === p.id)) beginResolution(s, p);
+    s.flags[`nightcrawlerMinionCostOrigin:${p.id}`] = origin;
+    add(
+      s,
+      E("nightcrawlerMinionCostAttempt", {
+        piece: p,
+        resume: E("play", {
+          piece: p,
+          paid,
+          lightningX,
+          masterInvocationId,
+          attachedTarget,
+          agilityHandled,
+          overpaid,
+          paidForCard,
+          fromDeck,
+          generatedForCard,
+          novaDamageContext,
+          syncPaid,
+        }),
+      }),
+    );
+    return;
+  }
+  const nightcrawlerCosts = nightcrawler.nightcrawlerAdditionalCostOptions(
+    s,
+    p,
+    nightcrawlerPorts,
+  );
+  if (nightcrawlerCosts !== null) {
+    need(
+      nightcrawlerCosts.length,
+      "This event requires its actual additional cost.",
+    );
+    choose(
+      s,
+      `${c.name} · additional cost`,
+      "Pay the printed additional cost before playing.",
+      nightcrawlerCosts.map((o) => ({
+        ...o,
+        effects: [
+          ...o.effects,
+          E("play", {
+            piece: p,
+            paid,
+            lightningX,
+            masterInvocationId,
+            attachedTarget,
+            agilityHandled,
+            overpaid,
+            paidForCard,
+            fromDeck,
+            generatedForCard,
+            novaDamageContext,
+            syncPaid,
+          }),
+        ],
+      })),
+    );
+    return;
+  }
   if (p.code === "45016" && !s.flags[`bishopSidekickCost:${p.id}`]) {
     const candidates = bishop
       .bishopSidekicks(s)
@@ -7562,7 +7736,16 @@ function play(
   const storedGeorge = ghostSpider
     .ghostSpiderStoredPlayable(s, ghostSpiderPorts)
     .some((x) => x.id === p.id);
-  const stored = storedArrow || storedPanther || storedDefense || storedGeorge;
+  const stagedMinionCost =
+    !!s.flags[`nightcrawlerMinionCostPaid:${p.id}`] &&
+    s.resolving.some((q) => q.id === p.id);
+  const minionCostOrigin = s.flags[`nightcrawlerMinionCostOrigin:${p.id}`];
+  const stored =
+    storedArrow ||
+    storedPanther ||
+    storedDefense ||
+    storedGeorge ||
+    stagedMinionCost;
   const magikOrigin = magik.magikPending(s, p);
   const fromHand = s.player.hand.some((x) => x.id === p.id) || magikOrigin;
   const zone = magikOrigin
@@ -7597,6 +7780,11 @@ function play(
     );
   else if (magikOrigin)
     need(magik.magikTakePending(s, p.id), "The staged top-card play changed.");
+  else if (stagedMinionCost)
+    s.resolving.splice(
+      s.resolving.findIndex((q) => q.id === p.id),
+      1,
+    );
   else zone.splice(i, 1);
   const playToken = nativeCardPlayCommitted(s, p);
   const niBonus = niPack.novaIronheartPackAttackEventBonus(
@@ -7634,7 +7822,8 @@ function play(
       !storedArrow &&
       !storedPanther &&
       !storedDefense &&
-      !storedGeorge,
+      !storedGeorge &&
+      (!stagedMinionCost || minionCostOrigin === "hand"),
   };
   if (c.type_code !== "event")
     add(s, E("niNativePlayed", { receipt: niPlayed }));
@@ -7727,6 +7916,7 @@ function play(
 
       ...magik.magikEntered(s, p),
       ...x23.x23Entered(s, p),
+      ...nightcrawler.nightcrawlerEntered(s, p),
       ...bishop.bishopEntered(s, p),
       ...iceman.icemanEntered(s, p),
       ...jubilee.jubileeEntered(s, p),
@@ -7920,6 +8110,7 @@ function allyEnter(
       fromHand,
     ),
   );
+  add(s, ...nightcrawler.nightcrawlerEntered(s, p));
   add(s, ...cyclops.cyclopsAllyEntered(s, p), ...bishop.bishopEntered(s, p));
   add(s, ...iceman.icemanEntered(s, p, fromHand, true));
   if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
@@ -8184,6 +8375,7 @@ function event(
     (p.code === "45052"
       ? scarletPack.scarletWitchPackEvent(s, { ...p, code: "15019" }, paid)
       : null) ??
+    nightcrawler.nightcrawlerEvent(s, p) ??
     jubilee.jubileeEvent(s, p) ??
     psylocke.psylockeEvent(s, p, paid) ??
     domino.dominoEvent(s, p) ??
@@ -8923,6 +9115,7 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
       controller(s, p.id) ? seatView(s, controller(s, p.id)!) : s,
       p.id,
     ) +
+    nightcrawler.nightcrawlerAllyBonus(s, p, kind) +
     deadpool.deadpoolAllyBonus(s, p) +
     gambit.gambitAllyBonus(s, p, kind) +
     cyclops.cyclopsCharacterModifiers(s, p.id)[kind] +
@@ -9003,6 +9196,19 @@ function ability(s: GameState, id: string, action = "special") {
     !deadpool.deadpoolTriggeredBlocked(s),
     "The Merc with the Mouth prevents another player’s triggered card abilities during this turn.",
   );
+  const nightcrawlerOptions = nightcrawler.nightcrawlerAbilityOptions(
+    s,
+    id,
+    nightcrawlerPorts,
+  );
+  const nightcrawlerSelected =
+    action === "special"
+      ? nightcrawlerOptions[0]
+      : nightcrawlerOptions.find((o) => o.id === action);
+  if (nightcrawlerSelected) {
+    add(s, ...nightcrawlerSelected.effects);
+    return;
+  }
   const jubileeOptions = jubilee.jubileeAbilityOptions(s, id, jubileePorts);
   const jubileeSelected =
     action === "special" && jubileeOptions.length === 1
@@ -10395,6 +10601,12 @@ function allyUpgradeTargets(s: GameState, p: Piece) {
   );
 }
 function rawAllyUpgradeTargets(s: GameState, p: Piece) {
+  const nightcrawlerTargets = nightcrawler.nightcrawlerAttachmentTargets(
+    s,
+    p,
+    nightcrawlerPorts,
+  );
+  if (nightcrawlerTargets !== null) return nightcrawlerTargets;
   const bishopTargets = bishop.bishopAttachmentTargets(s, p, bishopPorts);
   if (bishopTargets !== null) return bishopTargets;
   const phoenixTargets = phoenix.phoenixAttachmentTargets(s, p, phoenixPorts);
@@ -12264,6 +12476,7 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
       .filter((o) => o.id === "game-history");
   if (deadpool.deadpoolTriggeredBlocked(s)) return [];
   return [
+    ...nightcrawler.nightcrawlerAbilityOptions(s, id, nightcrawlerPorts),
     ...bishop.bishopAbilityOptions(s, id, bishopPorts),
     ...magik.magikAbilityOptions(s, id),
     ...jubilee.jubileeAbilityOptions(s, id, jubileePorts),
@@ -15189,6 +15402,18 @@ function minionEntered(s: GameState, p: Piece) {
     giveCharacterStatus(s, p, "tough");
   if (underlying) p.droneCard = underlying;
   p.engagedWith = s.activePlayerId;
+  for (const seat of s.players) {
+    const view = seatView(s, seat);
+    const pendingMinionCost = view.flags.nightcrawlerMinionCostPending;
+    if (typeof pendingMinionCost !== "string") continue;
+    const receipt = JSON.parse(pendingMinionCost) as {
+      eventId: string;
+      playerId: string;
+    };
+    view.flags[`nightcrawlerMinionCostPaid:${receipt.eventId}`] =
+      p.engagedWith === receipt.playerId;
+    view.flags[`nightcrawlerMinionCostMinion:${receipt.eventId}`] = p.id;
+  }
   s.resolving = s.resolving.filter((x) => x.id !== p.id);
   log(
     s,
@@ -17237,6 +17462,7 @@ export function nativeCanPutIntoPlay(s: GameState, p: Piece) {
 }
 function nativePutAttachmentTargets(s: GameState, p: Piece) {
   const native =
+    nightcrawler.nightcrawlerAttachmentTargets(s, p, nightcrawlerPorts) ??
     bishop.bishopAttachmentTargets(s, p, bishopPorts) ??
     iceman.icemanAttachmentTargets(s, p, icemanPorts) ??
     x23.x23AttachmentTargets(s, p, x23Ports) ??
@@ -17729,6 +17955,182 @@ const angelPorts: angel.AngelPorts = {
   discardPlayerCards: mill,
   dealEncounter,
 };
+
+const nightcrawlerPorts: nightcrawler.NightcrawlerPorts = {
+  damageBatch: spectrumPorts.damageBatch,
+  queue: add,
+  choose,
+  find,
+  enemies: (s, attack) => targets(s, "enemy", attack),
+  schemes: (s, thwart) => targets(s, "scheme", false, thwart),
+  characters: warMachinePackPorts.characters,
+  hasTrait: captainPackHasTrait,
+  characterThwart: (s, id) => {
+    const p = find(s, id);
+    return p && card(p).thwart === null && !card(p).thwart_star
+      ? 0
+      : valkyriePackPorts.characterThwart(s, id);
+  },
+  exhaust: warMachinePackPorts.exhaustCharacter,
+  canPay: (s, p) => canPay(s, cardCost(s, card(p), p), [], p.id, p.code),
+  canDiscard: (s, p) =>
+    !isPermanent(card(p)) && valkyrie.valkyrieCanDiscardAttachment(s, p),
+  canAttach: playerAttachmentTarget,
+  discard: discardPiece,
+  discardHand,
+  shuffle: (s) => {
+    revealHidden(s);
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  hidden: revealHidden,
+  reaction: gambitPorts.reaction,
+  pay: (s, title, cost, after) =>
+    requestPayment(
+      s,
+      title,
+      cost,
+      after,
+      [],
+      undefined,
+      true,
+      undefined,
+      true,
+      [],
+      false,
+      false,
+      false,
+      true,
+    ),
+  canDefend: (s) =>
+    !!s.attack &&
+    !attackTargetsEnemy(s, s.attack) &&
+    s.player.form === "hero" &&
+    vision.visionCanDefend(s) &&
+    shadowcat.shadowcatCanDefend(s) &&
+    !armadillo.armadilloDefenseBlocked(s, s.attack.attacker) &&
+    !magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank }),
+  bamfDefend: (s, after) => {
+    need(
+      nightcrawlerPorts.canDefend(s),
+      "Nightcrawler cannot defend this attack.",
+    );
+    const a = s.attack!;
+    need(
+      !a.defender || a.defender === "none",
+      "Another character already defends this attack.",
+    );
+    a.defender = "hero";
+    a.targetPlayerId = s.activePlayerId;
+    a.basicDefense = true;
+    a.eventDefense = true;
+    a.defense = heroStats(s).defense + (a.defenseBonus || 0);
+    log(s, "Bamf!: Nightcrawler defends without exhausting.");
+    add(s, E("defender", { id: "hero", withoutExhaust: true }), ...after);
+  },
+  cancelBoost: (s, id) => {
+    bwPorts.cancelBoostIcons(s, id);
+  },
+  numericBoost: bwPorts.numericBoostIcons,
+  canDamageCost: (s, id) => spdrPackPorts.canDealDamageCost(s, id, 1),
+  damageCost: (s, id, after) =>
+    spdrPackPorts.dealDamageCost(s, id, 1, id, after),
+  canChange: (s) =>
+    canChangeIdentityForm(s, s.player.form === "hero" ? "alter" : "hero"),
+  canReady: (s) => s.player.exhausted && canReadyIdentity(s),
+  ready: readyIdentity,
+  discardEncounterTop: (s) => mutagenPorts.discardTop(s).piece,
+  distributeThwart: (s, packets, after) => {
+    if (!packets.length) {
+      add(s, ...after);
+      return;
+    }
+    const before = new Set(s.queue);
+    waspPorts.thwartDistribution(s, packets);
+    const generated = s.queue.filter((q) => !before.has(q));
+    s.queue = s.queue.filter((q) => before.has(q));
+    add(s, ...generated, ...after);
+  },
+  distributeDamage: (s, packets) => {
+    if (packets.length)
+      niAttackProgram(
+        s,
+        [E("waspDistributedAttack", { packets, basic: false })],
+        [],
+      );
+  },
+};
+
+const nightcrawlerEncounterPorts: nightcrawlerEncounter.NightcrawlerEncounterPorts =
+  {
+    queue: add,
+    choose,
+    find,
+    makePiece,
+    hidden: revealHidden,
+    shuffleEncounter: mutagenPorts.shuffleEncounter,
+    discardHand,
+    discard: discardPiece,
+    discardEncounterControlled: (s, id, _source) => discardPiece(s, id),
+    canDiscard: nightcrawlerPorts.canDiscard,
+    removeEncounter: removeEncounterInstance,
+    takeMinion: (s, p) => {
+      movePieceFromPlay(s, p.id, true, undefined, false, true);
+      for (const zone of [
+        s.removed,
+        s.encounter.discard,
+        ...s.players.map((seat) => seatView(s, seat).player.discard),
+      ]) {
+        const i = zone.findIndex((q) => q.id === p.id);
+        if (i >= 0) return zone.splice(i, 1)[0];
+      }
+      return undefined;
+    },
+    attach: (s, p, target) => {
+      removeEncounterInstance(s, p.id);
+      mutagenPorts.attach(s, p, target);
+    },
+    dealEncounter: (s, playerId) => {
+      dealEncounter(s, playerId);
+    },
+    canChangeToAlter: (s) => canChangeIdentityForm(s, "alter"),
+    random: (s, upper) => Math.floor(random(s) * upper),
+    characters: (s) =>
+      warMachinePackPorts.characters(s).map((t) => ({
+        ...t,
+        remainingHP: t.id.startsWith("hero:")
+          ? seatView(s, t.playerId).player.hp
+          : pieceHP(s, find(s, t.id)!) - find(s, t.id)!.damage,
+      })),
+    revealExistingMinion: (s, p, playerId) => {
+      const changed = p.engagedWith !== playerId;
+      p.engagedWith = playerId;
+      if (changed) {
+        const original = s.activePlayerId;
+        activateSeat(s, playerId);
+        add(
+          s,
+          ...masterMold.masterMoldMinionEngaged(
+            s,
+            { token: `engagement:${s.nextId++}`, minionId: p.id, playerId },
+            { isTextBlank },
+          ),
+          ...rogue.rogueMinionEngaged(s, p),
+          ...acolytes.acolytesEngaged(s, p),
+          ...ironspider.ironspiderSinisterEngagementResponses(s, p),
+          ...spiderHam.spiderHamMinionEngaged(s, p),
+          E("valkPackEngagementWindow", { id: p.id }),
+          ...thorEngagementResponses(s, p),
+        );
+        activateSeat(s, original);
+        if (
+          keyword(p, "Quickstrike", s) &&
+          seatView(s, playerId).player.form === "hero"
+        )
+          add(s, E("enemyAttack", { id: p.id, actorId: playerId }));
+      }
+    },
+    discardEncounterTop: nightcrawlerPorts.discardEncounterTop,
+  };
 
 const bishopPorts: bishop.BishopPorts = {
   queue: add,
@@ -19532,6 +19934,14 @@ function declareDefense(s: GameState) {
   );
 }
 function boostEffects(s: GameState, p: Piece) {
+  const nightcrawlerBoost = nightcrawlerEncounter.nightcrawlerEncounterBoost(
+    s,
+    p,
+  );
+  if (nightcrawlerBoost !== null) {
+    add(s, ...nightcrawlerBoost);
+    return;
+  }
   const icy = iceman.icemanBoost(s, p);
   if (icy !== null) {
     add(s, ...icy);
@@ -20035,6 +20445,11 @@ function finishScheme(s: GameState) {
     ...iceman.icemanActivated(s, id),
     ...armadillo.armadilloActivationResponses(s, id).flatMap((r) => r.effects),
     ...spectrum.spectrumEnemyActivated(s, p, s.activePlayerId, spectrumPorts),
+    ...nightcrawlerEncounter.nightcrawlerEncounterMinionSchemed(
+      s,
+      id,
+      s.activePlayerId,
+    ),
     ...(activation.afterActivation || []),
     ...activation.boostIds.map((id) => E("finishResolution", { id })),
     E("scarletEnemyActivated", { id }),
@@ -20669,6 +21084,7 @@ function finishAttackAfterDamage(
       {
         receipt: zeroReceipt,
         responses: [
+          ...nightcrawler.nightcrawlerDelayedResponses(s, a),
           ...bishop.bishopEnemyAttackFinished(s, a).map((effect, i) => ({
             id: `${a.id}:bishop-after:${i}`,
             sourceId: a.attacker,
@@ -20847,6 +21263,7 @@ function finishAttackAfterDamage(
       },
     ),
     ...rogue.rogueAfterEnemyAttack(s, a.attacker),
+    ...nightcrawlerEncounter.nightcrawlerEncounterAttackComplete(s, a),
     ...jubilee.jubileeEnemyAttacked(s, p, a.originalPlayerId || recipientId),
     ...a.boostEffects,
     ...(a.boostIds || []).map((id) => E("finishResolution", { id })),
@@ -20883,6 +21300,7 @@ function finishAttackAfterDamage(
         heroDamage: a.identityDamage || 0,
         heroDefended: target === "hero" && a.defender !== "none",
         basicDefense: !!a.basicDefense,
+        defenderDamage: a.damage,
         neverBackDownCount:
           (a as typeof a & { neverBackDownCount?: number })
             .neverBackDownCount || 0,
@@ -21316,6 +21734,7 @@ function reveal(
   if (
     !repeat &&
     [
+      "48029",
       "46027",
       "46031",
       "32067",
@@ -21337,7 +21756,8 @@ function reveal(
   ) {
     add(
       s,
-      ...((iceman.icemanEncounter(s, p) ??
+      ...((nightcrawlerEncounter.nightcrawlerEncounter(s, p) ??
+        iceman.icemanEncounter(s, p) ??
         magneto.magnetoReveal(s, p, { isTextBlank }) ??
         masterMold.masterMoldReveal(s, p, { isTextBlank }) ??
         wideawake.projectWideawakeReveal(s, p, { isTextBlank }) ??
@@ -21352,8 +21772,10 @@ function reveal(
   }
   if (
     !repeat &&
-    ((jubilee.JUBILEE_SCRIPT_CODES.includes(p.code) &&
+    ((nightcrawlerEncounter.NIGHTCRAWLER_ENCOUNTER_CODES.includes(p.code) &&
       ["minion", "side_scheme"].includes(c.type_code)) ||
+      (jubilee.JUBILEE_SCRIPT_CODES.includes(p.code) &&
+        ["minion", "side_scheme"].includes(c.type_code)) ||
       (rogue.REAVERS_SCRIPT_CODES.includes(p.code) &&
         c.type_code !== "attachment") ||
       ["38025", "38026"].includes(p.code) ||
@@ -21539,6 +21961,7 @@ function reveal(
       bishop.bishopEncounter(s, p) ??
       magik.magikEncounter(s, p) ??
       cable.cableEncounter(s, p) ??
+      nightcrawlerEncounter.nightcrawlerEncounter(s, p) ??
       iceman.icemanEncounter(s, p) ??
       jubilee.jubileeEncounter(s, p) ??
       x23.x23Encounter(s, p) ??
@@ -21595,6 +22018,7 @@ function reveal(
     bishop.bishopEncounter(s, p) ??
     magik.magikEncounter(s, p) ??
     cable.cableEncounter(s, p) ??
+    nightcrawlerEncounter.nightcrawlerEncounter(s, p) ??
     iceman.icemanEncounter(s, p) ??
     jubilee.jubileeEncounter(s, p) ??
     x23.x23Encounter(s, p) ??
@@ -21872,6 +22296,10 @@ function reveal(
   if (keyword(p, "Surge")) add(s, E("surge", { sourceCode: p.code }));
 }
 function obligation(s: GameState, p: Piece) {
+  if (p.code === "48026") {
+    add(s, ...nightcrawlerEncounter.nightcrawlerEncounter(s, p)!);
+    return;
+  }
   if (p.code === "45025") {
     add(s, ...bishop.bishopEncounter(s, p)!);
     return;
@@ -21978,6 +22406,11 @@ function obligation(s: GameState, p: Piece) {
   );
 }
 function treachery(s: GameState, p: Piece) {
+  const nightcrawlerReveal = nightcrawlerEncounter.nightcrawlerEncounter(s, p);
+  if (nightcrawlerReveal !== null) {
+    add(s, ...nightcrawlerReveal);
+    return;
+  }
   const icemanReveal = iceman.icemanEncounter(s, p);
   if (icemanReveal !== null) {
     add(s, ...icemanReveal);
@@ -22017,6 +22450,7 @@ function treachery(s: GameState, p: Piece) {
     bishop.bishopEncounter(s, p) ??
     magik.magikEncounter(s, p) ??
     cable.cableEncounter(s, p) ??
+    nightcrawlerEncounter.nightcrawlerEncounter(s, p) ??
     iceman.icemanEncounter(s, p) ??
     jubilee.jubileeEncounter(s, p) ??
     x23.x23Encounter(s, p) ??
@@ -22302,6 +22736,12 @@ function treachery(s: GameState, p: Piece) {
       else surge();
       break;
     case "01190": {
+      const nightcrawlerNemesis =
+        nightcrawlerEncounter.nightcrawlerEncounterShadows(s);
+      if (nightcrawlerNemesis !== null) {
+        add(s, ...nightcrawlerNemesis);
+        break;
+      }
       const magikNemesis = magik.magikShadows(s);
       if (magikNemesis !== null) {
         add(s, ...magikNemesis);
@@ -22593,6 +23033,68 @@ function resolve(s: GameState, e: Effect) {
     return;
   }
   if (magik.resolveMagikEffect(s, e, magikPorts)) return;
+  if (nightcrawler.resolveNightcrawlerEffect(s, e, nightcrawlerPorts)) return;
+  if (
+    nightcrawlerEncounter.resolveNightcrawlerEncounter(
+      s,
+      e,
+      nightcrawlerEncounterPorts,
+    )
+  )
+    return;
+  if (e.type === "nightcrawlerMinionCostAttempt") {
+    const event = s.resolving.find((p) => p.id === e.piece.id);
+    if (!event) return;
+    const maximum = s.encounter.deck.length;
+    let found: Piece | undefined;
+    for (let n = 0; n < maximum; n++) {
+      const discarded = mutagenPorts.discardTop(s).piece;
+      if (!discarded) break;
+      if (card(discarded).type_code === "minion") {
+        found = discarded;
+        break;
+      }
+    }
+    const before = new Set(s.queue);
+    if (found) {
+      s.flags.nightcrawlerMinionCostPending = JSON.stringify({
+        eventId: event.id,
+        playerId: s.activePlayerId,
+      });
+      mutagenPorts.putMinion(s, found, s.activePlayerId);
+      delete s.flags.nightcrawlerMinionCostPending;
+    }
+    const entry = s.queue.filter((q) => !before.has(q));
+    s.queue = s.queue.filter((q) => before.has(q));
+    add(
+      s,
+      ...entry,
+      E("nightcrawlerMinionCostComplete", { piece: event, resume: e.resume }),
+    );
+    return;
+  }
+  if (e.type === "nightcrawlerMinionCostComplete") {
+    if (s.flags[`nightcrawlerMinionCostPaid:${e.piece.id}`]) add(s, e.resume);
+    else {
+      log(
+        s,
+        `${card(e.piece).name}: the uncertain minion cost failed; discard without playing the event.`,
+      );
+      delete s.flags[`magikPending:${e.piece.id}`];
+      const previousCancel = s.flags[`ghostCancelled:${e.piece.id}`];
+      s.flags[`ghostCancelled:${e.piece.id}`] = true;
+      finishResolution(s, e.piece.id);
+      if (previousCancel === undefined)
+        delete s.flags[`ghostCancelled:${e.piece.id}`];
+      else s.flags[`ghostCancelled:${e.piece.id}`] = previousCancel;
+    }
+    return;
+  }
+  if (e.type === "nightcrawlerDefeat") {
+    const p = find(s, e.target);
+    if (p) defeatCharacter(s, p, e.source);
+    return;
+  }
   if (iceman.resolveIcemanEffect(s, e, icemanPorts)) return;
   if (domino.resolveDominoEffect(s, e, dominoPorts)) return;
   if (gambit.resolveGambitEffect(s, e, gambitPorts)) return;
@@ -23808,6 +24310,7 @@ function resolve(s: GameState, e: Effect) {
         s,
         ...spiderHam.spiderHamAfterBasicRecover(s, e.receipt, spiderHamPorts),
         ...deadpool.deadpoolRecovered(s),
+        ...nightcrawler.nightcrawlerRecovered(s),
         ...bishop.bishopRecovered(s),
         ...iceman.icemanRecovered(s),
         ...phoenix.phoenixRecovered(s),
@@ -25084,6 +25587,7 @@ function resolve(s: GameState, e: Effect) {
         ...angel.angelPlayerSideSchemeDefeated(s, p),
         ...cable.cableSideReward(s, p),
         ...x23.x23SchemeDefeated(s, p),
+        ...nightcrawler.nightcrawlerSchemeDefeated(s, p),
         ...iceman.icemanSchemeDefeated(s, p),
         ...jubilee.jubileeSideReward(s, p),
       ];
@@ -28863,6 +29367,11 @@ function resolve(s: GameState, e: Effect) {
             : [];
         options.push(
           ...scoped(seat.id, [
+            ...nightcrawler.nightcrawlerBamfOptions(
+              view,
+              [resume("nightcrawler-bamf")],
+              nightcrawlerPorts,
+            ),
             ...gambit.gambitAttackOptions(view, []).map((entry) => ({
               ...entry,
               effects: entry.effects.map((effect) => ({
@@ -28937,7 +29446,7 @@ function resolve(s: GameState, e: Effect) {
         };
         const opts = iceman.icemanFreezeOptions(s, packet, icemanPorts);
         if (opts.length) {
-          s.player.exhausted = true;
+          if (!e.withoutExhaust) s.player.exhausted = true;
           choose(
             s,
             "Basic defense interrupts",
@@ -29018,7 +29527,8 @@ function resolve(s: GameState, e: Effect) {
             "Wrapped in Metal prevents this identity from defending.",
           );
           s.attack.basicDefense = true;
-          if (!e.icemanDefensePaid) s.player.exhausted = true;
+          if (!e.icemanDefensePaid && !e.withoutExhaust)
+            s.player.exhausted = true;
           s.attack.defenseBonus =
             (s.attack.defenseBonus || 0) +
             (e.amount === undefined ? 0 : e.amount - heroStats(s).defense);
@@ -29045,6 +29555,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     case "spectrumDefenseWindow": {
       const options = [
+        ...nightcrawler.nightcrawlerRiposteOptions(s, [], nightcrawlerPorts),
         ...gambit.gambitDefenseOptions(s, gambitPorts),
         ...spdr.spdrDefenseOptions(s, spdrPorts),
         ...spectrum.spectrumDefenseOptions(s, e.used || [], [], spectrumPorts),
@@ -29099,6 +29610,11 @@ function resolve(s: GameState, e: Effect) {
       }
       if (!e.expertChecked) {
         const options = [
+          ...nightcrawler.nightcrawlerRiposteOptions(
+            s,
+            [E("boostAttack")],
+            nightcrawlerPorts,
+          ),
           ...valkPack.valkyriePackDefenseOptions(
             s,
             [E("boostAttack")],
@@ -29205,7 +29721,24 @@ function resolve(s: GameState, e: Effect) {
         after,
         bwPorts,
       );
-      if (!e.scheme) options.push(...domino.dominoBoostOptions(s, e.piece));
+      if (!e.scheme) {
+        options.push(...domino.dominoBoostOptions(s, e.piece));
+        for (const seat of playerOrder(s))
+          options.push(
+            ...nightcrawler
+              .nightcrawlerBoostOptions(
+                seatView(s, seat),
+                e.piece,
+                after.map((q) => ({ ...q, actorId: original })),
+                nightcrawlerPorts,
+              )
+              .map((o) => ({
+                ...o,
+                id: `${seat.id}:${o.id}`,
+                effects: o.effects.map((q) => ({ actorId: seat.id, ...q })),
+              })),
+          );
+      }
       options.push(
         ...playerOrder(s).flatMap((seat) =>
           nebulaPack
@@ -30189,6 +30722,18 @@ function resolve(s: GameState, e: Effect) {
     }
     case "defenseResponses": {
       s.attack = null;
+      if (!e.nightcrawlerHandled) {
+        add(
+          s,
+          ...nightcrawler.nightcrawlerDefenseFinished(
+            s,
+            e.snapshot || {},
+            nightcrawlerPorts,
+          ),
+          { ...e, nightcrawlerHandled: true },
+        );
+        break;
+      }
       if (!e.psylockeHandled) {
         add(s, ...psylocke.psylockeDefenseFinished(s, e), {
           ...e,

@@ -3,6 +3,7 @@ import { jubileeResourceSources } from "./jubilee.js";
 import { cableResourceSources } from "./cable.js";
 import { x23ResourceSources } from "./x23.js";
 import { icemanResourceSources } from "./iceman.js";
+import { nightcrawlerResourceSources } from "./nightcrawler.js";
 import { deadpoolResources, deadpoolTriggeredBlocked } from "./deadpool.js";
 import { psylockeResourceSources } from "./psylocke.js";
 import { rogueResourceSources } from "./rogue.js";
@@ -176,6 +177,7 @@ function localPaymentSources(
     }),
   );
   sources.push(...icemanResourceSources(s, targetCode));
+  sources.push(...nightcrawlerResourceSources(s, targetCode));
   sources.push(...cyclopsResourceSources(s, targetCode));
   sources.push(...colossusResourceSources(s, { isTextBlank }));
   sources.push(...shadowcatResourceSources(s, targetCode, { isTextBlank }));

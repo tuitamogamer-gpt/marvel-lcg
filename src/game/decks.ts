@@ -135,6 +135,7 @@ export function deckErrors(
       "x23",
       "iceman",
       "jubilee",
+      "nightcrawler",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

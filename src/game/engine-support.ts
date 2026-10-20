@@ -1,4 +1,6 @@
 import { BISHOP_SCRIPT_CODES } from "./bishop.js";
+import { NIGHTCRAWLER_SCRIPT_CODES } from "./nightcrawler.js";
+import { NIGHTCRAWLER_ENCOUNTER_CODES } from "./nightcrawler-encounters.js";
 import { MAGIK_SCRIPT_CODES } from "./magik.js";
 import { JUBILEE_SCRIPT_CODES } from "./jubilee.js";
 import { DOMINO_SCRIPT_CODES } from "./domino.js";
@@ -143,8 +145,13 @@ export const SCRIPTED_HERO_IDS = new Set([
   "bishop",
   "magik",
   "jubilee",
+  "nightcrawler",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
+  ...NIGHTCRAWLER_SCRIPT_CODES,
+  "48017",
+  "48022",
+  ...NIGHTCRAWLER_ENCOUNTER_CODES,
   ...MAGIK_SCRIPT_CODES,
   ...CYCLOPS_SCRIPT_CODES,
   ...CYCLOPS_SHARED_SCRIPT_CODES,

@@ -1,4 +1,5 @@
 import { bishopAllyHP, bishopCharacterBonus } from "./bishop.js";
+import { nightcrawlerStats } from "./nightcrawler.js";
 import { magikStats } from "./magik.js";
 import { icemanStats } from "./iceman.js";
 import { jubileeStats, jubileeEnemyHealth } from "./jubilee.js";
@@ -878,6 +879,20 @@ export const HEROES = [
     style: "Resource types · Justice",
     complexity: 2,
   },
+  {
+    id: "nightcrawler",
+    code: "48001a",
+    alter: "48001b",
+    name: "Nightcrawler",
+    identity: "Kurt Wagner",
+    aspect: "protection" as Aspect,
+    color: "#4554a0",
+    tag: "Bamf!",
+    description:
+      "Teleport between enemies, defend without exhausting, and answer every attack with your X-Men allies.",
+    style: "Teleportation and defense · Protection",
+    complexity: 2,
+  },
 ];
 export const VILLAINS = [
   {
@@ -1051,6 +1066,7 @@ export const MODULES = [
   },
   { id: "sauron", name: "Sauron", difficulty: 3 },
   { id: "arcade", name: "Arcade", difficulty: 3 },
+  { id: "crazy_gang", name: "The Crazy Gang", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -1232,6 +1248,7 @@ export function deckCodes(
       (hero === "iceman" && aspect === "aggression") ||
       (hero === "deadpool" && String(aspect) === "pool") ||
       (hero === "jubilee" && aspect === "justice") ||
+      (hero === "nightcrawler" && aspect === "protection") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
       (hero === "rogue" && aspect === "protection") ||
@@ -1489,6 +1506,7 @@ export function heroStats(s: GameState) {
       x23Stats(s).attack +
       icemanStats(s).attack +
       jubileeStats(s).attack +
+      nightcrawlerStats(s).attack +
       x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
@@ -1544,6 +1562,7 @@ export function heroStats(s: GameState) {
       magikStats(s).defense +
       x23Stats(s).defense +
       icemanStats(s).defense +
+      nightcrawlerStats(s).defense +
       (has(s, "01081") ? 1 : 0) +
       (has(s, "01016") ? (aerial(s) ? 2 : 1) : 0) +
       captainStats(s).def +
@@ -1568,6 +1587,7 @@ export function heroStats(s: GameState) {
     recover:
       card(HEROES.find((h) => h.id === s.heroId)!.alter).recover! +
       scriptedModifier(s, "recover") +
+      nightcrawlerStats(s).recover +
       hulkStats(s).recover +
       msMarvelStats(s).recover +
       visionAlterStats(s).recover +
