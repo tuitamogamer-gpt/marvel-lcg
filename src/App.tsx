@@ -4792,7 +4792,14 @@ function Tabletop({
                   )}
                 </div>
               </div>
-              <div className="scheme-area">
+              <div
+                className="scheme-area"
+                style={
+                  s.sideSchemes.some((p) => p.code === "47003")
+                    ? { flexWrap: "wrap" }
+                    : undefined
+                }
+              >
                 <div
                   className={`main-scheme ${threatCritical ? "critical" : ""}`}
                 >
@@ -5043,6 +5050,24 @@ function Tabletop({
                           </span>
                         </>
                       )}
+                    </div>
+                    <div className="in-play-actions">
+                      {abilityOptions(s, p).map((a) => (
+                        <button
+                          key={a.id}
+                          disabled={!canUseAction || !!a.disabled}
+                          title={a.disabled || a.label}
+                          onClick={() =>
+                            sendAction({
+                              type: "ABILITY",
+                              id: p.id,
+                              action: a.id,
+                            })
+                          }
+                        >
+                          {a.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -5631,6 +5656,17 @@ function Tabletop({
                                 <span className="mini-token">
                                   <PremiumToken kind="health" />
                                   {pieceHP(s, p) - p.damage}
+                                </span>
+                              )}
+                              {p.code === "46008" && (
+                                <span
+                                  className="mini-token"
+                                  role="img"
+                                  aria-label={`Ice Wall damage: ${p.damage} of 8`}
+                                  title={`Ice Wall damage: ${p.damage} of 8`}
+                                >
+                                  {p.damage}/8
+                                  <small>DMG</small>
                                 </span>
                               )}
                               {!!p.storedCards?.length && (

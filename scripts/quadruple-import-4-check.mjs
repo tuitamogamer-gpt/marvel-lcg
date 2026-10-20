@@ -545,6 +545,198 @@ async function jubileeMallRat(source) {
   return after;
 }
 
+async function nextRoundUndefended(source) {
+  const before = await save();
+  assert.equal(before.player.form, "hero");
+  await page.getByRole("button", { name: /End hero phase/ }).click();
+  const discardCount = Math.max(0, before.player.hand.length - 5);
+  for (let index = 0; index < discardCount; index++)
+    await page.locator(".selection-card").nth(index).click();
+  await page
+    .getByRole("button", { name: "Begin villain phase", exact: true })
+    .click();
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const state = await settle();
+    if (state.phase === "player" && state.round === before.round + 1) {
+      assert.ok(!state.prompt, "The actual villain phase finishes naturally");
+      return state;
+    }
+    assert.equal(state.prompt?.kind, "choice", JSON.stringify(state.prompt));
+    const option =
+      state.prompt.options.find((candidate) => candidate.id === "take") ||
+      state.prompt.options.find((candidate) =>
+        /^(pass|skip|none|done|continue|no)$/.test(candidate.id),
+      );
+    assert.ok(
+      option,
+      `Unreviewed ${source.name} villain-phase choice: ${JSON.stringify(state.prompt)}`,
+    );
+    await choose(option);
+  }
+  throw Error(`${source.name} did not reach the next round`);
+}
+
+async function jubileeShoppingSpree(source, width, initial) {
+  const before = await nextRoundUndefended(source);
+  const scheme = before.sideSchemes.find((piece) => piece.code === "47003");
+  assert.ok(scheme, "The original searched Shopping Spree remains in play");
+  assert.equal(scheme.counters, 2);
+  assert.equal(before.player.exhausted, false);
+  await page.locator(".flip-button").click();
+  const ready = await finishChoices(source);
+  assert.equal(ready.player.form, "alter");
+  assert.equal(ready.player.exhausted, false);
+  const action = page
+    .locator(`.table-side-scheme[data-piece-id="${scheme.id}"]`)
+    .getByRole("button", {
+      name: "Shopping Spree · remove 1 threat",
+      exact: true,
+    });
+  assert.ok(
+    await action.isEnabled(),
+    "The native ready alter-ego action is usable",
+  );
+  await checkpoint("jubilee-shopping-spree-ready", width, source, initial);
+  await action.click();
+  const after = await finishChoices(source);
+  assert.equal(after.player.form, "alter");
+  assert.equal(
+    after.player.exhausted,
+    true,
+    "The printed action exhausts the identity",
+  );
+  assert.equal(after.player.hp, ready.player.hp);
+  assert.equal(
+    after.sideSchemes.find((piece) => piece.id === scheme.id)?.counters,
+    1,
+    "The same physical Shopping Spree loses exactly one threat",
+  );
+  assert.deepEqual(after.player.hand, ready.player.hand);
+  assert.deepEqual(after.player.deck, ready.player.deck);
+  assert.equal(
+    await action.count(),
+    0,
+    "The exhausted identity cannot use the action again",
+  );
+  await checkpoint("jubilee-shopping-spree-used", width, source, initial);
+  await reload();
+  conserved(
+    await save(),
+    source,
+    initial,
+    "Shopping Spree action exact reload",
+  );
+  return {
+    schemeId: scheme.id,
+    threatBefore: 2,
+    threatAfter: 1,
+    exhaustedIdentity: true,
+  };
+}
+
+async function icemanPlayWall(source) {
+  const before = await save();
+  const wall = before.player.hand.find((piece) => piece.code === "46008");
+  assert.ok(wall, "The original source opens the actual Ice Wall");
+  const paid = before.player.hand
+    .filter((piece) => piece.id !== wall.id)
+    .slice(0, 4);
+  assert.equal(paid.length, 4);
+  await page
+    .getByRole("button", { name: "Play now: Ice Wall", exact: true })
+    .click();
+  const pending = await settle();
+  assert.equal(pending.prompt?.kind, "payment");
+  assert.equal(pending.prompt.card.id, wall.id);
+  assert.equal(
+    pending.prompt.cost,
+    4,
+    "Ice Wall retains its actual printed resource cost",
+  );
+  for (const piece of paid) {
+    const resource = page
+      .locator('.payment-source[aria-pressed="false"]')
+      .filter({
+        has: page.locator(`img[src="${imageFor(piece.code)}"]`),
+      })
+      .first();
+    await resource.click();
+  }
+  assert.equal(
+    await page.locator('.payment-source[aria-pressed="true"]').count(),
+    4,
+  );
+  await page
+    .getByRole("button", { name: "Confirm payment", exact: true })
+    .click();
+  const after = await finishChoices(source);
+  assert.equal(
+    after.player.inPlay.find((piece) => piece.id === wall.id)?.damage,
+    0,
+  );
+  assert.ok(
+    paid.every((piece) =>
+      after.player.discard.some((candidate) => candidate.id === piece.id),
+    ),
+  );
+  assert.deepEqual(
+    after.player.hand,
+    before.player.hand.filter(
+      (piece) =>
+        piece.id !== wall.id &&
+        !paid.some((candidate) => candidate.id === piece.id),
+    ),
+    "Ice Wall spends only the four selected physical hand cards",
+  );
+  return {
+    state: after,
+    wallId: wall.id,
+    paidHandCardIds: paid.map((piece) => piece.id),
+  };
+}
+
+async function icemanWallDamage(source, width, initial, wall) {
+  const before = await save();
+  const after = await nextRoundUndefended(source);
+  const inPlay = after.player.inPlay.find((piece) => piece.id === wall.wallId);
+  assert.equal(
+    inPlay?.damage,
+    3,
+    "The same paid Ice Wall holds the actual three incoming damage",
+  );
+  assert.equal(
+    after.player.hp,
+    before.player.hp,
+    "Ice Wall prevents that damage to Iceman",
+  );
+  const badge = page
+    .locator(`.in-play-card[data-piece-id="${wall.wallId}"]`)
+    .getByRole("img", { name: "Ice Wall damage: 3 of 8", exact: true });
+  assert.ok(
+    await badge.isVisible(),
+    "Ice Wall's accumulated damage is visible",
+  );
+  assert.equal((await badge.innerText()).replace(/\s/g, ""), "3/8DMG");
+  assert.equal(
+    after.player.setAside.filter((piece) => piece.code === "46002").length,
+    6,
+  );
+  await checkpoint("iceman-ice-wall-damage", width, source, initial);
+  await reload();
+  assert.ok(
+    await badge.isVisible(),
+    "The exact saved Ice Wall damage remains visible after reload",
+  );
+  conserved(await save(), source, initial, "Ice Wall damage exact reload");
+  return {
+    wallId: wall.wallId,
+    paidHandCardIds: wall.paidHandCardIds,
+    damage: 3,
+    capacity: 8,
+    preventedHpLoss: 3,
+  };
+}
+
 async function assertVillainStats(attack, scheme, label) {
   const stats = page.locator(".villain-info .enemy-stats");
   for (const [kind, name, expected] of [
@@ -1034,6 +1226,12 @@ async function publicSource(source, width) {
     magikPayment = await magikTopPlay(source, width, initial);
     state = magikPayment.state;
   }
+  let iceWall = null;
+  if (source.id === "iceman") {
+    current.stage = "ice-wall-payment";
+    iceWall = await icemanPlayWall(source);
+    state = iceWall.state;
+  }
   const beforeHp = state.villain.hp;
   if (source.id === "iceman")
     await assertVillainStats(2, 1, "Rhino before Frostbite");
@@ -1093,6 +1291,16 @@ async function publicSource(source, width) {
       0,
       "The same Frostbite power reduction survives reload",
     );
+  let wallDamage = null,
+    shoppingSpree = null;
+  if (source.id === "iceman") {
+    current.stage = "ice-wall-damage";
+    wallDamage = await icemanWallDamage(source, width, initial, iceWall);
+  }
+  if (source.id === "jubilee") {
+    current.stage = "shopping-spree-action";
+    shoppingSpree = await jubileeShoppingSpree(source, width, initial);
+  }
   checks.push({
     hero: source.id,
     width,
@@ -1105,8 +1313,10 @@ async function publicSource(source, width) {
       bishop: "Energy Absorption after an actual enemy attack",
       magik:
         "Paid top-deck play, revealed next card and exact committed-payment reload",
-      iceman: "Freeze interrupt attaches the original reserve Frostbite",
-      jubilee: "Mall Rat searches the original Shopping Spree",
+      iceman:
+        "Freeze attaches the original Frostbite; paid Ice Wall stores actual damage",
+      jubilee:
+        "Mall Rat searches the original Shopping Spree; its printed action exhausts the ready alter-ego",
     }[source.id],
     ...(source.id === "iceman"
       ? {
@@ -1117,6 +1327,8 @@ async function publicSource(source, width) {
           },
         }
       : {}),
+    ...(wallDamage ? { iceWall: wallDamage } : {}),
+    ...(shoppingSpree ? { shoppingSpree } : {}),
     ...(magikPayment
       ? {
           topDeckPayment: {
