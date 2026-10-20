@@ -1,7 +1,7 @@
 import { rulesCode } from "./rules-code.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, seatView } from "./team.js";
-import { isTextBlank } from "./card-text.js";
+import { eventPlaySource, eventPlaySources, isTextBlank } from "./card-text.js";
 import { statusCards } from "./keywords.js";
 import type { PaymentSource } from "./payment.js";
 import type {
@@ -283,7 +283,7 @@ function formResponseCards(
   used: string[] = [],
 ) {
   return s.player.form === "hero"
-    ? s.player.hand.filter(
+    ? eventPlaySources(s).filter(
         (p) =>
           ["13014", "13033"].includes(rulesCode(p)) &&
           !used.includes(p.id) &&
@@ -559,10 +559,11 @@ export function resolveWaspPackEffect(
       break;
     }
     case "wasp-pack:form-paid": {
-      const p = s.player.hand.find(
-        (p) => p.id === e.id && ["13014", "13033"].includes(rulesCode(p)),
+      const p = eventPlaySource(s, e.id);
+      need(
+        p && ["13014", "13033"].includes(rulesCode(p)),
+        "The response card is no longer available to play.",
       );
-      need(p, "The response card is no longer in hand.");
       ports.queue(
         s,
         E("resolveHandEvent", {

@@ -1,5 +1,5 @@
 import { card } from "./card-definitions.js";
-import { isTextBlank } from "./card-text.js";
+import { eventPlaySource, eventPlaySources, isTextBlank } from "./card-text.js";
 import { allInPlay, controlledNPCs, playerOrder, seatView } from "./team.js";
 import type { Card, Effect, GameState, Option, Piece } from "./types.js";
 
@@ -428,7 +428,7 @@ export function angelDamageOptions(
   ports: AngelPorts,
 ): Option[] {
   if (!(packet.amount > 0) || !aerialReady(s, ports).length) return [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter((p) => p.code === "42014" && ports.canPay(s, p))
     .map((p) =>
       O(
@@ -795,8 +795,8 @@ export function resolveAngelEffect(
       );
       break;
     case "angel:pay-reaction": {
-      const p = s.player.hand.find((p) => p.id === e.id);
-      need(p, "The reaction event left hand.");
+      const p = eventPlaySource(s, e.id);
+      need(p, "The reaction event is unavailable to play.");
       ports.playReaction(s, p!, e.effects, e.after || []);
       break;
     }
@@ -888,7 +888,7 @@ export function resolveAngelEffect(
       break;
     }
     case "angel:warpath": {
-      const cards = s.player.hand.filter(
+      const cards = eventPlaySources(s).filter(
         (p) =>
           card(p).type_code === "event" &&
           /Hero Action/.test(card(p).text || "") &&
@@ -905,7 +905,7 @@ export function resolveAngelEffect(
       break;
     }
     case "angel:warpath-play": {
-      const p = s.player.hand.find((p) => p.id === e.target);
+      const p = eventPlaySource(s, e.target);
       if (p) ports.playAction(s, p);
       break;
     }

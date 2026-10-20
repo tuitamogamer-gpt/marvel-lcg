@@ -656,30 +656,47 @@ describe("Valkyrie supplementary native physical integration", () => {
     exact(s, other);
   });
 
-  it("Problem Solvers completes every scheme removal before offering its real Turn the Tide hero response", () => {
-    let s = base("gam");
-    const event = take(s, "25033"),
-      a = take(s, "25025"),
-      b = take(s, "01089", "hand", "p2"),
-      tide = take(s, "15015"),
-      side = makePiece(s, "01107");
-    side.counters = 3;
-    s.sideSchemes.push(side);
-    s = command(s, { type: "PLAY", id: event.id });
-    s = payPrompt(s, [a, b]);
-    s = choose(s, "hero:p1|hero:p2");
-    expect(s.scheme.threat).toBe(9);
-    expect(s.sideSchemes.some((p) => p.id === side.id)).toBe(false);
-    expect(s.prompt?.title).toBe("Turn the Tide");
-    s = choose(s, tide.id);
-    if (s.prompt?.options.some((o) => o.id === s.villain.id))
-      s = choose(s, s.villain.id);
-    s = finish(s);
-    expect(s.villain.hp).toBe(47);
-    exact(s, event);
-    exact(s, tide);
-    exact(s, side);
-  });
+  it.each([false, true])(
+    "Problem Solvers completes every scheme removal before offering its real Turn the Tide hero response (Waylay available: %s)",
+    (withWaylay) => {
+      let s = base("gam");
+      const event = take(s, "25033"),
+        a = take(s, "25025"),
+        b = take(s, "01089", "hand", "p2"),
+        tide = take(s, "15015"),
+        side = makePiece(s, "01107");
+      const waylay = withWaylay ? take(s, "47014") : undefined;
+      if (withWaylay) {
+        take(s, "01088");
+        take(s, "01090");
+      }
+      side.counters = 3;
+      s.sideSchemes.push(side);
+      s = command(s, { type: "PLAY", id: event.id });
+      s = payPrompt(s, [a, b]);
+      s = choose(s, "hero:p1|hero:p2");
+      expect(s.scheme.threat).toBe(9);
+      expect(s.sideSchemes.some((p) => p.id === side.id)).toBe(false);
+      expect(s.prompt?.title).toBe(
+        withWaylay ? "After your hero thwarts" : "Turn the Tide",
+      );
+      expect(
+        s.prompt?.options.filter((o) => o.id !== "continue").map((o) => o.id),
+      ).toEqual(waylay ? [tide.id, waylay.id] : [tide.id]);
+      s = choose(s, tide.id);
+      if (s.prompt?.options.some((o) => o.id === s.villain.id))
+        s = choose(s, s.villain.id);
+      s = finish(s);
+      expect(s.villain.hp).toBe(47);
+      exact(s, event);
+      exact(s, tide);
+      exact(s, side);
+      if (waylay) {
+        exact(s, waylay);
+        expect(s.player.hand.some((p) => p.id === waylay.id)).toBe(true);
+      }
+    },
+  );
 
   it("Problem Solvers belongs to the actual event-playing Gamora and offers Precision after the whole thwart", () => {
     let s = base("valk", "gam");

@@ -1,3 +1,5 @@
+import { magikTopPlayable } from "./magik.js";
+import { icemanSchemeIcon } from "./iceman.js";
 import { valkyrieCannotBasicAttack } from "./valkyrie.js";
 import { visionCanAttack } from "./vision.js";
 import {
@@ -16,6 +18,7 @@ import {
 import {
   abilityOptions,
   canPay,
+  cardCost,
   canChangeIdentityForm,
   dispatch,
   escalation,
@@ -63,7 +66,10 @@ function villainSch(s: GameState) {
 export function incomingThreat(s: GameState, form = s.player.form) {
   const accel =
     s.encounter.acceleration +
-    s.sideSchemes.reduce((n, p) => n + (card(p).scheme_acceleration || 0), 0);
+    s.sideSchemes.reduce(
+      (n, p) => n + icemanSchemeIcon(s, p, "scheme_acceleration"),
+      0,
+    );
   const scheming =
     form === "alter"
       ? villainSch(s) +
@@ -88,7 +94,9 @@ function pressure(s: GameState) {
     limit,
     room,
     danger: room <= 1,
-    pressed: room <= 3 || s.sideSchemes.some((p) => card(p).scheme_crisis),
+    pressed:
+      room <= 3 ||
+      s.sideSchemes.some((p) => icemanSchemeIcon(s, p, "scheme_crisis")),
   };
 }
 const num = (text: string | undefined, re: RegExp) => {
@@ -139,12 +147,15 @@ function rankSource(s: GameState) {
   };
 }
 function playCost(s: GameState, p: Piece) {
-  return Math.max(0, (card(p).cost || 0) - Number(s.flags.discount || 0));
+  return cardCost(s, card(p), p);
 }
 /** The best card to play now, if paying for it costs less than it is worth. */
 function bestPlay(s: GameState): Advice | null {
   let best: { piece: Piece; score: number } | null = null;
-  for (const p of s.player.hand) {
+  for (const p of [
+    ...s.player.hand,
+    ...[magikTopPlayable(s)].filter((p): p is Piece => !!p),
+  ]) {
     if (playable(s, p)) continue;
     const cost = playCost(s, p);
     const sources = paymentSources(

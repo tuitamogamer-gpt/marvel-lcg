@@ -1,3 +1,4 @@
+import { magikPending, magikTopPlayable } from "./magik.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import players from "../data/core-player.json" with { type: "json" };
 import type { Card, GameState, Piece } from "./types.js";
@@ -11,6 +12,18 @@ const seatViewForBlank = (s: GameState, id: string) =>
   id === s.activePlayerId
     ? s.player
     : s.players.find((seat) => seat.id === id)!.player;
+
+/** Lost Child blanks the complete printed text box, including printed traits.
+ * Externally granted traits, including Regressed, remain separate effects. */
+export function isPrintedTraitsBlank(s: GameState, p: Piece | undefined) {
+  return !!(
+    p?.treatedAsMinion &&
+    p.jubileeLostController &&
+    s.attachments.some(
+      (a) => a.code === "47027" && a.attachedTo === p.id && !isTextBlank(s, a),
+    )
+  );
+}
 
 /** Tech Theft blanks printed text, while retaining stats, traits and icons. */
 export function isTextBlank(
@@ -168,10 +181,26 @@ export function eventPlaySources(s: GameState): Piece[] {
   const event = (p: Piece) => definitions.get(p.code)?.type_code === "event";
   return [
     ...s.player.hand.filter(event),
+    ...[magikTopPlayable(s)].filter((p): p is Piece => !!p && event(p)),
     ...s.player.inPlay
       .filter((p) => p.code === "27007" && !isTextBlank(s, p))
       .flatMap((p) => (p.storedCards || []).filter(event)),
   ];
+}
+
+/** Revalidate a native event PLAY continuation after its source may have been
+ * staged for payment. Pending events are never added to availability lists. */
+export function eventPlaySource(s: GameState, id: string): Piece | undefined {
+  return (
+    eventPlaySources(s).find((p) => p.id === id) ||
+    s.resolving.find(
+      (p) =>
+        p.id === id &&
+        p.ownerId === s.activePlayerId &&
+        definitions.get(p.code)?.type_code === "event" &&
+        magikPending(s, p),
+    )
+  );
 }
 
 /** Actual Defense events available to this controller. Jocasta permits playing
@@ -188,6 +217,7 @@ export function defenseEventSources(s: GameState): Piece[] {
   };
   return [
     ...s.player.hand.filter(defense),
+    ...[magikTopPlayable(s)].filter((p): p is Piece => !!p && defense(p)),
     ...s.player.inPlay
       .filter((p) => ["26013", "27007"].includes(p.code) && !isTextBlank(s, p))
       .flatMap((p) => (p.storedCards || []).filter(defense)),

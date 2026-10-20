@@ -1,3 +1,4 @@
+import { icemanSchemeIcon } from "./iceman.js";
 import { card } from "./card-definitions.js";
 import { isTextBlank } from "./card-text.js";
 import { allInPlay, playerOrder, seatView, controller } from "./team.js";
@@ -453,7 +454,9 @@ export function cableTemporalOptions(s: GameState, after: Effect[]): Option[] {
   if (
     s.player.form !== "hero" ||
     !cableVictoryCount(s) ||
-    s.sideSchemes.some((p) => card(p).scheme_crisis && !isTextBlank(s, p))
+    s.sideSchemes.some(
+      (p) => icemanSchemeIcon(s, p, "scheme_crisis") && !isTextBlank(s, p),
+    )
   )
     return [];
   return own(s, "40013").map((p) =>
@@ -1043,7 +1046,7 @@ export function resolveCableEffect(s: GameState, e: Effect, ports: CablePorts) {
       if (card(scheme!).type_code === "player_side_scheme")
         scheme!.playerSideSchemeController = scheme!.ownerId;
       const moved = s.sideSchemes.some(
-        (p) => card(p).scheme_crisis && !isTextBlank(s, p),
+        (p) => icemanSchemeIcon(s, p, "scheme_crisis") && !isTextBlank(s, p),
       )
         ? 0
         : Math.min(4, s.scheme.threat);

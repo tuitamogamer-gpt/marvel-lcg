@@ -1,3 +1,4 @@
+import { rulesCode } from "./rules-code.js";
 import { card } from "./card-definitions.js";
 import { isTextBlank, defenseEventSources } from "./card-text.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
@@ -301,13 +302,13 @@ export function roguePlayRestriction(
   if (p.code === "38012" && !ports.hasTrait(s, "hero", "X-Men"))
     return "Armor requires the X-Men trait.";
   if (
-    ["38018", "38019"].includes(p.code) &&
+    ["38018", "38019"].includes(rulesCode(p)) &&
     !ports.hasTrait(s, "hero", "Mutant")
   )
     return "This card requires the Mutant trait.";
   if (
-    ["38014", "38019", "38028"].includes(p.code) &&
-    s.player.inPlay.some((q) => q.code === p.code)
+    ["38014", "38019", "38028"].includes(rulesCode(p)) &&
+    s.player.inPlay.some((q) => rulesCode(q) === rulesCode(p))
   )
     return "Max 1 per player.";
   if (p.code === "38020" && !teamUp(s))
@@ -331,7 +332,9 @@ export function rogueResourceSources(
   )
     return [];
   return s.player.inPlay
-    .filter((p) => p.code === "38019" && !p.exhausted && !isTextBlank(s, p))
+    .filter(
+      (p) => rulesCode(p) === "38019" && !p.exhausted && !isTextBlank(s, p),
+    )
     .map((p) => ({
       id: `rogue-gene:${p.id}`,
       code: p.code,

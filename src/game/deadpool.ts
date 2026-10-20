@@ -1,5 +1,6 @@
+import { icemanSchemeIconsSuppressed, icemanSchemeIcon } from "./iceman.js";
 import { card, CATALOG_CARDS } from "./card-definitions.js";
-import { isTextBlank } from "./card-text.js";
+import { eventPlaySource, eventPlaySources, isTextBlank } from "./card-text.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import type {
   Card,
@@ -146,7 +147,18 @@ export function deadpoolIcons(s: GameState) {
         ...s.attachments,
         ...(s.environments || []),
         ...allInPlay(s),
-      ].map((p) => [p.id, card(p)]),
+      ].map((p) => [
+        p.id,
+        icemanSchemeIconsSuppressed(s, p)
+          ? {
+              ...card(p),
+              scheme_crisis: 0,
+              scheme_acceleration: 0,
+              scheme_amplify: 0,
+              scheme_hazard: 0,
+            }
+          : card(p),
+      ]),
     ).values(),
   ];
   const count = (key: keyof Card) =>
@@ -168,7 +180,7 @@ export function deadpoolPlayerIcons(
     | "scheme_amplify"
     | "scheme_hazard",
 ) {
-  return allInPlay(s).reduce((n, p) => n + Number(card(p)[key] || 0), 0);
+  return allInPlay(s).reduce((n, p) => n + icemanSchemeIcon(s, p, key), 0);
 }
 export function deadpoolResources(
   s: GameState,
@@ -588,7 +600,7 @@ export function deadpoolRevealOptions(
   if (deadpoolTriggeredBlocked(s)) return [];
   const out: Option[] = [];
   if (s.player.form === "hero")
-    for (const q of s.player.hand.filter(
+    for (const q of eventPlaySources(s).filter(
       (q) =>
         ((q.code === "44005" &&
           !["villain", "main_scheme"].includes(card(p).type_code)) ||
@@ -633,7 +645,7 @@ export function deadpoolDamageOptions(
     deadpoolTriggeredBlocked(s)
   )
     return [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter((p) => p.code === "44017" && ports.canPay(s, p))
     .map((p) =>
       O(
@@ -650,7 +662,7 @@ export function deadpoolThreatOptions(
   ports: DeadpoolPorts,
 ): Option[] {
   if (!(packet.amount > 0) || deadpoolTriggeredBlocked(s)) return [];
-  return s.player.hand
+  return eventPlaySources(s)
     .filter((p) => p.code === "44022" && ports.canPay(s, p))
     .map((p) =>
       O(
@@ -1694,7 +1706,7 @@ export function resolveDeadpoolEffect(
       break;
     }
     case "deadpool:reveal-pay": {
-      const q = s.player.hand.find((q) => q.id === e.id);
+      const q = eventPlaySource(s, e.id);
       need(q, "The interrupt event is unavailable.");
       ports.reaction(
         s,
@@ -1748,7 +1760,7 @@ export function resolveDeadpoolEffect(
       }
       break;
     case "deadpool:damage-pay": {
-      const q = s.player.hand.find((q) => q.id === e.id);
+      const q = eventPlaySource(s, e.id);
       if (q)
         ports.reaction(
           s,
@@ -1786,7 +1798,7 @@ export function resolveDeadpoolEffect(
       ports.attackEnemy(s, e.id, e.target);
       break;
     case "deadpool:threat-pay": {
-      const q = s.player.hand.find((q) => q.id === e.id);
+      const q = eventPlaySource(s, e.id);
       if (q)
         ports.reaction(
           s,

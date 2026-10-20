@@ -406,9 +406,10 @@ export function psylockeDamageBonus(
   s: GameState,
   source: string,
   target: string,
+  confusedAtInitiation?: boolean,
 ): number {
   const victim = enemy(s, target);
-  if (!victim?.confused) return 0;
+  if (!(confusedAtInitiation ?? victim?.confused)) return 0;
   const owner =
     source === "hero"
       ? s.activePlayerId

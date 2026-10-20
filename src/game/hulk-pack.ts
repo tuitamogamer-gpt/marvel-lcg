@@ -1,3 +1,5 @@
+import { icemanSchemeIcon } from "./iceman.js";
+import { eventPlaySource, eventPlaySources } from "./card-text.js";
 import { rulesCode } from "./rules-code.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
@@ -103,7 +105,7 @@ export interface HulkPackPorts {
 
 function schemeTargets(s: GameState): HulkPackTarget[] {
   return [
-    ...(!s.sideSchemes.some((p) => cards.get(p.code)?.scheme_crisis) &&
+    ...(!s.sideSchemes.some((p) => icemanSchemeIcon(s, p, "scheme_crisis")) &&
     s.scheme.code !== "01139b" &&
     s.scheme.threat > 0
       ? [
@@ -327,7 +329,7 @@ export function hulkPackAttackResponseOptions(
     view.player.form === "hero" &&
     (attack.heroDamage > 0 || view.player.confused) &&
     (view.player.confused || schemeTargets(view).length)
-      ? view.player.hand.filter(
+      ? eventPlaySources(view).filter(
           (p) =>
             p.code === "10016" &&
             !used.includes(p.id) &&
@@ -592,10 +594,11 @@ export function resolveHulkPackEffect(
       break;
     }
     case "hulk-pack:vengeance": {
-      const p = s.player.hand.find((p) => p.id === e.id && p.code === "10016");
+      const p = eventPlaySource(s, e.id);
       const attack = e.attack as HulkPackAttackSnapshot;
       need(
         p &&
+          p.code === "10016" &&
           hulkPackAttackResponseOptions(s, attack, ports).some(
             (o) => o.id === p.id,
           ),

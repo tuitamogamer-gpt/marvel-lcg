@@ -1,3 +1,4 @@
+import { magikTopPlayable } from "./magik.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { isTextBlank } from "./card-text.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
@@ -162,6 +163,7 @@ export function visionPackDefenseEvents(
 ): Piece[] {
   return [
     ...s.player.hand.filter(defense),
+    ...[magikTopPlayable(s)].filter((p): p is Piece => !!p && defense(p)),
     ...visionPackStoredPlayable(s, ports),
   ];
 }

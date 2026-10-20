@@ -1,3 +1,7 @@
+import { bishopAllyHP, bishopCharacterBonus } from "./bishop.js";
+import { magikStats } from "./magik.js";
+import { icemanStats } from "./iceman.js";
+import { jubileeStats, jubileeEnemyHealth } from "./jubilee.js";
 import { cableStatBonus } from "./cable.js";
 import { deadpoolAttackBonus, deadpoolHandBonus } from "./deadpool.js";
 import { psylockeStats, psylockePowerOfMind } from "./psylocke.js";
@@ -818,6 +822,62 @@ export const HEROES = [
     style: "Health and acceleration · Pool",
     complexity: 3,
   },
+  {
+    id: "bishop",
+    code: "45001a",
+    alter: "45001b",
+    name: "Bishop",
+    identity: "Lucas Bishop",
+    aspect: "leadership" as Aspect,
+    color: "#d4a82c",
+    tag: "Turn their power against them.",
+    description:
+      "Absorb attack damage into stored resources, lead your Temporal allies, and unleash charged attacks.",
+    style: "Energy Absorption · Leadership",
+    complexity: 3,
+  },
+  {
+    id: "magik",
+    code: "45030a",
+    alter: "45030b",
+    name: "Magik",
+    identity: "Illyana Rasputin",
+    aspect: "aggression" as Aspect,
+    color: "#e4bd38",
+    tag: "There are no snowflakes in Limbo.",
+    description:
+      "Reveal the top of your deck, play through Limbo, and empower spells with its resources.",
+    style: "Top-deck spells · Aggression",
+    complexity: 3,
+  },
+  {
+    id: "iceman",
+    code: "46001a",
+    alter: "46001b",
+    name: "Iceman",
+    identity: "Bobby Drake",
+    aspect: "aggression" as Aspect,
+    color: "#72b9d4",
+    tag: "Freeze!",
+    description:
+      "Attach Frostbite to slow enemies, build ice defenses, and strike with your frozen powers.",
+    style: "Frostbite and Ice powers · Aggression",
+    complexity: 2,
+  },
+  {
+    id: "jubilee",
+    code: "47001a",
+    alter: "47001b",
+    name: "Jubilee",
+    identity: "Jubilation Lee",
+    aspect: "justice" as Aspect,
+    color: "#dba72c",
+    tag: "Make every spark count.",
+    description:
+      "Combine different resources, dazzle your enemies, and find the perfect Item on a Shopping Spree.",
+    style: "Resource types · Justice",
+    complexity: 2,
+  },
 ];
 export const VILLAINS = [
   {
@@ -989,6 +1049,8 @@ export const MODULES = [
     description:
       "Cybernetic mercenaries coordinate attacks and reinforce each other.",
   },
+  { id: "sauron", name: "Sauron", difficulty: 3 },
+  { id: "arcade", name: "Arcade", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -1162,10 +1224,14 @@ export function deckCodes(
       (hero === "spdr" && aspect === "protection") ||
       (hero === "cyclops" && aspect === "leadership") ||
       (hero === "storm" && aspect === "leadership") ||
+      (hero === "bishop" && aspect === "leadership") ||
+      (hero === "magik" && aspect === "aggression") ||
       (hero === "cable" && aspect === "leadership") ||
       (hero === "angel" && aspect === "protection") ||
       (hero === "x23" && aspect === "aggression") ||
+      (hero === "iceman" && aspect === "aggression") ||
       (hero === "deadpool" && String(aspect) === "pool") ||
+      (hero === "jubilee" && aspect === "justice") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
       (hero === "rogue" && aspect === "protection") ||
@@ -1315,6 +1381,7 @@ export function maxHP(s: GameState) {
     cyclopsCharacterModifiers(s, "hero").health +
     wolverineStats(s).health +
     x23Stats(s).health +
+    icemanStats(s).health +
     hulkStats(s).health +
     msMarvelStats(s).health +
     rocketMaxHpBonus(s) +
@@ -1331,6 +1398,7 @@ export function aerial(s: GameState, visited: string[] = []): boolean {
     (s.player.form === "hero" &&
       (has(s, "01017") || !!s.flags.aerial || thorStats(s).aerial)) ||
     (s.heroId === "angel" && s.player.form === "hero") ||
+    icemanStats(s).aerial ||
     rogueModifiers(s).aerial ||
     rogueTraits(
       s,
@@ -1415,8 +1483,12 @@ export function heroStats(s: GameState) {
       phoenixStats(s).attack +
       wolverineStats(s).attack +
       psylockeStats(s).attack +
+      bishopCharacterBonus(s, "hero") +
       cableStatBonus(s) +
+      magikStats(s).attack +
       x23Stats(s).attack +
+      icemanStats(s).attack +
+      jubileeStats(s).attack +
       x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
       nebulaNamedCharacterModifiers(s, h.name).attack +
       quicksilverPackHeroStatBonus(s, "attack") +
@@ -1452,7 +1524,11 @@ export function heroStats(s: GameState) {
       rogueModifiers(s).thwart +
       phoenixStats(s).thwart +
       psylockeStats(s).thwart +
+      bishopCharacterBonus(s, "hero") +
       cableStatBonus(s) +
+      magikStats(s).thwart +
+      icemanStats(s).thwart +
+      jubileeStats(s).thwart +
       x23Stats(s).thwart -
       x23Mad(s, card(HEROES.find((h) => h.id === s.heroId)!.code).health!) +
       nebulaNamedCharacterModifiers(s, h.name).thwart +
@@ -1465,7 +1541,9 @@ export function heroStats(s: GameState) {
       stormStats(s).defense +
       psylockeStats(s).defense +
       cableStatBonus(s) +
+      magikStats(s).defense +
       x23Stats(s).defense +
+      icemanStats(s).defense +
       (has(s, "01081") ? 1 : 0) +
       (has(s, "01016") ? (aerial(s) ? 2 : 1) : 0) +
       captainStats(s).def +
@@ -1543,6 +1621,7 @@ export function enemyAttachmentModifier(
 
 export function pieceHP(s: GameState, p: Piece) {
   return (
+    jubileeEnemyHealth(s, p) +
     (p.code === "drone"
       ? (visionDroneStats(s, p)?.health ?? 1) +
         s.attachments.filter(
@@ -1560,6 +1639,7 @@ export function pieceHP(s: GameState, p: Piece) {
     (p.code === "40068" && !isTextBlank(s, p) ? p.counters : 0) +
     scriptedModifier(s, "health", p) +
     angelRecruitBonus(s, p.id) +
+    bishopAllyHP(s, p) +
     phoenixAllyModifiers(s, p).health +
     stormAllyHP(s, p) +
     hawkeyeAllyMaxHP(s, p) +

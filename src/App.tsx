@@ -1,3 +1,8 @@
+import {
+  magikRevealedTop,
+  magikTopPlayable,
+  magikHasPending,
+} from "./game/magik";
 import { rogueTouched } from "./game/rogue";
 import { gambitCharges } from "./game/gambit";
 import { cyclopsCanAttack } from "./game/cyclops";
@@ -35,7 +40,6 @@ import {
   spectrumEnergyForm,
   spectrumFormFaceup,
 } from "./game/spectrum";
-import { riskyBlankPower } from "./game/risky-business";
 import { zeroToleranceIsPermanent } from "./game/zero-tolerance";
 import { projectWideawakeBombCount } from "./game/project-wideawake";
 import { magnetoDamageCap, magnetoIdentityRestricted } from "./game/magneto";
@@ -156,7 +160,6 @@ import {
   imageFor,
   maxHP,
   pieceHP,
-  enemyAttachmentModifier,
   plain,
   resources,
   scenarioModules,
@@ -1807,7 +1810,9 @@ export default function App() {
                     ? `One Permanent mass card stays outside the ${setupDeckSize}-card deck and enters play after you keep your opening hand. `
                     : hero.id === "psylocke"
                       ? `Your two Permanent Psi-Energy upgrades enter play Psi-Knife side up after your mulligan, outside the ${setupDeckSize}-card deck. `
-                      : `${setupCardCount} Permanent cards start in play outside the ${setupDeckSize}-card deck. `)}
+                      : hero.id === "spectrum"
+                        ? `${setupCardCount} Permanent energy forms start in play outside the ${setupDeckSize}-card deck. `
+                        : `${setupCardCount} Permanent cards start in play outside the ${setupDeckSize}-card deck. `)}
                 {hero.id === "rogue" &&
                   "Touched counts toward deck size and is set aside after your opening hand and mulligan. "}
                 {hero.id === "cable" &&
@@ -2585,7 +2590,7 @@ export default function App() {
                         : game,
                       inspect.piece,
                     ) ||
-                      `Pay ${cardCost(game, card(inspect.code))} resources to play this card.`}
+                      `Pay ${cardCost(game, card(inspect.code), inspect.piece)} resources to play this card.`}
                   </p>
                   <button
                     className="primary-button"
@@ -2630,7 +2635,9 @@ export default function App() {
                   ? "One reversible Solid / Phased mass card stays outside the 40-card deck and enters play Solid after you keep your opening hand."
                   : hero.id === "psylocke"
                     ? "Your two reversible Psi-Energy upgrades stay outside the 40-card deck and enter play Psi-Knife side up after your mulligan."
-                    : `${setupCardCount} Permanent cards start in play and stay outside the deck count.`}
+                    : hero.id === "spectrum"
+                      ? `${setupCardCount} Permanent energy forms start in play and stay outside the deck count.`
+                      : `${setupCardCount} Permanent cards start in play and stay outside the deck count.`}
             </p>
           )}
           {hero.id === "rogue" && (
@@ -2949,6 +2956,7 @@ function PaymentDecision({
     p.retainAlternatives,
   );
   const subject = paymentSubject(s, p);
+  const magikPaymentTop = magikHasPending(s) ? magikRevealedTop(s) : undefined;
   // Spend the least valuable resources first: Scientist and printed resource
   // cards, then cards that cannot be played this turn, then playable cards by cost.
   const rank = (x: PaymentSource) => {
@@ -3040,6 +3048,24 @@ function PaymentDecision({
             </span>
             <b>{p.cost || 0}</b>
           </div>
+          {magikPaymentTop && (
+            <div
+              className="magik-payment-top"
+              aria-label="Magik · revealed next top card"
+            >
+              <button
+                aria-label={`Read faceup ${card(magikPaymentTop).name}`}
+                onClick={() => setPreview(magikPaymentTop.code)}
+              >
+                <CardImage code={magikPaymentTop.code} />
+              </button>
+              <span>
+                <small>Top of your deck</small>
+                <b>{card(magikPaymentTop).name}</b>
+                <ResourceIcons items={resources(card(magikPaymentTop))} />
+              </span>
+            </div>
+          )}
           {!!p.requirements?.length && (
             <div className="payment-required">
               <span>Must include</span>
@@ -3052,7 +3078,9 @@ function PaymentDecision({
               : p.card
                 ? "Confirm payment to play the card."
                 : "Confirm payment to resolve this action."}{" "}
-            Your resources and the result appear together in the action summary.
+            {magikPaymentTop
+              ? "The next card is already revealed; finish playing this card."
+              : "Your resources and the result appear together in the action summary."}
           </p>
         </aside>
         <section
@@ -4438,6 +4466,12 @@ function Tabletop({
     ...msMarvelAbilityOptions(s, "identity"),
   ];
   const importedIdentityAbility = importedIdentityAbilities[0];
+  const magikTop = magikRevealedTop(s);
+  const magikTopReason = magikTop
+    ? magikTopPlayable(s)?.id === magikTop.id
+      ? playable(s, magikTop)
+      : "Magik’s top-card play is used this phase."
+    : null;
   const visibleInvocation = doctorStrangeTopInvocation(s);
   const spellUnavailable =
     importedIdentityAbility?.id === "spell" &&
@@ -4708,25 +4742,13 @@ function Tabletop({
                   <div className="enemy-stats stat-row">
                     <StatToken
                       kind="attack"
-                      value={
-                        s.villainId === "mansion_attack"
-                          ? enemyStats(s, s.villain).attack
-                          : riskyBlankPower(s, "attack", s.villain.id)
-                            ? 0
-                            : (card(s.villain).attack || 0) +
-                              enemyAttachmentModifier(s, s.villain.id, "attack")
-                      }
+                      value={enemyStats(s, s.villain).attack}
                       label="ATK"
                       compact
                     />
                     <StatToken
                       kind="threat"
-                      value={
-                        riskyBlankPower(s, "scheme", s.villain.id)
-                          ? 0
-                          : (card(s.villain).scheme || 0) +
-                            enemyAttachmentModifier(s, s.villain.id, "scheme")
-                      }
+                      value={enemyStats(s, s.villain).scheme}
                       label="SCH"
                       compact
                     />
@@ -4770,7 +4792,14 @@ function Tabletop({
                   )}
                 </div>
               </div>
-              <div className="scheme-area">
+              <div
+                className="scheme-area"
+                style={
+                  s.sideSchemes.some((p) => p.code === "47003")
+                    ? { flexWrap: "wrap" }
+                    : undefined
+                }
+              >
                 <div
                   className={`main-scheme ${threatCritical ? "critical" : ""}`}
                 >
@@ -5021,6 +5050,24 @@ function Tabletop({
                           </span>
                         </>
                       )}
+                    </div>
+                    <div className="in-play-actions">
+                      {abilityOptions(s, p).map((a) => (
+                        <button
+                          key={a.id}
+                          disabled={!canUseAction || !!a.disabled}
+                          title={a.disabled || a.label}
+                          onClick={() =>
+                            sendAction({
+                              type: "ABILITY",
+                              id: p.id,
+                              action: a.id,
+                            })
+                          }
+                        >
+                          {a.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -5611,6 +5658,17 @@ function Tabletop({
                                   {pieceHP(s, p) - p.damage}
                                 </span>
                               )}
+                              {p.code === "46008" && (
+                                <span
+                                  className="mini-token"
+                                  role="img"
+                                  aria-label={`Ice Wall damage: ${p.damage} of 8`}
+                                  title={`Ice Wall damage: ${p.damage} of 8`}
+                                >
+                                  {p.damage}/8
+                                  <small>DMG</small>
+                                </span>
+                              )}
                               {!!p.storedCards?.length && (
                                 <span className="mini-token stored-token">
                                   <PremiumToken kind="counter" />
@@ -5725,6 +5783,53 @@ function Tabletop({
                     }
                   />
                 </div>
+                {magikTop && s.phase !== "mulligan" && (
+                  <section
+                    className="invocation-area magik-top-card"
+                    aria-label="Magik · top card of deck"
+                  >
+                    <span className="table-group-label">
+                      MAGIK · FACEUP TOP CARD
+                    </span>
+                    <div className="attached-card-list">
+                      <div className="attached-piece">
+                        <button
+                          className="attached-card"
+                          aria-label={`Inspect faceup ${card(magikTop).name}`}
+                          onClick={() =>
+                            inspect({
+                              code: magikTop.code,
+                              piece: magikTop,
+                              hand: true,
+                              playerId: s.activePlayerId,
+                            })
+                          }
+                        >
+                          <CardImage code={magikTop.code} />
+                          <span>{card(magikTop).name}</span>
+                        </button>
+                        <button
+                          className="ability-button"
+                          disabled={!canUseAction || !!magikTopReason}
+                          title={
+                            magikTopReason ||
+                            "Play the top card as if in your hand, reducing its cost by 1."
+                          }
+                          onClick={() =>
+                            sendAction({ type: "PLAY", id: magikTop.id })
+                          }
+                        >
+                          Play from top · cost{" "}
+                          {cardCost(s, card(magikTop), magikTop)}
+                        </button>
+                        <small>
+                          {magikTopReason ||
+                            "Once per phase · reduce this play’s cost by 1."}
+                        </small>
+                      </div>
+                    </div>
+                  </section>
+                )}
                 {hawkeyeStoredPlayable(s).length > 0 && (
                   <section
                     className="invocation-area"

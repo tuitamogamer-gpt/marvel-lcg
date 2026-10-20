@@ -14,6 +14,11 @@ const aliases = new Map<string, string>();
 // Exact non-Core reprints share an installed native handler while their
 // physical cards retain the actual printing code.
 const nativeAliases = new Map<string, string>([
+  ["46017", "16043"],
+  ["46021", "12024"],
+  ["46022", "15031"],
+  ["46023", "13024"],
+  ["47020", "38019"],
   ["40052", "30014"],
   ["40055", "30019"],
   ["43027", "05023"],

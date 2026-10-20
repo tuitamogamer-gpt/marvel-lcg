@@ -1,3 +1,4 @@
+import { icemanSchemeIcon } from "./iceman.js";
 import { rulesCode } from "./rules-code.js";
 import { eventPlaySources, isTextBlank } from "./card-text.js";
 import { defenseEventSources } from "./card-text.js";
@@ -220,7 +221,7 @@ function statusCount(p: Piece | GameState["player"], status: Status) {
 function schemes(s: GameState) {
   return [
     ...(s.scheme.threat > 0 &&
-    !s.sideSchemes.some((p) => cards.get(p.code)?.scheme_crisis)
+    !s.sideSchemes.some((p) => icemanSchemeIcon(s, p, "scheme_crisis"))
       ? [{ id: "main", code: s.scheme.code }]
       : []),
     ...s.sideSchemes

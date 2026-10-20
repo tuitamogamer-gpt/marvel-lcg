@@ -5,6 +5,7 @@ import {
   newGame,
   paymentSources,
   playable,
+  abilityOptions,
 } from "../src/game/engine";
 import { upgradeSave } from "../src/game/team";
 import type {
@@ -206,12 +207,17 @@ function heroTurn(input: GameState, trace: Trace) {
     (p) => card(p).type_code === "ally" && !p.exhausted,
   )) {
     if (s.phase !== "player") break;
-    cmd({
-      type: "ABILITY",
-      id: p.id,
-      action:
-        s.scheme.threat >= 3 || s.sideSchemes.length ? "thwart" : "attack",
-    });
+    const live = s.player.inPlay.find((piece) => piece.id === p.id);
+    if (!live || live.exhausted || card(live).type_code !== "ally") continue;
+    const preferred =
+      s.scheme.threat >= 3 || s.sideSchemes.length ? "thwart" : "attack";
+    const options = abilityOptions(s, live);
+    const action = [
+      preferred,
+      preferred === "thwart" ? "attack" : "thwart",
+    ].find((id) => options.some((o) => o.id === id && !o.disabled));
+    if (!action) continue;
+    cmd({ type: "ABILITY", id: live.id, action });
   }
   if (s.phase === "player" && !s.player.exhausted && s.player.form === "hero")
     cmd({

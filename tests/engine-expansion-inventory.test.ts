@@ -301,6 +301,10 @@ describe("complete expansion rules inventory", () => {
       ["next_evol", "domino"],
       ["x23", "x23"],
       ["deadpool", "deadpool"],
+      ["aoa", "bishop"],
+      ["aoa", "magik"],
+      ["iceman", "iceman"],
+      ["jubilee", "jubilee"],
     ])
       expect(
         inventory.heroes.find(
@@ -311,19 +315,21 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(22);
+    expect(MODULES).toHaveLength(24);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "deathstrike",
         "shadow_king",
         "exodus",
         "reavers",
+        "sauron",
+        "arcade",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2019);
-    expect(coverage.unsupportedFaces).toBe(2532);
-    expect(coverage.dedicatedFaces).toBe(1561);
-    expect(coverage.registeredHeroIds).toHaveLength(49);
+    expect(coverage.executableFaces).toBe(2135);
+    expect(coverage.unsupportedFaces).toBe(2416);
+    expect(coverage.dedicatedFaces).toBe(1688);
+    expect(coverage.registeredHeroIds).toHaveLength(53);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
     );
@@ -387,6 +393,38 @@ describe("complete expansion rules inventory", () => {
         (scenario: { id: string }) => scenario.id === "mutagen_formula",
       ).registered,
     ).toBe(true);
+  });
+  it("closes the Age of Apocalypse hero slice and both complete retail Hero Packs", () => {
+    const products = inventory.installedRegistryCoverage.products;
+    const apocalypse = products.find(
+      (pack: { code: string }) => pack.code === "aoa",
+    );
+    expect(apocalypse).toMatchObject({
+      faceCount: 220,
+      executableFaces: 60,
+      installedCardClosure: false,
+    });
+    expect(apocalypse.unsupportedFaceCodes).toEqual(
+      cards
+        .filter(
+          (entry: { pack_code: string; position: number }) =>
+            entry.pack_code === "aoa" && entry.position > 58,
+        )
+        .map((entry: { code: string }) => entry.code)
+        .sort(),
+    );
+    for (const [code, count] of [
+      ["iceman", 33],
+      ["jubilee", 41],
+    ] as const)
+      expect(
+        products.find((pack: { code: string }) => pack.code === code),
+      ).toMatchObject({
+        faceCount: count,
+        executableFaces: count,
+        unsupportedFaceCodes: [],
+        installedCardClosure: true,
+      });
   });
   it("closes both NeXt Evolution hero sections while retaining the boxed scenario and campaign gaps", () => {
     const next = inventory.installedRegistryCoverage.products.find(
@@ -535,7 +573,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(114);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(121);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

@@ -1,3 +1,4 @@
+import { icemanSchemeIcon } from "./iceman.js";
 import { defenseEventSources, isTextBlank } from "./card-text.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, playerOrder, seatView } from "./team.js";
@@ -107,8 +108,8 @@ function schemes(
       (p) =>
         gamoraCanRemoveThreat(s, p.id) &&
         (p.id !== "main" ||
-          !s.sideSchemes.some(
-            (scheme) => cards.get(scheme.code)?.scheme_crisis,
+          !s.sideSchemes.some((scheme) =>
+            icemanSchemeIcon(s, scheme, "scheme_crisis"),
           )),
     );
 }

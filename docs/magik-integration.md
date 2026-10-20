@@ -1,0 +1,34 @@
+# Magik native integration
+
+Magik covers the Age of Apocalypse hero/player section `45030a/b`–`45058`: **30 original faces on 47 physical cards**. This is the Magik section of the expansion, rather than scenario or campaign automation. Her original Aggression source contains **40 cards: 15 identity-specific, 16 Aggression and nine Basic**. There are no Permanent setup cards. Five separately owned physical nemesis cards (`45054`–`45058`) begin set aside; Darkchilde is her ordinary encounter-deck obligation. The imported catalog, starter and image bytes remain unchanged.
+
+The registry has 29 dedicated Magik-section faces plus the exact Core-equivalent Power of Aggression printing `45047`. The native handlers retain the original Clobber `45046` and Spiritual Meditation `45052` physical codes while sharing the corresponding authored effect providers. Enabling these faces requires their host adapters; importing text alone does not enable a card.
+
+## Public top card and play initiation
+
+[Rules Reference 1.8, p64](https://hallofheroeslcg.com/wp-content/uploads/2026/07/mc_rulesreference_v18_compressed.pdf#page=64) specifically resolves Magik's permission:
+
+- Her top card is public only in hero form while her printed identity text is active. Blanking Magik turns it facedown; the top-card resource conditions consequently do not apply, even when its identity was previously known. Keywords granted by unblanked upgrades remain active on the Magik hero.
+- Once per phase, the actual current top card can be played as if in hand for one resource less. It is staged on the table at initiation step 3, exposing the next actual card before payment and effects. Immediate player-deck exhaustion recycles the old discard and deals its ordinary encounter card at that point.
+- The actual staged card, origin, discount and phase receipt survive JSON serialization. A pending play prevents starting a second top play. Once the next card is revealed, its payment and nested decisions cannot be canceled; the dialog shows that next card with artwork, printed resources and a read-card control. Ordinary hand payments retain normal cancellation.
+- The top card remains outside the physical hand: it cannot pay resources or a printed discard-from-hand cost and cannot be put into play by a hand-only instruction. Playing it does qualify for after-playing-from-hand triggers. Team-Building Exercise can play it with both discounts, and top-played Pixie receives her hand-play response.
+
+The visible table has a separate faceup-top panel. The fair planner retains the current public top while sampling the remaining hidden deck; it stops retaining that card when the identity is blanked. Scrying's looked-at cards remain known during its saved selection. Showing the next card crosses the existing hidden-information boundary.
+
+Native event availability and paid continuation use separate views. `eventPlaySources` offers actual currently playable sources; `eventPlaySource` additionally validates an active player's already staged event by its physical ID. Staged cards cannot be offered as new plays, and an invalid owner or phase cannot retain the discount. Basic attack and thwart packets refresh their current statistics after a top-play interrupt changes the public resource icons.
+
+## Native rules
+
+Illyana's optional Spell interrupt resolves before her form change and uses one actual discarded Spell. Limbo offers its saved hand/top swap both as an Action and at the beginning of the villain phase. Scrying allocates the looked-at cards to draw, discard and top instructions, including the published one/two-card cases. Its draw uses the native draw path and its actual event stays on the table until resolution finishes. Stepping Disc readies the hero and selects an original Magik card other than Stepping Disc.
+
+Crown, Soulsword and Mystical Armor use the currently public resource icons for basic statistics. Their steady, basic-attack-only piercing and retaliate are separate granted keywords. Exorcism, Soul Strike and Magic Barrier check the new top at their conditional clause; ordinary status priority, defense restrictions, damage and aftermath remain native. Colossus can play from hand or the top during his attack interrupt, receives his actual Tough status and defends without exhaustion. Illyana, Limbo's phase response and Colossus's interrupt retain Superpower Feedback's one damage occurrence; identity-specific events use the shared completion path.
+
+The player pool implements Goldballs's fixed, chosen discard cost; Tempus's canceled villain scheme; Blood Rage's identity-only basic defeat (including a continuing villain stage); Test the Defense's optional counters after an Attack event is played, including a status-canceled event; Full-Body Charge's strict below-half-starting-HP overkill; Triage, Stepford Cuckoos, Bloodgem and Basic Spell. Exact-printing Clobber uses the first-card-played-this-round receipt, and Spiritual Meditation draws and discards actual hand cards.
+
+Belasco uses Villainous and his post-activation discard, retaining the same physical references through immediate recycling. Ruler of Limbo captures the actual Limbo facedown, prevents threat removal while Belasco is present, and returns that same support under its owner's control on defeat. Other captured player cards retain ordinary leaving-play destinations. S'ym, Witchfire and Battle for Limbo use the actual common zones. Battle for Limbo counts completed activations rather than merely counting eligible minions: it gains Surge when all attempts were replaced or prevented. Its printed boost places threat on the actual Ruler.
+
+## Source and validation boundary
+
+Primary evidence is the [Age of Apocalypse gallery](https://hallofheroeslcg.com/age-of-apocalypse/), the original checked-in English scans, RRG 1.8 and dated FFG answers on the [post-1.5 ruling page](https://hallofheroeslcg.com/latest-ffg-rulings-post-rrg-1-5/) and [post-1.6 ruling page](https://hallofheroeslcg.com/latest-ffg-rulings-post-rrg-1-6/). Relevant dated answers include January 25, May 2, May 10 and May 16, 2024 for initiation, Scrying, blanking and as-if-in-hand behavior; September 26, 2024 confirms that an initiated top play can resolve without effect after its valid target is spent as a resource. RRG p49 limits Blood Rage's “you” trigger to the identity, and the Otherwise definition applies to Witchfire's effect after its ally-defeat trigger.
+
+The focused native suite exercises the actual public commands and native windows, both natural source seeds (`45037` free Blood Rage and `45052` paid Crown), exact pending reload, the information boundary, physical IDs, deck exhaustion, source decks for all five aspects, keywords, player effects and nemesis continuations. This checkpoint does not replace the merged batch's full regression, source mission matrix, public browser checks or exact-commit deployment verification.

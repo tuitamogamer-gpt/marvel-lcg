@@ -1,3 +1,4 @@
+import { magikTopPlayable } from "./magik.js";
 import { rulesCode } from "./rules-code.js";
 import raw from "../data/catalog-cards.json" with { type: "json" };
 import core from "../data/core-player.json" with { type: "json" };
@@ -194,8 +195,12 @@ function maxOneWayUsed(s: GameState) {
 }
 const hand = (s: GameState, ports: SpiderHamPackPorts) =>
   ports.handPlayableCards?.(s) || s.player.hand;
+function teamPlayCards(s: GameState) {
+  const top = magikTopPlayable(s);
+  return [...s.player.hand, ...(top ? [top] : [])];
+}
 function matchingHand(s: GameState, support: Piece, ports: SpiderHamPackPorts) {
-  return s.player.hand.filter(
+  return teamPlayCards(s).filter(
     (p) =>
       ports
         .traits(s, p)
@@ -1021,13 +1026,13 @@ export function resolveSpiderHamPackEffect(
     }
     case "spider-ham-pack:team-play": {
       const p = own(s, e.id, "30022"),
-        candidate = s.player.hand.find((p) => p.id === e.target);
+        candidate = teamPlayCards(s).find((p) => p.id === e.target);
       need(
         p &&
           candidate &&
           spiderHamPackAbilityOptions(s, p.id, ports).length &&
           matchingHand(s, p, ports).some((p) => p.id === candidate.id),
-        "Choose a playable actual hand card sharing a trait with your hero.",
+        "Choose a playable card sharing a trait with your hero.",
       );
       p!.exhausted = true;
       ports.playFromHand(s, candidate!.id, 1, after);
