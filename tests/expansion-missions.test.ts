@@ -110,6 +110,10 @@ const heroIds = [
   "magik",
   "iceman",
   "jubilee",
+  "nightcrawler",
+  "magneto",
+  "maria_hill",
+  "nick_fury",
 ];
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -303,6 +307,10 @@ function runMission(config: (typeof missions)[number]) {
     magik: 40,
     iceman: 40,
     jubilee: 40,
+    nightcrawler: 40,
+    magneto: 40,
+    maria_hill: 40,
+    nick_fury: 41,
   };
   if (Object.hasOwn(physicalSourceCounts, hero.id)) {
     expect(codes).toHaveLength(physicalSourceCounts[hero.id]);
@@ -608,9 +616,9 @@ describe("published expansion starters across every supported mission setting", 
         ),
     );
     expect(VILLAINS).toHaveLength(10);
-    expect(MODULES).toHaveLength(24);
-    expect(heroIds).toHaveLength(48);
-    expect(missions).toHaveLength(22752);
+    expect(MODULES).toHaveLength(26);
+    expect(heroIds).toHaveLength(52);
+    expect(missions).toHaveLength(26728);
     const key = (mission: (typeof missions)[number]) =>
       [
         mission.heroId,
@@ -622,7 +630,7 @@ describe("published expansion starters across every supported mission setting", 
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
     expect(
       createHash("sha256").update(manifest(missions).join("\n")).digest("hex"),
-    ).toBe("8700b7efebe73397bb71519e768a39b4c7096cfbda3637e15ca405c4f0b5f5a3");
+    ).toBe("50a2adec4c438e99521fa30c0fa2c46be481d6837ff5396f82eaec269dcf63c1");
     const combined = partitions.flat();
     // New heroes and modular sets extend the published mission grid without
     // changing the names or seeded shuffles of the 11,328 prior missions.
@@ -636,6 +644,8 @@ describe("published expansion starters across every supported mission setting", 
           "reavers",
           "sauron",
           "arcade",
+          "crazy_gang",
+          "hellfire",
         ].includes(mission.module),
     );
     expect(retained).toHaveLength(11328);
@@ -645,7 +655,14 @@ describe("published expansion starters across every supported mission setting", 
     const previousImport = missions.filter(
       (mission) =>
         heroIds.indexOf(mission.heroId) < 36 &&
-        !["exodus", "reavers", "sauron", "arcade"].includes(mission.module),
+        ![
+          "exodus",
+          "reavers",
+          "sauron",
+          "arcade",
+          "crazy_gang",
+          "hellfire",
+        ].includes(mission.module),
     );
     expect(previousImport).toHaveLength(14184);
     expect(
@@ -656,7 +673,9 @@ describe("published expansion starters across every supported mission setting", 
     const secondImport = missions.filter(
       (mission) =>
         heroIds.indexOf(mission.heroId) < 40 &&
-        !["sauron", "arcade"].includes(mission.module),
+        !["sauron", "arcade", "crazy_gang", "hellfire"].includes(
+          mission.module,
+        ),
     );
     expect(secondImport).toHaveLength(17360);
     expect(
@@ -667,7 +686,9 @@ describe("published expansion starters across every supported mission setting", 
     const thirdImport = missions.filter(
       (mission) =>
         heroIds.indexOf(mission.heroId) < 44 &&
-        !["sauron", "arcade"].includes(mission.module),
+        !["sauron", "arcade", "crazy_gang", "hellfire"].includes(
+          mission.module,
+        ),
     );
     expect(thirdImport).toHaveLength(19096);
     expect(
@@ -675,14 +696,25 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(thirdImport).join("\n"))
         .digest("hex"),
     ).toBe("b3ee09ef91e3f0f528da00b9c5e541220bdd12344987c2d0fcac7600024daf66");
-    expect(new Set(missions.map(key)).size).toBe(22752);
-    expect(new Set(combined.map(key)).size).toBe(22752);
+    const fourthImport = missions.filter(
+      (mission) =>
+        heroIds.indexOf(mission.heroId) < 48 &&
+        !["crazy_gang", "hellfire"].includes(mission.module),
+    );
+    expect(fourthImport).toHaveLength(22752);
+    expect(
+      createHash("sha256")
+        .update(manifest(fourthImport).join("\n"))
+        .digest("hex"),
+    ).toBe("8700b7efebe73397bb71519e768a39b4c7096cfbda3637e15ca405c4f0b5f5a3");
+    expect(new Set(missions.map(key)).size).toBe(26728);
+    expect(new Set(combined.map(key)).size).toBe(26728);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(5688);
-      expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(12);
+      expect(partition).toHaveLength(6682);
+      expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(13);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 5688 : 22752);
+    expect(selectedMissions).toHaveLength(isSharded ? 6682 : 26728);
   });
   for (const mission of selectedMissions)
     it(
