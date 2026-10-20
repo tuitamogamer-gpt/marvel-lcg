@@ -468,7 +468,9 @@ export function paymentStatus(
   sourceRequirement?: Prompt["sourceRequirement"],
   retainAlternatives: string[][] = [],
 ) {
-  const selected = sources.filter((s) => ids.includes(s.id));
+  const selected = [...new Set(ids)]
+    .map((id) => sources.find((source) => source.id === id))
+    .filter((source): source is PaymentSource => !!source);
   const printed = selected.flatMap((s) => s.resources);
   const available = [...printed];
   const missing: Resource[] = [];
