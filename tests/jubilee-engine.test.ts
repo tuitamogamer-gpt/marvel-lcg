@@ -34,7 +34,7 @@ import {
 } from "./dv-test-helpers.js";
 import type { GameState, Piece, Resource } from "../src/game/types.js";
 
-function base(alter = false, team = false) {
+function base(alter = false, team: boolean | string = false) {
   let s = newGame({
     heroId: "jubilee",
     aspect: "justice",
@@ -46,7 +46,10 @@ function base(alter = false, team = false) {
       ? {
           heroes: [
             { heroId: "jubilee", aspect: "justice" as const },
-            { heroId: "spider_man", aspect: "justice" as const },
+            {
+              heroId: typeof team === "string" ? team : "spider_man",
+              aspect: "justice" as const,
+            },
           ],
         }
       : {}),
@@ -577,6 +580,55 @@ describe("Jubilee player pool and side schemes", () => {
     s = finish(s);
     expect(s.sideSchemes.find((q) => q.id === p.id)?.counters).toBe(1);
   });
+  it.each([
+    ["spider_man", ["01003"]],
+    ["spider_woman", ["04035", "04036", "04037", "04038"]],
+  ] as const)(
+    "Generation X searches borrowed %s identity events, including aspect signatures, and excludes ordinary aspect events",
+    (other, codes) => {
+      let s = base(false, other);
+      const teammate = seatView(s, "p2").player;
+      const borrowed = codes.map((code) => {
+        const index = teammate.deck.findIndex((p) => p.code === code);
+        expect(index).toBeGreaterThanOrEqual(0);
+        const p = teammate.deck.splice(index, 1)[0];
+        s.player.discard.push(p);
+        return p;
+      });
+      const controlIndex = teammate.deck.findIndex(
+        (p) =>
+          card(p).type_code === "event" &&
+          card(p).faction_code !== "hero" &&
+          card(p).set_code !== other,
+      );
+      expect(controlIndex).toBeGreaterThanOrEqual(0);
+      const control = teammate.deck.splice(controlIndex, 1)[0];
+      s.player.deck.push(control);
+      const before = sourceIds(s).sort();
+      const scheme = hand(s, "47016")[0];
+      s = finish(command(s, { type: "PLAY", id: scheme.id }));
+      expect(s.sideSchemes.find((p) => p.id === scheme.id)?.counters).toBe(6);
+      s = cast(s, "47008a", ["47010a"]);
+      s = finish(target(s, scheme.id));
+      expect(s.sideSchemes.find((p) => p.id === scheme.id)?.counters).toBe(3);
+      s = cast(s, "47008b", ["47010b"]);
+      s = target(reload(s), scheme.id);
+      expect(s.prompt?.title).toBe("Generation X");
+      for (const p of borrowed)
+        expect(s.prompt?.options.some((o) => o.id === p.id)).toBe(true);
+      expect(s.prompt?.options.some((o) => o.id === control.id)).toBe(false);
+      const chosen = borrowed[borrowed.length - 1];
+      s = choose(reload(s), chosen.id);
+      s = finish(s);
+      expect(s.player.hand.find((p) => p.id === chosen.id)).toMatchObject({
+        code: chosen.code,
+        ownerId: "p2",
+      });
+      expect(s.victoryDisplay?.some((p) => p.id === scheme.id)).toBe(true);
+      expect(sourceIds(reload(s)).sort()).toEqual(before);
+      expect(sourceIds(s).filter((id) => id === chosen.id)).toHaveLength(1);
+    },
+  );
 });
 
 describe("Jubilee obligation, physical control changes and Arcade", () => {

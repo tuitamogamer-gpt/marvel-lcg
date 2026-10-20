@@ -1,5 +1,5 @@
 import { deadpoolTriggeredBlocked } from "./deadpool.js";
-import { card } from "./card-definitions.js";
+import { card, CATALOG_CARDS } from "./card-definitions.js";
 import { eventPlaySources, isTextBlank } from "./card-text.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import type { PaymentSource } from "./payment.js";
@@ -32,6 +32,13 @@ const hero = (s: GameState) => s.player.form === "hero";
 const live = (s: GameState, code: string) =>
   s.player.inPlay.filter((p) => p.code === code && !isTextBlank(s, p));
 const types: Resource[] = ["energy", "mental", "physical", "wild"];
+// Spider-Woman's signature events have aspect factions; their identity set
+// still makes them identity-specific. Hero-faction Invocation events also qualify.
+const identitySets = new Set(
+  CATALOG_CARDS.filter((c) => c.type_code === "hero" && c.set_code).map(
+    (c) => c.set_code!,
+  ),
+);
 const printedResources = (p: Piece) =>
   types.flatMap((r) =>
     Array<Resource>(Number(card(p)[`resource_${r}`] || 0)).fill(r),
@@ -891,7 +898,9 @@ export function resolveJubileeEffect(
       const candidates = [...s.player.deck, ...s.player.discard].filter((p) =>
         e.item
           ? hasTrait(p, "Item") && ports.canPut(s, p)
-          : card(p).type_code === "event" && card(p).set_code === s.heroId,
+          : card(p).type_code === "event" &&
+            (card(p).faction_code === "hero" ||
+              identitySets.has(card(p).set_code || "")),
       );
       ports.choose(
         s,
