@@ -5599,24 +5599,36 @@ function bishopResourceCardPaymentOptions(
   wildAs: Resource,
   paidForCard?: Resource[],
   generatedForCard?: Resource[],
+  explicitAssignment?: Resource[],
 ): boolean[] {
   const key = (resources: Resource[]) => [...resources].sort().join(":");
-  type Allocation = { generated: Resource[]; usedResourceCard: boolean };
+  type Allocation = {
+    generated: Resource[];
+    declared: Resource[];
+    usedResourceCard: boolean;
+  };
   let subsets = new Map<string, Allocation>([
-    ["false|", { generated: [], usedResourceCard: false }],
+    ["false||", { generated: [], declared: [], usedResourceCard: false }],
   ]);
+  let sourceIndex = 0;
   for (const source of selected) {
     for (const resource of source.resources) {
+      // Independent declarations stay paired with the physical source icon.
+      const declaration = explicitAssignment?.[sourceIndex++];
       const next = new Map(subsets);
       for (const subset of subsets.values()) {
         if (subset.generated.length >= cost) continue;
         const generated = [...subset.generated, resource];
+        const declared = declaration
+          ? [...subset.declared, declaration]
+          : subset.declared;
         const usedResourceCard =
           subset.usedResourceCard ||
           (source.kind === "card" &&
             card(source.code).type_code === "resource");
-        next.set(`${usedResourceCard}|${key(generated)}`, {
+        next.set(`${usedResourceCard}|${key(generated)}|${key(declared)}`, {
           generated,
+          declared,
           usedResourceCard,
         });
       }
@@ -5630,12 +5642,9 @@ function bishopResourceCardPaymentOptions(
       (generatedForCard && key(subset.generated) !== key(generatedForCard))
     )
       continue;
-    const paid = paidResourceAllocations(
-      subset.generated,
-      cost,
-      requirements,
-      wildAs,
-    );
+    const paid = explicitAssignment
+      ? [subset.declared]
+      : paidResourceAllocations(subset.generated, cost, requirements, wildAs);
     if (
       paid.some(
         (allocation) => !paidForCard || key(allocation) === key(paidForCard),
@@ -5796,7 +5805,13 @@ function pay(
       : undefined;
 
   need(
-    !p.card || hulkPaymentAllowed(p.card, printed, wildAs),
+    !p.card ||
+      hulkPaymentAllowed(
+        p.card,
+        explicitWilds ?? printed,
+        // A retained Wild must not be redeclared by the legacy aggregate type.
+        explicitWilds ? "wild" : wildAs,
+      ),
     "Crushing Blow can only be paid with physical resources.",
   );
   let paidForCard: Resource[] | undefined;
@@ -5985,7 +6000,9 @@ function pay(
     const needed = p.cost || 0;
     const counts = new Set<number>();
     const assigned =
-      spentAssignment || printed.map((r) => (r === "wild" ? wildAs : r));
+      explicitWilds ||
+      spentAssignment ||
+      printed.map((r) => (r === "wild" ? wildAs : r));
     const wanted = (paidForCard || assigned.slice(0, needed))
       .slice()
       .sort()
@@ -6055,6 +6072,7 @@ function pay(
       wildAs,
       paidForCard,
       generatedForCard,
+      explicitWilds,
     );
     const receipt = p.bishopResourcePayment;
     if (
