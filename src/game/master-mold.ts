@@ -30,7 +30,8 @@ export const MASTER_MOLD_SCRIPT_CODES = [
   "32172b",
 ] as const;
 
-/** Metadata only: Magneto occupies an ordinary controlled-ally zone. */
+/** Metadata only: Magneto occupies an ordinary controlled-ally zone, or the
+ * first player's set-aside zone if a matching unique card prevents entry. */
 export interface MasterMoldState {
   magnetoId?: string;
   handledSchemes: string[];

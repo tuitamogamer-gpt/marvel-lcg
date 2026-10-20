@@ -15152,10 +15152,12 @@ const masterMoldPorts: masterMold.MasterMoldPorts = {
   putMagneto: (s, p, playerId) => {
     Object.assign(p, resetPiece(p, true));
     delete p.ownerId;
-    need(
-      !uniqueConflict(s, card(p)),
-      "The unique Magneto ally is already in play.",
-    );
+    if (uniqueConflict(s, card(p))) {
+      // RRG 1.8, p.46: an effect putting a matching unique player card into
+      // play has no effect. Keep this actual, ownerless setup card set aside.
+      (seatView(s, playerId).player.setAside ||= []).push(p);
+      return;
+    }
     seatView(s, playerId).player.inPlay.push(p);
     add(s, E("allyEnter", { id: p.id, actorId: playerId, fromHand: false }));
   },
