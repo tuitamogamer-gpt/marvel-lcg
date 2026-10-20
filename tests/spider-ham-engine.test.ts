@@ -687,6 +687,77 @@ describe("actual damage and recovery responses", () => {
     expect(toon(s)).toBe(1);
     exact(s);
   });
+  it("recovery finishes Death Factor, Synch and Probability Field before Cartoon Power or a teammate's Truck responds", () => {
+    let s = base("deadpool");
+    s.player.form = "alter";
+    s.player.hp = 1;
+    const synch = makePiece(s, "47018"),
+      field = makePiece(s, "40049");
+    for (const p of [synch, field]) {
+      p.ownerId = "p1";
+      s.player.inPlay.push(p);
+    }
+    const deathFactor = makePiece(s, "35030");
+    deathFactor.attachedTo = "hero:p1";
+    s.attachments.push(deathFactor);
+    const truck = put(s, "44008", "p2");
+    const top = source(s, "30002");
+    s.player.deck.unshift(top);
+    const ids = all(s)
+      .map((p) => p.id)
+      .sort();
+    s = command(reload(s), { type: "BASIC", action: "recover" });
+    expect(s.prompt?.title).toBe("Death Factor");
+    expect(s.player.hp).toBe(1);
+    s = choose(reload(s), "heal");
+    expect(s.prompt?.title).toBe("Synch");
+    expect(s.player.hp).toBe(1);
+    expect(toon(s)).toBe(0);
+    s = choose(reload(s), synch.id);
+    expect(s.prompt?.title).toBe("Probability Field");
+    expect(s.player.hp).toBe(1);
+    expect(actual(s, truck).exhausted).toBe(false);
+    s = choose(reload(s), field.id);
+    expect(s.prompt?.title).toBe("Cartoon Power");
+    expect(s.player.hp).toBe(8);
+    expect(s.player.exhausted).toBe(true);
+    expect(s.player.discard.some((p) => p.id === top.id)).toBe(true);
+    s = respond(reload(s), /Cartoon Power/, "30001b");
+    expect(s.prompt?.title).toBe("Chimichanga Truck");
+    expect(seatView(s, "p1").player.hp).toBe(8);
+    s = settle(respond(reload(s), /Chimichanga Truck/));
+    expect(seatView(s, "p1").player.exhausted).toBe(false);
+    expect(actual(s, truck).exhausted).toBe(true);
+    activateSeat(s, "p1");
+    expect(toon(s)).toBe(1);
+    expect(
+      all(reload(s))
+        .map((p) => p.id)
+        .sort(),
+    ).toEqual(ids);
+    exact(s);
+  });
+  it("a Death Factor recovery replacement completes before the after-recovery response and grants no healing", () => {
+    let s = base();
+    s.player.form = "alter";
+    s.player.hp = 4;
+    const deathFactor = makePiece(s, "35030");
+    deathFactor.attachedTo = "hero:p1";
+    s.attachments.push(deathFactor);
+    s = command(reload(s), { type: "BASIC", action: "recover" });
+    expect(s.prompt?.title).toBe("Death Factor");
+    expect(toon(s)).toBe(0);
+    s = choose(reload(s), deathFactor.id);
+    expect(s.prompt?.title).toBe("Cartoon Power");
+    expect(s.attachments.some((p) => p.id === deathFactor.id)).toBe(false);
+    expect(s.encounter.discard.some((p) => p.id === deathFactor.id)).toBe(true);
+    expect(s.player.hp).toBe(4);
+    s = settle(respond(reload(s), /Cartoon Power/, "30001b"));
+    expect(s.player.hp).toBe(4);
+    expect(toon(s)).toBe(1);
+    expect(s.player.exhausted).toBe(true);
+    exact(s);
+  });
   it("an ordinary healing effect is not a basic recovery response", () => {
     let s = base();
     s.player.form = "alter";

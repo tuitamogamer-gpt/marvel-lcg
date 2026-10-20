@@ -23799,6 +23799,19 @@ function resolve(s: GameState, e: Effect) {
       else heal(s, "hero", e.amount);
       break;
     }
+    case "basicRecoverResponses":
+      // Evaluate after-recovery abilities only after the entire basic power,
+      // including healing interrupts or its replacement, has completed.
+      add(
+        s,
+        ...spiderHam.spiderHamAfterBasicRecover(s, e.receipt, spiderHamPorts),
+        ...deadpool.deadpoolRecovered(s),
+        ...bishop.bishopRecovered(s),
+        ...iceman.icemanRecovered(s),
+        ...phoenix.phoenixRecovered(s),
+        ...x23.x23Recovered(s),
+      );
+      break;
     case "basicPower": {
       const bishopPacket = {
         ...e,
@@ -31913,7 +31926,16 @@ export function dispatch(state: GameState, command: Command): GameState {
               "You are at full health.",
             );
             s.player.exhausted = true;
-            if (deathFactor.length)
+            const after = E("basicRecoverResponses", {
+              receipt: {
+                token: `recover:${s.nextId++}`,
+                playerId: s.activePlayerId,
+                performed: true,
+                wasAlter: true,
+              },
+            });
+            if (deathFactor.length) {
+              add(s, after);
               choose(
                 s,
                 "Death Factor",
@@ -31925,33 +31947,12 @@ export function dispatch(state: GameState, command: Command): GameState {
                   ]),
                 ],
               );
-            else {
-              const packet = E("heal", {
-                target: "hero",
-                amount: stats.recover,
-              });
-              add(s, E("jubileeBasicRecover", { amount: packet.amount }));
-            }
-            add(s, ...phoenix.phoenixRecovered(s), ...x23.x23Recovered(s));
-            add(
-              s,
-              ...deadpool.deadpoolRecovered(s),
-              ...bishop.bishopRecovered(s),
-              ...iceman.icemanRecovered(s),
-            );
-            add(
-              s,
-              ...spiderHam.spiderHamAfterBasicRecover(
+            } else
+              add(
                 s,
-                {
-                  token: `recover:${s.nextId++}`,
-                  playerId: s.activePlayerId,
-                  performed: true,
-                  wasAlter: true,
-                },
-                spiderHamPorts,
-              ),
-            );
+                E("jubileeBasicRecover", { amount: stats.recover }),
+                after,
+              );
           } else {
             need(s.player.form === "hero", "Change to hero form first.");
             if (command.action === "attack")
