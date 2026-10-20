@@ -614,6 +614,9 @@ describe("published expansion starters across every supported mission setting", 
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
+    expect(
+      createHash("sha256").update(manifest(missions).join("\n")).digest("hex"),
+    ).toBe("8700b7efebe73397bb71519e768a39b4c7096cfbda3637e15ca405c4f0b5f5a3");
     const combined = partitions.flat();
     // New heroes and modular sets extend the published mission grid without
     // changing the names or seeded shuffles of the 11,328 prior missions.
