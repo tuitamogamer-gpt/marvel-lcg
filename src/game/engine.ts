@@ -23,6 +23,7 @@ import {
 } from "./player-side-schemes.js";
 import * as acolytes from "./acolytes.js";
 import * as armadillo from "./armadillo.js";
+import * as experimentalWeapons from "./experimental-weapons.js";
 import * as inheritors from "./inheritors.js";
 import * as brotherhood from "./brotherhood.js";
 import * as zzzax from "./zzzax.js";
@@ -311,6 +312,7 @@ import {
   controller,
   controlledNPCs,
   engaged,
+  isElectroResource,
   playerOrder,
   seatView,
   syncSeat,
@@ -853,6 +855,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
       !!(
         name === "Ranged" &&
         (granted.ranged ||
+          (s.attack?.attacker === p.id && s.attack.experimentalWeaponsRanged) ||
           wideawakeKeywords.ranged ||
           allyTraits.ranged ||
           packTraits.ranged ||
@@ -885,6 +888,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     ? storm.stormGlobal(s).retaliate +
         intrinsic +
         grantedValue +
+        experimentalWeapons.experimentalWeaponsRetaliate(s, p.id) +
         mansionKeywords.retaliate
     : Math.max(intrinsic, grantedValue);
 }
@@ -1544,6 +1548,22 @@ function movePieceFromPlay(
   const viewBefore = controlling ? seatView(s, controlling) : s;
   const healthBefore = maxHP(viewBefore);
   const removedSource = find(s, id);
+  // These actual cards were attached from a hand, never put into play.
+  // Retain the marker before Electro leaves so legacy saves also bypass all
+  // leave-play interrupts and printed player-card effects during cleanup.
+  if (removedSource?.code === "31032")
+    for (const attached of s.attachments)
+      if (isElectroResource(s, attached)) attached.electroResource = true;
+  if (removedSource && isElectroResource(s, removedSource)) {
+    const index = s.attachments.findIndex((p) => p.id === id);
+    if (index < 0) return;
+    const [actual] = s.attachments.splice(index, 1);
+    const owner = s.players.find((seat) => seat.id === actual.ownerId);
+    if (removed || !owner || owner.eliminated)
+      s.removed.push(resetPiece(actual));
+    else seatView(s, owner).player.discard.push(resetPiece(actual));
+    return;
+  }
   if (
     !movement &&
     removedSource &&
@@ -2405,6 +2425,9 @@ function check(s: GameState) {
       movePieceFromPlay(s, remainingNPC.id, false);
       if (s.phase === "lost") return;
     }
+    for (const attached of [...s.attachments])
+      if (attached.ownerId === seat.id && isElectroResource(s, attached))
+        movePieceFromPlay(s, attached.id, true);
     for (const m of s.minions)
       if (m.engagedWith === seat.id) {
         m.engagedWith = next.id;
@@ -3076,6 +3099,7 @@ function dealDamage(
             ? 0
             : printedKeyword(card(original), "Retaliate")) +
           antMan.antManEnemyRetaliate(s, original) +
+          experimentalWeapons.experimentalWeaponsRetaliate(s, original.id) +
           storm.stormGlobal(s).retaliate +
           inheritors.inheritorsModifiers(s, original).retaliate +
           ironheart.ironheartEnemyKeywords(s, original, { isTextBlank })
@@ -6929,38 +6953,40 @@ export function newGame(config: {
               "acolytes",
             ].includes(c.set_code || "")
               ? "mut_gen"
-              : c.set_code === "exodus"
-                ? "gambit"
-                : c.set_code === "sauron"
-                  ? "iceman"
-                  : c.set_code === "crazy_gang"
-                    ? "ncrawler"
-                    : c.set_code === "hellfire"
-                      ? "magneto"
-                      : c.set_code === "arcade"
-                        ? "jubilee"
-                        : c.set_code === "reavers"
-                          ? "rogue"
-                          : c.set_code === "deathstrike"
-                            ? "wolv"
-                            : c.set_code === "shadow_king"
-                              ? "storm"
-                              : c.set_code === "ironspider_sinister"
-                                ? "spdr"
-                                : c.set_code === "inheritors"
-                                  ? "spiderham"
-                                  : c.set_code === "zzzax"
-                                    ? "ironheart"
-                                    : c.set_code === "armadillo"
-                                      ? "nova"
-                                      : [
-                                            "goblin_gimmicks",
-                                            "a_mess_of_things",
-                                            "power_drain",
-                                            "running_interference",
-                                          ].includes(c.set_code || "")
-                                        ? "gob"
-                                        : "core")) ||
+              : c.set_code === "exper_weapon"
+                ? "trors"
+                : c.set_code === "exodus"
+                  ? "gambit"
+                  : c.set_code === "sauron"
+                    ? "iceman"
+                    : c.set_code === "crazy_gang"
+                      ? "ncrawler"
+                      : c.set_code === "hellfire"
+                        ? "magneto"
+                        : c.set_code === "arcade"
+                          ? "jubilee"
+                          : c.set_code === "reavers"
+                            ? "rogue"
+                            : c.set_code === "deathstrike"
+                              ? "wolv"
+                              : c.set_code === "shadow_king"
+                                ? "storm"
+                                : c.set_code === "ironspider_sinister"
+                                  ? "spdr"
+                                  : c.set_code === "inheritors"
+                                    ? "spiderham"
+                                    : c.set_code === "zzzax"
+                                      ? "ironheart"
+                                      : c.set_code === "armadillo"
+                                        ? "nova"
+                                        : [
+                                              "goblin_gimmicks",
+                                              "a_mess_of_things",
+                                              "power_drain",
+                                              "running_interference",
+                                            ].includes(c.set_code || "")
+                                          ? "gob"
+                                          : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -9195,6 +9221,7 @@ export function abilityOptions(
       : []),
     ...sentinels.sentinelsAbilityOptions(s, p.id, sentinelsPorts),
     ...zzzax.zzzaxActions(s, p, zzzaxPorts),
+    ...experimentalWeapons.experimentalWeaponsActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
     ...mutagenAttachmentActions(s, p),
     ...scarletWitch.scarletWitchAttachmentActions(s, p, scarletPorts),
@@ -9622,6 +9649,15 @@ function ability(s: GameState, id: string, action = "special") {
     return;
   const moduleSource = find(s, id);
   if (moduleSource) {
+    const weaponEffects = experimentalWeapons.experimentalWeaponsActionEffects(
+      s,
+      moduleSource,
+      action,
+    );
+    if (weaponEffects) {
+      add(s, ...weaponEffects);
+      return;
+    }
     const effects = ironspider.ironspiderSinisterActionEffects(
       s,
       moduleSource,
@@ -13070,6 +13106,10 @@ const msPorts: MsMarvelPorts = {
   flip,
 };
 const goblinPorts: GoblinModuleEnginePorts = { ...mutagenPorts, discardHand };
+const experimentalWeaponsPorts: experimentalWeapons.ExperimentalWeaponsPorts = {
+  ...mutagenPorts,
+  discardHand,
+};
 const armadilloPorts: armadillo.ArmadilloPorts = {
   ...mutagenPorts,
   shuffleEncounter: (s) => {
@@ -13170,6 +13210,7 @@ const ironspiderPorts: ironspider.IronspiderSinisterPorts = {
     need(i >= 0, "Electro needs the actual hand card.");
     const [actual] = s.player.hand.splice(i, 1);
     actual.attachedTo = id;
+    actual.electroResource = true;
     s.attachments.push(actual);
   },
   indirect: (s, r) =>
@@ -20395,6 +20436,10 @@ function enemyAttack(
     omitNormalBoost: activation?.omitNormalBoost,
     activationAfter: activation?.after,
     attackerSnapshot: structuredClone(p),
+    experimentalWeaponsRanged: experimentalWeapons.experimentalWeaponsRanged(
+      s,
+      id,
+    ),
   };
   if (rulesCode(p) === "01130" && extra !== "whirlwind" && !isTextBlank(s, p))
     add(
@@ -22014,6 +22059,12 @@ function finishAttackAfterDamage(
               ]
             : []),
           ...ironspider.ironspiderSinisterActivationResponses(s, a.attacker),
+          ...experimentalWeapons.experimentalWeaponsAttackResponses(
+            s,
+            a.attacker,
+            recipientId,
+            a.identityDamage || 0,
+          ),
           ...armadillo.armadilloActivationResponses(s, a.attacker),
           ...goblinModuleAttackResponses(s, {
             attacker: a.attackerSnapshot || p!,
@@ -22698,6 +22749,7 @@ function reveal(
     ([
       ...GOBLIN_MODULE_SCRIPT_CODES,
       ...armadillo.ARMADILLO_SCRIPT_CODES,
+      ...experimentalWeapons.EXPERIMENTAL_WEAPONS_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       ...RISKY_BUSINESS_SCRIPT_CODES,
@@ -22772,6 +22824,7 @@ function reveal(
       ...GOBLIN_MODULE_SCRIPT_CODES,
       ...MUTAGEN_FORMULA_SCRIPT_CODES,
       ...armadillo.ARMADILLO_SCRIPT_CODES,
+      ...experimentalWeapons.EXPERIMENTAL_WEAPONS_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -22800,6 +22853,7 @@ function reveal(
       goblinModuleReveal(s, p) ??
       mutagenEncounterReveal(s, p) ??
       armadillo.armadilloReveal(s, p) ??
+      experimentalWeapons.experimentalWeaponsReveal(s, p) ??
       zzzax.zzzaxReveal(s, p) ??
       domino.dominoEncounter(s, p) ??
       gambit.gambitEncounter(s, p) ??
@@ -24111,6 +24165,7 @@ function resolve(s: GameState, e: Effect) {
           mystique.mystiqueReveal(state, piece) ??
           ironspider.ironspiderSinisterReveal(state, piece) ??
           armadillo.armadilloReveal(state, piece) ??
+          experimentalWeapons.experimentalWeaponsReveal(state, piece) ??
           zzzax.zzzaxReveal(state, piece) ??
           inheritors.inheritorsReveal(state, piece) ??
           goblinModuleReveal(state, piece) ??
@@ -24196,6 +24251,14 @@ function resolve(s: GameState, e: Effect) {
   )
     return;
   if (armadillo.resolveArmadilloEffect(s, e, armadilloPorts)) return;
+  if (
+    experimentalWeapons.resolveExperimentalWeaponsEffect(
+      s,
+      e,
+      experimentalWeaponsPorts,
+    )
+  )
+    return;
   if (zzzax.resolveZzzaxEffect(s, e, zzzaxPorts)) return;
   if (inheritors.resolveInheritorsEffect(s, e, inheritorsPorts)) return;
   if (resolveGoblinModuleEffect(s, e, goblinPorts)) return;
@@ -33633,6 +33696,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...sentinels.sentinelsAbilityOptions(s, p.id, sentinelsPorts),
               ...sabretooth.sabretoothActionOptions(s, p.id, sabretoothPorts),
               ...zzzax.zzzaxActions(s, p, zzzaxPorts),
+              ...experimentalWeapons.experimentalWeaponsActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
               ...goblinModuleAttachmentActions(s, p),
               ...mutagenAttachmentActions(s, p),

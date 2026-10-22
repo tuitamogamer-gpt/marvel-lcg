@@ -58,7 +58,9 @@
     "test:quadruple-import-2": "node scripts/quadruple-import-2-check.mjs",
     "test:quadruple-import-3": "node scripts/quadruple-import-3-check.mjs",
     "test:quadruple-import-4": "node scripts/quadruple-import-4-check.mjs",
-    "test:quadruple-import-5": "node scripts/quadruple-import-5-check.mjs"
+    "test:quadruple-import-5": "node scripts/quadruple-import-5-check.mjs",
+    "test:audio": "node scripts/audio-check.mjs",
+    "test:experimental-weapons": "node scripts/experimental-weapons-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

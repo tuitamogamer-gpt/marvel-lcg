@@ -1,5 +1,5 @@
 import catalogCards from "../data/catalog-cards.json" with { type: "json" };
-import { allInPlay } from "./team.js";
+import { allInPlay, isElectroResource } from "./team.js";
 import type { Card, GameState } from "./types.js";
 import { printedCardMetadata } from "./printed-card-metadata.js";
 
@@ -99,7 +99,7 @@ export function uniqueConflict(
     s.villain,
     ...s.minions,
     ...s.sideSchemes,
-    ...s.attachments,
+    ...s.attachments.filter((p) => !isElectroResource(s, p)),
     ...allInPlay(s),
   ].some((piece) => {
     if (piece.id === excludeId) return false;

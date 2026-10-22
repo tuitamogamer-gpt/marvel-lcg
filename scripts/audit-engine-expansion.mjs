@@ -847,7 +847,7 @@ export async function generateAudit(
   const bundle = await build({
     stdin: {
       contents:
-        'export { scriptCoverage } from "./src/game/scripts/compiler.ts"; export { hasExecutableScript } from "./src/game/script-registry.ts"; export { EXPLICIT_CARD_SCRIPTS, SCRIPTED_HERO_IDS } from "./src/game/engine-support.ts"; export { CARDS, CATALOG_CARDS, HEROES, VILLAINS } from "./src/game/cards.ts"; export { printedCardMetadata } from "./src/game/printed-card-metadata.ts";',
+        'export { scriptCoverage } from "./src/game/scripts/compiler.ts"; export { hasExecutableScript } from "./src/game/script-registry.ts"; export { EXPLICIT_CARD_SCRIPTS, SCRIPTED_HERO_IDS } from "./src/game/engine-support.ts"; export { CARDS, CATALOG_CARDS, HEROES, VILLAINS, MODULES } from "./src/game/cards.ts"; export { printedCardMetadata } from "./src/game/printed-card-metadata.ts";',
       resolveDir: root,
     },
     bundle: true,
@@ -864,6 +864,7 @@ export async function generateAudit(
     CATALOG_CARDS,
     HEROES,
     VILLAINS,
+    MODULES,
     printedCardMetadata,
   } = await import(
     `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}`
@@ -959,6 +960,29 @@ export async function generateAudit(
     dedicatedCodes: [...EXPLICIT_CARD_SCRIPTS].sort(),
     registeredHeroIds: [...SCRIPTED_HERO_IDS].sort(),
     registeredScenarioIds: VILLAINS.map((scenario) => scenario.id).sort(),
+    registeredModuleIds: MODULES.map((module) => module.id).sort(),
+    registeredModules: MODULES.map(({ id, name }) => {
+      const faceCodes = cards
+        .filter(
+          (card) => card.faction_code === "encounter" && card.set_code === id,
+        )
+        .map((card) => card.code)
+        .sort();
+      const unsupportedFaceCodes = faceCodes.filter(
+        (code) => !installedIndex.get(code)?.executable,
+      );
+      return {
+        id,
+        name,
+        faceCodes,
+        faceCount: faceCodes.length,
+        unsupportedFaceCodes,
+        installedCardClosure:
+          faceCodes.length > 0 && unsupportedFaceCodes.length === 0,
+        automationCertification:
+          "registration_closure_only_requires_rules_and_native_integration_evidence",
+      };
+    }),
     registeredHeroes: HEROES.filter((hero) =>
       SCRIPTED_HERO_IDS.has(hero.id),
     ).map(({ id, code, alter }) => ({ id, code, alter })),
@@ -1063,6 +1087,7 @@ export async function generateAudit(
     "src/game/armadillo.ts",
     "src/game/zzzax.ts",
     "src/game/inheritors.ts",
+    "src/game/experimental-weapons.ts",
     "src/game/reveal-window.ts",
     "src/game/black-widow.ts",
     "src/game/doctor-strange.ts",

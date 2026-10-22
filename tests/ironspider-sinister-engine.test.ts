@@ -10,6 +10,7 @@ import {
   pieceHP,
 } from "../src/game/cards.js";
 import { isTextBlank } from "../src/game/card-text.js";
+import { uniqueConflict } from "../src/game/unique.js";
 import { catalogDeckCodes, STARTER_DECKS } from "../src/game/catalog.js";
 import { hasExecutableScript } from "../src/game/script-registry.js";
 import { activateSeat, seatView } from "../src/game/team.js";
@@ -98,6 +99,8 @@ function base(
   villainId = "rhino",
   secondHero = "spider_man",
   firstHero = "ironheart",
+  firstDeckCards?: string[],
+  firstAspect?: "protection",
 ) {
   const iron = {
     heroId: firstHero,
@@ -108,12 +111,14 @@ function base(
           ),
         }
       : {}),
+    ...(firstDeckCards ? { deckCards: firstDeckCards } : {}),
     aspect:
-      firstHero === "doctor_strange" || firstHero === "spdr"
+      firstAspect ??
+      (firstHero === "doctor_strange" || firstHero === "spdr"
         ? ("protection" as const)
         : firstHero === "wsp"
           ? ("aggression" as const)
-          : ("leadership" as const),
+          : ("leadership" as const)),
   };
   let s = newGame({
     ...iron,
@@ -134,7 +139,9 @@ function base(
             },
           ],
         }
-      : {}),
+      : firstDeckCards
+        ? { heroes: [iron] }
+        : {}),
   });
   for (const _ of s.players) s = command(s, { type: "MULLIGAN", ids: [] });
   s = settle(s);
@@ -149,9 +156,13 @@ function base(
     );
     expect(source).toHaveLength(40);
     expect(source.map((p) => p.code).sort()).toEqual(
-      (seat.heroId === "doctor_strange"
-        ? catalogDeckCodes(STARTER_DECKS.find((d) => d.heroCode === "09001a")!)
-        : deckCodes(seat.heroId, seat.aspect)
+      (seat.id === "p1" && firstDeckCards
+        ? firstDeckCards
+        : seat.heroId === "doctor_strange"
+          ? catalogDeckCodes(
+              STARTER_DECKS.find((d) => d.heroCode === "09001a")!,
+            )
+          : deckCodes(seat.heroId, seat.aspect)
       ).sort(),
     );
     p.deck = source;
@@ -319,6 +330,109 @@ describe("Eight original Iron Spider's Sinister Six physical cards", () => {
 });
 
 describe("Electro actual hand ownership, dynamic HP and activation timing", () => {
+  it.each([false, true])(
+    "a raw unique ally does not block entry, including a legacy saved attachment (%s)",
+    (legacy) => {
+      let s = base(true);
+      const cat = hand(s, "01002", "p2");
+      s = settle(reveal(s, "31032", "p2"), () => cat.id);
+      if (legacy)
+        delete s.attachments.find((p) => p.id === cat.id)!.electroResource;
+      s = reload(s);
+      expect(uniqueConflict(s, card(cat))).toBe(false);
+      expect(pieceHP(s, minion(s, "31032"))).toBe(4);
+      s = settle(
+        native(s, { type: "damage", target: minion(s, "31032").id, amount: 4 }),
+      );
+      expect(
+        seatView(s, "p2").player.discard.find((p) => p.id === cat.id)
+          ?.electroResource,
+      ).toBeUndefined();
+      activateSeat(s, "p2");
+      s.turnPlayerId = "p2";
+      const returned = hand(s, "01002", "p2");
+      const payment = hand(s, "01088", "p2");
+      s = command(s, { type: "PLAY", id: returned.id });
+      s = command(reload(s), { type: "PAY", ids: [payment.id] });
+      s = settle(s);
+      expect(
+        seatView(s, "p2").player.inPlay.find((p) => p.id === returned.id)
+          ?.electroResource,
+      ).toBeUndefined();
+      expect(uniqueConflict(s, card(cat))).toBe(true);
+      exact(s);
+    },
+  );
+  it.each(["played", "forced"] as const)(
+    "a %s Spider-Tracer grants Energy HP, but only the played upgrade responds to defeat",
+    (mode) => {
+      let s = base(true);
+      const captured = mode === "forced" ? hand(s, "01007", "p2") : undefined;
+      s = settle(reveal(s, "31032", "p2"), () => captured?.id);
+      const id = minion(s, "31032").id;
+      let tracerId = captured?.id;
+      if (mode === "played") {
+        activateSeat(s, "p2");
+        s.turnPlayerId = "p2";
+        const played = hand(s, "01007", "p2"),
+          payment = hand(s, "01006", "p2");
+        tracerId = played.id;
+        s = command(s, { type: "PLAY", id: played.id });
+        s = command(reload(s), { type: "PAY", ids: [payment.id] });
+        s = settle(s, (v) =>
+          v.prompt?.options.some((o) => o.id === id) ? id : undefined,
+        );
+      }
+      expect(pieceHP(s, minion(s, "31032"))).toBe(4);
+      expect(
+        seatView(s, "p2").player.inPlay.some((p) => p.id === tracerId),
+      ).toBe(mode === "played");
+      s.scheme.threat = 5;
+      s = settle(native(reload(s), { type: "damage", target: id, amount: 4 }));
+      expect(s.minions.some((p) => p.id === id)).toBe(false);
+      expect(
+        seatView(s, "p2").player.discard.filter((p) => p.id === tracerId),
+      ).toHaveLength(1);
+      expect(s.scheme.threat).toBe(mode === "played" ? 2 : 5);
+    },
+  );
+  it("raw attachments return to discard without offering Pinpoint's leave-play interrupt", () => {
+    const deck = deckCodes("ironheart", "protection").map((code) =>
+      code === "01088" ? "29035" : code,
+    );
+    let s = base(false, "rhino", "spider_man", "ironheart", deck, "protection");
+    const pinpoint = control(s, "29035");
+    const energy = hand(s, "29006");
+    s = settle(reveal(s, "31032"), () => energy.id);
+    const id = minion(s, "31032").id;
+    delete s.attachments.find((p) => p.id === energy.id)!.electroResource;
+    s = native(reload(s), { type: "damage", target: id, amount: 4 });
+    expect(s.prompt).toBeNull();
+    expect(s.player.inPlay.find((p) => p.id === pinpoint.id)?.exhausted).toBe(
+      false,
+    );
+    expect(s.player.discard.filter((p) => p.id === energy.id)).toHaveLength(1);
+    exact(s);
+  });
+  it("elimination removes the owner's raw attachment before Electro reengages the survivor", () => {
+    let s = base(true);
+    const previous = hand(s, "29006");
+    s = settle(reveal(s, "31032"), () => previous.id);
+    const id = minion(s, "31032").id;
+    const energy = hand(s, "01088", "p2");
+    delete s.attachments.find((p) => p.id === previous.id)!.electroResource;
+    s = native(reload(s), {
+      type: "damage",
+      target: "hero",
+      amount: s.player.hp,
+    });
+    expect(s.removed.filter((p) => p.id === previous.id)).toHaveLength(1);
+    expect(s.attachments.some((p) => p.id === previous.id)).toBe(false);
+    expect(minion(s, "31032").engagedWith).toBe("p2");
+    s = settle(s, () => energy.id);
+    expect(pieceHP(s, minion(s, "31032"))).toBe(5);
+    expect(s.attachments.find((p) => p.id === energy.id)?.attachedTo).toBe(id);
+  });
   it("original VEN#m attached for Energy grants HP without its ally ATK leaking into Electro's attack", () => {
     let s = base(false, "rhino", "spider_man", "spdr");
     const venm = hand(s, "31003");
@@ -552,6 +666,23 @@ describe("Hobgoblin replaces would-attack before defense and boosts", () => {
 });
 
 describe("Bombshell ordinary attack allocation and actual boost damage", () => {
+  it("a Helmet-saved identity remains exhausted after actual boost damage", () => {
+    let s = base(false, "rhino", "spider_man", "captain_america");
+    const helmet = control(s, "03008");
+    s.player.hp = 1;
+    const [bomb] = top(s, "31031");
+    s = native(reload(s), { type: "enemyScheme", id: s.villain.id });
+    expect(s.prompt?.text).toMatch(/remaining indirect damage/);
+    s = choose(reload(s), "hero");
+    expect(s.prompt?.title).toContain("Helmet");
+    s = settle(choose(reload(s), "helmet"));
+    expect(s.player.hp).toBe(1);
+    expect(s.players[0].eliminated).toBe(false);
+    expect(s.player.exhausted).toBe(true);
+    expect(s.player.discard.filter((p) => p.id === helmet.id)).toHaveLength(1);
+    expect(s.encounter.discard.filter((p) => p.id === bomb.id)).toHaveLength(1);
+    expect(s.scheming).toBeFalsy();
+  });
   it("with no allies completes one actual ordinary attack for three damage", () => {
     let s = settle(reveal(base(), "31031"));
     const id = minion(s, "31031").id;

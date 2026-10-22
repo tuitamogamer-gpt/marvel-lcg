@@ -106,6 +106,8 @@ export interface Piece {
   stunned: boolean;
   confused: boolean;
   attachedTo?: string;
+  /** Actual hand card attached as an out-of-play resource by Electro. */
+  electroResource?: boolean;
   /** Steady requires two status cards; booleans mean the status is active. */
   stunCards?: number;
   confuseCards?: number;
@@ -175,6 +177,8 @@ export interface Prompt {
   selectAction?: Effect;
 }
 export interface Attack {
+  /** Laser Rifle grants Ranged to the actual attack at initiation. */
+  experimentalWeaponsRanged?: boolean;
   angelIgnoreBoosts?: boolean;
   angelRetaliatePlayerId?: string;
   angelRetaliate?: number;
