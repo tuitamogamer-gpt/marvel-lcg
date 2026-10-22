@@ -34,10 +34,10 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     env:
       MISSION_SHARD_INDEX: ${{ matrix.shard }}
-      MISSION_SHARD_COUNT: "4"
+      MISSION_SHARD_COUNT: "8"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

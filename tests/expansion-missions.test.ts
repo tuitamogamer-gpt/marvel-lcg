@@ -133,16 +133,22 @@ const missions = heroIds.flatMap((heroId, hi) =>
 // keeps the original global hero/scenario/module indexes and seeded shuffle.
 const shardIndex = process.env.MISSION_SHARD_INDEX;
 const shardCount = process.env.MISSION_SHARD_COUNT;
+const missionShardCount = 8;
 const isSharded = shardIndex !== undefined || shardCount !== undefined;
 if (
   isSharded &&
-  (shardCount !== "4" || !["0", "1", "2", "3"].includes(shardIndex ?? ""))
+  (shardCount !== String(missionShardCount) ||
+    !/^[0-7]$/.test(shardIndex ?? ""))
 )
   throw Error(
-    "Set both MISSION_SHARD_COUNT=4 and MISSION_SHARD_INDEX=0..3, or neither.",
+    "Set both MISSION_SHARD_COUNT=8 and MISSION_SHARD_INDEX=0..7, or neither.",
   );
-const partitions = Array.from({ length: 4 }, (_, index) =>
-  missions.filter((mission) => heroIds.indexOf(mission.heroId) % 4 === index),
+// Round-robin individual configurations, not whole heroes: every runner gets
+// all identities, spreading their different simulation costs across shards.
+const partitions = Array.from({ length: missionShardCount }, (_, index) =>
+  missions.filter(
+    (_, missionIndex) => missionIndex % missionShardCount === index,
+  ),
 );
 // Exercise the newest imports first without changing any mission's original
 // seed or shard membership, so integration failures surface early in CI.
@@ -730,10 +736,19 @@ describe("published expansion starters across every supported mission setting", 
     expect(new Set(combined.map(key)).size).toBe(27768);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(6942);
-      expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(13);
+      expect(partition).toHaveLength(3471);
+      expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 6942 : 27768);
+    for (const heroId of heroIds) {
+      const perShard = partitions.map(
+        (partition) =>
+          partition.filter((mission) => mission.heroId === heroId).length,
+      );
+      expect(Math.min(...perShard)).toBe(66);
+      expect(Math.max(...perShard)).toBe(67);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(534);
+    }
+    expect(selectedMissions).toHaveLength(isSharded ? 3471 : 27768);
   });
   for (const mission of selectedMissions)
     it(
