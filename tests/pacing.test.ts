@@ -313,27 +313,27 @@ describe("tempo: fewer acknowledgements without hiding consequences", () => {
     expect(counts.brisk).toBeLessThan(counts.guided);
     expect(counts.expert).toBeLessThanOrEqual(counts.brisk);
   });
-  // Six bounded three-round simulations also run beside the expansion matrix
-  // in the full suite; the click budgets remain the assertions below.
-  it("keeps brisk and expert within a click budget per round", () => {
-    for (const [heroes, villainId, brisk, expert] of [
-      [[{ heroId: "spider_man", aspect: "justice" }], "rhino", 9, 5],
-      [[{ heroId: "captain_marvel", aspect: "leadership" }], "klaw", 10, 6],
+  // Give each independent three-round simulation its own timeout and result.
+  // The six original scenarios, seeds and click budgets stay unchanged.
+  for (const [heroes, villainId, brisk, expert] of [
+    [[{ heroId: "spider_man", aspect: "justice" }], "rhino", 9, 5],
+    [[{ heroId: "captain_marvel", aspect: "leadership" }], "klaw", 10, 6],
+    [
       [
-        [
-          { heroId: "she_hulk", aspect: "aggression" },
-          { heroId: "captain_marvel", aspect: "leadership" },
-          { heroId: "spider_man", aspect: "justice" },
-        ],
-        "rhino",
-        20,
-        10,
+        { heroId: "she_hulk", aspect: "aggression" },
+        { heroId: "captain_marvel", aspect: "leadership" },
+        { heroId: "spider_man", aspect: "justice" },
       ],
-    ] as [{ heroId: string; aspect: Aspect }[], string, number, number][]) {
-      for (const [pacing, budget] of [
-        ["brisk", brisk],
-        ["expert", expert],
-      ] as const) {
+      "rhino",
+      20,
+      10,
+    ],
+  ] as [{ heroId: string; aspect: Aspect }[], string, number, number][]) {
+    for (const [pacing, budget] of [
+      ["brisk", brisk],
+      ["expert", expert],
+    ] as const)
+      it(`keeps ${pacing} within the ${villainId} click budget with ${heroes.length} heroes`, () => {
         const { trace, roundsPlayed } = playRounds(
           pacing,
           [...heroes],
@@ -344,9 +344,8 @@ describe("tempo: fewer acknowledgements without hiding consequences", () => {
           trace.proceeds / Math.max(1, roundsPlayed),
           `${pacing} ${villainId} ${heroes.length} heroes`,
         ).toBeLessThanOrEqual(budget);
-      }
-    }
-  }, 20_000);
+      }, 20_000);
+  }
   it("brisk pauses to read a revealed encounter; expert reads it from the timeline or log", () => {
     const brisk = playRounds(
       "brisk",

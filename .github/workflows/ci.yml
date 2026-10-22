@@ -34,10 +34,10 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
-        shard: [0, 1, 2, 3]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
     env:
       MISSION_SHARD_INDEX: ${{ matrix.shard }}
-      MISSION_SHARD_COUNT: "4"
+      MISSION_SHARD_COUNT: "8"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -95,6 +95,10 @@ jobs:
             timeout: 45
           - group: zzzax
             scripts: test:zzzax
+          - group: milestone-audio
+            scripts: test:audio
+          - group: experimental-weapons
+            scripts: test:experimental-weapons
           - group: inheritors
             scripts: test:inheritors
           - group: spider-ham
@@ -166,7 +170,7 @@ jobs:
           done
           echo "Dev server did not start"; cat output-dev.log; exit 1
       - name: Build and serve production artifact
-        if: matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold' || matrix.group == 'mansion-attack' || matrix.group == 'acolytes' || matrix.group == 'magneto' || matrix.group == 'quadruple-import' || matrix.group == 'quadruple-import-2' || matrix.group == 'quadruple-import-3' || matrix.group == 'quadruple-import-4' || matrix.group == 'quadruple-import-5'
+        if: matrix.group == 'milestone-audio' || matrix.group == 'experimental-weapons' || matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold' || matrix.group == 'mansion-attack' || matrix.group == 'acolytes' || matrix.group == 'magneto' || matrix.group == 'quadruple-import' || matrix.group == 'quadruple-import-2' || matrix.group == 'quadruple-import-3' || matrix.group == 'quadruple-import-4' || matrix.group == 'quadruple-import-5'
         run: |
           npm run build
           npm run preview -- --host 127.0.0.1 --port 4173 > output-preview.log 2>&1 &
@@ -181,7 +185,7 @@ jobs:
             npm run "$script"
           done
         env:
-          BASE_URL: ${{ (matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold' || matrix.group == 'mansion-attack' || matrix.group == 'acolytes' || matrix.group == 'magneto' || matrix.group == 'quadruple-import' || matrix.group == 'quadruple-import-2' || matrix.group == 'quadruple-import-3' || matrix.group == 'quadruple-import-4' || matrix.group == 'quadruple-import-5') && 'http://127.0.0.1:4173' || 'http://127.0.0.1:5174' }}
+          BASE_URL: ${{ (matrix.group == 'milestone-audio' || matrix.group == 'experimental-weapons' || matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold' || matrix.group == 'mansion-attack' || matrix.group == 'acolytes' || matrix.group == 'magneto' || matrix.group == 'quadruple-import' || matrix.group == 'quadruple-import-2' || matrix.group == 'quadruple-import-3' || matrix.group == 'quadruple-import-4' || matrix.group == 'quadruple-import-5') && 'http://127.0.0.1:4173' || 'http://127.0.0.1:5174' }}
           CI_BROWSER_SCRIPTS: ${{ matrix.scripts }}
           SPDR_SCENARIOS: ${{ matrix.spdrScenarios }}
           SPDR_FIXTURE_ONLY: ${{ matrix.spdrFixtureOnly }}

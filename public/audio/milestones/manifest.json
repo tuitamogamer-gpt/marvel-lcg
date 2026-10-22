@@ -1,0 +1,51 @@
+{
+  "provider": "Fish Audio",
+  "model": "s2.1-pro",
+  "voiceId": "4c6a6762e4ac4bdebdb4fa8525d054a2",
+  "voiceName": "ATOMIC",
+  "generatedOn": "2026-10-22",
+  "purpose": "Short opt-in voice cues for significant game events",
+  "processing": "Trim leading/trailing silence, normalize to -20 LUFS/-3 dBTP, mono 44.1 kHz MP3",
+  "assets": [
+    {
+      "id": "victory",
+      "file": "/audio/milestones/victory.mp3",
+      "script": "[confident] Victory!",
+      "taskId": "9473701c8daa43de9e3f03572240ae99",
+      "sourceURL": "https://platform.r2.fish.audio/tasks/2026-10-22/9473701c8daa43de9e3f03572240ae99.mp3",
+      "durationSeconds": 1.306122,
+      "bytes": 10760,
+      "sha256": "e34feb8f3349cb6ae87f37831c2bd0791692019f22acac38f8f72678a59aea4b"
+    },
+    {
+      "id": "defeat",
+      "file": "/audio/milestones/defeat.mp3",
+      "script": "[serious] Mission failed.",
+      "taskId": "c266e62994754eb4885575f3a9a0eb19",
+      "sourceURL": "https://platform.r2.fish.audio/tasks/2026-10-22/c266e62994754eb4885575f3a9a0eb19.mp3",
+      "durationSeconds": 1.854694,
+      "bytes": 15149,
+      "sha256": "8b051bfd429bf1f3c73a8d6e78db3f91788676bb443999900b5d1b0fb29bd25f"
+    },
+    {
+      "id": "stage",
+      "file": "/audio/milestones/stage.mp3",
+      "script": "[warning] New threat.",
+      "taskId": "a3ca424e443e42ffa10677afc21bb99f",
+      "sourceURL": "https://platform.r2.fish.audio/tasks/2026-10-22/a3ca424e443e42ffa10677afc21bb99f.mp3",
+      "durationSeconds": 2.142041,
+      "bytes": 17448,
+      "sha256": "0f5879d2ba0bd18978a5b78b4dd11383507e964c975091d76d7c459c3c23a889"
+    },
+    {
+      "id": "upgrade",
+      "file": "/audio/milestones/upgrade.mp3",
+      "script": "[confident] Suit upgraded.",
+      "taskId": "48b40c883de44055af3276fd2085ce81",
+      "sourceURL": "https://platform.r2.fish.audio/tasks/2026-10-22/48b40c883de44055af3276fd2085ce81.mp3",
+      "durationSeconds": 2.037551,
+      "bytes": 16612,
+      "sha256": "8011b897145cc5baae139c5b84cab6e406433f8e64fba34e4ca6796f0948d702"
+    }
+  ]
+}

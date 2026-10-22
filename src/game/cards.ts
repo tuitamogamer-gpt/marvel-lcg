@@ -1112,6 +1112,7 @@ export const MODULES = [
   { id: "arcade", name: "Arcade", difficulty: 3 },
   { id: "crazy_gang", name: "The Crazy Gang", difficulty: 3 },
   { id: "hellfire", name: "Hellfire", difficulty: 3 },
+  { id: "exper_weapon", name: "Experimental Weapons", difficulty: 2 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {

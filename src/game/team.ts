@@ -52,6 +52,18 @@ export function allInPlay(s: GameState): Piece[] {
     p.id === s.activePlayerId ? s.player.inPlay : p.player.inPlay,
   );
 }
+/** Electro's attached hand cards stay out of play. Recognize older saves
+ * before the explicit marker was introduced while the parent is present. */
+export function isElectroResource(s: GameState, p: Piece): boolean {
+  return (
+    !!p.electroResource ||
+    (!!p.ownerId &&
+      s.attachments.some((q) => q.id === p.id) &&
+      s.minions.some(
+        (enemy) => enemy.code === "31032" && enemy.id === p.attachedTo,
+      ))
+  );
+}
 /** Scenario allies retain their one physical NPC zone while control changes. */
 export function controlledNPCs(
   s: GameState,

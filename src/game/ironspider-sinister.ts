@@ -1,7 +1,7 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import corePlayers from "../data/core-player.json" with { type: "json" };
 import { isTextBlank } from "./card-text.js";
-import { playerOrder } from "./team.js";
+import { allInPlay, playerOrder } from "./team.js";
 import type {
   MutagenEnginePorts,
   MutagenForcedResponse,
@@ -132,7 +132,11 @@ export function ironspiderSinisterCriminalSurge(
  * not change attached printed icons. Blanking does not detach those cards. */
 export function ironspiderSinisterHealthBonus(s: GameState, p: Piece) {
   return p.code === "31032" && !isTextBlank(s, p)
-    ? s.attachments
+    ? [
+        ...new Map(
+          [...s.attachments, ...allInPlay(s)].map((q) => [q.id, q]),
+        ).values(),
+      ]
         .filter((q) => q.attachedTo === p.id)
         .reduce((n, q) => n + Number(card(q).resource_energy || 0), 0)
     : 0;

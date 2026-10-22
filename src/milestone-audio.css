@@ -1,0 +1,94 @@
+.app .sound-settings {
+  position: relative;
+  flex: 0 0 auto;
+}
+.app .sound-settings > summary {
+  list-style: none;
+  cursor: pointer;
+  color: inherit;
+  border-radius: var(--radius-control, 8px);
+}
+.app .sound-settings > summary::-webkit-details-marker {
+  display: none;
+}
+.app .sound-settings > summary:focus-visible,
+.app .sound-settings-panel input:focus-visible {
+  outline: 3px solid #d29814;
+  outline-offset: 3px;
+}
+.app .sound-settings[open] > summary {
+  background: #7588a229;
+}
+.app .sound-settings-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 35;
+  display: grid;
+  gap: 12px;
+  width: min(280px, calc(100vw - 32px));
+  padding: 16px;
+  border: 2px solid #15243d;
+  border-radius: var(--radius-panel, 12px);
+  background: #faf8f2;
+  color: #15243d;
+  box-shadow: 0 12px 30px #081c3140;
+  text-align: left;
+  font-family: var(--body);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.app .sound-settings-panel > strong {
+  font-family: var(--display);
+  font-size: 18px;
+}
+.app .sound-enable {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 34px;
+  cursor: pointer;
+  font-weight: 700;
+}
+.app .sound-enable input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #24568a;
+}
+.app .sound-enable b {
+  margin-left: auto;
+  font-size: 11px;
+  color: #405270;
+}
+.app .sound-volume-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 700;
+}
+.app .sound-volume-heading output {
+  font-variant-numeric: tabular-nums;
+}
+.app .sound-settings-panel input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  margin: -6px 0 0;
+  cursor: pointer;
+  accent-color: #24568a;
+}
+.app .sound-settings-panel p {
+  margin: 0;
+  font-size: 12px;
+  color: #405270;
+}
+@media (max-width: 600px) {
+  .app .sound-settings {
+    position: static;
+  }
+  .app .sound-settings-panel {
+    top: calc(100% + 6px);
+    right: 12px;
+  }
+}

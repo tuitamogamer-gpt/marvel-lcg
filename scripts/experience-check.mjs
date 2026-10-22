@@ -303,12 +303,18 @@ try {
     };
   });
   await blocked.goto(url);
+  await blocked.locator('[aria-label="Sound settings"]').click();
   await blocked
-    .getByRole("button", { name: "Enable sound", exact: true })
-    .click();
-  await blocked
-    .getByRole("button", { name: "Mute sound", exact: true })
-    .waitFor();
+    .getByRole("checkbox", { name: "Enable sound", exact: true })
+    .check();
+  assert.equal(
+    await blocked
+      .getByRole("checkbox", { name: "Enable sound", exact: true })
+      .isChecked(),
+    true,
+    "Sound remains usable when preference storage is blocked",
+  );
+  await blocked.locator('[aria-label="Sound settings"]').click();
   await blocked.locator("#start-btn").click();
   await blocked
     .getByRole("button", { name: "Keep hand & begin", exact: true })

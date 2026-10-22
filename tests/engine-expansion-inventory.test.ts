@@ -321,7 +321,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(26);
+    expect(MODULES).toHaveLength(27);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "deathstrike",
@@ -332,11 +332,12 @@ describe("complete expansion rules inventory", () => {
         "arcade",
         "crazy_gang",
         "hellfire",
+        "exper_weapon",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2272);
-    expect(coverage.unsupportedFaces).toBe(2279);
-    expect(coverage.dedicatedFaces).toBe(1832);
+    expect(coverage.executableFaces).toBe(2276);
+    expect(coverage.unsupportedFaces).toBe(2275);
+    expect(coverage.dedicatedFaces).toBe(1836);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -484,8 +485,13 @@ describe("complete expansion rules inventory", () => {
         (entry: { code: string }) => !alreadyRegistered.has(entry.code),
       ),
     ).toHaveLength(137);
-    expect(coverage.executableFaces - 2135).toBe(137);
-    expect(MODULES.slice(24).map((module) => module.id)).toEqual([
+    const laterExperimentalFaces = coverage.registeredModules.find(
+      (module: { id: string }) => module.id === "exper_weapon",
+    ).faceCodes;
+    expect(
+      coverage.executableFaces - laterExperimentalFaces.length - 2135,
+    ).toBe(137);
+    expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
       "crazy_gang",
       "hellfire",
     ]);
@@ -605,6 +611,63 @@ describe("complete expansion rules inventory", () => {
       installedUnsupportedDependencies: [],
     });
   });
+  it("records selectable modular closure and all four original Experimental Weapons cards", () => {
+    const coverage = inventory.installedRegistryCoverage;
+    expect(coverage.registeredModuleIds).toEqual(
+      MODULES.map((module) => module.id).sort(),
+    );
+    expect(coverage.registeredModules).toHaveLength(27);
+    for (const module of coverage.registeredModules) {
+      const source = cards
+        .filter(
+          (entry: { faction_code: string; set_code: string }) =>
+            entry.faction_code === "encounter" && entry.set_code === module.id,
+        )
+        .map((entry: { code: string }) => entry.code)
+        .sort();
+      expect(module.faceCodes, module.id).toEqual(source);
+      expect(module.faceCount, module.id).toBe(source.length);
+      expect(module.unsupportedFaceCodes, module.id).toEqual(
+        source.filter((code: string) => !hasExecutableScript(code)),
+      );
+      expect(module.installedCardClosure, module.id).toBe(true);
+    }
+    const codes = ["04072", "04073", "04074", "04075"];
+    const source = cards.filter(
+      (entry: { set_code: string }) => entry.set_code === "exper_weapon",
+    );
+    expect(source.map((entry: { code: string }) => entry.code).sort()).toEqual(
+      codes,
+    );
+    expect(
+      source.every(
+        (entry: { pack_code: string; quantity: number }) =>
+          entry.pack_code === "trors" && entry.quantity === 1,
+      ),
+    ).toBe(true);
+    expect(MODULES.at(-1)?.id).toBe("exper_weapon");
+    expect(
+      coverage.registeredModules.find(
+        (module: { id: string }) => module.id === "exper_weapon",
+      ),
+    ).toMatchObject({
+      name: "Experimental Weapons",
+      faceCount: 4,
+      faceCodes: codes,
+      unsupportedFaceCodes: [],
+      installedCardClosure: true,
+    });
+    for (const code of codes) {
+      expect(EXPLICIT_CARD_SCRIPTS.has(code), code).toBe(true);
+      expect(audited.get(code)?.installedRegistry, code).toMatchObject({
+        executable: true,
+        mechanism: "dedicated-module",
+      });
+    }
+    expect(inventory.sourceHashes["src/game/experimental-weapons.ts"]).toMatch(
+      /^[a-f0-9]{64}$/,
+    );
+  });
   it("records live compiler outcomes separately from inventory and whole-game certification", () => {
     const coverage = inventory.compilerCoverage;
     expect(coverage.total).toBe(cards.length);
@@ -650,7 +713,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(126);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(127);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

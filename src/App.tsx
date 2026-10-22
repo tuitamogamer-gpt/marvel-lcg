@@ -71,6 +71,8 @@ import { AccountPage } from "./account/AccountPage";
 import { useAccount, useMissionSync } from "./account/useAccount";
 import type { SavedDeck, MissionRecord } from "./account/types";
 import { significantEvent, type Milestone } from "./milestones";
+import { useMilestoneAudio } from "./useMilestoneAudio";
+import "./milestone-audio.css";
 const MilestoneAnimation = lazy(() => import("./MilestoneAnimation"));
 import { HeroEmblem } from "./HeroEmblem";
 import { HeroRoster } from "./HeroRoster";
@@ -694,6 +696,8 @@ const fanCards: Record<string, [string, string]> = {
 };
 export default function App() {
   const account = useAccount();
+  const audio = useMilestoneAudio();
+  const soundSettings = useRef<HTMLDetailsElement>(null);
   const [combat, setCombat] = useState<{
     id: number;
     event: Milestone;
@@ -824,9 +828,6 @@ export default function App() {
   );
   const [toast, setToast] = useState("");
   const [logOpen, setLogOpen] = useState(true);
-  const [sound, setSound] = useState(
-    () => readStorage("champions.sound") === "on",
-  );
   const [pacing, setPacingState] = useState<Pacing>(readPacing);
   const [heroic, setHeroic] = useState(0);
   const recommendedSenatorDamage =
@@ -871,6 +872,19 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [screen]);
   useEffect(() => {
+    if (screen !== "game") audio.stop();
+    soundSettings.current?.removeAttribute("open");
+  }, [screen, audio.stop]);
+  useEffect(() => {
+    const closeOutside = (event: PointerEvent) => {
+      const settings = soundSettings.current;
+      if (settings?.open && !settings.contains(event.target as Node))
+        settings.open = false;
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    return () => document.removeEventListener("pointerdown", closeOutside);
+  }, []);
+  useEffect(() => {
     if (game && !gameOwner)
       try {
         localStorage.setItem(SAVE_KEY, JSON.stringify(game));
@@ -893,12 +907,13 @@ export default function App() {
       account.session &&
       account.session.user?.id !== gameOwner
     ) {
+      audio.resetSession();
       setGame(readSave());
       setGameOwner(null);
       setScreen("account");
       missionSync.reset();
     }
-  }, [account.session?.user?.id, gameOwner]);
+  }, [account.session?.user?.id, gameOwner, audio.resetSession]);
   useEffect(() => {
     if (!toast) return;
     const id = setTimeout(() => setToast(""), 5000);
@@ -1008,23 +1023,6 @@ export default function App() {
       );
     (window as any).advanceTime = () => {};
   }, [screen, hero, villain, aspect, difficulty, team, contentView]);
-  function tone() {
-    if (!sound) return;
-    try {
-      const ctx = new AudioContext();
-      const o = ctx.createOscillator(),
-        g = ctx.createGain();
-      o.connect(g);
-      g.connect(ctx.destination);
-      o.frequency.setValueAtTime(440, ctx.currentTime);
-      o.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.08);
-      g.gain.setValueAtTime(0.03, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-      o.start();
-      o.stop(ctx.currentTime + 0.15);
-      o.onended = () => void ctx.close();
-    } catch {}
-  }
   function send(command: Command) {
     if (!game) return;
     const next = dispatch(game, command);
@@ -1045,12 +1043,16 @@ export default function App() {
     setUndoDepth(history.current.length);
     setGame(next);
     const milestone = significantEvent(game, next);
-    if (milestone) setCombat({ id: ++combatId.current, event: milestone });
-    tone();
+    if (milestone) {
+      const id = ++combatId.current;
+      setCombat({ id, event: milestone });
+      audio.play(milestone, id);
+    }
   }
   function undo() {
     const previous = history.current.pop();
     if (!previous) return;
+    audio.stop();
     setUndoDepth(history.current.length);
     setCombat(null);
     setGame(previous);
@@ -1107,6 +1109,7 @@ export default function App() {
     }
   }
   async function start(replay = false, sameSeed = false, tutorial = false) {
+    audio.stop();
     await missionSync.flush();
     if (missionSync.hasUnsaved()) {
       setToast(
@@ -1114,6 +1117,7 @@ export default function App() {
       );
       return;
     }
+    audio.resetSession();
     setCombat(null);
     clearHistory();
     missionSync.reset();
@@ -1192,7 +1196,6 @@ export default function App() {
     setTutorialRequested(false);
     setScreen("game");
     setRestart(false);
-    tone();
   }
   function startRequest(tutorial = false) {
     setTutorialRequested(tutorial);
@@ -1223,6 +1226,7 @@ export default function App() {
   }
   async function resumeAccountMission(record: MissionRecord) {
     if (!record.state) return;
+    audio.stop();
     await missionSync.flush();
     if (
       missionSync.hasUnsaved() &&
@@ -1232,6 +1236,7 @@ export default function App() {
     )
       return;
     missionSync.adopt(record);
+    audio.resetSession();
     clearHistory();
     setGameOwner(account.session!.user!.id);
     setGame(
@@ -1244,12 +1249,14 @@ export default function App() {
     setScreen("game");
   }
   async function signOut() {
+    audio.stop();
     await missionSync.flush();
     if (missionSync.hasUnsaved())
       throw Error(
         "Your mission has unsaved changes. Retry saving before signing out.",
       );
     await account.request("logout");
+    audio.resetSession();
     setGame(readSave());
     setGameOwner(null);
     clearHistory();
@@ -1333,17 +1340,72 @@ export default function App() {
             <span>CARD GAME</span>
             <b>LCG</b>
           </span>
-          <button
-            className="icon-button"
-            aria-label={sound ? "Mute sound" : "Enable sound"}
-            title={sound ? "Mute sound" : "Enable sound"}
-            onClick={() => {
-              setSound(!sound);
-              writeStorage("champions.sound", sound ? "off" : "on");
+          <details
+            className="sound-settings"
+            ref={soundSettings}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return;
+              event.preventDefault();
+              event.stopPropagation();
+              event.currentTarget.open = false;
+              event.currentTarget.querySelector("summary")?.focus();
+            }}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node))
+                event.currentTarget.open = false;
             }}
           >
-            {sound ? <SpeakerHigh size={19} /> : <SpeakerSlash size={19} />}
-          </button>
+            <summary
+              className="icon-button"
+              aria-label="Sound settings"
+              title="Sound settings"
+              data-sound-enabled={audio.enabled && audio.volume > 0}
+            >
+              {audio.enabled && audio.volume > 0 ? (
+                <SpeakerHigh size={19} aria-hidden="true" />
+              ) : (
+                <SpeakerSlash size={19} aria-hidden="true" />
+              )}
+            </summary>
+            <div
+              className="sound-settings-panel"
+              role="group"
+              aria-label="Mission audio"
+            >
+              <strong>Mission audio</strong>
+              <label className="sound-enable">
+                <input
+                  type="checkbox"
+                  checked={audio.enabled}
+                  onChange={(event) => audio.setEnabled(event.target.checked)}
+                />
+                <span>Enable sound</span>
+                <b aria-hidden="true">{audio.enabled ? "ON" : "OFF"}</b>
+              </label>
+              <div className="sound-volume-heading">
+                <label htmlFor="milestone-sound-volume">Sound volume</label>
+                <output htmlFor="milestone-sound-volume" aria-hidden="true">
+                  {Math.round(audio.volume * 100)}%
+                </output>
+              </div>
+              <input
+                id="milestone-sound-volume"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={Math.round(audio.volume * 100)}
+                aria-valuetext={`${Math.round(audio.volume * 100)}%`}
+                onChange={(event) =>
+                  audio.setVolume(Number(event.target.value) / 100)
+                }
+              />
+              <p>
+                Short cues for victory, defeat, villain stages and suit
+                upgrades.
+              </p>
+            </div>
+          </details>
           {screen === "game" && (
             <button
               className="icon-button"
@@ -1404,6 +1466,7 @@ export default function App() {
           onSignOut={signOut}
           onMissionDeleted={(id) => {
             if (gameOwner && game?.accountMission?.id === id) {
+              audio.resetSession();
               setGame(null);
               setGameOwner(null);
               missionSync.reset();
@@ -1431,6 +1494,7 @@ export default function App() {
                     (m) => m.id === snapshot.accountMission.id,
                   )!;
                   missionSync.adopt(record);
+                  audio.resetSession();
                   setGame(snapshot);
                   setGameOwner(response.user!.id);
                 }
@@ -1447,7 +1511,13 @@ export default function App() {
             <span>{HEROES.length} HEROES. ONE EXTRAORDINARY UNIVERSE.</span>
           </div>
           {active && (
-            <button className="resume-banner" onClick={() => setScreen("game")}>
+            <button
+              className="resume-banner"
+              onClick={() => {
+                audio.resetSession();
+                setScreen("game");
+              }}
+            >
               <div>
                 <Clock size={18} />
                 <span>
@@ -4321,6 +4391,10 @@ function AttachedCards({
               ...mutagenAttachmentActions(game, p),
               ...goblinModuleAttachmentActions(game, p),
               ...([
+                "04072",
+                "04073",
+                "04074",
+                "04075",
                 "25032",
                 "29038",
                 "32059",
@@ -4339,13 +4413,23 @@ function AttachedCards({
                 key={a.id}
                 className="text-button"
                 disabled={!send}
-                aria-label={p.code === "29038" ? a.label : undefined}
-                title={p.code === "29038" ? a.label : undefined}
+                aria-label={
+                  ["04072", "04073", "04074", "04075", "29038"].includes(p.code)
+                    ? a.label
+                    : undefined
+                }
+                title={
+                  ["04072", "04073", "04074", "04075", "29038"].includes(p.code)
+                    ? a.label
+                    : undefined
+                }
                 onClick={() =>
                   send?.({ type: "ABILITY", id: p.id, action: a.id })
                 }
               >
-                {p.code === "29038" ? "Remove" : a.label}
+                {["04072", "04073", "04074", "04075", "29038"].includes(p.code)
+                  ? "Remove"
+                  : a.label}
               </button>
             ))}
           </div>
