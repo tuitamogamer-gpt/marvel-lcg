@@ -1764,144 +1764,158 @@ export default function App() {
                   <h2>CHOOSE YOUR VILLAIN</h2>
                 </div>
               </div>
-              <div className="villain-tabs">
-                {VILLAINS.map((v) => (
-                  <button
-                    key={v.id}
-                    className={v.id === villain.id ? "active" : ""}
-                    aria-pressed={v.id === villain.id}
-                    onClick={() => {
-                      setVillain(v);
-                      setModule(v.module);
-                    }}
-                  >
-                    {v.name}
-                  </button>
-                ))}
-              </div>
-              <div className="mission-preview">
-                <div className="mission-portrait">
-                  <img
-                    data-card-preview={villain.codes[0]}
-                    tabIndex={0}
-                    src={imageFor(villain.codes[0])}
-                    alt={villain.name}
-                  />
+              <div className="mission-overview">
+                <div className="villain-tabs">
+                  {VILLAINS.map((v) => (
+                    <button
+                      key={v.id}
+                      className={v.id === villain.id ? "active" : ""}
+                      aria-pressed={v.id === villain.id}
+                      onClick={() => {
+                        setVillain(v);
+                        setModule(v.module);
+                      }}
+                    >
+                      {v.name}
+                    </button>
+                  ))}
                 </div>
-                <div className="mission-info">
-                  <span className="small-label">{villain.location}</span>
-                  <h3>{villain.name.toUpperCase()}</h3>
-                  <span className="mission-subtitle">{villain.title}</span>
-                  <div className="mission-level">
-                    <Difficulty level={villain.difficulty} />
-                    {
-                      [
-                        "",
-                        "A good first fight",
-                        "A tactical challenge",
-                        "An all-out war",
-                      ][villain.difficulty]
-                    }
+                <div className="mission-preview">
+                  <div className="mission-portrait">
+                    <img
+                      data-card-preview={villain.codes[0]}
+                      tabIndex={0}
+                      src={imageFor(villain.codes[0])}
+                      alt={villain.name}
+                    />
+                  </div>
+                  <div className="mission-info">
+                    <span className="small-label">{villain.location}</span>
+                    <h3
+                      style={
+                        {
+                          "--title-chars": Math.max(
+                            ...villain.name.split(" ").map((w) => w.length),
+                          ),
+                        } as CSSProperties
+                      }
+                    >
+                      {villain.name.toUpperCase()}
+                    </h3>
+                    <span className="mission-subtitle">{villain.title}</span>
+                    <div className="mission-level">
+                      <Difficulty level={villain.difficulty} />
+                      {
+                        [
+                          "",
+                          "A good first fight",
+                          "A tactical challenge",
+                          "An all-out war",
+                        ][villain.difficulty]
+                      }
+                    </div>
                   </div>
                 </div>
+                <p className="mission-description">{villain.description}</p>
               </div>
-              <p className="mission-description">{villain.description}</p>
-              <div className="setting-line">
-                <span>Difficulty</span>
-                <div className="segmented">
-                  {(["standard", "expert"] as const).map((d) => (
-                    <button
-                      key={d}
-                      className={difficulty === d ? "selected" : ""}
-                      aria-pressed={difficulty === d}
-                      onClick={() => setDifficulty(d)}
-                    >
-                      {d === "standard" ? "Standard" : "Expert"}
-                    </button>
-                  ))}
+              <div className="mission-settings">
+                <div className="setting-line">
+                  <span>Difficulty</span>
+                  <div className="segmented">
+                    {(["standard", "expert"] as const).map((d) => (
+                      <button
+                        key={d}
+                        className={difficulty === d ? "selected" : ""}
+                        aria-pressed={difficulty === d}
+                        onClick={() => setDifficulty(d)}
+                      >
+                        {d === "standard" ? "Standard" : "Expert"}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div className="setting-line tempo-line">
-                <span>Tempo</span>
-                <div className="segmented">
-                  {PACINGS.map((p) => (
-                    <button
-                      key={p.id}
-                      className={pacing === p.id ? "selected" : ""}
-                      aria-pressed={pacing === p.id}
-                      title={p.text}
-                      onClick={() => choosePacing(p.id)}
-                    >
-                      {p.name}
-                    </button>
-                  ))}
+                <div className="setting-line tempo-line">
+                  <span>Tempo</span>
+                  <div className="segmented">
+                    {PACINGS.map((p) => (
+                      <button
+                        key={p.id}
+                        className={pacing === p.id ? "selected" : ""}
+                        aria-pressed={pacing === p.id}
+                        title={p.text}
+                        onClick={() => choosePacing(p.id)}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <p className="setting-help">
-                {PACINGS.find((p) => p.id === pacing)!.text} Decisions always
-                pause.
-              </p>
-              <div className="setting-line heroic-line">
-                <span>Heroic</span>
-                <div className="segmented">
-                  {[0, 1, 2, 3].map((n) => (
-                    <button
-                      key={n}
-                      className={heroic === n ? "selected" : ""}
-                      aria-pressed={heroic === n}
-                      title={
-                        n
-                          ? `Each hero is dealt ${n} extra encounter card${n === 1 ? "" : "s"} every villain phase.`
-                          : "Standard dealing: one encounter card per hero."
-                      }
-                      onClick={() => setHeroic(n)}
-                    >
-                      {n === 0 ? "Off" : n}
-                    </button>
-                  ))}
+                <p className="setting-help">
+                  {PACINGS.find((p) => p.id === pacing)!.text} Decisions always
+                  pause.
+                </p>
+                <div className="setting-line heroic-line">
+                  <span>Heroic</span>
+                  <div className="segmented">
+                    {[0, 1, 2, 3].map((n) => (
+                      <button
+                        key={n}
+                        className={heroic === n ? "selected" : ""}
+                        aria-pressed={heroic === n}
+                        title={
+                          n
+                            ? `Each hero is dealt ${n} extra encounter card${n === 1 ? "" : "s"} every villain phase.`
+                            : "Standard dealing: one encounter card per hero."
+                        }
+                        onClick={() => setHeroic(n)}
+                      >
+                        {n === 0 ? "Off" : n}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div className="seed-line">
-                <label>
-                  Seed
-                  <input
-                    id="mission-seed"
-                    value={seedText}
-                    maxLength={40}
-                    placeholder="Optional · same seed, same shuffles"
-                    onChange={(e) => setSeedText(e.target.value)}
-                  />
+                <div className="seed-line">
+                  <label>
+                    Seed
+                    <input
+                      id="mission-seed"
+                      value={seedText}
+                      maxLength={40}
+                      placeholder="Optional · same seed, same shuffles"
+                      onChange={(e) => setSeedText(e.target.value)}
+                    />
+                  </label>
+                  <div className="seed-actions">
+                    <button
+                      className="text-button"
+                      title="Same hero, villain and shuffles for everyone today"
+                      onClick={dailySetup}
+                    >
+                      <CalendarBlank size={15} /> Daily mission
+                    </button>
+                    <button
+                      className="text-button"
+                      title="Random hero, aspect, villain and modular set for this seat"
+                      onClick={randomizeSetup}
+                    >
+                      <DiceFive size={15} /> Surprise me
+                    </button>
+                  </div>
+                </div>
+                <label className="module-label">
+                  Modular encounter
+                  <select
+                    value={module}
+                    onChange={(e) => setModule(e.target.value)}
+                  >
+                    {MODULES.map((m) => (
+                      <option value={m.id} key={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
                 </label>
-                <div className="seed-actions">
-                  <button
-                    className="text-button"
-                    title="Same hero, villain and shuffles for everyone today"
-                    onClick={dailySetup}
-                  >
-                    <CalendarBlank size={15} /> Daily mission
-                  </button>
-                  <button
-                    className="text-button"
-                    title="Random hero, aspect, villain and modular set for this seat"
-                    onClick={randomizeSetup}
-                  >
-                    <DiceFive size={15} /> Surprise me
-                  </button>
-                </div>
               </div>
-              <label className="module-label">
-                Modular encounter
-                <select
-                  value={module}
-                  onChange={(e) => setModule(e.target.value)}
-                >
-                  {MODULES.map((m) => (
-                    <option value={m.id} key={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
               <div className="mission-team-summary">
                 {team.map((p, i) => (
                   <div className="mission-loadout" key={p.heroId}>

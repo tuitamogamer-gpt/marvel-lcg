@@ -3606,18 +3606,15 @@ option {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0 36px;
+    align-items: start;
   }
-  .mission-panel .section-heading {
+  .mission-panel .section-heading,
+  .mission-team-summary,
+  .start-button,
+  .save-note {
     grid-column: 1/-1;
   }
-  .villain-tabs {
-    grid-column: 1;
-    grid-row: 2;
-  }
   .mission-preview {
-    grid-column: 1;
-    grid-row: 3/6;
-    align-self: start;
     gap: 25px;
     margin-top: 5px;
   }
@@ -3629,32 +3626,7 @@ option {
     font-size: 56px;
   }
   .mission-description {
-    grid-column: 1;
     margin: 18px 0 0;
-    grid-row: 6/8;
-  }
-  .setting-line {
-    grid-column: 2;
-    grid-row: 2;
-  }
-  .module-label {
-    grid-column: 2;
-    grid-row: 3;
-    margin-top: 0;
-  }
-  .mission-loadout {
-    grid-column: 2;
-    grid-row: 4;
-    margin-top: 15px;
-  }
-  .start-button {
-    grid-column: 2;
-    grid-row: 5;
-    margin-top: 19px;
-  }
-  .save-note {
-    grid-column: 2;
-    grid-row: 6;
   }
   .field-guide {
     grid-template-columns: repeat(2, 1fr);

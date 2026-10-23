@@ -707,3 +707,13 @@
     grid-template-columns: 1fr;
   }
 }
+@media (max-width: 480px) {
+  /* Two filters share a row; the result count moves below them. */
+  .catalog-collection .collection-toolbar select {
+    flex: 1 1 0;
+    max-width: none;
+  }
+  .catalog-collection .collection-toolbar > span {
+    flex-basis: 100%;
+  }
+}
