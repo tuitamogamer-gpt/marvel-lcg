@@ -5319,6 +5319,10 @@ option {
   text-transform: uppercase;
   margin: 12px 0 18px;
 }
+/* Hyphenated hero names (Spider-Man, She-Hulk) never split across lines. */
+.keep-word {
+  white-space: nowrap;
+}
 .review-source {
   display: flex;
   align-items: flex-start;
@@ -6374,6 +6378,20 @@ option {
 .result-banner .modal-actions {
   flex-wrap: wrap;
   gap: 8px;
+}
+@media (max-width: 520px) {
+  /* Phones: two short actions share a row; the longer ones span it. */
+  .result-banner .modal-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .result-banner .modal-actions > button {
+    justify-content: center;
+    white-space: nowrap;
+  }
+  .result-banner .modal-actions > :nth-child(n + 3) {
+    grid-column: 1 / -1;
+  }
 }
 
 /* Lobby: heroic level, seed and recent guest missions */

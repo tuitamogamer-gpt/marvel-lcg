@@ -1987,7 +1987,8 @@ export default function App() {
                       <small>
                         {r.difficulty}
                         {r.heroic ? ` · Heroic ${r.heroic}` : ""} · {r.round}{" "}
-                        rounds · {new Date(r.date).toLocaleDateString()}
+                        round{r.round === 1 ? "" : "s"} ·{" "}
+                        {new Date(r.date).toLocaleDateString()}
                       </small>
                     </span>
                     <button
@@ -2258,8 +2259,10 @@ export default function App() {
             <CardImage code={inspect.code} />
             <div>
               <span className="card-type">
-                {card(inspect.code).faction_code || "card"} ·{" "}
-                {(card(inspect.code).type_code || "card").replace("_", " ")}
+                {[card(inspect.code).faction_code, card(inspect.code).type_code]
+                  .filter((v, i, all) => v && all.indexOf(v) === i)
+                  .join(" · ")
+                  .replace(/_/g, " ") || "card"}
               </span>
               {inspectedEnergyForm && (
                 <p className="modal-intro" role="status">
@@ -2499,7 +2502,7 @@ export default function App() {
                 </dl>
               )}
               <span className="result-rounds">
-                {game.round} rounds ·{" "}
+                {game.round} round{game.round === 1 ? "" : "s"} ·{" "}
                 {game.players
                   .map((p) => HEROES.find((h) => h.id === p.heroId)!.name)
                   .join(", ")}{" "}
@@ -3576,13 +3579,23 @@ function ActionDirector({
   // The new-round step closes the villain phase even though the table has moved on.
   const villainPhase = s.phase === "villain" || !!review?.step;
   const waiting =
-    s.phase === "mulligan"
-      ? "Confirm your opening hand"
-      : s.prompt
-        ? "A decision needs you"
-        : ["won", "lost"].includes(s.phase)
-          ? "Mission complete"
-          : `Your move, ${activeHero.name}.`;
+    s.phase === "mulligan" ? (
+      "Confirm your opening hand"
+    ) : s.prompt ? (
+      "A decision needs you"
+    ) : ["won", "lost"].includes(s.phase) ? (
+      "Mission complete"
+    ) : (
+      <>
+        Your move,{" "}
+        {`${activeHero.name}.`.split(" ").flatMap((word, i) => [
+          i ? " " : "",
+          <span key={i} className="keep-word">
+            {word}
+          </span>,
+        ])}
+      </>
+    );
   return (
     <>
       <section
