@@ -39,6 +39,8 @@ describe("complete expansion rules inventory", () => {
   it("records scan-verified printed metadata separately from text errata", () => {
     const corrections = inventory.runtimeMetadataCorrections;
     expect(corrections.map((entry: { code: string }) => entry.code)).toEqual([
+      "04145",
+      "04150",
       "13018",
       "19025",
       "19026",
@@ -58,6 +60,7 @@ describe("complete expansion rules inventory", () => {
       "35021",
     ]);
     for (const [code, boost] of [
+      ["04145", 1],
       ["19025", 2],
       ["19026", 2],
       ["19027", 3],
@@ -75,6 +78,22 @@ describe("complete expansion rules inventory", () => {
         runtime: boost,
       });
     }
+    expect(
+      corrections.find((entry: { code: string }) => entry.code === "04150"),
+    ).toMatchObject({
+      source: "Original English card scan",
+      url: "https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/04150.jpg",
+      changes: [
+        {
+          field: "text",
+          imported: cards.find(
+            (entry: { code: string }) => entry.code === "04150",
+          ).text,
+          runtime:
+            "<b>When Revealed (Alter-Ego)</b>: The villain schemes. If they have a [[Weapon]] attachment, this card gains surge.\n<b>When Revealed (Hero)</b>: The villain attacks you. If they have a [[Weapon]] attachment, this card gains surge.",
+        },
+      ],
+    });
     expect(
       corrections.find((entry: { code: string }) => entry.code === "19028")
         .changes,
@@ -321,7 +340,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(27);
+    expect(MODULES).toHaveLength(30);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "deathstrike",
@@ -333,11 +352,14 @@ describe("complete expansion rules inventory", () => {
         "crazy_gang",
         "hellfire",
         "exper_weapon",
+        "hydra_assault",
+        "weap_master",
+        "hydra_patrol",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2276);
-    expect(coverage.unsupportedFaces).toBe(2275);
-    expect(coverage.dedicatedFaces).toBe(1836);
+    expect(coverage.executableFaces).toBe(2286);
+    expect(coverage.unsupportedFaces).toBe(2265);
+    expect(coverage.dedicatedFaces).toBe(1846);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -485,12 +507,19 @@ describe("complete expansion rules inventory", () => {
         (entry: { code: string }) => !alreadyRegistered.has(entry.code),
       ),
     ).toHaveLength(137);
-    const laterExperimentalFaces = coverage.registeredModules.find(
-      (module: { id: string }) => module.id === "exper_weapon",
-    ).faceCodes;
-    expect(
-      coverage.executableFaces - laterExperimentalFaces.length - 2135,
-    ).toBe(137);
+    const laterModularFaces = coverage.registeredModules
+      .filter((module: { id: string }) =>
+        [
+          "exper_weapon",
+          "hydra_assault",
+          "weap_master",
+          "hydra_patrol",
+        ].includes(module.id),
+      )
+      .flatMap((module: { faceCodes: string[] }) => module.faceCodes);
+    expect(coverage.executableFaces - laterModularFaces.length - 2135).toBe(
+      137,
+    );
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
       "crazy_gang",
       "hellfire",
@@ -616,7 +645,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(27);
+    expect(coverage.registeredModules).toHaveLength(30);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -645,7 +674,7 @@ describe("complete expansion rules inventory", () => {
           entry.pack_code === "trors" && entry.quantity === 1,
       ),
     ).toBe(true);
-    expect(MODULES.at(-1)?.id).toBe("exper_weapon");
+    expect(MODULES[26]?.id).toBe("exper_weapon");
     expect(
       coverage.registeredModules.find(
         (module: { id: string }) => module.id === "exper_weapon",
@@ -667,6 +696,93 @@ describe("complete expansion rules inventory", () => {
     expect(inventory.sourceHashes["src/game/experimental-weapons.ts"]).toMatch(
       /^[a-f0-9]{64}$/,
     );
+  });
+  it("closes all three remaining Rise of Red Skull modules with their original physical quantities", () => {
+    const expected = [
+      ["hydra_assault", ["04145", "04146", "04147"], [3, 2, 1]],
+      ["weap_master", ["04148", "04149", "04150", "04151"], [1, 1, 2, 1]],
+      ["hydra_patrol", ["04152", "04153", "04154"], [2, 3, 1]],
+    ] as const;
+    expect(MODULES.slice(27).map((module) => module.id)).toEqual(
+      expected.map(([id]) => id),
+    );
+    let faces = 0;
+    let physical = 0;
+    for (const [id, codes, quantities] of expected) {
+      const source = cards
+        .filter((entry: { set_code: string }) => entry.set_code === id)
+        .sort((a: { code: string }, b: { code: string }) =>
+          a.code.localeCompare(b.code),
+        );
+      expect(
+        source.map((entry: { code: string }) => entry.code),
+        id,
+      ).toEqual(codes);
+      expect(
+        source.map((entry: { quantity: number }) => entry.quantity),
+        id,
+      ).toEqual(quantities);
+      expect(
+        source.every(
+          (entry: { pack_code: string }) => entry.pack_code === "trors",
+        ),
+        id,
+      ).toBe(true);
+      expect(
+        inventory.installedRegistryCoverage.registeredModules.find(
+          (module: { id: string }) => module.id === id,
+        ),
+      ).toMatchObject({
+        faceCount: codes.length,
+        faceCodes: [...codes],
+        unsupportedFaceCodes: [],
+        installedCardClosure: true,
+      });
+      for (const code of codes) {
+        expect(EXPLICIT_CARD_SCRIPTS.has(code), code).toBe(true);
+        expect(audited.get(code)?.installedRegistry, code).toMatchObject({
+          executable: true,
+          mechanism: "dedicated-module",
+        });
+      }
+      faces += codes.length;
+      physical += quantities.reduce<number>(
+        (sum, quantity) => sum + quantity,
+        0,
+      );
+    }
+    expect(faces).toBe(10);
+    expect(physical).toBe(17);
+    const newCodes = new Set<string>(
+      expected.flatMap(([, codes]) => [...codes]),
+    );
+    const retainedExecutable = inventory.cards
+      .filter(
+        (entry: AuditedCard) =>
+          entry.installedRegistry.executable && !newCodes.has(entry.code),
+      )
+      .map((entry: AuditedCard) => entry.code)
+      .sort();
+    expect(retainedExecutable).toHaveLength(2276);
+    expect(
+      createHash("sha256").update(retainedExecutable.join("\n")).digest("hex"),
+    ).toBe("280993fb6807622a1e4f2d8e7e00e4bb9969c0fd74e0a0a33c84aaab5a34cae2");
+    expect(inventory.sourceHashes["src/game/red-skull-modules.ts"]).toMatch(
+      /^[a-f0-9]{64}$/,
+    );
+    const product = inventory.installedRegistryCoverage.products.find(
+      (entry: { code: string }) => entry.code === "trors",
+    );
+    expect(product).toMatchObject({
+      faceCount: 181,
+      executableFaces: 74,
+      installedCardClosure: false,
+    });
+    expect(product.unsupportedFaceCodes).toHaveLength(107);
+    expect(product.unsupportedFaceCodes).toEqual(
+      expect.arrayContaining(["04058", "04076", "04093", "04109", "04125"]),
+    );
+    expect(inventory.installedRegistryCoverage.campaignSupport).toEqual([]);
   });
   it("records live compiler outcomes separately from inventory and whole-game certification", () => {
     const coverage = inventory.compilerCoverage;
@@ -713,7 +829,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(127);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(128);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

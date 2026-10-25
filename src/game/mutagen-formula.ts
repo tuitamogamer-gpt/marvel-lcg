@@ -124,6 +124,8 @@ export interface MutagenActivation {
   kind: "attack" | "scheme";
   modifier: number;
   omitNormalBoost?: boolean;
+  /** This activation cannot receive any newly dealt boost cards. Existing boosts remain. */
+  noNewBoostCards?: boolean;
   after?: Effect;
 }
 

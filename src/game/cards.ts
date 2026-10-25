@@ -1113,6 +1113,9 @@ export const MODULES = [
   { id: "crazy_gang", name: "The Crazy Gang", difficulty: 3 },
   { id: "hellfire", name: "Hellfire", difficulty: 3 },
   { id: "exper_weapon", name: "Experimental Weapons", difficulty: 2 },
+  { id: "hydra_assault", name: "Hydra Assault", difficulty: 3 },
+  { id: "weap_master", name: "Weapon Master", difficulty: 3 },
+  { id: "hydra_patrol", name: "Hydra Patrol", difficulty: 2 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {

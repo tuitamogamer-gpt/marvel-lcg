@@ -24,6 +24,7 @@ import {
 import * as acolytes from "./acolytes.js";
 import * as armadillo from "./armadillo.js";
 import * as experimentalWeapons from "./experimental-weapons.js";
+import * as redSkullModules from "./red-skull-modules.js";
 import * as inheritors from "./inheritors.js";
 import * as brotherhood from "./brotherhood.js";
 import * as zzzax from "./zzzax.js";
@@ -832,6 +833,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
       !!(
         name === "Piercing" &&
         (storm.stormPiercing(s, p) ||
+          redSkullModules.redSkullPiercing(s, p.id) ||
           acolytes.acolytesPiercing(s, p) ||
           granted.piercing ||
           nebula.nebulaNamedCharacterModifiers(s, card(p).name).piercing ||
@@ -856,6 +858,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         name === "Ranged" &&
         (granted.ranged ||
           (s.attack?.attacker === p.id && s.attack.experimentalWeaponsRanged) ||
+          (s.attack?.attacker === p.id && s.attack.redSkullModulesRanged) ||
           wideawakeKeywords.ranged ||
           allyTraits.ranged ||
           packTraits.ranged ||
@@ -3899,7 +3902,7 @@ function defeatCharacter(
           mandatory: true,
         }),
       );
-    if (rulesCode(m) === "01182" && !textWasBlank)
+    if ((rulesCode(m) === "01182" || m.code === "04153") && !textWasBlank)
       dealEncounter(s, m.engagedWith);
     const tigra = find(s, source);
     if (tigra && rulesCode(tigra) === "01051")
@@ -4415,6 +4418,7 @@ function defeatScheme(
     ...iceman.icemanSchemeDefeated(s, p),
     ...mariaHill.mariaHillSchemeDefeated(s, p),
   );
+  const patrolDefeat = redSkullModules.redSkullSchemeDefeated(s, p);
   const nativeDefeat = sabretooth.sabretoothSideSchemeDefeated(
     s,
     p,
@@ -4470,6 +4474,15 @@ function defeatScheme(
   ];
   if (!victory && !retainFind) discardPiece(s, p.id);
   const responses = [
+    ...(patrolDefeat.length
+      ? [
+          {
+            id: `${p.id}:patrol-defeated`,
+            title: card(p).name,
+            effects: patrolDefeat,
+          },
+        ]
+      : []),
     ...(magikDefeat.length
       ? [{ id: `${p.id}:magik`, title: card(p).name, effects: magikDefeat }]
       : []),
@@ -6953,7 +6966,12 @@ export function newGame(config: {
               "acolytes",
             ].includes(c.set_code || "")
               ? "mut_gen"
-              : c.set_code === "exper_weapon"
+              : [
+                    "exper_weapon",
+                    "hydra_assault",
+                    "weap_master",
+                    "hydra_patrol",
+                  ].includes(c.set_code || "")
                 ? "trors"
                 : c.set_code === "exodus"
                   ? "gambit"
@@ -9222,6 +9240,7 @@ export function abilityOptions(
     ...sentinels.sentinelsAbilityOptions(s, p.id, sentinelsPorts),
     ...zzzax.zzzaxActions(s, p, zzzaxPorts),
     ...experimentalWeapons.experimentalWeaponsActions(s, p),
+    ...redSkullModules.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
     ...mutagenAttachmentActions(s, p),
     ...scarletWitch.scarletWitchAttachmentActions(s, p, scarletPorts),
@@ -9649,6 +9668,15 @@ function ability(s: GameState, id: string, action = "special") {
     return;
   const moduleSource = find(s, id);
   if (moduleSource) {
+    const redSkullEffects = redSkullModules.redSkullActionEffects(
+      s,
+      moduleSource,
+      action,
+    );
+    if (redSkullEffects !== null) {
+      add(s, ...redSkullEffects);
+      return;
+    }
     const weaponEffects = experimentalWeapons.experimentalWeaponsActionEffects(
       s,
       moduleSource,
@@ -10526,6 +10554,7 @@ const mutagenPorts: MutagenEnginePorts = {
   },
   dealEncounter,
   giveBoost: (s, villainId, scope) => {
+    if (scope === "current" && !canDealCurrentBoost(s)) return;
     const p = drawEncounter(s);
     if (!p) return;
     if (scope === "next") (s.encounter.storedBoosts ||= []).push(p);
@@ -13110,6 +13139,59 @@ const experimentalWeaponsPorts: experimentalWeapons.ExperimentalWeaponsPorts = {
   ...mutagenPorts,
   discardHand,
 };
+const redSkullModulePorts: redSkullModules.RedSkullModulePorts = {
+  ...mutagenPorts,
+  undefended: (s, a) => {
+    if (
+      a.originalTarget &&
+      a.originalTarget !== "hero" &&
+      !a.originalTarget.startsWith("hero:")
+    )
+      return false;
+    if (!a.defender || a.defender === "none") return !a.eventDefense;
+    if (a.defender === "hero") return false;
+    // A previous boost may have removed the ally before damageWindow updates
+    // the stored defender. Mutant Protectors instead retains hero defense.
+    return (
+      !find(s, a.defender) && a.mutantProtectorsDefender?.allyId !== a.defender
+    );
+  },
+  supports: (s) =>
+    s.player.inPlay.filter(
+      (p) => card(p).type_code === "support" && !isPermanent(card(p)),
+    ),
+  revealHidden,
+  putMinion: (s, p, playerId) => swPorts.putMinion(s, p, playerId),
+  activateEffect: (s, e) => {
+    if (!s.players.some((seat) => seat.id === e.playerId && !seat.eliminated))
+      return;
+    if (s.attack || s.scheming) {
+      // Triggered activations wait until the current activation and every
+      // native defense/after-activation response have fully completed.
+      const boundary = s.queue.findIndex((q) =>
+        ["defenseResponses", "endScheme"].includes(q.type),
+      );
+      if (boundary >= 0) s.queue.splice(boundary + 1, 0, effectContext(s, e));
+      else
+        ((s.scheming || s.attack)!.afterActivation ||= []).push(
+          effectContext(s, e),
+        );
+      return;
+    }
+    mutagenPorts.activate(s, {
+      enemyId: s.villain.id,
+      playerId: e.playerId,
+      kind: e.kind,
+      modifier: 0,
+      omitNormalBoost: !!e.omitNormalBoost,
+      noNewBoostCards: !!e.omitNormalBoost,
+      after: E("red-skull-modules:activation-finished", {
+        after: e.after || [],
+        actorId: e.playerId,
+      }),
+    });
+  },
+};
 const armadilloPorts: armadillo.ArmadilloPorts = {
   ...mutagenPorts,
   shuffleEncounter: (s) => {
@@ -14738,6 +14820,7 @@ const mansionAttackPorts: mansionAttack.MansionAttackPorts = {
     }
   },
   additionalBoost: (s) => {
+    if (!canDealCurrentBoost(s)) return;
     const activation = s.scheming || s.attack;
     if (!activation || activation.attacker !== s.villain.id) return;
     const p = drawEncounter(s);
@@ -14980,6 +15063,13 @@ const magnetoPorts: magneto.MagnetoPorts = {
     return !!p && giveCharacterStatus(s, p, "tough");
   },
   giveFacedownBoost: (s, p) => {
+    const current = s.scheming || s.attack;
+    if (
+      current?.attacker === s.villain.id &&
+      !("completionRecorded" in current && current.completionRecorded) &&
+      !canDealCurrentBoost(s)
+    )
+      return;
     const actual = p ? takeWideawakePiece(s, p.id) || p : drawEncounter(s);
     if (actual) {
       removeEncounterInstance(s, actual.id);
@@ -17507,6 +17597,7 @@ const dominoPorts: domino.DominoPorts = {
     bwPorts.cancelBoostAbility(s, id);
   },
   additionalBoost: (s) => {
+    if (!canDealCurrentBoost(s)) return;
     const p = drawEncounter(s);
     if (p && s.attack) (s.attack.pendingBoosts ||= []).push(p);
   },
@@ -20434,8 +20525,10 @@ function enemyAttack(
       novaModifiers.attack +
       psylocke.psylockeActivationBonus(s, id),
     omitNormalBoost: activation?.omitNormalBoost,
+    noNewBoostCards: activation?.noNewBoostCards,
     activationAfter: activation?.after,
     attackerSnapshot: structuredClone(p),
+    redSkullModulesRanged: redSkullModules.redSkullRanged(s, id),
     experimentalWeaponsRanged: experimentalWeapons.experimentalWeaponsRanged(
       s,
       id,
@@ -20601,6 +20694,10 @@ function abortAttack(s: GameState) {
     activateSeat(s, previous);
   }
   s.attack = null;
+}
+/** Boost cards already dealt remain; a printed prohibition blocks new deals. */
+function canDealCurrentBoost(s: GameState) {
+  return !(s.scheming || s.attack)?.noNewBoostCards;
 }
 function prepareAttackBoosts(s: GameState) {
   const a = s.attack;
@@ -20869,6 +20966,7 @@ function boostEffects(s: GameState, p: Piece) {
     return;
   }
   const rise =
+    redSkullModules.redSkullBoost(s, p, redSkullModulePorts) ??
     starLord.starLordBoost(s, p) ??
     shadowcat.shadowcatBoost(s, p) ??
     gamora.gamoraBoost(s, p) ??
@@ -20990,7 +21088,7 @@ function boostEffects(s: GameState, p: Piece) {
       );
       break;
     case "01164":
-      if (s.scheming || s.attack) {
+      if ((s.scheming || s.attack) && canDealCurrentBoost(s)) {
         const boost = drawEncounter(s);
         if (boost) {
           if (s.scheming) s.scheming.pendingBoosts.push(boost);
@@ -21157,6 +21255,7 @@ function enemyScheme(
     if (boost) pendingBoosts.push(boost);
   }
   s.scheming = {
+    noNewBoostCards: request?.noNewBoostCards,
     id: moldReceipt.token,
     nickStealthSuit: request?.nickStealthSuit,
     nickInformant: !!s.flags[`nickInformant:${id}`],
@@ -22059,6 +22158,7 @@ function finishAttackAfterDamage(
               ]
             : []),
           ...ironspider.ironspiderSinisterActivationResponses(s, a.attacker),
+          ...redSkullModules.redSkullAttackResponses(s, a, redSkullModulePorts),
           ...experimentalWeapons.experimentalWeaponsAttackResponses(
             s,
             a.attacker,
@@ -22694,6 +22794,10 @@ function reveal(
       ironspider.IRONSPIDER_SINISTER_SCRIPT_CODES.some(
         (code) => code === p.code,
       ) ||
+      (redSkullModules.RED_SKULL_MODULE_SCRIPT_CODES.some(
+        (code) => code === p.code,
+      ) &&
+        c.type_code !== "attachment") ||
       moduleSurge)
   ) {
     if (c.type_code === "minion") {
@@ -22750,6 +22854,7 @@ function reveal(
       ...GOBLIN_MODULE_SCRIPT_CODES,
       ...armadillo.ARMADILLO_SCRIPT_CODES,
       ...experimentalWeapons.EXPERIMENTAL_WEAPONS_SCRIPT_CODES,
+      ...redSkullModules.RED_SKULL_MODULE_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       ...RISKY_BUSINESS_SCRIPT_CODES,
@@ -22825,6 +22930,7 @@ function reveal(
       ...MUTAGEN_FORMULA_SCRIPT_CODES,
       ...armadillo.ARMADILLO_SCRIPT_CODES,
       ...experimentalWeapons.EXPERIMENTAL_WEAPONS_SCRIPT_CODES,
+      ...redSkullModules.RED_SKULL_MODULE_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -22854,6 +22960,7 @@ function reveal(
       mutagenEncounterReveal(s, p) ??
       armadillo.armadilloReveal(s, p) ??
       experimentalWeapons.experimentalWeaponsReveal(s, p) ??
+      redSkullModules.redSkullReveal(s, p) ??
       zzzax.zzzaxReveal(s, p) ??
       domino.dominoEncounter(s, p) ??
       gambit.gambitEncounter(s, p) ??
@@ -22918,6 +23025,7 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    redSkullModules.redSkullReveal(s, p) ??
     domino.dominoEncounter(s, p) ??
     psylocke.psylockeEncounterReveal(s, p) ??
     bishop.bishopEncounter(s, p) ??
@@ -24166,6 +24274,7 @@ function resolve(s: GameState, e: Effect) {
           ironspider.ironspiderSinisterReveal(state, piece) ??
           armadillo.armadilloReveal(state, piece) ??
           experimentalWeapons.experimentalWeaponsReveal(state, piece) ??
+          redSkullModules.redSkullReveal(state, piece) ??
           zzzax.zzzaxReveal(state, piece) ??
           inheritors.inheritorsReveal(state, piece) ??
           goblinModuleReveal(state, piece) ??
@@ -24249,6 +24358,8 @@ function resolve(s: GameState, e: Effect) {
         ),
     })
   )
+    return;
+  if (redSkullModules.resolveRedSkullModuleEffect(s, e, redSkullModulePorts))
     return;
   if (armadillo.resolveArmadilloEffect(s, e, armadilloPorts)) return;
   if (
@@ -33335,6 +33446,7 @@ function run(s: GameState) {
         "goblin-module:interference-each",
       ].includes(e.type) ||
       e.type.startsWith("sw:hydra") ||
+      e.type === "red-skull-modules:patrol-search" ||
       e.type.startsWith("sabretooth:") ||
       e.type.startsWith("sabretooth-native:") ||
       e.type.startsWith("wideawake:") ||
@@ -33697,6 +33809,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...sabretooth.sabretoothActionOptions(s, p.id, sabretoothPorts),
               ...zzzax.zzzaxActions(s, p, zzzaxPorts),
               ...experimentalWeapons.experimentalWeaponsActions(s, p),
+              ...redSkullModules.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
               ...goblinModuleAttachmentActions(s, p),
               ...mutagenAttachmentActions(s, p),

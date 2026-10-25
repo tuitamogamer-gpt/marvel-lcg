@@ -3606,18 +3606,15 @@ option {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0 36px;
+    align-items: start;
   }
-  .mission-panel .section-heading {
+  .mission-panel .section-heading,
+  .mission-team-summary,
+  .start-button,
+  .save-note {
     grid-column: 1/-1;
   }
-  .villain-tabs {
-    grid-column: 1;
-    grid-row: 2;
-  }
   .mission-preview {
-    grid-column: 1;
-    grid-row: 3/6;
-    align-self: start;
     gap: 25px;
     margin-top: 5px;
   }
@@ -3629,32 +3626,7 @@ option {
     font-size: 56px;
   }
   .mission-description {
-    grid-column: 1;
     margin: 18px 0 0;
-    grid-row: 6/8;
-  }
-  .setting-line {
-    grid-column: 2;
-    grid-row: 2;
-  }
-  .module-label {
-    grid-column: 2;
-    grid-row: 3;
-    margin-top: 0;
-  }
-  .mission-loadout {
-    grid-column: 2;
-    grid-row: 4;
-    margin-top: 15px;
-  }
-  .start-button {
-    grid-column: 2;
-    grid-row: 5;
-    margin-top: 19px;
-  }
-  .save-note {
-    grid-column: 2;
-    grid-row: 6;
   }
   .field-guide {
     grid-template-columns: repeat(2, 1fr);
@@ -5347,6 +5319,10 @@ option {
   text-transform: uppercase;
   margin: 12px 0 18px;
 }
+/* Hyphenated hero names (Spider-Man, She-Hulk) never split across lines. */
+.keep-word {
+  white-space: nowrap;
+}
 .review-source {
   display: flex;
   align-items: flex-start;
@@ -6402,6 +6378,20 @@ option {
 .result-banner .modal-actions {
   flex-wrap: wrap;
   gap: 8px;
+}
+@media (max-width: 520px) {
+  /* Phones: two short actions share a row; the longer ones span it. */
+  .result-banner .modal-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .result-banner .modal-actions > button {
+    justify-content: center;
+    white-space: nowrap;
+  }
+  .result-banner .modal-actions > :nth-child(n + 3) {
+    grid-column: 1 / -1;
+  }
 }
 
 /* Lobby: heroic level, seed and recent guest missions */

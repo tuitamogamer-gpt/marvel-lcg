@@ -207,7 +207,7 @@ function blank(s: GameState, id: string) {
 describe("Experimental Weapons original modular source", () => {
   it("registers all four faces and retains the original forty-card starter", () => {
     const s = base();
-    expect(MODULES.at(-1)?.id).toBe("exper_weapon");
+    expect(MODULES[26]?.id).toBe("exper_weapon");
     expect(
       physical(s)
         .filter((p) => card(p).set_code === "exper_weapon")

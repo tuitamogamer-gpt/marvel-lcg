@@ -622,9 +622,10 @@ describe("published expansion starters across every supported mission setting", 
         ),
     );
     expect(VILLAINS).toHaveLength(10);
-    expect(MODULES).toHaveLength(27);
+    expect(MODULES).toHaveLength(30);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(27768);
+    expect(missions).toHaveLength(30888);
+    const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
         mission.heroId,
@@ -636,7 +637,7 @@ describe("published expansion starters across every supported mission setting", 
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
     expect(
       createHash("sha256").update(manifest(missions).join("\n")).digest("hex"),
-    ).toBe("bfd15ff0e1081015f5b01d55beb096051c63af39d842c8342b0a8e70ad1f6b9e");
+    ).toBe("492adb711daff6578c014486b51281291235d8d3672f3d408a2689e7f8990ae1");
     const combined = partitions.flat();
     // New heroes and modular sets extend the published mission grid without
     // changing the names or seeded shuffles of the 11,328 prior missions.
@@ -653,6 +654,7 @@ describe("published expansion starters across every supported mission setting", 
           "crazy_gang",
           "hellfire",
           "exper_weapon",
+          ...redSkullModules,
         ].includes(mission.module),
     );
     expect(retained).toHaveLength(11328);
@@ -670,6 +672,7 @@ describe("published expansion starters across every supported mission setting", 
           "crazy_gang",
           "hellfire",
           "exper_weapon",
+          ...redSkullModules,
         ].includes(mission.module),
     );
     expect(previousImport).toHaveLength(14184);
@@ -687,6 +690,7 @@ describe("published expansion starters across every supported mission setting", 
           "crazy_gang",
           "hellfire",
           "exper_weapon",
+          ...redSkullModules,
         ].includes(mission.module),
     );
     expect(secondImport).toHaveLength(17360);
@@ -704,6 +708,7 @@ describe("published expansion starters across every supported mission setting", 
           "crazy_gang",
           "hellfire",
           "exper_weapon",
+          ...redSkullModules,
         ].includes(mission.module),
     );
     expect(thirdImport).toHaveLength(19096);
@@ -715,7 +720,12 @@ describe("published expansion starters across every supported mission setting", 
     const fourthImport = missions.filter(
       (mission) =>
         heroIds.indexOf(mission.heroId) < 48 &&
-        !["crazy_gang", "hellfire", "exper_weapon"].includes(mission.module),
+        ![
+          "crazy_gang",
+          "hellfire",
+          "exper_weapon",
+          ...redSkullModules,
+        ].includes(mission.module),
     );
     expect(fourthImport).toHaveLength(22752);
     expect(
@@ -724,7 +734,8 @@ describe("published expansion starters across every supported mission setting", 
         .digest("hex"),
     ).toBe("8700b7efebe73397bb71519e768a39b4c7096cfbda3637e15ca405c4f0b5f5a3");
     const fifthImport = missions.filter(
-      (mission) => mission.module !== "exper_weapon",
+      (mission) =>
+        !["exper_weapon", ...redSkullModules].includes(mission.module),
     );
     expect(fifthImport).toHaveLength(26728);
     expect(
@@ -732,11 +743,20 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(fifthImport).join("\n"))
         .digest("hex"),
     ).toBe("50a2adec4c438e99521fa30c0fa2c46be481d6837ff5396f82eaec269dcf63c1");
-    expect(new Set(missions.map(key)).size).toBe(27768);
-    expect(new Set(combined.map(key)).size).toBe(27768);
+    const experimentalWeaponsImport = missions.filter(
+      (mission) => !redSkullModules.includes(mission.module),
+    );
+    expect(experimentalWeaponsImport).toHaveLength(27768);
+    expect(
+      createHash("sha256")
+        .update(manifest(experimentalWeaponsImport).join("\n"))
+        .digest("hex"),
+    ).toBe("bfd15ff0e1081015f5b01d55beb096051c63af39d842c8342b0a8e70ad1f6b9e");
+    expect(new Set(missions.map(key)).size).toBe(30888);
+    expect(new Set(combined.map(key)).size).toBe(30888);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(3471);
+      expect(partition).toHaveLength(3861);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -744,11 +764,11 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(66);
-      expect(Math.max(...perShard)).toBe(67);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(534);
+      expect(Math.min(...perShard)).toBe(74);
+      expect(Math.max(...perShard)).toBe(75);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(594);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 3471 : 27768);
+    expect(selectedMissions).toHaveLength(isSharded ? 3861 : 30888);
   });
   for (const mission of selectedMissions)
     it(

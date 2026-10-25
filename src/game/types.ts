@@ -179,6 +179,8 @@ export interface Prompt {
 export interface Attack {
   /** Laser Rifle grants Ranged to the actual attack at initiation. */
   experimentalWeaponsRanged?: boolean;
+  /** Hydra Sidearm grants Ranged to this actual attack at initiation. */
+  redSkullModulesRanged?: boolean;
   angelIgnoreBoosts?: boolean;
   angelRetaliatePlayerId?: string;
   angelRetaliate?: number;
@@ -214,6 +216,7 @@ export interface Attack {
   retainedBoostIds?: string[];
   modifier?: number;
   omitNormalBoost?: boolean;
+  noNewBoostCards?: boolean;
   extraBoostIcons?: number;
   afterActivation?: Effect[];
   /** Effects tied to this actual attack, before optional aftermath responses. */
@@ -389,6 +392,7 @@ export interface GameState {
   removed: Piece[];
   resolving: Piece[];
   scheming?: {
+    noNewBoostCards?: boolean;
     nickStealthSuit?: string;
     nickInformant?: boolean;
     id?: string;

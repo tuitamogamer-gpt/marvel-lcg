@@ -15,6 +15,12 @@ type PrintedMetadata = Readonly<
  * https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/<code>.jpg
  */
 const printedMetadata: Readonly<Record<string, PrintedMetadata>> = {
+  // public/cards/catalog/04145.webp: one numeric boost triangle plus a star.
+  "04145": { boost: 1 },
+  // public/cards/catalog/04150.webp: both printed headings are When Revealed.
+  "04150": {
+    text: "<b>When Revealed (Alter-Ego)</b>: The villain schemes. If they have a [[Weapon]] attachment, this card gains surge.\n<b>When Revealed (Hero)</b>: The villain attacks you. If they have a [[Weapon]] attachment, this card gains surge.",
+  },
   // Original scans public/cards/catalog/34028.webp and 34031.webp.
   "34028": {
     text: "Give to the Jean Grey player.\n<b>When Revealed</b>: If you have the [[UNLEASHED]] trait, search the encounter deck, discard pile, and set-aside area for Dark Phoenix and reveal her. Then, remove Burning Hunger from the game. If you have the [[RESTRAINED]] trait, remove 1 power counter from Phoenix Force and this card gains surge. Discard this card.",

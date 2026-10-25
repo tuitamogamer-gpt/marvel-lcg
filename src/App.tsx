@@ -1925,294 +1925,308 @@ export default function App() {
                   <h2>CHOOSE YOUR VILLAIN</h2>
                 </div>
               </div>
-              <div className="villain-tabs">
-                {VILLAINS.map((v) => (
-                  <button
-                    key={v.id}
-                    className={v.id === villain.id ? "active" : ""}
-                    aria-pressed={v.id === villain.id}
-                    onClick={() => {
-                      setVillain(v);
-                      setModule(v.module);
-                      setSecondaryModule(
-                        v.id === "sabretooth" ? "mystique" : "brotherhood",
-                      );
-                      setSenatorDamage("");
-                      setCaptureAllocation(["", "", ""]);
-                    }}
-                  >
-                    {v.name}
-                  </button>
-                ))}
-              </div>
-              <div
-                className={`mission-preview${villain.name.length > 14 ? " long-title" : ""}`}
-              >
-                <div className="mission-portrait">
-                  <img
-                    data-card-preview={villain.codes[0]}
-                    tabIndex={0}
-                    src={imageFor(villain.codes[0])}
-                    alt={villain.name}
-                  />
+              <div className="mission-overview">
+                <div className="villain-tabs">
+                  {VILLAINS.map((v) => (
+                    <button
+                      key={v.id}
+                      className={v.id === villain.id ? "active" : ""}
+                      aria-pressed={v.id === villain.id}
+                      onClick={() => {
+                        setVillain(v);
+                        setModule(v.module);
+                        setSecondaryModule(
+                          v.id === "sabretooth" ? "mystique" : "brotherhood",
+                        );
+                        setSenatorDamage("");
+                        setCaptureAllocation(["", "", ""]);
+                      }}
+                    >
+                      {v.name}
+                    </button>
+                  ))}
                 </div>
-                <div className="mission-info">
-                  <span className="small-label">{villain.location}</span>
-                  <h3>{villain.name.toUpperCase()}</h3>
-                  <span className="mission-subtitle">{villain.title}</span>
-                  <div className="mission-level">
-                    <Difficulty level={villain.difficulty} />
-                    {
-                      [
-                        "",
-                        "A good first fight",
-                        "A tactical challenge",
-                        "An all-out war",
-                      ][villain.difficulty]
-                    }
+                <div className="mission-preview">
+                  <div className="mission-portrait">
+                    <img
+                      data-card-preview={villain.codes[0]}
+                      tabIndex={0}
+                      src={imageFor(villain.codes[0])}
+                      alt={villain.name}
+                    />
+                  </div>
+                  <div className="mission-info">
+                    <span className="small-label">{villain.location}</span>
+                    <h3
+                      style={
+                        {
+                          "--title-chars": Math.max(
+                            ...villain.name
+                              .split(" ")
+                              .map((word) => word.length),
+                          ),
+                        } as CSSProperties
+                      }
+                    >
+                      {villain.name.toUpperCase()}
+                    </h3>
+                    <span className="mission-subtitle">{villain.title}</span>
+                    <div className="mission-level">
+                      <Difficulty level={villain.difficulty} />
+                      {
+                        [
+                          "",
+                          "A good first fight",
+                          "A tactical challenge",
+                          "An all-out war",
+                        ][villain.difficulty]
+                      }
+                    </div>
                   </div>
                 </div>
+                <p className="mission-description">{villain.description}</p>
               </div>
-              <p className="mission-description">{villain.description}</p>
-              <div className="setting-line">
-                <span>Difficulty</span>
-                <div className="segmented">
-                  {(["standard", "expert"] as const).map((d) => (
-                    <button
-                      key={d}
-                      className={difficulty === d ? "selected" : ""}
-                      aria-pressed={difficulty === d}
-                      onClick={() => setDifficulty(d)}
-                    >
-                      {d === "standard" ? "Standard" : "Expert"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <p className="setting-help">
-                {difficulty === "expert"
-                  ? "Villain stages II → III. Includes the Expert encounter set."
-                  : "Villain stages I → II. Recommended for your first mission."}
-              </p>
-              <div className="setting-line tempo-line">
-                <span>Tempo</span>
-                <div className="segmented">
-                  {PACINGS.map((p) => (
-                    <button
-                      key={p.id}
-                      className={pacing === p.id ? "selected" : ""}
-                      aria-pressed={pacing === p.id}
-                      title={p.text}
-                      onClick={() => choosePacing(p.id)}
-                    >
-                      {p.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <p className="setting-help">
-                {PACINGS.find((p) => p.id === pacing)!.text} Decisions always
-                pause.
-              </p>
-              <div className="setting-line heroic-line">
-                <span>Heroic</span>
-                <div className="segmented">
-                  {[0, 1, 2, 3].map((n) => (
-                    <button
-                      key={n}
-                      className={heroic === n ? "selected" : ""}
-                      aria-pressed={heroic === n}
-                      title={
-                        n
-                          ? `Each hero is dealt ${n} extra encounter card${n === 1 ? "" : "s"} every villain phase.`
-                          : "Standard dealing: one encounter card per hero."
-                      }
-                      onClick={() => setHeroic(n)}
-                    >
-                      {n === 0 ? "Off" : n}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {heroic > 0 && (
-                <p className="setting-help">
-                  Each hero receives {heroic} extra encounter{" "}
-                  {heroic === 1 ? "card" : "cards"} every villain phase.
-                </p>
-              )}
-              <div className="seed-line">
-                <label>
-                  Seed
-                  <input
-                    id="mission-seed"
-                    value={seedText}
-                    maxLength={40}
-                    placeholder="Optional · same seed, same shuffles"
-                    onChange={(e) => setSeedText(e.target.value)}
-                  />
-                </label>
-                <div className="seed-actions">
-                  <button
-                    className="text-button"
-                    title="Same hero, villain and shuffles for everyone today"
-                    onClick={dailySetup}
-                  >
-                    <CalendarBlank size={15} /> Daily mission
-                  </button>
-                  <button
-                    className="text-button"
-                    title="Random hero, aspect, villain and modular set for this seat"
-                    onClick={randomizeSetup}
-                  >
-                    <DiceFive size={15} /> Surprise me
-                  </button>
-                </div>
-              </div>
-              <div className="module-label">
-                <label>
-                  {villain.id === "sabretooth"
-                    ? "Modular encounter 1"
-                    : "Modular encounter"}
-                  <select
-                    value={module}
-                    onChange={(e) => selectModule(e.target.value)}
-                  >
-                    {scenarioModules(villain.id).map((m) => (
-                      <option value={m.id} key={m.id}>
-                        {m.name}
-                      </option>
+              <div className="mission-settings">
+                <div className="setting-line">
+                  <span>Difficulty</span>
+                  <div className="segmented">
+                    {(["standard", "expert"] as const).map((d) => (
+                      <button
+                        key={d}
+                        className={difficulty === d ? "selected" : ""}
+                        aria-pressed={difficulty === d}
+                        onClick={() => setDifficulty(d)}
+                      >
+                        {d === "standard" ? "Standard" : "Expert"}
+                      </button>
                     ))}
-                  </select>
-                </label>
-                {villain.id === "master_mold" && (
-                  <p>
-                    Sentinels is included with this scenario. Choose one
-                    additional modular set; Zero Tolerance is recommended.
+                  </div>
+                </div>
+                <p className="setting-help">
+                  {difficulty === "expert"
+                    ? "Villain stages II → III. Includes the Expert encounter set."
+                    : "Villain stages I → II. Recommended for your first mission."}
+                </p>
+                <div className="setting-line tempo-line">
+                  <span>Tempo</span>
+                  <div className="segmented">
+                    {PACINGS.map((p) => (
+                      <button
+                        key={p.id}
+                        className={pacing === p.id ? "selected" : ""}
+                        aria-pressed={pacing === p.id}
+                        title={p.text}
+                        onClick={() => choosePacing(p.id)}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="setting-help">
+                  {PACINGS.find((p) => p.id === pacing)!.text} Decisions always
+                  pause.
+                </p>
+                <div className="setting-line heroic-line">
+                  <span>Heroic</span>
+                  <div className="segmented">
+                    {[0, 1, 2, 3].map((n) => (
+                      <button
+                        key={n}
+                        className={heroic === n ? "selected" : ""}
+                        aria-pressed={heroic === n}
+                        title={
+                          n
+                            ? `Each hero is dealt ${n} extra encounter card${n === 1 ? "" : "s"} every villain phase.`
+                            : "Standard dealing: one encounter card per hero."
+                        }
+                        onClick={() => setHeroic(n)}
+                      >
+                        {n === 0 ? "Off" : n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {heroic > 0 && (
+                  <p className="setting-help">
+                    Each hero receives {heroic} extra encounter{" "}
+                    {heroic === 1 ? "card" : "cards"} every villain phase.
                   </p>
                 )}
-                {villain.id === "mansion_attack" && (
-                  <p>
-                    Brotherhood is included with this scenario. Choose one
-                    additional modular set; Mystique is recommended. Defeat two
-                    villains in Standard or three in Expert before two rooms are
-                    completed.
-                  </p>
-                )}
-                {villain.id === "project_wideawake" && (
-                  <>
+                <div className="seed-line">
+                  <label>
+                    Seed
+                    <input
+                      id="mission-seed"
+                      value={seedText}
+                      maxLength={40}
+                      placeholder="Optional · same seed, same shuffles"
+                      onChange={(e) => setSeedText(e.target.value)}
+                    />
+                  </label>
+                  <div className="seed-actions">
+                    <button
+                      className="text-button"
+                      title="Same hero, villain and shuffles for everyone today"
+                      onClick={dailySetup}
+                    >
+                      <CalendarBlank size={15} /> Daily mission
+                    </button>
+                    <button
+                      className="text-button"
+                      title="Random hero, aspect, villain and modular set for this seat"
+                      onClick={randomizeSetup}
+                    >
+                      <DiceFive size={15} /> Surprise me
+                    </button>
+                  </div>
+                </div>
+                <div className="module-label">
+                  <label>
+                    {villain.id === "sabretooth"
+                      ? "Modular encounter 1"
+                      : "Modular encounter"}
+                    <select
+                      value={module}
+                      onChange={(e) => selectModule(e.target.value)}
+                    >
+                      {scenarioModules(villain.id).map((m) => (
+                        <option value={m.id} key={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {villain.id === "master_mold" && (
                     <p>
-                      Zero Tolerance is included with this scenario. Choose one
-                      additional modular set; Sentinels is recommended.
+                      Sentinels is included with this scenario. Choose one
+                      additional modular set; Zero Tolerance is recommended.
                     </p>
-                    <details className="capture-setup">
-                      <summary>Starting captures</summary>
+                  )}
+                  {villain.id === "mansion_attack" && (
+                    <p>
+                      Brotherhood is included with this scenario. Choose one
+                      additional modular set; Mystique is recommended. Defeat
+                      two villains in Standard or three in Expert before two
+                      rooms are completed.
+                    </p>
+                  )}
+                  {villain.id === "project_wideawake" && (
+                    <>
                       <p>
-                        We recommend {recommendedSenatorDamage} facedown{" "}
-                        {recommendedSenatorDamage === 1 ? "card" : "cards"} for
-                        the whole team. Choose which decks contribute before
-                        opening hands are drawn, or choose zero for an easier
-                        start.
+                        Zero Tolerance is included with this scenario. Choose
+                        one additional modular set; Sentinels is recommended.
                       </p>
-                      {team.map((seat, index) => (
-                        <label className="seed-field" key={seat.heroId}>
-                          Starting captures for{" "}
-                          {HEROES.find((h) => h.id === seat.heroId)!.name}
+                      <details className="capture-setup">
+                        <summary>Starting captures</summary>
+                        <p>
+                          We recommend {recommendedSenatorDamage} facedown{" "}
+                          {recommendedSenatorDamage === 1 ? "card" : "cards"}{" "}
+                          for the whole team. Choose which decks contribute
+                          before opening hands are drawn, or choose zero for an
+                          easier start.
+                        </p>
+                        {team.map((seat, index) => (
+                          <label className="seed-field" key={seat.heroId}>
+                            Starting captures for{" "}
+                            {HEROES.find((h) => h.id === seat.heroId)!.name}
+                            <input
+                              type="number"
+                              min={0}
+                              max={team.length + 2}
+                              step={1}
+                              value={captureAllocation[index] || ""}
+                              placeholder={String(
+                                index === 0 ? recommendedSenatorDamage : 0,
+                              )}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                const next = [...captureAllocation];
+                                next[index] = value;
+                                const total = team.reduce(
+                                  (sum, _, i) =>
+                                    sum +
+                                    (next[i]
+                                      ? Number(next[i])
+                                      : i === 0
+                                        ? recommendedSenatorDamage
+                                        : 0),
+                                  0,
+                                );
+                                if (
+                                  (value === "" ||
+                                    (Number.isInteger(Number(value)) &&
+                                      Number(value) >= 0 &&
+                                      Number(value) <= team.length + 2)) &&
+                                  total <= team.length + 2
+                                )
+                                  setCaptureAllocation(next);
+                              }}
+                            />
+                          </label>
+                        ))}
+                        <p role="status">
+                          {resolvedCaptureAllocation.reduce(
+                            (sum, n) => sum + n,
+                            0,
+                          )}{" "}
+                          starting captures · loss at {team.length + 3}.
+                          {!captureSetupValid &&
+                            " Choose fewer starting captures before starting the mission."}
+                        </p>
+                      </details>
+                    </>
+                  )}
+                  {villain.id === "sabretooth" && (
+                    <>
+                      <label>
+                        Modular encounter 2
+                        <select
+                          value={secondaryModule}
+                          onChange={(e) => setSecondaryModule(e.target.value)}
+                        >
+                          {MODULES.map((m) => (
+                            <option
+                              value={m.id}
+                              key={m.id}
+                              disabled={m.id === module}
+                            >
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <details>
+                        <summary>Robert Kelly setup</summary>
+                        <p>
+                          Keep the recommended {recommendedSenatorDamage}{" "}
+                          starting damage, or adjust the challenge.
+                        </p>
+                        <label className="seed-field">
+                          Robert Kelly starting damage
                           <input
                             type="number"
                             min={0}
-                            max={team.length + 2}
+                            max={8}
                             step={1}
-                            value={captureAllocation[index] || ""}
-                            placeholder={String(
-                              index === 0 ? recommendedSenatorDamage : 0,
-                            )}
-                            onChange={(event) => {
-                              const value = event.target.value;
-                              const next = [...captureAllocation];
-                              next[index] = value;
-                              const total = team.reduce(
-                                (sum, _, i) =>
-                                  sum +
-                                  (next[i]
-                                    ? Number(next[i])
-                                    : i === 0
-                                      ? recommendedSenatorDamage
-                                      : 0),
-                                0,
-                              );
+                            value={senatorDamage}
+                            placeholder={`Recommended: ${recommendedSenatorDamage}`}
+                            onChange={(e) => {
+                              const value = e.target.value;
                               if (
-                                (value === "" ||
-                                  (Number.isInteger(Number(value)) &&
-                                    Number(value) >= 0 &&
-                                    Number(value) <= team.length + 2)) &&
-                                total <= team.length + 2
+                                value === "" ||
+                                (Number.isInteger(Number(value)) &&
+                                  Number(value) >= 0 &&
+                                  Number(value) <= 8)
                               )
-                                setCaptureAllocation(next);
+                                setSenatorDamage(value);
                             }}
                           />
                         </label>
-                      ))}
-                      <p role="status">
-                        {resolvedCaptureAllocation.reduce(
-                          (sum, n) => sum + n,
-                          0,
-                        )}{" "}
-                        starting captures · loss at {team.length + 3}.
-                        {!captureSetupValid &&
-                          " Choose fewer starting captures before starting the mission."}
-                      </p>
-                    </details>
-                  </>
-                )}
-                {villain.id === "sabretooth" && (
-                  <>
-                    <label>
-                      Modular encounter 2
-                      <select
-                        value={secondaryModule}
-                        onChange={(e) => setSecondaryModule(e.target.value)}
-                      >
-                        {MODULES.map((m) => (
-                          <option
-                            value={m.id}
-                            key={m.id}
-                            disabled={m.id === module}
-                          >
-                            {m.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <details>
-                      <summary>Robert Kelly setup</summary>
-                      <p>
-                        Keep the recommended {recommendedSenatorDamage} starting
-                        damage, or adjust the challenge.
-                      </p>
-                      <label className="seed-field">
-                        Robert Kelly starting damage
-                        <input
-                          type="number"
-                          min={0}
-                          max={8}
-                          step={1}
-                          value={senatorDamage}
-                          placeholder={`Recommended: ${recommendedSenatorDamage}`}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            if (
-                              value === "" ||
-                              (Number.isInteger(Number(value)) &&
-                                Number(value) >= 0 &&
-                                Number(value) <= 8)
-                            )
-                              setSenatorDamage(value);
-                          }}
-                        />
-                      </label>
-                    </details>
-                  </>
-                )}
+                      </details>
+                    </>
+                  )}
+                </div>
               </div>
               <div className="mission-team-summary">
                 {team.map((p, i) => (
@@ -2300,7 +2314,8 @@ export default function App() {
                       <small>
                         {r.difficulty}
                         {r.heroic ? ` · Heroic ${r.heroic}` : ""} · {r.round}{" "}
-                        rounds · {new Date(r.date).toLocaleDateString()}
+                        round{r.round === 1 ? "" : "s"} ·{" "}
+                        {new Date(r.date).toLocaleDateString()}
                       </small>
                     </span>
                     <button
@@ -2608,10 +2623,16 @@ export default function App() {
             )}
             <div>
               <span className="card-type">
-                {card(inspect.piece || inspect.code).faction_code || "card"} ·{" "}
-                {(
-                  card(inspect.piece || inspect.code).type_code || "card"
-                ).replace("_", " ")}
+                {[
+                  card(inspect.piece || inspect.code).faction_code,
+                  card(inspect.piece || inspect.code).type_code,
+                ]
+                  .filter(
+                    (value, index, all) =>
+                      value && all.indexOf(value) === index,
+                  )
+                  .join(" · ")
+                  .replace(/_/g, " ") || "card"}
               </span>
               {inspectedEnergyForm && (
                 <p className="modal-intro" role="status">
@@ -2869,7 +2890,7 @@ export default function App() {
                 </dl>
               )}
               <span className="result-rounds">
-                {game.round} rounds ·{" "}
+                {game.round} round{game.round === 1 ? "" : "s"} ·{" "}
                 {game.players
                   .map((p) => HEROES.find((h) => h.id === p.heroId)!.name)
                   .join(", ")}{" "}
@@ -3985,13 +4006,23 @@ function ActionDirector({
   // The new-round step closes the villain phase even though the table has moved on.
   const villainPhase = s.phase === "villain" || !!review?.step;
   const waiting =
-    s.phase === "mulligan"
-      ? "Confirm your opening hand"
-      : s.prompt
-        ? "A decision needs you"
-        : ["won", "lost"].includes(s.phase)
-          ? "Mission complete"
-          : `Your move, ${activeHero.name}.`;
+    s.phase === "mulligan" ? (
+      "Confirm your opening hand"
+    ) : s.prompt ? (
+      "A decision needs you"
+    ) : ["won", "lost"].includes(s.phase) ? (
+      "Mission complete"
+    ) : (
+      <>
+        Your move,{" "}
+        {`${activeHero.name}.`.split(" ").flatMap((word, i) => [
+          i ? " " : "",
+          <span key={i} className="keep-word">
+            {word}
+          </span>,
+        ])}
+      </>
+    );
   return (
     <>
       <section
@@ -4395,6 +4426,8 @@ function AttachedCards({
                 "04073",
                 "04074",
                 "04075",
+                "04148",
+                "04149",
                 "25032",
                 "29038",
                 "32059",
@@ -4414,12 +4447,28 @@ function AttachedCards({
                 className="text-button"
                 disabled={!send}
                 aria-label={
-                  ["04072", "04073", "04074", "04075", "29038"].includes(p.code)
+                  [
+                    "04072",
+                    "04073",
+                    "04074",
+                    "04075",
+                    "04148",
+                    "04149",
+                    "29038",
+                  ].includes(p.code)
                     ? a.label
                     : undefined
                 }
                 title={
-                  ["04072", "04073", "04074", "04075", "29038"].includes(p.code)
+                  [
+                    "04072",
+                    "04073",
+                    "04074",
+                    "04075",
+                    "04148",
+                    "04149",
+                    "29038",
+                  ].includes(p.code)
                     ? a.label
                     : undefined
                 }
@@ -4427,7 +4476,15 @@ function AttachedCards({
                   send?.({ type: "ABILITY", id: p.id, action: a.id })
                 }
               >
-                {["04072", "04073", "04074", "04075", "29038"].includes(p.code)
+                {[
+                  "04072",
+                  "04073",
+                  "04074",
+                  "04075",
+                  "04148",
+                  "04149",
+                  "29038",
+                ].includes(p.code)
                   ? "Remove"
                   : a.label}
               </button>
