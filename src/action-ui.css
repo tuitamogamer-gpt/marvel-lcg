@@ -1298,6 +1298,17 @@
   .review-focus > .villain-steps {
     padding: 8px 14px;
   }
+  /* Before the phase nothing is current, so the preview keeps every name. */
+  .villain-steps.upcoming:not(.compact) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .villain-steps.upcoming:not(.compact) li {
+    padding-right: 8px;
+  }
+  .villain-steps.upcoming:not(.compact) li .villain-step-name {
+    display: inline;
+  }
 }
 
 /* Keep the card and every payment control reachable on narrow tables. */

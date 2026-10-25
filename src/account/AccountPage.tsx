@@ -116,7 +116,7 @@ function AuthForm({ account }: { account: AccountController }) {
         </p>
         <ul>
           <li>
-            <Cards size={21} /> Your own library of Core Set decks
+            <Cards size={21} /> Up to 30 saved hero decks
           </li>
           <li>
             <Clock size={21} /> Up to 5 missions ready to resume

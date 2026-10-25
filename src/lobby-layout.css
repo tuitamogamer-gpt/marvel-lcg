@@ -1,0 +1,78 @@
+/* Mission setup layout: loaded last so it settles the lobby rules above. */
+
+/* Settings rows keep a steady rhythm; the tempo note belongs to its row. */
+.mission-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.mission-settings > * {
+  margin: 0;
+}
+.mission-settings > .setting-help {
+  margin-top: -6px;
+}
+.mission-settings .setting-line {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.mission-overview {
+  min-width: 0;
+}
+
+/* Villain rows fill the panel instead of clipping long names. */
+.villain-tabs {
+  display: flex;
+  flex-wrap: wrap;
+}
+.villain-tabs button {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  padding-inline: 12px;
+}
+
+/* Hero names scale with their tile so the longest word always fits. */
+.hero-tile {
+  container-type: inline-size;
+}
+.hero-roster .hero-tile-copy strong {
+  font-size: clamp(13px, 12cqi, 26px);
+  overflow-wrap: normal;
+}
+
+.aspect-heading {
+  flex-wrap: wrap;
+}
+.aspect-heading .text-button {
+  max-width: none;
+  white-space: nowrap;
+}
+
+/* Crop past the printed title bar so tiles show only the artwork. */
+.hero-roster .portrait img {
+  margin-top: -24%;
+}
+
+@media (max-width: 520px) {
+  .hero-roster {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .hero-roster .portrait {
+    height: auto;
+    aspect-ratio: 5 / 4;
+  }
+  .hero-roster .hero-tile-copy {
+    min-height: 0;
+    padding: 6px 7px 9px;
+  }
+}
+
+/* Villain titles shrink only when their longest word would not fit. */
+.mission-preview .mission-info {
+  flex: 1;
+  container-type: inline-size;
+}
+.mission-preview .mission-info h3 {
+  font-size: min(57px, calc(100cqi / var(--title-chars, 5) / 0.72));
+}

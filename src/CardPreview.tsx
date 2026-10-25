@@ -11,6 +11,14 @@ const backs = {
   },
 };
 const backFor = (code: string) => backs[code as keyof typeof backs];
+const keyboardFocus = (target: EventTarget | null) => {
+  if (!(target instanceof Element)) return false;
+  try {
+    return target.matches(":focus-visible");
+  } catch {
+    return true;
+  }
+};
 
 /** One viewport-level preview covers card faces, thumbnails and text-only lists. */
 export function CardPreview() {
@@ -26,6 +34,9 @@ export function CardPreview() {
     // A dialog opening under a resting pointer must not pop a preview; only
     // real pointer movement does.
     let lastMove = 0;
+    // A click can open a dialog whose card lands under the pointer; that card
+    // waits for movement after the click.
+    let lastDown = 0;
     const clear = () => {
       clearTimeout(openTimer);
       clearTimeout(closeTimer);
@@ -113,6 +124,9 @@ export function CardPreview() {
     const enter = (event: PointerEvent | FocusEvent) => {
       if (event instanceof PointerEvent && event.pointerType === "touch")
         return;
+      // A dialog focusing its first card after a click must not cover itself;
+      // keyboard focus still enlarges the card.
+      if (event instanceof FocusEvent && !keyboardFocus(event.target)) return;
       if (
         insidePopup(
           event.target,
@@ -122,7 +136,10 @@ export function CardPreview() {
         clear();
         return;
       }
-      if (event instanceof PointerEvent && performance.now() - lastMove > 200)
+      if (
+        event instanceof PointerEvent &&
+        (performance.now() - lastMove > 200 || lastMove <= lastDown)
+      )
         return;
       open(candidate(event.target));
     };
@@ -194,7 +211,11 @@ export function CardPreview() {
     document.addEventListener("pointerout", leave);
     document.addEventListener("focusin", enter);
     document.addEventListener("focusout", leave);
-    document.addEventListener("pointerdown", close);
+    const down = () => {
+      lastDown = performance.now();
+      close();
+    };
+    document.addEventListener("pointerdown", down);
     document.addEventListener("wheel", wheel, { passive: false });
     window.addEventListener("keydown", escape, true);
     window.addEventListener("scroll", scroll, true);
@@ -208,7 +229,7 @@ export function CardPreview() {
       document.removeEventListener("pointerout", leave);
       document.removeEventListener("focusin", enter);
       document.removeEventListener("focusout", leave);
-      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("pointerdown", down);
       document.removeEventListener("wheel", wheel);
       window.removeEventListener("keydown", escape, true);
       window.removeEventListener("scroll", scroll, true);

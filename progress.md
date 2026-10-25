@@ -465,3 +465,20 @@ Original prompt: I want to create fully playable and scripted Marvel Champions L
 - Merged implementation checks pass **265 native/source-contract cases across six files** and TypeScript. Native receipts retain physical resource origins, independent Wild declarations, actual Frostbites, public-top initiation and owner/controller context through reloads. Narrow crosspack follow-ups remain under validation at this checkpoint.
 - Configured **22,752 original-source missions** in four shards of 5,688 while retaining every prior 19,096 name/seed pair and earlier historical manifests. Every command audits physical IDs and printing families; lettered Jubilee resource cards are not collapsed.
 - Complete frozen regression, full mission execution, final browser acceptance, exact-commit CI, commit/push and production verification remain separate release gates. This is an implementation checkpoint, not a publication claim. Scope and evidence boundaries: [source contract](docs/quadruple-import-4-source-contract.md) and [coverage document](docs/engine-expansion-coverage.md#bishop-magik-iceman-and-jubilee-continuation--2026-10-20).
+
+## Lobby and responsive layout repair — 2026-10-23
+
+- Mission setup at 721–980 px placed Difficulty, Tempo, Heroic and the tempo note on the same grid rows, so they were drawn on top of each other. The villain panel now groups an overview column (tabs, portrait, description) and a settings column; team summary and Start span both. The tempo note no longer overlaps its control at any width.
+- Ultron, Mutagen Formula and Risky Business titles overflowed their column at every width; titles now size from their longest word. Villain tabs wrap into full rows instead of clipping. Hero names scale with their tile (phones show three columns) and tile art crops past the printed title bar. "View 40-card deck" stays on one line and moves under the heading when space is short.
+- Phone card-library filters share a row with the count below; the phone hand keeps its cost/resource footer visible. At 1000–1199 px "Use Scientist…" stays on one line, which also fixes the crowded 1024×768 table needing 2 px of scroll (an existing `test:viewport-fit` failure).
+- Share/description metadata now says 33 heroes and five villain scenarios instead of the original Core Set counts.
+- `test:design`, `test:viewport-fit`, `test:tabletop`, `test:flow`, `test:onboarding`, `test:catalog`, formatting and build pass locally.
+
+## Dialogs, tutorial and tablet table polish — 2026-10-24
+
+- Starting the first mission no longer covers the opening hand with an enlarged card. A dialog's first card can land under the pointer that just clicked; hover previews now wait for movement after a click, and focus previews open only for keyboard focus (`:focus-visible`).
+- On phones and tablets the first-mission coach sits above the playmat instead of after the whole table, so each lesson is visible while it applies.
+- Tablets (681–999 px): the hero deck and discard sit under allies and upgrades, beside the hero column, instead of a separate row that left half the area empty.
+- "Your move, Spider-Man." and other hyphenated names wrap at spaces, never at the hyphen. Phones name all four villain-phase stops in the "Ready for the villain?" preview instead of four empty-looking chips.
+- Mission results say "1 round" instead of "1 Rounds" (also in recent missions), and the phone result actions use even rows. Card dialogs show "Hero" instead of "Hero · Hero" when faction and type match, and the sign-in page promises "Up to 30 saved hero decks" instead of Core Set decks.
+- `test:design`, `test:viewport-fit`, `test:tabletop`, `test:flow`, `test:onboarding`, `test:catalog`, `test:expansion`, `test:engine-continuation`, `test:hero-packs`, formatting and build pass locally.

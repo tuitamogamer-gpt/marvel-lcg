@@ -1351,6 +1351,14 @@ button.table-pile:hover .pile-face {
   .physical-table .team-strip-note {
     display: none;
   }
+  /* The rail follows the table here, so the first-mission coach moves ahead
+     of the playmat where a new player sees each lesson. */
+  .physical-table .mission-rail:has(> .tutorial-coach) {
+    display: contents;
+  }
+  .physical-table .mission-rail > .tutorial-coach {
+    order: -1;
+  }
   .physical-table .opposition {
     grid-template-columns: 235px minmax(172px, 1fr) 156px;
     gap: 14px;
@@ -1361,8 +1369,13 @@ button.table-pile:hover .pile-face {
     padding: 12px;
     gap: 16px;
   }
+  /* The hero column is tall; the deck fills the space under the tableau. */
+  .physical-table .identity-area {
+    grid-row: 1 / span 2;
+  }
   .physical-table .hero-pile-area {
-    grid-column: 1 / -1;
+    grid-column: 2;
+    align-self: end;
     display: flex;
     gap: 20px;
     align-items: center;
@@ -1470,8 +1483,13 @@ button.table-pile:hover .pile-face {
     grid-template-columns: minmax(0, 1fr);
   }
   .physical-table .identity-area {
+    grid-row: auto;
     width: 277px;
     max-width: 100%;
+  }
+  .physical-table .hero-pile-area {
+    grid-column: 1 / -1;
+    align-self: auto;
   }
   .physical-table .tableau-groups {
     gap: 20px;
