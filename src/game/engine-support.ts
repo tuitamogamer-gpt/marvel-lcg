@@ -1,3 +1,4 @@
+import { RED_SKULL_MODULE_SCRIPT_CODES } from "./red-skull-modules.js";
 import { NICK_FURY_SCRIPT_CODES } from "./nick-fury.js";
 import { MARIA_HILL_SCRIPT_CODES } from "./maria-hill.js";
 import { BISHOP_SCRIPT_CODES } from "./bishop.js";
@@ -236,6 +237,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...GOBLIN_MODULE_SCRIPT_CODES,
   ...ARMADILLO_SCRIPT_CODES,
   ...EXPERIMENTAL_WEAPONS_SCRIPT_CODES,
+  ...RED_SKULL_MODULE_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,
   ...SABRETOOTH_SCRIPT_CODES,

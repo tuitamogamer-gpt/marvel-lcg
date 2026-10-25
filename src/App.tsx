@@ -4426,6 +4426,8 @@ function AttachedCards({
                 "04073",
                 "04074",
                 "04075",
+                "04148",
+                "04149",
                 "25032",
                 "29038",
                 "32059",
@@ -4445,12 +4447,28 @@ function AttachedCards({
                 className="text-button"
                 disabled={!send}
                 aria-label={
-                  ["04072", "04073", "04074", "04075", "29038"].includes(p.code)
+                  [
+                    "04072",
+                    "04073",
+                    "04074",
+                    "04075",
+                    "04148",
+                    "04149",
+                    "29038",
+                  ].includes(p.code)
                     ? a.label
                     : undefined
                 }
                 title={
-                  ["04072", "04073", "04074", "04075", "29038"].includes(p.code)
+                  [
+                    "04072",
+                    "04073",
+                    "04074",
+                    "04075",
+                    "04148",
+                    "04149",
+                    "29038",
+                  ].includes(p.code)
                     ? a.label
                     : undefined
                 }
@@ -4458,7 +4476,15 @@ function AttachedCards({
                   send?.({ type: "ABILITY", id: p.id, action: a.id })
                 }
               >
-                {["04072", "04073", "04074", "04075", "29038"].includes(p.code)
+                {[
+                  "04072",
+                  "04073",
+                  "04074",
+                  "04075",
+                  "04148",
+                  "04149",
+                  "29038",
+                ].includes(p.code)
                   ? "Remove"
                   : a.label}
               </button>
