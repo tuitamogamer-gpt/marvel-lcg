@@ -923,7 +923,9 @@ export async function generateAudit(
                 ? "https://hallofheroeslcg.com/wp-content/uploads/2022/05/i0d.jpg"
                 : imported.code === "13018"
                   ? "https://hallofheroeslcg.com/wp-content/uploads/2020/12/a8.jpg"
-                  : `https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/${imported.code}.jpg`,
+                  : imported.code === "04061b"
+                    ? imported.image_url
+                    : `https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/${imported.code}.jpg`,
             changes,
           },
         ]
@@ -986,12 +988,27 @@ export async function generateAudit(
     registeredHeroes: HEROES.filter((hero) =>
       SCRIPTED_HERO_IDS.has(hero.id),
     ).map(({ id, code, alter }) => ({ id, code, alter })),
-    registeredScenarios: VILLAINS.map(({ id, codes, schemes, module }) => ({
-      id,
-      codes,
-      schemes,
-      defaultModule: module,
-    })),
+    registeredScenarios: VILLAINS.map(
+      ({
+        id,
+        codes,
+        schemes,
+        module,
+        moduleCount,
+        defaultModules,
+        fixedSets,
+        reservedSets,
+      }) => ({
+        id,
+        codes,
+        schemes,
+        defaultModule: module,
+        moduleCount: moduleCount || 1,
+        defaultModules: defaultModules || [module],
+        fixedSets: fixedSets || [],
+        reservedSets: reservedSets || [],
+      }),
+    ),
     campaignSupport: [],
     products: packs.map((pack) => {
       const productCards = cards.filter((card) => card.pack_code === pack.code);
@@ -1089,6 +1106,7 @@ export async function generateAudit(
     "src/game/inheritors.ts",
     "src/game/experimental-weapons.ts",
     "src/game/red-skull-modules.ts",
+    "src/game/crossbones.ts",
     "src/game/reveal-window.ts",
     "src/game/black-widow.ts",
     "src/game/doctor-strange.ts",

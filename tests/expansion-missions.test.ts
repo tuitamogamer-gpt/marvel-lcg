@@ -180,6 +180,7 @@ function ownedPieces(s: GameState, originalIds?: Set<string>): Piece[] {
     ...((s as GameState & { deadpool?: { poolSetAside: Piece[] } }).deadpool
       ?.poolSetAside || []),
     ...(s.encounter.storedBoosts || []),
+    ...(s.crossbones?.weaponDeck || []),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
     ...(s.attack?.pendingBoosts || []),
@@ -215,9 +216,11 @@ function ownedPieces(s: GameState, originalIds?: Set<string>): Piece[] {
 /** Native scenario piles own original main/villain/progress cards. Public
  * scheme counters, attacker snapshots and retired villain views own no cards. */
 function scenarioPhysicalPieces(s: GameState): Piece[] {
-  if (!["mansion_attack", "magneto"].includes(s.villainId)) return [];
+  if (!["mansion_attack", "magneto", "crossbones"].includes(s.villainId))
+    return [];
   const m = s.mansionAttack;
   const g = s.magneto;
+  const c = s.crossbones;
   const pieces: Piece[] = [];
   const visit = (p: Piece) => {
     pieces.push(p);
@@ -249,16 +252,19 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
     ...((s as GameState & { deadpool?: { poolSetAside: Piece[] } }).deadpool
       ?.poolSetAside || []),
     ...(s.encounter.storedBoosts || []),
+    ...(s.crossbones?.weaponDeck || []),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
     ...(m?.activeVillainRetired ? [] : [s.villain]),
-    ...(m?.villainDeck || g?.villainDeck || []),
-    ...(m?.mainDeck || g?.mainDeck || []),
+    ...(m?.villainDeck || g?.villainDeck || c?.villainDeck || []),
+    ...(m?.mainDeck || g?.mainDeck || c?.mainDeck || []),
     ...(m?.currentMain
       ? [m.currentMain]
       : g?.currentMain
         ? [g.currentMain]
-        : []),
+        : c?.currentMain
+          ? [c.currentMain]
+          : []),
     ...(g?.orbital ? [g.orbital] : []),
     ...s.minions,
     ...s.sideSchemes,
@@ -400,7 +406,9 @@ function runMission(config: (typeof missions)[number]) {
       ? "mansion_attack"
       : s.villainId === "magneto"
         ? "magneto_villain"
-        : undefined;
+        : s.villainId === "crossbones"
+          ? "crossbones"
+          : undefined;
   const scenarioSources = scenarioSet
     ? scenarioPhysicalPieces(s).filter((p) => card(p).set_code === scenarioSet)
     : [];
@@ -409,12 +417,36 @@ function runMission(config: (typeof missions)[number]) {
     scenarioSources.map((p) => [p.id, p.code.replace(/[ab]$/, "")]),
   );
   if (scenarioSet) {
-    const expected = scenarioSet === "mansion_attack" ? 25 : 29;
+    const expected =
+      scenarioSet === "mansion_attack"
+        ? 25
+        : scenarioSet === "crossbones"
+          ? 18
+          : 29;
     expect(
       scenarioSources,
       "All selected original scenario cards begin in physical zones",
     ).toHaveLength(expected);
     expect(new Set(scenarioIds).size).toBe(expected);
+  }
+  const weaponSources =
+    s.villainId === "crossbones"
+      ? scenarioPhysicalPieces(s).filter(
+          (p) => card(p).set_code === "exper_weapon",
+        )
+      : [];
+  const weaponIds = weaponSources.map((p) => p.id).sort();
+  if (s.villainId === "crossbones") {
+    expect(weaponSources.map((p) => p.code).sort()).toEqual([
+      "04072",
+      "04073",
+      "04074",
+      "04075",
+    ]);
+    expect(new Set(weaponIds).size).toBe(4);
+    expect(s.modules).toHaveLength(3);
+    expect(new Set(s.modules).size).toBe(3);
+    expect(s.modules).not.toContain("exper_weapon");
   }
   const trace: string[] = [];
   let commands = 0;
@@ -434,6 +466,14 @@ function runMission(config: (typeof missions)[number]) {
         .map((p) => ({ id: p.id, code: p.code })),
       `Every original printing or its linked reverse after ${trace.at(-1)}`,
     ).toEqual([]);
+    if (s.villainId === "crossbones")
+      expect(
+        scenarioPhysicalPieces(s)
+          .filter((p) => card(p).set_code === "exper_weapon")
+          .map((p) => p.id)
+          .sort(),
+        `all four original Experimental Weapons after ${trace.at(-1)}`,
+      ).toEqual(weaponIds);
     // ownedPieces admits only original IDs. Equal total and distinct counts
     // therefore prove every original instance occurs exactly once.
     if (scenarioSet) {
@@ -621,10 +661,10 @@ describe("published expansion starters across every supported mission setting", 
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(10);
+    expect(VILLAINS).toHaveLength(11);
     expect(MODULES).toHaveLength(30);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(30888);
+    expect(missions).toHaveLength(33904);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -637,11 +677,23 @@ describe("published expansion starters across every supported mission setting", 
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
     expect(
       createHash("sha256").update(manifest(missions).join("\n")).digest("hex"),
-    ).toBe("492adb711daff6578c014486b51281291235d8d3672f3d408a2689e7f8990ae1");
+    ).toBe("6a4742e07325a1c84c1f98ec22302ae79769a2dc9efff1e71eae461d644ba6a0");
     const combined = partitions.flat();
+    const previousMissions = missions.filter(
+      (mission) => mission.villainId !== "crossbones",
+    );
+    expect(previousMissions).toHaveLength(30888);
+    expect(
+      createHash("sha256")
+        .update(manifest(previousMissions).join("\n"))
+        .digest("hex"),
+    ).toBe("492adb711daff6578c014486b51281291235d8d3672f3d408a2689e7f8990ae1");
+    expect(
+      missions.filter((mission) => mission.villainId === "crossbones"),
+    ).toHaveLength(3016);
     // New heroes and modular sets extend the published mission grid without
     // changing the names or seeded shuffles of the 11,328 prior missions.
-    const retained = missions.filter(
+    const retained = previousMissions.filter(
       (mission) =>
         heroIds.indexOf(mission.heroId) < 32 &&
         ![
@@ -661,7 +713,7 @@ describe("published expansion starters across every supported mission setting", 
     expect(
       createHash("sha256").update(manifest(retained).join("\n")).digest("hex"),
     ).toBe("8639244ce44d6832c10f3f51edb418a1435a42fa862f629f47a62b4016e519a0");
-    const previousImport = missions.filter(
+    const previousImport = previousMissions.filter(
       (mission) =>
         heroIds.indexOf(mission.heroId) < 36 &&
         ![
@@ -681,7 +733,7 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(previousImport).join("\n"))
         .digest("hex"),
     ).toBe("88a7dfa4ec824a10b054097804b59c33d9bafb5f1f15f3e35dde99edec2463b3");
-    const secondImport = missions.filter(
+    const secondImport = previousMissions.filter(
       (mission) =>
         heroIds.indexOf(mission.heroId) < 40 &&
         ![
@@ -699,7 +751,7 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(secondImport).join("\n"))
         .digest("hex"),
     ).toBe("81f2fa5fc4410fcd58139b13ade0c65cf7812111772eeb17299d72f9622ce255");
-    const thirdImport = missions.filter(
+    const thirdImport = previousMissions.filter(
       (mission) =>
         heroIds.indexOf(mission.heroId) < 44 &&
         ![
@@ -717,7 +769,7 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(thirdImport).join("\n"))
         .digest("hex"),
     ).toBe("b3ee09ef91e3f0f528da00b9c5e541220bdd12344987c2d0fcac7600024daf66");
-    const fourthImport = missions.filter(
+    const fourthImport = previousMissions.filter(
       (mission) =>
         heroIds.indexOf(mission.heroId) < 48 &&
         ![
@@ -733,7 +785,7 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(fourthImport).join("\n"))
         .digest("hex"),
     ).toBe("8700b7efebe73397bb71519e768a39b4c7096cfbda3637e15ca405c4f0b5f5a3");
-    const fifthImport = missions.filter(
+    const fifthImport = previousMissions.filter(
       (mission) =>
         !["exper_weapon", ...redSkullModules].includes(mission.module),
     );
@@ -743,7 +795,7 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(fifthImport).join("\n"))
         .digest("hex"),
     ).toBe("50a2adec4c438e99521fa30c0fa2c46be481d6837ff5396f82eaec269dcf63c1");
-    const experimentalWeaponsImport = missions.filter(
+    const experimentalWeaponsImport = previousMissions.filter(
       (mission) => !redSkullModules.includes(mission.module),
     );
     expect(experimentalWeaponsImport).toHaveLength(27768);
@@ -752,11 +804,18 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(experimentalWeaponsImport).join("\n"))
         .digest("hex"),
     ).toBe("bfd15ff0e1081015f5b01d55beb096051c63af39d842c8342b0a8e70ad1f6b9e");
-    expect(new Set(missions.map(key)).size).toBe(30888);
-    expect(new Set(combined.map(key)).size).toBe(30888);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter((mission) => mission.villainId === "crossbones")
+            .length,
+      ),
+    ).toEqual([364, 364, 390, 390, 364, 364, 390, 390]);
+    expect(new Set(missions.map(key)).size).toBe(33904);
+    expect(new Set(combined.map(key)).size).toBe(33904);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(3861);
+      expect(partition).toHaveLength(4238);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -764,11 +823,11 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(74);
-      expect(Math.max(...perShard)).toBe(75);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(594);
+      expect(Math.min(...perShard)).toBe(81);
+      expect(Math.max(...perShard)).toBe(82);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(652);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 3861 : 30888);
+    expect(selectedMissions).toHaveLength(isSharded ? 4238 : 33904);
   });
   for (const mission of selectedMissions)
     it(

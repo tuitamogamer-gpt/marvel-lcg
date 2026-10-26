@@ -87,6 +87,12 @@ export function fairClone(s: GameState, random: () => number): GameState {
     c.attack.pendingBoosts = c.attack.pendingBoosts.map(takeEncounter);
   if (c.scheming)
     c.scheming.pendingBoosts = c.scheming.pendingBoosts.map(takeEncounter);
+  // Crossbones' unrevealed weapons are a separate facedown deck. Sample only
+  // its remaining physical cards; revealed weapons belong to encounter zones.
+  if (c.crossbones) {
+    c.crossbones.weaponDeck.sort((a, b) => a.id.localeCompare(b.id));
+    shuffleWith(c.crossbones.weaponDeck, random);
+  }
   const lookedAt = new Set<string>(
     c.prompt?.options.flatMap((o) =>
       o.effects.flatMap((e) =>

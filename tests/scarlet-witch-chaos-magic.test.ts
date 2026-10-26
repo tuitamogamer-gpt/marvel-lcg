@@ -75,7 +75,15 @@ describe("Chaos Magic native nested plays and independent costs", () => {
     }));
     s.minions = minions;
     const discarded = s.encounter.deck.slice(0, 3).map((p) => p.id);
-    s = free(s, magic, cyclone);
+    s = command(s, { type: "PLAY", id: magic.id });
+    expect(s.prompt?.title).toBe("Chaos Magic");
+    expect(s.player.hand.map((p) => p.id)).toEqual([cyclone.id]);
+    // Its ordinary PLAY is unaffordable in this same physical hand, while
+    // Chaos Magic ignores the printed X cost and still chooses a positive X.
+    expect(playable({ ...s, prompt: null, review: null }, cyclone)).toBe(
+      "Speed Cyclone requires a payable positive X.",
+    );
+    s = choose(s, cyclone.id);
     expect(s.prompt?.title).toBe("Speed Cyclone");
     expect(s.prompt?.options.map((option) => option.id)).toEqual([
       "1",

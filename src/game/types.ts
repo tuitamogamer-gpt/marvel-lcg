@@ -256,6 +256,8 @@ export interface Attack {
   isVillain: boolean;
 }
 export interface GameState {
+  /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */
+  crossbones?: import("./crossbones.js").CrossbonesState;
   /** Original Magneto main stages, future villains and set-aside Orbital Decay. */
   magneto?: import("./magneto.js").MagnetoState;
   /** Original Mansion Attack hidden piles and physical active main scheme. */

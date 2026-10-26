@@ -4,6 +4,44 @@ import { fairClone } from "../src/game/lookahead";
 import { activateSeat, syncSeat } from "../src/game/team";
 
 describe("native hidden-information boundaries", () => {
+  it("samples Crossbones' hidden weapons independently of encounter cards and their real order", () => {
+    const original = newGame({
+      heroId: "spider_man",
+      aspect: "justice",
+      villainId: "crossbones",
+      seed: 40581,
+      pacing: "expert",
+    });
+    const before = structuredClone(original);
+    const reversed = JSON.parse(JSON.stringify(original));
+    reversed.crossbones.weaponDeck.reverse();
+    const left = fairClone(original, () => 0.25);
+    const right = fairClone(reversed, () => 0.25);
+    expect(left).toEqual(right);
+    expect(left.crossbones!.weaponDeck).toHaveLength(3);
+    expect(left.crossbones!.weaponDeck.map((p) => p.id).sort()).toEqual(
+      original.crossbones!.weaponDeck.map((p) => p.id).sort(),
+    );
+    expect(left.attachments).toEqual(original.attachments);
+    const weapons = [
+      ...left.crossbones!.weaponDeck,
+      ...left.attachments.filter((p) => /^0407[2-5]$/.test(p.code)),
+    ];
+    expect(weapons.map((p) => p.code).sort()).toEqual([
+      "04072",
+      "04073",
+      "04074",
+      "04075",
+    ]);
+    expect(new Set(weapons.map((p) => p.id)).size).toBe(4);
+    expect(
+      left.encounter.deck.some((p) => weapons.some((w) => w.id === p.id)),
+    ).toBe(false);
+    expect(fairClone(original, () => 0).crossbones!.weaponDeck).not.toEqual(
+      fairClone(original, () => 0.999).crossbones!.weaponDeck,
+    );
+    expect(original).toEqual(before);
+  });
   it("keeps only the faceup Invocation fixed when sampling the supplementary deck", () => {
     let a = newGame({
       heroId: "doctor_strange",

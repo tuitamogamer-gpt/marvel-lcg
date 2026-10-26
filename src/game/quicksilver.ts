@@ -272,6 +272,12 @@ export function quicksilverPlayRestriction(
       .some((t) => ports.canGiveStatus(s, t.id, "stunned"))
   )
     return "Speed Cyclone has no enemy that can receive a stun card.";
+  if (
+    p.code === "14006" &&
+    !s.flags.scwIgnoreResourceCost &&
+    !quicksilverCyclonePaymentOptions(s, p, ports).length
+  )
+    return "Speed Cyclone requires a payable positive X.";
   return null;
 }
 export function quicksilverEvent(
