@@ -419,17 +419,22 @@ export function resolveCaptainEffect(
     case "cap:strike": {
       const target = enemy(s, e.target);
       const code = target?.code;
-      if (ports.attackBatch(s, [e.target], 6) && e.physical) {
-        const remaining = enemy(s, e.target);
-        if (
-          remaining &&
-          (remaining.code === code ||
-            (remaining.id === s.villain.id &&
-              !!code &&
-              cards.get(remaining.code)?.name === cards.get(code)?.name))
-        )
-          ports.queue(s, E("status", { target: e.target, status: "stunned" }));
-      }
+      if (ports.attackBatch(s, [e.target], 6) && e.physical)
+        ports.queue(s, cap("strike-status", { target: e.target, code }));
+      break;
+    }
+    case "cap:strike-status": {
+      // The native host resolves a retired physical villain stage's target
+      // reference to its continuing same-title character before this step.
+      const remaining = enemy(s, e.target);
+      if (
+        remaining &&
+        (remaining.code === e.code ||
+          (remaining.id === s.villain.id &&
+            e.code &&
+            cards.get(remaining.code)?.name === cards.get(e.code)?.name))
+      )
+        ports.queue(s, E("status", { target: e.target, status: "stunned" }));
       break;
     }
     case "cap:toss-cost": {

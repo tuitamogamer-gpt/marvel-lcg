@@ -479,6 +479,34 @@ describe("Quicksilver's source pack through native commands", () => {
     );
   });
 
+  it("Speed Cyclone is unavailable without a payable positive X and becomes playable with a ready resource ability", () => {
+    let s = base();
+    const [cyclone] = hand(s, "14006"),
+      resistance = put(s, "14009");
+    resistance.exhausted = true;
+    const before = reload(s);
+    expect(playable(s, cyclone)).toBe(
+      "Speed Cyclone requires a payable positive X.",
+    );
+    const rejected = dispatch(reload(s), { type: "PLAY", id: cyclone.id });
+    expect(rejected.error).toBe("Speed Cyclone requires a payable positive X.");
+    expect(rejected.player.hand).toEqual(before.player.hand);
+    expect(rejected.player.inPlay).toEqual(before.player.inPlay);
+    expect(rejected.player.discard).toEqual(before.player.discard);
+    expect(rejected.prompt).toBeNull();
+
+    resistance.exhausted = false;
+    expect(playable(s, cyclone)).toBeNull();
+    s = choose(command(reload(s), { type: "PLAY", id: cyclone.id }), "1");
+    s = command(reload(s), { type: "PAY", ids: [resistance.id] });
+    s = command(reload(s), { type: "SELECT", ids: [s.villain.id] });
+    expect(s.villain.stunned).toBe(true);
+    expect(s.player.inPlay.find((p) => p.id === resistance.id)?.exhausted).toBe(
+      true,
+    );
+    expect(s.player.discard.filter((p) => p.id === cyclone.id)).toHaveLength(1);
+  });
+
   it("Speed Cyclone binds X to actual paid resources and never repeats a chosen enemy", () => {
     let s = base();
     const enemy = minion(s),

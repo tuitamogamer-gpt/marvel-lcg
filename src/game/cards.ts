@@ -1074,6 +1074,22 @@ export const VILLAINS = [
     description:
       "Board Asteroid M, sabotage Master Mold and survive Magneto's magnetic assault.",
   },
+  {
+    id: "crossbones",
+    name: "Crossbones",
+    codes: ["04058", "04059", "04060"],
+    schemes: ["04061b", "04062b", "04063b"],
+    module: "hydra_assault",
+    moduleCount: 3,
+    defaultModules: ["hydra_assault", "weap_master", "legions_of_hydra"],
+    reservedSets: ["exper_weapon"],
+    difficulty: 2,
+    title: "Attack on Mount Athena",
+    location: "Project P.E.G.A.S.U.S.",
+    description:
+      "Stop Hydra's assault before Crossbones escapes with the Reality Stone. Experimental weapons arm his forces as the battle advances.",
+    color: "#b9a28a",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1119,7 +1135,11 @@ export const MODULES = [
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
-  const fixed = VILLAINS.find((v) => v.id === villainId)?.fixedSets || [];
+  const scenario = VILLAINS.find((v) => v.id === villainId);
+  const fixed = [
+    ...(scenario?.fixedSets || []),
+    ...(scenario?.reservedSets || []),
+  ];
   return MODULES.filter((module) => !fixed.includes(module.id));
 }
 export const ASPECTS: {

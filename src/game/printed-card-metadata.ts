@@ -15,6 +15,10 @@ type PrintedMetadata = Readonly<
  * https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/<code>.jpg
  */
 const printedMetadata: Readonly<Record<string, PrintedMetadata>> = {
+  // public/cards/catalog/04061b.webp: the imported first main scheme omitted its ability.
+  "04061b": {
+    text: "<b>When Revealed</b>: Reveal the top card of the Experimental Weapons deck.",
+  },
   // public/cards/catalog/04145.webp: one numeric boost triangle plus a star.
   "04145": { boost: 1 },
   // public/cards/catalog/04150.webp: both printed headings are When Revealed.

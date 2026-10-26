@@ -1,3 +1,4 @@
+import * as crossbones from "./crossbones.js";
 import * as nickFury from "./nick-fury.js";
 import * as magnetoHero from "./magneto-hero.js";
 import * as mariaHill from "./maria-hill.js";
@@ -834,6 +835,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         name === "Piercing" &&
         (storm.stormPiercing(s, p) ||
           redSkullModules.redSkullPiercing(s, p.id) ||
+          crossbones.crossbonesPiercing(s, p.id, card) ||
           acolytes.acolytesPiercing(s, p) ||
           granted.piercing ||
           nebula.nebulaNamedCharacterModifiers(s, card(p).name).piercing ||
@@ -2819,6 +2821,7 @@ function attackExcess(s: GameState, packet: Effect): number {
     if (
       riskyDamageReplacement(s, target.id, amount) ||
       villainAt(s, "01098").length ||
+      !!crossbones.crossbonesArmor(s) ||
       (s.villainId === "ultron" &&
         s.villain.stage === 3 &&
         s.minions.some((p) => card(p).traits?.includes("Drone.")))
@@ -3087,42 +3090,56 @@ function dealDamage(
     );
   // Retaliate responds to the attack, even when its damage is prevented.
   // A same-title villain stage is the same character for card abilities (RRG).
+  const retaliationTarget =
+    originalStage !== undefined &&
+    original &&
+    card(s.villain).name === card(original).name
+      ? s.villain
+      : original;
   if (
     attack &&
     original &&
+    retaliationTarget &&
     (find(s, target)?.code === code ||
-      (target === s.villain.id &&
-        card(find(s, target)!).name === card(code!).name)) &&
+      (originalStage !== undefined &&
+        card(s.villain).name === card(code!).name)) &&
     !["won", "lost"].includes(s.phase)
   ) {
     const amount =
       (traits.ranged ?? !!sourceKeyword(s, source, "Ranged"))
         ? 0
-        : (isTextBlank(s, original)
+        : (isTextBlank(s, retaliationTarget)
             ? 0
-            : printedKeyword(card(original), "Retaliate")) +
-          antMan.antManEnemyRetaliate(s, original) +
-          experimentalWeapons.experimentalWeaponsRetaliate(s, original.id) +
+            : printedKeyword(card(retaliationTarget), "Retaliate")) +
+          antMan.antManEnemyRetaliate(s, retaliationTarget) +
+          experimentalWeapons.experimentalWeaponsRetaliate(
+            s,
+            retaliationTarget.id,
+          ) +
           storm.stormGlobal(s).retaliate +
-          inheritors.inheritorsModifiers(s, original).retaliate +
-          ironheart.ironheartEnemyKeywords(s, original, { isTextBlank })
-            .retaliate +
+          inheritors.inheritorsModifiers(s, retaliationTarget).retaliate +
+          ironheart.ironheartEnemyKeywords(s, retaliationTarget, {
+            isTextBlank,
+          }).retaliate +
           niPack.novaIronheartPackCharacterModifiers(
             s,
-            original.id,
+            retaliationTarget.id,
             niPackPorts,
           ).retaliate +
-          wideawake.projectWideawakeModifiers(s, original, { isTextBlank })
-            .retaliate +
-          masterMold.masterMoldModifiers(s, original, {
+          wideawake.projectWideawakeModifiers(s, retaliationTarget, {
+            isTextBlank,
+          }).retaliate +
+          masterMold.masterMoldModifiers(s, retaliationTarget, {
             isTextBlank,
             hasTrait: captainPackHasTrait,
           }).retaliate +
-          mansionAttack.mansionAttackModifiers(s, original, { isTextBlank })
+          mansionAttack.mansionAttackModifiers(s, retaliationTarget, {
+            isTextBlank,
+          }).retaliate +
+          magneto.magnetoModifiers(s, retaliationTarget, { isTextBlank })
             .retaliate +
-          magneto.magnetoModifiers(s, original, { isTextBlank }).retaliate +
           x23.x23EnemyRetaliate(s) +
-          (target === s.villain.id
+          (retaliationTarget.id === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
     if (amount)
@@ -3132,13 +3149,19 @@ function dealDamage(
           target: source,
           amount,
           source: "retaliate",
-          retaliateSource: original.id,
-          inheritorRetaliate: inheritors.inheritorsModifiers(s, original)
-            .retaliate,
-          mansionRetaliate: mansionAttack.mansionAttackModifiers(s, original, {
-            isTextBlank,
-          }).retaliate,
-          title: `${card(original).name} · Retaliate ${amount}`,
+          retaliateSource: retaliationTarget.id,
+          inheritorRetaliate: inheritors.inheritorsModifiers(
+            s,
+            retaliationTarget,
+          ).retaliate,
+          mansionRetaliate: mansionAttack.mansionAttackModifiers(
+            s,
+            retaliationTarget,
+            {
+              isTextBlank,
+            },
+          ).retaliate,
+          title: `${card(retaliationTarget).name} · Retaliate ${amount}`,
           mandatory: true,
           afterAttack: true,
         }),
@@ -3340,6 +3363,13 @@ function applyDamage(
     return { actualDamage: n, excessDamage: 0 };
   }
   if (target === s.villain.id) {
+    const armor = crossbones.crossbonesArmor(s);
+    if (armor) {
+      armor.damage += n;
+      log(s, `Crossbones' Armor absorbs ${n} damage.`);
+      if (armor.damage >= 5) discardPiece(s, armor.id);
+      return traits.overkillDamage ? { ...none, damageDealt: n } : none;
+    }
     const magnetic = magneto.magnetoReplaceDamage(s, target, n, magnetoPorts);
     if (magnetic !== undefined) return none;
     const replaced = riskyDamageReplacement(s, target, n);
@@ -3984,10 +4014,18 @@ function advanceVillain(
     );
     return;
   }
-  if (s.villainId === "magneto") {
-    const next = s.magneto?.villainDeck?.shift();
+  if (["magneto", "crossbones"].includes(s.villainId)) {
+    const next = (
+      s.villainId === "crossbones" ? s.crossbones : s.magneto
+    )?.villainDeck?.shift();
     if (!next) {
-      endGame(s, true, "Magneto is defeated. Asteroid M is safe.");
+      endGame(
+        s,
+        true,
+        s.villainId === "crossbones"
+          ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
+          : "Magneto is defeated. Asteroid M is safe.",
+      );
       return;
     }
     const old = s.villain;
@@ -4001,6 +4039,7 @@ function advanceVillain(
       stunCards: old.stunCards,
       confuseCards: old.confuseCards,
       toughCards: old.toughCards,
+      ...(s.villainId === "crossbones" ? { counters: old.counters } : {}),
     });
     s.villain = next as GameState["villain"];
     if (s.attack?.attacker === old.id) s.attack.attacker = next.id;
@@ -4008,6 +4047,18 @@ function advanceVillain(
     for (const p of [...s.attachments, ...allInPlay(s)])
       if (p.attachedTo === old.id) p.attachedTo = next.id;
     s.removed.push(resetPiece(old));
+    if (s.villainId === "crossbones") {
+      s.villain.maxHp =
+        card(s.villain).health! * s.playerCount +
+        wideawake.projectWideawakeModifiers(s, s.villain, { isTextBlank })
+          .health +
+        wasp.waspEnemyHP(s, s.villain) +
+        s.sideSchemes.filter(
+          (p) => rulesCode(p) === "01127" && !isTextBlank(s, p),
+        ).length *
+          10;
+      s.villain.hp = s.villain.maxHp;
+    }
     if (keyword(s.villain, "Toughness", s))
       giveCharacterStatus(s, s.villain, "tough");
     syncNebulaIdentityStatuses(s);
@@ -4062,6 +4113,7 @@ function advanceVillain(
   villainSetup(s);
 }
 function villainSetup(s: GameState) {
+  add(s, ...(crossbones.crossbonesReveal(s, s.villain) || []));
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
     s,
@@ -4209,6 +4261,34 @@ function threat(
           s,
           ...magneto.magnetoMainRevealed(s, next.code),
           E("magneto-native:main-back", { actorId: s.firstPlayerId }),
+        );
+        return;
+      }
+      if (s.villainId === "crossbones") {
+        if (s.pendingMainCompletion) return;
+        const next = s.crossbones?.mainDeck.shift();
+        if (!next) {
+          endGame(
+            s,
+            false,
+            "The Getaway is complete. Crossbones escapes with the Reality Stone.",
+          );
+          return;
+        }
+        s.pendingMainCompletion = true;
+        discardMainAttachments(s);
+        s.removed.push(resetPiece(s.crossbones!.currentMain));
+        next.code = card(next).back_link || next.code;
+        s.crossbones!.currentMain = next;
+        s.scheme.index++;
+        s.scheme.code = next.code;
+        s.scheme.threat =
+          (card(next).base_threat || 0) *
+          (card(next).base_threat_fixed ? 1 : s.playerCount);
+        add(
+          s,
+          ...(crossbones.crossbonesReveal(s, next) || []),
+          E("clearMainCompletion"),
         );
         return;
       }
@@ -4418,6 +4498,11 @@ function defeatScheme(
     ...iceman.icemanSchemeDefeated(s, p),
     ...mariaHill.mariaHillSchemeDefeated(s, p),
   );
+  const crossbonesDefeat = crossbones.crossbonesSideSchemeDefeated(
+    s,
+    p,
+    s.activePlayerId,
+  );
   const patrolDefeat = redSkullModules.redSkullSchemeDefeated(s, p);
   const nativeDefeat = sabretooth.sabretoothSideSchemeDefeated(
     s,
@@ -4474,6 +4559,15 @@ function defeatScheme(
   ];
   if (!victory && !retainFind) discardPiece(s, p.id);
   const responses = [
+    ...(crossbonesDefeat.length
+      ? [
+          {
+            id: `${p.id}:crossbones-defeated`,
+            title: card(p).name,
+            effects: crossbonesDefeat,
+          },
+        ]
+      : []),
     ...(patrolDefeat.length
       ? [
           {
@@ -6795,9 +6889,10 @@ export function newGame(config: {
   const primary = config.module || v.module;
   const selectedModules = config.modules
     ? [...config.modules]
-    : moduleCount === 2
-      ? [primary, v.defaultModules!.find((id) => id !== primary) || "mystique"]
-      : [primary];
+    : [
+        primary,
+        ...(v.defaultModules || []).filter((id) => id !== primary),
+      ].slice(0, moduleCount);
   need(
     selectedModules.length === moduleCount &&
       new Set(selectedModules).size === selectedModules.length,
@@ -6805,7 +6900,10 @@ export function newGame(config: {
   );
   need(
     selectedModules.every(
-      (id) => MODULES.some((m) => m.id === id) && !v.fixedSets?.includes(id),
+      (id) =>
+        MODULES.some((m) => m.id === id) &&
+        !v.fixedSets?.includes(id) &&
+        !v.reservedSets?.includes(id),
     ),
     "This modular set’s complete rules are not implemented yet.",
   );
@@ -7033,7 +7131,33 @@ export function newGame(config: {
   deadpool.deadpoolSetupPool(s, makePiece);
   if (s.deadpool?.initializedPoolSeats.length)
     s.encounter.deck = shuffle(s, s.encounter.deck);
-  if (v.id === "magneto") {
+  if (v.id === "crossbones") {
+    s.crossbones = {
+      weaponDeck: shuffle(
+        s,
+        ["04072", "04073", "04074", "04075"].map((code) => makePiece(s, code)),
+      ),
+      currentMain: makePiece(s, "04061b"),
+      mainDeck: ["04062a", "04063a"].map((code) => makePiece(s, code)),
+      villainDeck: [makePiece(s, v.codes[stage])],
+    };
+    s.villain = Object.assign(makePiece(s, v.codes[stage - 1]), {
+      hp,
+      maxHp: hp,
+      stage,
+    });
+    s.queue.push(
+      ...[
+        ...(crossbones.crossbonesReveal(s, s.villain) || []),
+        ...(crossbones.crossbonesReveal(s, s.crossbones.currentMain) || []),
+      ].map((e) => effectContext(s, { ...e, actorId: s.firstPlayerId })),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "magneto") {
     const boarding = s.encounter.deck.find((p) => p.code === "32144a");
     const orbital = s.encounter.deck.find((p) => p.code === "32145a");
     need(
@@ -13191,6 +13315,49 @@ const redSkullModulePorts: redSkullModules.RedSkullModulePorts = {
       }),
     });
   },
+};
+const crossbonesPorts: crossbones.CrossbonesPorts = {
+  ...mutagenPorts,
+  card,
+  revealHidden,
+  countBoostIcons: (s, pieces, after, sourceTitle) =>
+    add(
+      s,
+      ...scarletWitch.scarletWitchCountBoosts(s, pieces, after, {
+        sourceTitle,
+      }),
+    ),
+  reveal: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    add(s, E("reveal", { piece: p, actorId: playerId }));
+  },
+  giveTough: (s) => giveCharacterStatus(s, s.villain, "tough"),
+  enemyAttack: (s) => enemyATK(s, s.villain, s.activePlayerId),
+  indirect: (s, playerId, amount, source, after = []) => {
+    add(
+      s,
+      E("indirect", {
+        actorId: playerId,
+        amount,
+        source: source.id,
+        sourceTitle: card(source).name,
+        zzzaxBatchId: `crossbones-indirect:${s.nextId++}`,
+        zzzaxBatchOwner: playerId,
+        zzzaxAfter: E("crossbones:after", { effects: after }),
+      }),
+    );
+  },
+  activate: (s, playerId, sourceId) =>
+    redSkullModulePorts.activateEffect(
+      s,
+      E("red-skull-modules:activate", {
+        playerId,
+        sourceId,
+        actorId: playerId,
+        kind:
+          seatView(s, playerId).player.form === "hero" ? "attack" : "scheme",
+      }),
+    ),
 };
 const armadilloPorts: armadillo.ArmadilloPorts = {
   ...mutagenPorts,
@@ -20480,15 +20647,15 @@ function enemyAttack(
     return;
   }
   const isVillain = id === s.villain.id;
-  if (
+  const spiderSense =
     isVillain &&
     s.heroId === "spider_man" &&
     s.player.form === "hero" &&
     !isTextBlank(s, heroCard(s)) &&
     !s.attachments.some((a) => a.code === "44040" && a.attachedTo === id) &&
-    !deadpool.deadpoolTriggeredBlocked(s)
-  )
-    draw(s, 1);
+    !deadpool.deadpoolTriggeredBlocked(s);
+  const deferredSpiderSense = spiderSense && s.villainId === "crossbones";
+  if (spiderSense && !deferredSpiderSense) draw(s, 1);
   const novaModifiers = friendlySource
     ? { attack: 0, overkill: false }
     : nova.novaEnemyAttackModifiers(s, p, s.activePlayerId, { isTextBlank });
@@ -20563,6 +20730,9 @@ function enemyAttack(
       usedIds: [],
     }),
   );
+  // Machine Gun's mandatory interrupt precedes Spider-Sense. The card drawn
+  // here cannot pay for a defense event against the earlier indirect damage.
+  if (deferredSpiderSense) add(s, E("draw", { amount: 1 }));
   if (s.flags.deadpoolFrontAwaiting && s.attack) {
     s.flags.deadpoolFrontAttackId = s.attack.id || "";
     delete s.flags.deadpoolFrontAwaiting;
@@ -20577,6 +20747,11 @@ function enemyAttack(
     add(
       s,
       ...vision.visionEnemyAttackInitiated(s, p, s.attack.originalPlayerId!),
+    );
+  if (!friendlySource && !attackTargetsEnemy(s, s.attack))
+    add(
+      s,
+      ...crossbones.crossbonesAttackStarted(s, id, s.attack.originalPlayerId!),
     );
   const forced = friendlySource ? [] : doctorStrangeEnemyAttackInitiated(s, p);
   if (forced.length) {
@@ -20966,6 +21141,7 @@ function boostEffects(s: GameState, p: Piece) {
     return;
   }
   const rise =
+    crossbones.crossbonesBoost(s, p) ??
     redSkullModules.redSkullBoost(s, p, redSkullModulePorts) ??
     starLord.starLordBoost(s, p) ??
     shadowcat.shadowcatBoost(s, p) ??
@@ -22780,6 +22956,8 @@ function reveal(
       mansionAttack.MANSION_ATTACK_SCRIPT_CODES.some(
         (code) => code === p.code,
       ) ||
+      (crossbones.CROSSBONES_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       masterMold.MASTER_MOLD_SCRIPT_CODES.some((code) => code === p.code) ||
       wideawake.PROJECT_WIDEAWAKE_SCRIPT_CODES.some(
         (code) => code === p.code,
@@ -22855,6 +23033,7 @@ function reveal(
       ...armadillo.ARMADILLO_SCRIPT_CODES,
       ...experimentalWeapons.EXPERIMENTAL_WEAPONS_SCRIPT_CODES,
       ...redSkullModules.RED_SKULL_MODULE_SCRIPT_CODES,
+      ...crossbones.CROSSBONES_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       ...RISKY_BUSINESS_SCRIPT_CODES,
@@ -22931,6 +23110,7 @@ function reveal(
       ...armadillo.ARMADILLO_SCRIPT_CODES,
       ...experimentalWeapons.EXPERIMENTAL_WEAPONS_SCRIPT_CODES,
       ...redSkullModules.RED_SKULL_MODULE_SCRIPT_CODES,
+      ...crossbones.CROSSBONES_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -22960,6 +23140,7 @@ function reveal(
       mutagenEncounterReveal(s, p) ??
       armadillo.armadilloReveal(s, p) ??
       experimentalWeapons.experimentalWeaponsReveal(s, p) ??
+      crossbones.crossbonesReveal(s, p) ??
       redSkullModules.redSkullReveal(s, p) ??
       zzzax.zzzaxReveal(s, p) ??
       domino.dominoEncounter(s, p) ??
@@ -23025,6 +23206,7 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    crossbones.crossbonesReveal(s, p) ??
     redSkullModules.redSkullReveal(s, p) ??
     domino.dominoEncounter(s, p) ??
     psylocke.psylockeEncounterReveal(s, p) ??
@@ -24026,14 +24208,37 @@ function resolve(s: GameState, e: Effect) {
   )
     return;
   // Capture the canonical alias as the current original-source villain ID.
-  if (["mansion_attack", "magneto"].includes(s.villainId)) {
-    for (const key of ["target", "targetId", "enemyId", "attacker"])
+  if (["mansion_attack", "magneto", "crossbones"].includes(s.villainId)) {
+    // Target references identify the continuing same-title character. Physical
+    // card IDs, source IDs and snapshots retain their original stage identity.
+    const retiredVillains =
+      s.villainId === "crossbones"
+        ? ["04058", "04059", "04060"]
+        : s.villainId === "magneto"
+          ? ["32138", "32139", "32140"]
+          : [];
+    const characterFields = ["target", "targetId", "enemyId", "attacker"];
+    if (
+      s.villainId === "crossbones" &&
+      [
+        "enemyAttack",
+        "enemyScheme",
+        "ghostNativeEnemyAttack",
+        "ghostNativeEnemyScheme",
+      ].includes(e.type)
+    )
+      characterFields.push("id");
+    if (s.villainId === "crossbones") {
+      if (e.type === "ms:melee-second") characterFields.push("firstId");
+      if (e.type === "target" && e.group === "enemy")
+        characterFields.push("exclude");
+    }
+    for (const key of characterFields)
       if (
         e[key] === "villain" ||
-        (s.villainId === "magneto" &&
+        (retiredVillains.includes(s.villain.code) &&
           s.removed.some(
-            (p) =>
-              p.id === e[key] && ["32138", "32139", "32140"].includes(p.code),
+            (p) => p.id === e[key] && retiredVillains.includes(p.code),
           ))
       )
         e[key] = s.villain.id;
@@ -24274,6 +24479,7 @@ function resolve(s: GameState, e: Effect) {
           ironspider.ironspiderSinisterReveal(state, piece) ??
           armadillo.armadilloReveal(state, piece) ??
           experimentalWeapons.experimentalWeaponsReveal(state, piece) ??
+          crossbones.crossbonesReveal(state, piece) ??
           redSkullModules.redSkullReveal(state, piece) ??
           zzzax.zzzaxReveal(state, piece) ??
           inheritors.inheritorsReveal(state, piece) ??
@@ -24359,6 +24565,7 @@ function resolve(s: GameState, e: Effect) {
     })
   )
     return;
+  if (crossbones.resolveCrossbonesEffect(s, e, crossbonesPorts)) return;
   if (redSkullModules.resolveRedSkullModuleEffect(s, e, redSkullModulePorts))
     return;
   if (armadillo.resolveArmadilloEffect(s, e, armadilloPorts)) return;
@@ -27869,9 +28076,11 @@ function resolve(s: GameState, e: Effect) {
       if (
         e.after &&
         (!original?.eliminated ||
-          ["zzzax:remove-damage-after", "ironspiderAttackComplete"].includes(
-            e.after.type,
-          ))
+          [
+            "zzzax:remove-damage-after",
+            "ironspiderAttackComplete",
+            "crossbones:after",
+          ].includes(e.after.type))
       )
         add(s, {
           ...e.after,
@@ -32715,6 +32924,7 @@ function resolve(s: GameState, e: Effect) {
         s.difficulty === "expert" &&
         ![
           "mutagen_formula",
+          "crossbones",
           "project_wideawake",
           "mansion_attack",
           "magneto",
@@ -33447,6 +33657,7 @@ function run(s: GameState) {
       ].includes(e.type) ||
       e.type.startsWith("sw:hydra") ||
       e.type === "red-skull-modules:patrol-search" ||
+      e.type.startsWith("crossbones:") ||
       e.type.startsWith("sabretooth:") ||
       e.type.startsWith("sabretooth-native:") ||
       e.type.startsWith("wideawake:") ||

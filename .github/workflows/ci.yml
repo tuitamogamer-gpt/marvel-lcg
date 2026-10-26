@@ -99,6 +99,8 @@ jobs:
             scripts: test:audio
           - group: experimental-weapons
             scripts: test:experimental-weapons
+          - group: crossbones
+            scripts: test:crossbones
           - group: red-skull-modules
             scripts: test:red-skull-modules
           - group: inheritors
@@ -172,7 +174,7 @@ jobs:
           done
           echo "Dev server did not start"; cat output-dev.log; exit 1
       - name: Build and serve production artifact
-        if: matrix.group == 'red-skull-modules' || matrix.group == 'milestone-audio' || matrix.group == 'experimental-weapons' || matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold' || matrix.group == 'mansion-attack' || matrix.group == 'acolytes' || matrix.group == 'magneto' || matrix.group == 'quadruple-import' || matrix.group == 'quadruple-import-2' || matrix.group == 'quadruple-import-3' || matrix.group == 'quadruple-import-4' || matrix.group == 'quadruple-import-5'
+        if: matrix.group == 'crossbones' || matrix.group == 'red-skull-modules' || matrix.group == 'milestone-audio' || matrix.group == 'experimental-weapons' || matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold' || matrix.group == 'mansion-attack' || matrix.group == 'acolytes' || matrix.group == 'magneto' || matrix.group == 'quadruple-import' || matrix.group == 'quadruple-import-2' || matrix.group == 'quadruple-import-3' || matrix.group == 'quadruple-import-4' || matrix.group == 'quadruple-import-5'
         run: |
           npm run build
           npm run preview -- --host 127.0.0.1 --port 4173 > output-preview.log 2>&1 &
@@ -187,7 +189,7 @@ jobs:
             npm run "$script"
           done
         env:
-          BASE_URL: ${{ (matrix.group == 'red-skull-modules' || matrix.group == 'milestone-audio' || matrix.group == 'experimental-weapons' || matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold' || matrix.group == 'mansion-attack' || matrix.group == 'acolytes' || matrix.group == 'magneto' || matrix.group == 'quadruple-import' || matrix.group == 'quadruple-import-2' || matrix.group == 'quadruple-import-3' || matrix.group == 'quadruple-import-4' || matrix.group == 'quadruple-import-5') && 'http://127.0.0.1:4173' || 'http://127.0.0.1:5174' }}
+          BASE_URL: ${{ (matrix.group == 'crossbones' || matrix.group == 'red-skull-modules' || matrix.group == 'milestone-audio' || matrix.group == 'experimental-weapons' || matrix.group == 'mutant-genesis' || matrix.group == 'sabretooth' || matrix.group == 'project-wideawake' || matrix.group == 'master-mold' || matrix.group == 'mansion-attack' || matrix.group == 'acolytes' || matrix.group == 'magneto' || matrix.group == 'quadruple-import' || matrix.group == 'quadruple-import-2' || matrix.group == 'quadruple-import-3' || matrix.group == 'quadruple-import-4' || matrix.group == 'quadruple-import-5') && 'http://127.0.0.1:4173' || 'http://127.0.0.1:5174' }}
           CI_BROWSER_SCRIPTS: ${{ matrix.scripts }}
           SPDR_SCENARIOS: ${{ matrix.spdrScenarios }}
           SPDR_FIXTURE_ONLY: ${{ matrix.spdrFixtureOnly }}

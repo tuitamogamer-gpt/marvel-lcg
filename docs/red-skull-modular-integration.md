@@ -1,6 +1,6 @@
 # Rise of Red Skull modular encounters
 
-Hydra Assault (`hydra_assault`), Weapon Master (`weap_master`) and Hydra Patrol (`hydra_patrol`) complete the remaining standalone modular sets from The Rise of Red Skull. Their ten original faces, `04145`–`04154`, represent seventeen physical cards. They append after Experimental Weapons at module indices 27–29, preserving every previous index and deterministic mission seed. The five boxed scenarios and campaign remain separate, unsupported work.
+Hydra Assault (`hydra_assault`), Weapon Master (`weap_master`) and Hydra Patrol (`hydra_patrol`) complete the remaining standalone modular sets from The Rise of Red Skull. Their ten original faces, `04145`–`04154`, represent seventeen physical cards. They append after Experimental Weapons at module indices 27–29, preserving every previous index and deterministic mission seed. Crossbones is implemented in a subsequent [scenario integration](crossbones-integration.md); the other four boxed scenarios and campaign remain unsupported.
 
 | Module | Original faces | Physical quantities | Total |
 | --- | --- | --- | ---: |
@@ -35,9 +35,9 @@ Hydra Regular has Incite 1 when revealed, but not when merely put into play. Hyd
 
 ## Registration and verification boundaries
 
-The configured source matrix contains 30,888 missions: `52 × 2 × (10 × 30 − 3)`. Eight disjoint shards contain 3,861 missions each, with every expansion hero represented in every shard. The global manifest preserves all 27,768 previous names and seeds and every earlier retained subset. The additional three modules contribute 3,120 configurations.
+This modular checkpoint configured 30,888 source missions: `52 × 2 × (10 × 30 − 3)`. Eight disjoint shards contained 3,861 missions each, with every expansion hero represented in every shard. Its global manifest preserves all 27,768 previous names and seeds and every earlier retained subset. The additional three modules contribute 3,120 configurations.
 
-The box remains partially supported: 74 of its 181 imported faces are executable and 107 remain unsupported. Closing these three modular sets does not enable any of its five scenarios or the campaign.
+At this modular checkpoint, 74 of the box's 181 imported faces were executable and 107 remained unsupported. Closing these three modular sets did not enable its scenarios or campaign; the subsequent Crossbones integration records the expanded scope.
 
 Registration closure and matrix configuration are separate from completed runtime tests, source-mission execution, browser acceptance and publication. Release measurements belong to the final frozen runtime and are recorded after the corresponding checks finish.
 

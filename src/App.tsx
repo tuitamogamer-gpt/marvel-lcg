@@ -805,14 +805,36 @@ export default function App() {
     "standard",
   );
   const [module, setModule] = useState("bomb_scare");
-  const [secondaryModule, setSecondaryModule] = useState("mystique");
+  const [additionalModules, setAdditionalModules] = useState<string[]>([]);
+  const selectedModules = [module, ...additionalModules];
+  const moduleCount = villain.moduleCount || 1;
   const [senatorDamage, setSenatorDamage] = useState("");
   const [captureAllocation, setCaptureAllocation] = useState(["", "", ""]);
-  function selectModule(id: string) {
+  function selectScenarioModules(
+    scenario: (typeof VILLAINS)[number],
+    preferred: string[] = scenario.defaultModules || [scenario.module],
+  ) {
+    const legal = scenarioModules(scenario.id).map((entry) => entry.id);
+    const chosen = [
+      ...new Set([
+        ...preferred,
+        ...(scenario.defaultModules || [scenario.module]),
+        ...legal,
+      ]),
+    ]
+      .filter((id) => legal.includes(id))
+      .slice(0, scenario.moduleCount || 1);
+    setModule(chosen[0]);
+    setAdditionalModules(chosen.slice(1));
+  }
+  function selectModule(id: string, index = 0) {
     if (!scenarioModules(villain.id).some((m) => m.id === id)) return;
-    setModule(id);
-    if (secondaryModule === id)
-      setSecondaryModule(id === "mystique" ? "brotherhood" : "mystique");
+    const next = [...selectedModules];
+    const other = next.indexOf(id);
+    if (other >= 0 && other !== index) next[other] = next[index];
+    next[index] = id;
+    setModule(next[0]);
+    setAdditionalModules(next.slice(1, moduleCount));
   }
   const [inspect, setInspect] = useState<Inspect | null>(null);
   const inspectedEnergyForm =
@@ -1071,8 +1093,7 @@ export default function App() {
     );
     setVillain(v);
     const primary = pick(scenarioModules(v.id)).id;
-    setModule(primary);
-    setSecondaryModule(primary === "mystique" ? "brotherhood" : "mystique");
+    selectScenarioModules(v, [primary]);
     setSenatorDamage("");
     setCaptureAllocation(["", "", ""]);
   }
@@ -1087,8 +1108,7 @@ export default function App() {
     setVillain(v);
     const choices = scenarioModules(v.id);
     const primary = choices[(n >>> 8) % choices.length].id;
-    setModule(primary);
-    setSecondaryModule(primary === "mystique" ? "brotherhood" : "mystique");
+    selectScenarioModules(v, [primary]);
     setSenatorDamage("");
     setCaptureAllocation(["", "", ""]);
     setDifficulty("standard");
@@ -1157,9 +1177,9 @@ export default function App() {
                 villainId: villain.id,
                 difficulty,
                 module,
+                modules: selectedModules,
                 ...(villain.id === "sabretooth"
                   ? {
-                      modules: [module, secondaryModule],
                       senatorDamage:
                         senatorDamage === ""
                           ? undefined
@@ -1934,10 +1954,7 @@ export default function App() {
                       aria-pressed={v.id === villain.id}
                       onClick={() => {
                         setVillain(v);
-                        setModule(v.module);
-                        setSecondaryModule(
-                          v.id === "sabretooth" ? "mystique" : "brotherhood",
-                        );
+                        selectScenarioModules(v);
                         setSenatorDamage("");
                         setCaptureAllocation(["", "", ""]);
                       }}
@@ -2082,21 +2099,45 @@ export default function App() {
                   </div>
                 </div>
                 <div className="module-label">
-                  <label>
-                    {villain.id === "sabretooth"
-                      ? "Modular encounter 1"
-                      : "Modular encounter"}
-                    <select
-                      value={module}
-                      onChange={(e) => selectModule(e.target.value)}
-                    >
-                      {scenarioModules(villain.id).map((m) => (
-                        <option value={m.id} key={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  {selectedModules.map((selected, index) => (
+                    <label key={index}>
+                      {moduleCount > 1
+                        ? `Modular encounter ${index + 1}`
+                        : "Modular encounter"}
+                      <select
+                        aria-label={
+                          moduleCount > 1
+                            ? `Modular encounter ${index + 1}`
+                            : "Modular encounter"
+                        }
+                        value={selected}
+                        onChange={(e) => selectModule(e.target.value, index)}
+                      >
+                        {scenarioModules(villain.id).map((m) => (
+                          <option
+                            value={m.id}
+                            key={m.id}
+                            disabled={
+                              index > 0 &&
+                              selectedModules.some(
+                                (id, slot) => slot !== index && id === m.id,
+                              )
+                            }
+                          >
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                  {villain.id === "crossbones" && (
+                    <p>
+                      Choose three different modular sets. Hydra Assault, Weapon
+                      Master and Legions of Hydra are recommended. Experimental
+                      Weapons has its own four-card deck; one weapon starts
+                      attached to Crossbones.
+                    </p>
+                  )}
                   {villain.id === "master_mold" && (
                     <p>
                       Sentinels is included with this scenario. Choose one
@@ -2179,23 +2220,6 @@ export default function App() {
                   )}
                   {villain.id === "sabretooth" && (
                     <>
-                      <label>
-                        Modular encounter 2
-                        <select
-                          value={secondaryModule}
-                          onChange={(e) => setSecondaryModule(e.target.value)}
-                        >
-                          {MODULES.map((m) => (
-                            <option
-                              value={m.id}
-                              key={m.id}
-                              disabled={m.id === module}
-                            >
-                              {m.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
                       <details>
                         <summary>Robert Kelly setup</summary>
                         <p>
@@ -2331,12 +2355,10 @@ export default function App() {
                               : {}),
                           })),
                         );
-                        setModule(setup.module);
-                        setSecondaryModule(
-                          setup.modules?.[1] ||
-                            (setup.module === "mystique"
-                              ? "brotherhood"
-                              : "mystique"),
+                        selectScenarioModules(
+                          VILLAINS.find((v) => v.id === r.villainId) ||
+                            VILLAINS[0],
+                          setup.modules || [setup.module],
                         );
                         setSenatorDamage(
                           setup.senatorDamage === undefined
@@ -4389,6 +4411,16 @@ function AttachedCards({
                 {p.damage}/8 damage
               </small>
             )}
+            {p.code === "04064" && (
+              <small aria-label={`Machine Gun ammo: ${p.counters}`}>
+                {p.counters} ammo
+              </small>
+            )}
+            {p.code === "04065" && (
+              <small aria-label={`Crossbones' Armor damage: ${p.damage} of 5`}>
+                {p.damage}/5 damage
+              </small>
+            )}
             {game.playerCount > 1 && p.ownerId && (
               <small>
                 {
@@ -5251,6 +5283,15 @@ function Tabletop({
                     }
                   />
                 </div>
+                {s.crossbones && (
+                  <span
+                    className="encounter-dealt"
+                    aria-label={`Experimental Weapons deck: ${s.crossbones.weaponDeck.length} cards, face down`}
+                  >
+                    Experimental Weapons · {s.crossbones.weaponDeck.length}{" "}
+                    facedown
+                  </span>
+                )}
                 {s.encounter.dealt.length > 0 && (
                   <span className="encounter-dealt">
                     {s.encounter.dealt.length} dealt across the team

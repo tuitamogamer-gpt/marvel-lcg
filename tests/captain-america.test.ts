@@ -208,10 +208,14 @@ describe("Captain America's exact identity and signature hooks", () => {
   });
   it("Heroic Strike stuns its surviving same-title character only when paid with physical", () => {
     const { s, run, minion, ports } = fixture();
+    const strike = (effect: Effect) => {
+      run(effect);
+      if (s.queue[0]?.type === "cap:strike-status") run(s.queue.shift()!);
+    };
     const m = minion("03028");
-    run({ type: "cap:strike", target: m.id, physical: false });
+    strike({ type: "cap:strike", target: m.id, physical: false });
     expect(s.queue).toEqual([]);
-    run({ type: "cap:strike", target: m.id, physical: true });
+    strike({ type: "cap:strike", target: m.id, physical: true });
     expect(s.queue[0]).toEqual({
       type: "status",
       target: m.id,
@@ -222,19 +226,19 @@ describe("Captain America's exact identity and signature hooks", () => {
       s.villain.stage++;
       return true;
     });
-    run({ type: "cap:strike", target: s.villain.id, physical: true });
+    strike({ type: "cap:strike", target: s.villain.id, physical: true });
     expect(s.queue).toEqual([
       { type: "status", target: s.villain.id, status: "stunned" },
     ]);
     s.queue = [];
     vi.mocked(ports.attackBatch).mockReturnValueOnce(false);
-    run({ type: "cap:strike", target: m.id, physical: true });
+    strike({ type: "cap:strike", target: m.id, physical: true });
     expect(s.queue).toEqual([]);
     vi.mocked(ports.attackBatch).mockImplementationOnce((s) => {
       s.villain.code = "02014";
       return true;
     });
-    run({ type: "cap:strike", target: s.villain.id, physical: true });
+    strike({ type: "cap:strike", target: s.villain.id, physical: true });
     expect(s.queue).toEqual([]);
   });
   it("Shield Toss explicitly pays discards and returns even an exhausted Shield before targeting", () => {

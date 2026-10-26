@@ -61,7 +61,8 @@
     "test:quadruple-import-5": "node scripts/quadruple-import-5-check.mjs",
     "test:audio": "node scripts/audio-check.mjs",
     "test:experimental-weapons": "node scripts/experimental-weapons-check.mjs",
-    "test:red-skull-modules": "node scripts/red-skull-modules-check.mjs"
+    "test:red-skull-modules": "node scripts/red-skull-modules-check.mjs",
+    "test:crossbones": "node scripts/crossbones-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",
