@@ -1103,6 +1103,20 @@ export const VILLAINS = [
       "Race past Crusher Creel as he absorbs his surroundings. Every delay makes the environment more dangerous.",
     color: "#95b2a1",
   },
+  {
+    id: "taskmaster",
+    name: "Taskmaster",
+    codes: ["04093", "04094", "04095"],
+    schemes: ["04096b"],
+    module: "weap_master",
+    fixedSets: ["hydra_patrol"],
+    difficulty: 3,
+    title: "Hunting Down Heroes",
+    location: "Hydra-controlled New York",
+    description:
+      "Rescue captured heroes while Taskmaster mirrors your attacks and hunts each change of form.",
+    color: "#bca88e",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },

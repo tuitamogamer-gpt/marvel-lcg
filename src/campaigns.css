@@ -131,6 +131,24 @@
 .campaign-error {
   color: #a31029;
 }
+.campaign-backup {
+  border: 1px solid #ccd1d9;
+  border-radius: 6px;
+  padding: 8px 16px;
+  background: #fffdf8;
+  overflow-wrap: anywhere;
+}
+.campaign-import-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.5;
+  margin: 16px 0;
+}
+.campaign-import-choice input {
+  flex: 0 0 auto;
+  margin-top: 4px;
+}
 .campaigns-page details summary {
   cursor: pointer;
   padding: 10px 0;

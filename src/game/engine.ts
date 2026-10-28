@@ -1,3 +1,4 @@
+import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
 import * as nickFury from "./nick-fury.js";
@@ -834,7 +835,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     Number(
       !!(
         name === "Piercing" &&
-        (storm.stormPiercing(s, p) ||
+        (taskmaster.taskmasterKeyword(s, p, "Piercing") ||
+          storm.stormPiercing(s, p) ||
           redSkullModules.redSkullPiercing(s, p.id) ||
           crossbones.crossbonesPiercing(s, p.id, card) ||
           acolytes.acolytesPiercing(s, p) ||
@@ -859,7 +861,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     Number(
       !!(
         name === "Ranged" &&
-        (granted.ranged ||
+        (taskmaster.taskmasterKeyword(s, p, "Ranged") ||
+          granted.ranged ||
           (s.attack?.attacker === p.id && s.attack.experimentalWeaponsRanged) ||
           (s.attack?.attacker === p.id && s.attack.redSkullModulesRanged) ||
           wideawakeKeywords.ranged ||
@@ -894,6 +897,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     ? storm.stormGlobal(s).retaliate +
         intrinsic +
         grantedValue +
+        taskmaster.taskmasterKeyword(s, p, "Retaliate") +
         experimentalWeapons.experimentalWeaponsRetaliate(s, p.id) +
         mansionKeywords.retaliate
     : Math.max(intrinsic, grantedValue);
@@ -975,6 +979,7 @@ function beginResolution(s: GameState, p: Piece) {
   if (!s.resolving.some((x) => x.id === p.id)) s.resolving.push(p);
 }
 function finishResolution(s: GameState, id: string) {
+  delete s.flags[`taskmasterReflex:${id}`];
   delete s.flags[`nightcrawlerCost:${id}`];
   delete s.flags[`nightcrawlerMinionCostPaid:${id}`];
   delete s.flags[`nightcrawlerMinionCostMinion:${id}`];
@@ -994,7 +999,8 @@ function finishResolution(s: GameState, id: string) {
   )
     add(s, ...domino.dominoFeedback(s));
   if (
-    card(p).faction_code === "encounter" ||
+    (card(p).faction_code === "encounter" &&
+      !(taskmaster.TASKMASTER_CAPTIVES.includes(p.code) && p.ownerId)) ||
     mtsPlayerPack.mtsIsCosmicEntity(p)
   )
     s.encounter.discard.push(resetPiece(p));
@@ -1778,7 +1784,11 @@ function movePieceFromPlay(
       s.removed.push(resetPiece(stored));
     else if (
       card(stored).faction_code === "encounter" &&
-      !(wideawakeCaptive(stored) && stored.ownerId)
+      !(
+        (wideawakeCaptive(stored) ||
+          taskmaster.TASKMASTER_CAPTIVES.includes(stored.code)) &&
+        stored.ownerId
+      )
     )
       s.encounter.discard.push(resetPiece(stored));
     else if (!owner || owner.eliminated) s.removed.push(resetPiece(stored));
@@ -1805,7 +1815,11 @@ function movePieceFromPlay(
     (s.victoryDisplay ||= []).push(resetPiece(p));
   else if (
     card(p).faction_code === "encounter" &&
-    !(wideawakeCaptive(p) && p.ownerId)
+    !(
+      (wideawakeCaptive(p) ||
+        taskmaster.TASKMASTER_CAPTIVES.includes(p.code)) &&
+      p.ownerId
+    )
   )
     (victory ? (s.victoryDisplay ||= []) : s.encounter.discard).push(
       resetPiece(p),
@@ -2930,8 +2944,13 @@ function dealDamage(
     log(s, prohibition);
     replaced = { actualDamage: 0, excessDamage: 0, damageDealt: 0 };
   } else if (dealt > 0 && target === s.villain.id) {
+    const reflex = taskmaster.taskmasterReflect(s, target, attack, source);
     const armor = villainAt(s, "01098")[0];
-    if (armor) {
+    if (reflex) {
+      if (s.attachments.some((p) => p.id === reflex)) discardPiece(s, reflex);
+      add(s, E("damage", { target: "hero", amount: dealt, source: reflex }));
+      replaced = { actualDamage: 0, excessDamage: 0, damageDealt: 0 };
+    } else if (armor) {
       armor.damage += dealt;
       track(s, "damageDealt", dealt);
       log(s, `Armored Rhino Suit absorbs ${dealt} damage.`);
@@ -3112,6 +3131,7 @@ function dealDamage(
         : (isTextBlank(s, retaliationTarget)
             ? 0
             : printedKeyword(card(retaliationTarget), "Retaliate")) +
+          taskmaster.taskmasterKeyword(s, retaliationTarget, "Retaliate") +
           antMan.antManEnemyRetaliate(s, retaliationTarget) +
           experimentalWeapons.experimentalWeaponsRetaliate(
             s,
@@ -4015,23 +4035,31 @@ function advanceVillain(
     );
     return;
   }
-  if (["magneto", "crossbones", "absorbing_man"].includes(s.villainId)) {
+  if (
+    ["magneto", "crossbones", "absorbing_man", "taskmaster"].includes(
+      s.villainId,
+    )
+  ) {
     const next = (
-      s.villainId === "absorbing_man"
-        ? s.absorbingMan
-        : s.villainId === "crossbones"
-          ? s.crossbones
-          : s.magneto
+      s.villainId === "taskmaster"
+        ? s.taskmaster
+        : s.villainId === "absorbing_man"
+          ? s.absorbingMan
+          : s.villainId === "crossbones"
+            ? s.crossbones
+            : s.magneto
     )?.villainDeck?.shift();
     if (!next) {
       endGame(
         s,
         true,
-        s.villainId === "absorbing_man"
-          ? "Absorbing Man is defeated. The way is clear."
-          : s.villainId === "crossbones"
-            ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
-            : "Magneto is defeated. Asteroid M is safe.",
+        s.villainId === "taskmaster"
+          ? "Taskmaster is defeated. The captives are safe."
+          : s.villainId === "absorbing_man"
+            ? "Absorbing Man is defeated. The way is clear."
+            : s.villainId === "crossbones"
+              ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
+              : "Magneto is defeated. Asteroid M is safe.",
       );
       return;
     }
@@ -4046,7 +4074,7 @@ function advanceVillain(
       stunCards: old.stunCards,
       confuseCards: old.confuseCards,
       toughCards: old.toughCards,
-      ...(["crossbones", "absorbing_man"].includes(s.villainId)
+      ...(["crossbones", "absorbing_man", "taskmaster"].includes(s.villainId)
         ? { counters: old.counters }
         : {}),
     });
@@ -4056,7 +4084,7 @@ function advanceVillain(
     for (const p of [...s.attachments, ...allInPlay(s)])
       if (p.attachedTo === old.id) p.attachedTo = next.id;
     s.removed.push(resetPiece(old));
-    if (["crossbones", "absorbing_man"].includes(s.villainId)) {
+    if (["crossbones", "absorbing_man", "taskmaster"].includes(s.villainId)) {
       s.villain.maxHp =
         card(s.villain).health! * s.playerCount +
         wideawake.projectWideawakeModifiers(s, s.villain, { isTextBlank })
@@ -4126,6 +4154,7 @@ function villainSetup(s: GameState) {
     s,
     ...(crossbones.crossbonesReveal(s, s.villain) || []),
     ...(absorbingMan.absorbingReveal(s, s.villain) || []),
+    ...(taskmaster.taskmasterReveal(s, s.villain) || []),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -4570,7 +4599,8 @@ function defeatScheme(
       ? magnetoHero.magnetoHeroSideDefeated(s, p)
       : []),
   ];
-  if (!victory && !retainFind) discardPiece(s, p.id);
+  if (!victory && !retainFind && !taskmaster.taskmasterSchemeDefeated(s, p))
+    discardPiece(s, p.id);
   const responses = [
     ...(crossbonesDefeat.length
       ? [
@@ -7152,7 +7182,39 @@ export function newGame(config: {
   deadpool.deadpoolSetupPool(s, makePiece);
   if (s.deadpool?.initializedPoolSeats.length)
     s.encounter.deck = shuffle(s, s.encounter.deck);
-  if (v.id === "absorbing_man") {
+  if (v.id === "taskmaster") {
+    s.scheme.threat = s.playerCount;
+    const captives = s.encounter.deck.filter((p) =>
+      taskmaster.TASKMASTER_CAPTIVES.includes(p.code),
+    );
+    s.encounter.deck = s.encounter.deck.filter(
+      (p) => !taskmaster.TASKMASTER_CAPTIVES.includes(p.code),
+    );
+    s.taskmaster = {
+      currentMain: makePiece(s, "04096b"),
+      villainDeck: [makePiece(s, v.codes[stage])],
+      captives,
+    };
+    s.villain = Object.assign(makePiece(s, v.codes[stage - 1]), {
+      hp,
+      maxHp: hp,
+      stage,
+    });
+    const patrol = s.encounter.deck.find((p) => p.code === "04154");
+    need(patrol, "Taskmaster requires the original Hydra Patrol side scheme.");
+    mutagenPorts.putSideScheme(s, patrol!);
+    s.encounter.deck = shuffle(s, s.encounter.deck);
+    s.queue.push(
+      ...(taskmaster.taskmasterReveal(s, s.villain) || []).map((e) =>
+        effectContext(s, { ...e, actorId: s.firstPlayerId }),
+      ),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "absorbing_man") {
     s.scheme.threat = 2 * s.playerCount;
     s.absorbingMan = {
       delay: 0,
@@ -8573,6 +8635,11 @@ function allyEnter(
     return;
   }
   if (p.code === "32002") return;
+  const taskmasterAlly = taskmaster.taskmasterAllyEntered(s, p, fromHand);
+  if (taskmasterAlly !== null) {
+    add(s, ...taskmasterAlly);
+    return;
+  }
   const mutantAlly = mgPack.mutantGenesisPlayerPackAllyEntered(
     s,
     p,
@@ -9364,6 +9431,7 @@ function flip(
         action: E("damage", { amount: 2 }),
       }),
     );
+  add(s, ...taskmaster.taskmasterFormChanged(s));
 }
 
 export function abilityOptions(
@@ -9422,6 +9490,7 @@ export function abilityOptions(
     ...experimentalWeapons.experimentalWeaponsActions(s, p),
     ...redSkullModules.redSkullActions(s, p),
     ...absorbingMan.absorbingActions(s, p),
+    ...taskmaster.taskmasterActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
     ...mutagenAttachmentActions(s, p),
     ...scarletWitch.scarletWitchAttachmentActions(s, p, scarletPorts),
@@ -9849,6 +9918,14 @@ function ability(s: GameState, id: string, action = "special") {
     return;
   const moduleSource = find(s, id);
   if (moduleSource) {
+    if (["04102", "04103"].includes(moduleSource.code)) {
+      const selected = taskmaster
+        .taskmasterActions(s, moduleSource)
+        .find((o) => !action || action === "special" || o.id === action);
+      need(selected, "Taskmaster attachment Hero Action is unavailable.");
+      add(s, ...selected!.effects);
+      return;
+    }
     if (moduleSource.code === "04084") {
       const selected = absorbingMan
         .absorbingActions(s, moduleSource)
@@ -13424,6 +13501,13 @@ const crossbonesPorts: crossbones.CrossbonesPorts = {
       }),
     ),
 };
+const taskmasterPorts: taskmaster.TaskmasterPorts = {
+  ...mutagenPorts,
+  random,
+  revealHidden,
+  mill,
+  countBoostIcons: crossbonesPorts.countBoostIcons,
+};
 const absorbingManPorts: absorbingMan.AbsorbingManPorts = {
   ...mutagenPorts,
   revealHidden,
@@ -16115,6 +16199,8 @@ function minionEntered(s: GameState, p: Piece) {
   }
   const underlying = p.droneCard;
   Object.assign(p, resetPiece(p, true));
+  if (s.sideSchemes.some((q) => q.code === "04108" && !isTextBlank(s, q)))
+    giveCharacterStatus(s, p, "tough");
   if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
     giveCharacterStatus(s, p, "tough");
   if (underlying) p.droneCard = underlying;
@@ -19473,6 +19559,7 @@ const nickFuryPorts: nickFury.NickFuryPorts = {
 };
 
 const jubileePorts: jubilee.JubileePorts = {
+  isPermanent: (p) => isPermanent(card(p)),
   queue: add,
   choose,
   find,
@@ -21235,6 +21322,7 @@ function boostEffects(s: GameState, p: Piece) {
     return;
   }
   const rise =
+    taskmaster.taskmasterBoost(s, p) ??
     absorbingMan.absorbingBoost(s, p) ??
     crossbones.crossbonesBoost(s, p) ??
     redSkullModules.redSkullBoost(s, p, redSkullModulePorts) ??
@@ -23053,6 +23141,8 @@ function reveal(
       mansionAttack.MANSION_ATTACK_SCRIPT_CODES.some(
         (code) => code === p.code,
       ) ||
+      (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (absorbingMan.ABSORBING_MAN_SCRIPT_CODES.some(
         (code) => code === p.code,
       ) &&
@@ -23136,6 +23226,7 @@ function reveal(
       ...redSkullModules.RED_SKULL_MODULE_SCRIPT_CODES,
       ...crossbones.CROSSBONES_SCRIPT_CODES,
       ...absorbingMan.ABSORBING_MAN_SCRIPT_CODES,
+      ...taskmaster.TASKMASTER_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       ...RISKY_BUSINESS_SCRIPT_CODES,
@@ -23214,6 +23305,7 @@ function reveal(
       ...redSkullModules.RED_SKULL_MODULE_SCRIPT_CODES,
       ...crossbones.CROSSBONES_SCRIPT_CODES,
       ...absorbingMan.ABSORBING_MAN_SCRIPT_CODES,
+      ...taskmaster.TASKMASTER_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -23243,6 +23335,7 @@ function reveal(
       mutagenEncounterReveal(s, p) ??
       armadillo.armadilloReveal(s, p) ??
       experimentalWeapons.experimentalWeaponsReveal(s, p) ??
+      taskmaster.taskmasterReveal(s, p) ??
       absorbingMan.absorbingReveal(s, p) ??
       crossbones.crossbonesReveal(s, p) ??
       redSkullModules.redSkullReveal(s, p) ??
@@ -23310,6 +23403,7 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    taskmaster.taskmasterReveal(s, p) ??
     absorbingMan.absorbingReveal(s, p) ??
     crossbones.crossbonesReveal(s, p) ??
     redSkullModules.redSkullReveal(s, p) ??
@@ -24314,23 +24408,29 @@ function resolve(s: GameState, e: Effect) {
     return;
   // Capture the canonical alias as the current original-source villain ID.
   if (
-    ["mansion_attack", "magneto", "crossbones", "absorbing_man"].includes(
-      s.villainId,
-    )
+    [
+      "mansion_attack",
+      "magneto",
+      "crossbones",
+      "absorbing_man",
+      "taskmaster",
+    ].includes(s.villainId)
   ) {
     // Target references identify the continuing same-title character. Physical
     // card IDs, source IDs and snapshots retain their original stage identity.
     const retiredVillains =
-      s.villainId === "absorbing_man"
-        ? ["04076", "04077", "04078"]
-        : s.villainId === "crossbones"
-          ? ["04058", "04059", "04060"]
-          : s.villainId === "magneto"
-            ? ["32138", "32139", "32140"]
-            : [];
+      s.villainId === "taskmaster"
+        ? ["04093", "04094", "04095"]
+        : s.villainId === "absorbing_man"
+          ? ["04076", "04077", "04078"]
+          : s.villainId === "crossbones"
+            ? ["04058", "04059", "04060"]
+            : s.villainId === "magneto"
+              ? ["32138", "32139", "32140"]
+              : [];
     const characterFields = ["target", "targetId", "enemyId", "attacker"];
     if (
-      ["crossbones", "absorbing_man"].includes(s.villainId) &&
+      ["crossbones", "absorbing_man", "taskmaster"].includes(s.villainId) &&
       [
         "enemyAttack",
         "enemyScheme",
@@ -24339,7 +24439,7 @@ function resolve(s: GameState, e: Effect) {
       ].includes(e.type)
     )
       characterFields.push("id");
-    if (["crossbones", "absorbing_man"].includes(s.villainId)) {
+    if (["crossbones", "absorbing_man", "taskmaster"].includes(s.villainId)) {
       if (e.type === "ms:melee-second") characterFields.push("firstId");
       if (e.type === "target" && e.group === "enemy")
         characterFields.push("exclude");
@@ -24590,6 +24690,7 @@ function resolve(s: GameState, e: Effect) {
           ironspider.ironspiderSinisterReveal(state, piece) ??
           armadillo.armadilloReveal(state, piece) ??
           experimentalWeapons.experimentalWeaponsReveal(state, piece) ??
+          taskmaster.taskmasterReveal(state, piece) ??
           absorbingMan.absorbingReveal(state, piece) ??
           crossbones.crossbonesReveal(state, piece) ??
           redSkullModules.redSkullReveal(state, piece) ??
@@ -24677,6 +24778,7 @@ function resolve(s: GameState, e: Effect) {
     })
   )
     return;
+  if (taskmaster.resolveTaskmasterEffect(s, e, taskmasterPorts)) return;
   if (absorbingMan.resolveAbsorbingEffect(s, e, absorbingManPorts)) return;
   if (crossbones.resolveCrossbonesEffect(s, e, crossbonesPorts)) return;
   if (redSkullModules.resolveRedSkullModuleEffect(s, e, redSkullModulePorts))
@@ -25064,6 +25166,8 @@ function resolve(s: GameState, e: Effect) {
       s.prompt = e.prompt;
       break;
     case "attackProgramEnd":
+      delete s.flags[`taskmasterReflex:${e.id}`];
+      delete s.flags[`taskmasterAttackSource:${e.id}`];
       if (!e.eventId && s.flags[`shadowcatProgramPerformed:${e.id}`]) {
         delete s.flags[`shadowcatProgramPerformed:${e.id}`];
         add(
@@ -29136,6 +29240,22 @@ function resolve(s: GameState, e: Effect) {
       if (!p) break;
       const attack = e.kind === "attack";
       const printed = card(p);
+      if (
+        attack &&
+        !p.stunned &&
+        e.target === s.villain.id &&
+        !e.taskmasterAttackWrapped &&
+        s.attachments.some((a) => a.code === "04104" && !isTextBlank(s, a))
+      ) {
+        const program = `taskmaster-attack:${s.nextId++}`;
+        s.flags[`taskmasterAttackSource:${program}`] = p.id;
+        add(
+          s,
+          { ...e, taskmasterAttackWrapped: true, attackProgramId: program },
+          E("attackProgramEnd", { id: program, attackProgramId: program }),
+        );
+        break;
+      }
       need(
         attack
           ? printed.attack !== null || printed.attack_star
@@ -29703,6 +29823,8 @@ function resolve(s: GameState, e: Effect) {
           );
         }
       }
+      if (s.currentAttackProgramId)
+        delete s.flags[`taskmasterAttackSource:${s.currentAttackProgramId}`];
       if (stunned) break;
       const responses = s.queue.splice(0, s.queue.length - queuedBefore);
       const defeatKey = `dvAllyDefeat:${p.id}:${s.nextId++}`;
@@ -33039,6 +33161,7 @@ function resolve(s: GameState, e: Effect) {
           "mutagen_formula",
           "crossbones",
           "absorbing_man",
+          "taskmaster",
           "project_wideawake",
           "mansion_attack",
           "magneto",
@@ -33284,6 +33407,7 @@ function resolve(s: GameState, e: Effect) {
           : []),
         ...sabretooth.sabretoothVillainPhaseStepOne(s),
         ...(s.absorbingMan ? [E("absorbing:delay")] : []),
+        ...taskmaster.taskmasterStepOne(s),
       );
       break;
     case "villainActivate": {
@@ -33774,6 +33898,7 @@ function run(s: GameState) {
       e.type === "red-skull-modules:patrol-search" ||
       e.type.startsWith("crossbones:") ||
       e.type.startsWith("absorbing:") ||
+      e.type.startsWith("taskmaster:") ||
       e.type.startsWith("sabretooth:") ||
       e.type.startsWith("sabretooth-native:") ||
       e.type.startsWith("wideawake:") ||
@@ -34138,6 +34263,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...experimentalWeapons.experimentalWeaponsActions(s, p),
               ...redSkullModules.redSkullActions(s, p),
               ...absorbingMan.absorbingActions(s, p),
+              ...taskmaster.taskmasterActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
               ...goblinModuleAttachmentActions(s, p),
               ...mutagenAttachmentActions(s, p),

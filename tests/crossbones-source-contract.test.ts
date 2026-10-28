@@ -270,7 +270,7 @@ describe("Crossbones executable setup and source acceptance", () => {
       expect(hasExecutableScript(code), code).toBe(true);
       expect(EXPLICIT_CARD_SCRIPTS.has(code), code).toBe(true);
     }
-    for (const code of ["04093", "04109", "04125"])
+    for (const code of ["04109", "04125"])
       expect(hasExecutableScript(code), code).toBe(false);
     expect(VILLAINS[10]).toMatchObject({
       id: "crossbones",

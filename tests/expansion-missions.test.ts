@@ -181,6 +181,7 @@ function ownedPieces(s: GameState, originalIds?: Set<string>): Piece[] {
       ?.poolSetAside || []),
     ...(s.encounter.storedBoosts || []),
     ...(s.crossbones?.weaponDeck || []),
+    ...(s.taskmaster?.captives || []),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
     ...(s.attack?.pendingBoosts || []),
@@ -217,15 +218,20 @@ function ownedPieces(s: GameState, originalIds?: Set<string>): Piece[] {
  * scheme counters, attacker snapshots and retired villain views own no cards. */
 function scenarioPhysicalPieces(s: GameState): Piece[] {
   if (
-    !["mansion_attack", "magneto", "crossbones", "absorbing_man"].includes(
-      s.villainId,
-    )
+    ![
+      "mansion_attack",
+      "magneto",
+      "crossbones",
+      "absorbing_man",
+      "taskmaster",
+    ].includes(s.villainId)
   )
     return [];
   const m = s.mansionAttack;
   const g = s.magneto;
   const c = s.crossbones;
   const a = s.absorbingMan;
+  const t = s.taskmaster;
   const pieces: Piece[] = [];
   const visit = (p: Piece) => {
     pieces.push(p);
@@ -258,6 +264,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       ?.poolSetAside || []),
     ...(s.encounter.storedBoosts || []),
     ...(s.crossbones?.weaponDeck || []),
+    ...(s.taskmaster?.captives || []),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
     ...(m?.activeVillainRetired ? [] : [s.villain]),
@@ -265,6 +272,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       g?.villainDeck ||
       c?.villainDeck ||
       a?.villainDeck ||
+      t?.villainDeck ||
       []),
     ...(m?.mainDeck || g?.mainDeck || c?.mainDeck || []),
     ...(m?.currentMain
@@ -275,7 +283,9 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
           ? [c.currentMain]
           : a?.currentMain
             ? [a.currentMain]
-            : []),
+            : t?.currentMain
+              ? [t.currentMain]
+              : []),
     ...(g?.orbital ? [g.orbital] : []),
     ...s.minions,
     ...s.sideSchemes,
@@ -421,7 +431,9 @@ function runMission(config: (typeof missions)[number]) {
           ? "crossbones"
           : s.villainId === "absorbing_man"
             ? "absorbing_man"
-            : undefined;
+            : s.villainId === "taskmaster"
+              ? "taskmaster"
+              : undefined;
   const scenarioSources = scenarioSet
     ? scenarioPhysicalPieces(s).filter((p) => card(p).set_code === scenarioSet)
     : [];
@@ -437,7 +449,9 @@ function runMission(config: (typeof missions)[number]) {
           ? 18
           : scenarioSet === "absorbing_man"
             ? 24
-            : 29;
+            : scenarioSet === "taskmaster"
+              ? 22
+              : 29;
     expect(
       scenarioSources,
       "All selected original scenario cards begin in physical zones",
@@ -676,10 +690,10 @@ describe("published expansion starters across every supported mission setting", 
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(12);
+    expect(VILLAINS).toHaveLength(13);
     expect(MODULES).toHaveLength(30);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(37024);
+    expect(missions).toHaveLength(40040);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -694,14 +708,31 @@ describe("published expansion starters across every supported mission setting", 
       createHash("sha256")
         .update(
           manifest(
-            missions.filter((m) => m.villainId !== "absorbing_man"),
+            missions.filter(
+              (m) => !["absorbing_man", "taskmaster"].includes(m.villainId),
+            ),
           ).join("\n"),
         )
         .digest("hex"),
     ).toBe("6a4742e07325a1c84c1f98ec22302ae79769a2dc9efff1e71eae461d644ba6a0");
+    const absorbingSnapshot = missions.filter(
+      (m) => m.villainId !== "taskmaster",
+    );
+    expect(absorbingSnapshot).toHaveLength(37024);
+    expect(
+      createHash("sha256")
+        .update(manifest(absorbingSnapshot).join("\n"))
+        .digest("hex"),
+    ).toBe("a0b4128d53ac2aae65b810f07cae056b5179fbf9851e910b56b3f5b0dac296dc");
+    expect(missions.filter((m) => m.villainId === "taskmaster")).toHaveLength(
+      3016,
+    );
     const combined = partitions.flat();
     const previousMissions = missions.filter(
-      (mission) => !["crossbones", "absorbing_man"].includes(mission.villainId),
+      (mission) =>
+        !["crossbones", "absorbing_man", "taskmaster"].includes(
+          mission.villainId,
+        ),
     );
     expect(previousMissions).toHaveLength(30888);
     expect(
@@ -834,12 +865,12 @@ describe("published expansion starters across every supported mission setting", 
           partition.filter((mission) => mission.villainId === "crossbones")
             .length,
       ),
-    ).toEqual([364, 364, 416, 416, 364, 364, 364, 364]);
-    expect(new Set(missions.map(key)).size).toBe(37024);
-    expect(new Set(combined.map(key)).size).toBe(37024);
+    ).toEqual([377, 377, 377, 377, 377, 377, 377, 377]);
+    expect(new Set(missions.map(key)).size).toBe(40040);
+    expect(new Set(combined.map(key)).size).toBe(40040);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(4628);
+      expect(partition).toHaveLength(5005);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -847,11 +878,11 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(89);
-      expect(Math.max(...perShard)).toBe(89);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(712);
+      expect(Math.min(...perShard)).toBe(96);
+      expect(Math.max(...perShard)).toBe(97);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(770);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 4628 : 37024);
+    expect(selectedMissions).toHaveLength(isSharded ? 5005 : 40040);
   });
   for (const mission of selectedMissions)
     it(

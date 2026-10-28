@@ -210,6 +210,9 @@ try {
     .getByLabel("Mission preset", { exact: true })
     .selectOption("hydra");
   await page
+    .getByRole("button", { name: "Remove mission 3", exact: true })
+    .click();
+  await page
     .getByRole("button", { name: "Remove mission 1", exact: true })
     .click();
   await page.getByLabel("Campaign name", { exact: true }).fill("Crusher Creel");
@@ -224,6 +227,7 @@ try {
     .getByRole("button", { name: "Start campaign", exact: true })
     .click();
   assert.equal((await saved()).villainId, "absorbing_man");
+  const absorbingOpening = await saved();
   await begin();
   await page.getByLabel("Delay counters: 0", { exact: true }).waitFor();
   for (const width of [1280, 390, 320]) {
@@ -232,6 +236,26 @@ try {
   }
   checks.push(
     "Absorbing Man starts inside a campaign with original environment and visible delay counter.",
+  );
+  const authoritative = (await library())[0].game;
+  await page.evaluate(
+    (old) => localStorage.setItem("champions.save.v1", JSON.stringify(old)),
+    absorbingOpening,
+  );
+  await page.reload();
+  await journal();
+  assert.deepEqual((await library())[0].game, authoritative);
+  await page
+    .locator(".campaign-library article")
+    .filter({
+      has: page.getByRole("heading", { name: "Crusher Creel", exact: true }),
+    })
+    .getByRole("button", { name: /Resume mission/ })
+    .click();
+  assert.equal((await saved()).phase, "player");
+  assert.deepEqual((await saved()).player.hand, authoritative.player.hand);
+  checks.push(
+    "An older guest save cannot rewind the campaign's authoritative checkpoint on reload.",
   );
   await journal();
   const [download] = await Promise.all([
@@ -247,6 +271,134 @@ try {
   checks.push(
     "Campaign export includes both the completed journal and active table.",
   );
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.getByText("Restore a campaign backup", { exact: true }).click();
+  const upload = async (data) =>
+    page.getByLabel("Campaign backup file", { exact: true }).setInputFiles({
+      name: "campaigns.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(data)),
+    });
+  const creel = page.locator(".campaign-library article").filter({
+    has: page.getByRole("heading", { name: "Crusher Creel", exact: true }),
+  });
+  await creel
+    .getByLabel("Campaign notes")
+    .fill("Keep these current notes unless replacement is selected.");
+  await creel.getByRole("heading").click();
+  await upload(exported);
+  await page
+    .getByRole("button", { name: "Restore backup", exact: true })
+    .click();
+  await page
+    .getByText("These campaigns are already saved.", { exact: false })
+    .waitFor();
+  assert.equal(
+    (await library())[0].notes,
+    "Keep these current notes unless replacement is selected.",
+  );
+  await page
+    .getByLabel("Replace matching campaigns with the backup versions", {
+      exact: false,
+    })
+    .check();
+  await audit("campaign-import-390");
+  await page
+    .getByRole("button", { name: "Restore backup", exact: true })
+    .click();
+  await page.getByText("Backup restored.", { exact: false }).waitFor();
+  assert.equal(
+    await creel.getByLabel("Campaign notes").inputValue(),
+    exported[0].notes,
+  );
+  assert.deepEqual((await saved()).player.hand, exported[0].game.player.hand);
+  checks.push(
+    "Backup collisions preserve current progress until explicit replacement; restored notes and active tables refresh together.",
+  );
+  const beforeInvalid = await library();
+  const invalid = structuredClone(exported);
+  invalid[0].game.flags = null;
+  await upload(invalid);
+  await page
+    .getByText("Invalid saved table progress.", { exact: true })
+    .waitFor();
+  assert.deepEqual(await library(), beforeInvalid);
+  checks.push(
+    "Malformed nested table backups are rejected without changing any saved campaign.",
+  );
+  await page.evaluate(() =>
+    localStorage.setItem("champions.campaigns.v1", "unreadable saved data"),
+  );
+  await page.reload();
+  await journal();
+  await page
+    .getByText("The campaign library could not be read.", { exact: false })
+    .waitFor();
+  await page.getByText("Restore a campaign backup", { exact: true }).click();
+  await upload(exported);
+  assert.equal(
+    await page
+      .getByRole("button", { name: "Restore backup", exact: true })
+      .isDisabled(),
+    true,
+  );
+  assert.equal(
+    await page.evaluate(() => localStorage.getItem("champions.campaigns.v1")),
+    "unreadable saved data",
+  );
+  await page
+    .getByLabel("Replace the unreadable campaign library.", { exact: false })
+    .check();
+  await page
+    .getByRole("button", { name: "Restore backup", exact: true })
+    .click();
+  await page.getByText("Backup restored.", { exact: false }).waitFor();
+  assert.equal((await library()).length, 2);
+  assert.equal((await library())[1].attempts.length, 3);
+  checks.push(
+    "An unreadable library remains intact until explicit replacement, then a validated backup recovers active and completed campaigns.",
+  );
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page
+    .getByLabel("Mission preset", { exact: true })
+    .selectOption("hydra");
+  await page
+    .getByRole("button", { name: "Remove mission 1", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Remove mission 1", exact: true })
+    .click();
+  await page
+    .getByLabel("Campaign name", { exact: true })
+    .fill("Taskmaster rescue");
+  await page
+    .getByRole("button", { name: "Create campaign", exact: true })
+    .click();
+  await page
+    .locator(".campaign-library article")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Taskmaster rescue",
+        exact: true,
+      }),
+    })
+    .getByRole("button", { name: "Start campaign", exact: true })
+    .click();
+  assert.equal((await saved()).villainId, "taskmaster");
+  assert.equal((await saved()).taskmaster.captives.length, 4);
+  await begin();
+  const taskmasterDeck = (await saved()).encounter.deck.length;
+  await page
+    .getByRole("button", { name: "Suit up Once per turn", exact: true })
+    .click();
+  await proceed();
+  assert.equal((await saved()).player.form, "hero");
+  assert.equal((await saved()).encounter.deck.length, taskmasterDeck - 1);
+  await audit("taskmaster-table-1280");
+  checks.push(
+    "The three-mission Rise of Red Skull preset includes Taskmaster with four original captive allies; suiting up resolves his native encounter-card discard response.",
+  );
+  await journal();
   await page.evaluate(() => {
     const set = Storage.prototype.setItem;
     window.restoreCampaignStorage = () => {
@@ -271,7 +423,7 @@ try {
   await page
     .getByRole("button", { name: "Retry campaign save", exact: true })
     .click();
-  assert.equal((await library()).length, 3);
+  assert.equal((await library()).length, 4);
   checks.push(
     "Failed storage writes show a persistent warning and retry saves all in-memory progress.",
   );

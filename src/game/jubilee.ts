@@ -90,6 +90,7 @@ export interface JubileeTarget {
   code?: string;
 }
 export interface JubileePorts {
+  isPermanent(p: Piece): boolean;
   queue(s: GameState, ...effects: Effect[]): void;
   choose(s: GameState, title: string, text: string, options: Option[]): void;
   enemies(s: GameState, attack: boolean): JubileeTarget[];
@@ -1425,8 +1426,10 @@ export function resolveJubileeEffect(
       break;
     }
     case "trap-discard": {
-      const choices = s.player.inPlay.filter((p) =>
-        ["ally", "upgrade"].includes(card(p).type_code),
+      const choices = s.player.inPlay.filter(
+        (p) =>
+          ["ally", "upgrade"].includes(card(p).type_code) &&
+          !ports.isPermanent(p),
       );
       if (choices.length)
         ports.choose(

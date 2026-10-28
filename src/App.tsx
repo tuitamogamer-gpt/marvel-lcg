@@ -4,11 +4,14 @@ import {
   campaignStage,
   createCampaign,
   launchCampaign,
+  mergeCampaignBackup,
   readCampaigns,
+  restoreCampaignTable,
   recordCampaignGame,
   writeCampaigns,
   type Campaign,
   type CampaignStage,
+  type CampaignLibrary,
 } from "./campaigns";
 import {
   magikRevealedTop,
@@ -682,7 +685,9 @@ function Status({
     </span>
   );
 }
-function readSave(): GameState | null {
+function readSave(
+  library: CampaignLibrary = readCampaigns(),
+): GameState | null {
   try {
     const a = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
     if (
@@ -691,7 +696,7 @@ function readSave(): GameState | null {
       a.player?.hand &&
       a.attachments
     )
-      return upgradeSave(a);
+      return restoreCampaignTable(upgradeSave(a), library);
     return null;
   } catch {
     return null;
@@ -974,7 +979,12 @@ export default function App() {
       account.session.user?.id !== gameOwner
     ) {
       audio.resetSession();
-      setGame(readSave());
+      setGame(
+        readSave({
+          campaigns: campaignsRef.current,
+          warning: campaignLibrary.warning,
+        }),
+      );
       setGameOwner(null);
       setScreen("account");
       missionSync.reset();
@@ -1280,6 +1290,35 @@ export default function App() {
     );
     return true;
   }
+  function importCampaigns(
+    incoming: Campaign[],
+    replaceExisting: boolean,
+    replaceUnreadable: boolean,
+  ) {
+    if (campaignLibrary.warning && !replaceUnreadable)
+      throw Error(
+        "Confirm replacement of the unreadable campaign library first.",
+      );
+    const next = mergeCampaignBackup(
+      campaignsRef.current,
+      incoming,
+      replaceExisting,
+    );
+    const replacedActive =
+      !gameOwner &&
+      game?.campaign &&
+      incoming.some((c) => c.id === game.campaign!.id) &&
+      (replaceExisting || campaignLibrary.warning);
+    saveCampaignLibrary(next);
+    if (replacedActive) {
+      // Replace the guest view in the same render so its older snapshot cannot
+      // overwrite the imported campaign checkpoint in the persistence effect.
+      setGame(restoreCampaignTable(game, { campaigns: next, warning: "" }));
+      audio.resetSession();
+      setCombat(null);
+      clearHistory();
+    }
+  }
   async function openCampaign(id: string) {
     const c = campaignsRef.current.find((c) => c.id === id);
     if (!c || campaignLibrary.warning) return;
@@ -1393,7 +1432,12 @@ export default function App() {
       );
     await account.request("logout");
     audio.resetSession();
-    setGame(readSave());
+    setGame(
+      readSave({
+        campaigns: campaignsRef.current,
+        warning: campaignLibrary.warning,
+      }),
+    );
     setGameOwner(null);
     clearHistory();
     missionSync.reset();
@@ -1603,6 +1647,7 @@ export default function App() {
             .join(" · ")}
           difficulty={`${difficulty}${heroic ? ` · Heroic ${heroic}` : ""}`}
           onCreate={addCampaign}
+          onImport={importCampaigns}
           onOpen={openCampaign}
           onBack={() => setScreen("lobby")}
           onNotes={(id, notes) =>

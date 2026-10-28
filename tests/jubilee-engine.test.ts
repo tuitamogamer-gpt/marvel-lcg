@@ -765,6 +765,31 @@ describe("Jubilee obligation, physical control changes and Arcade", () => {
     expect(s.player.confused).toBe(true);
     expect(s.sideSchemes).toHaveLength(2);
   });
+  it("Arcade's Funhouse excludes Permanent upgrades and resolves with no eligible cards", () => {
+    let s = newGame({
+      heroId: "wolverine",
+      aspect: "aggression",
+      villainId: "absorbing_man",
+      module: "arcade",
+      seed: 44123,
+      pacing: "expert",
+    });
+    s = finish(command(s, { type: "MULLIGAN", ids: [] }));
+    const claws = s.player.inPlay.find(
+      (p) => card(p).name === "Wolverine's Claws",
+    )!;
+    expect(claws).toBeTruthy();
+    const ally = put(s, "47012");
+    s = native(reload(s), { type: "jubilee:trap-discard" });
+    expect(s.prompt?.options.map((o) => o.id)).toContain(ally.id);
+    expect(s.prompt?.options.map((o) => o.id)).not.toContain(claws.id);
+    s = finish(choose(reload(s), ally.id));
+    expect(s.player.inPlay.some((p) => p.id === claws.id)).toBe(true);
+    expect(s.player.discard.some((p) => p.id === ally.id)).toBe(true);
+    s = finish(native(reload(s), { type: "jubilee:trap-discard" }));
+    expect(s.prompt).toBeNull();
+    expect(s.player.inPlay.some((p) => p.id === claws.id)).toBe(true);
+  });
   it("Shadows of the Past uses all five actual set-aside nemesis IDs without synthesizing duplicates", () => {
     let s = base();
     const originals = s.player.setAside!.map((p) => p.id);

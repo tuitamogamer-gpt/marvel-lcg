@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { HEROES, VILLAINS, scenarioModules } from "./game/cards";
 import {
   CAMPAIGNS_KEY,
   CAMPAIGN_LIMIT,
+  CAMPAIGN_BACKUP_BYTES,
   campaignStage,
   defaultCampaignStage,
+  parseCampaignBackup,
 } from "./campaigns";
 import type { Campaign, CampaignStage } from "./campaigns";
 import { readStorage } from "./browser-storage";
@@ -20,6 +22,7 @@ export function Campaigns({
   onDelete,
   onNotes,
   onBack,
+  onImport,
 }: {
   campaigns: Campaign[];
   teamLabel: string;
@@ -30,6 +33,11 @@ export function Campaigns({
   onDelete: (id: string) => void;
   onNotes: (id: string, notes: string) => void;
   onBack: () => void;
+  onImport: (
+    campaigns: Campaign[],
+    replaceExisting: boolean,
+    replaceUnreadable: boolean,
+  ) => void;
 }) {
   const [name, setName] = useState("");
   const [stages, setStages] = useState<CampaignStage[]>(
@@ -37,6 +45,14 @@ export function Campaigns({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [backup, setBackup] = useState<Campaign[] | null>(null);
+  const [backupError, setBackupError] = useState("");
+  const [replaceExisting, setReplaceExisting] = useState(false);
+  const [replaceUnreadable, setReplaceUnreadable] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
+  const backupRead = useRef(0);
+  const collisions =
+    backup?.filter((c) => campaigns.some((saved) => saved.id === c.id)) || [];
   const update = (index: number, stage: CampaignStage) =>
     setStages((list) => list.map((s, i) => (i === index ? stage : s)));
   return (
@@ -113,7 +129,7 @@ export function Campaigns({
                       "mansion_attack",
                       "magneto",
                     ],
-                    hydra: ["crossbones", "absorbing_man"],
+                    hydra: ["crossbones", "absorbing_man", "taskmaster"],
                   };
                   if (presets[e.target.value])
                     setStages(
@@ -258,6 +274,115 @@ export function Campaigns({
               Export saves
             </button>
           </div>
+          <details className="campaign-backup">
+            <summary>Restore a campaign backup</summary>
+            <p>
+              Choose an exported JSON file to restore campaigns and their saved
+              tables.
+            </p>
+            <label className="campaign-field">
+              Campaign backup file
+              <input
+                type="file"
+                accept=".json,application/json"
+                onChange={async (e) => {
+                  const file = e.currentTarget.files?.[0];
+                  const read = ++backupRead.current;
+                  e.currentTarget.value = "";
+                  setBackup(null);
+                  setBackupError("");
+                  setImportMessage("");
+                  setReplaceExisting(false);
+                  setReplaceUnreadable(false);
+                  if (!file) return;
+                  try {
+                    if (file.size > CAMPAIGN_BACKUP_BYTES)
+                      throw Error(
+                        "Choose a campaign backup smaller than 10 MB.",
+                      );
+                    const parsed = parseCampaignBackup(await file.text());
+                    if (!parsed.length)
+                      throw Error("The backup contains no campaigns.");
+                    if (read === backupRead.current) setBackup(parsed);
+                  } catch (e) {
+                    if (read === backupRead.current)
+                      setBackupError(
+                        e instanceof Error
+                          ? e.message
+                          : "Unable to read this backup.",
+                      );
+                  }
+                }}
+              />
+            </label>
+            {backup && (
+              <div>
+                <p>
+                  {backup.length} campaign{backup.length === 1 ? "" : "s"} in
+                  this backup · {backup.length - collisions.length} new ·{" "}
+                  {collisions.length} already saved.
+                </p>
+                <ul>
+                  {backup.map((c) => (
+                    <li key={c.id}>
+                      {c.name} · {campaignStage(c)} of {c.stages.length}{" "}
+                      missions won
+                    </li>
+                  ))}
+                </ul>
+                {!!collisions.length && (
+                  <label className="campaign-import-choice">
+                    <input
+                      type="checkbox"
+                      checked={replaceExisting}
+                      onChange={(e) => setReplaceExisting(e.target.checked)}
+                    />
+                    Replace matching campaigns with the backup versions,
+                    including their progress and saved tables.
+                  </label>
+                )}
+                {warning && (
+                  <label className="campaign-import-choice">
+                    <input
+                      type="checkbox"
+                      checked={replaceUnreadable}
+                      onChange={(e) => setReplaceUnreadable(e.target.checked)}
+                    />
+                    Replace the unreadable campaign library. Export its saved
+                    data first if you need a copy.
+                  </label>
+                )}
+                <button
+                  className="primary-button"
+                  disabled={!!warning && !replaceUnreadable}
+                  onClick={() => {
+                    setBackupError("");
+                    try {
+                      onImport(backup, replaceExisting, replaceUnreadable);
+                      setBackup(null);
+                      setImportMessage(
+                        "Backup restored. Your campaigns are available below.",
+                      );
+                    } catch (e) {
+                      setBackupError(
+                        e instanceof Error
+                          ? e.message
+                          : "Unable to restore this backup.",
+                      );
+                    }
+                  }}
+                >
+                  Restore backup
+                </button>
+              </div>
+            )}
+            {backupError && (
+              <p role="alert" className="campaign-error">
+                {backupError}
+              </p>
+            )}
+            {importMessage && <p role="status">{importMessage}</p>}
+          </details>
           {!campaigns.length && (
             <div className="campaign-panel">
               <h3>A story starts with a team.</h3>
@@ -329,6 +454,7 @@ export function Campaigns({
                 <label className="campaign-field">
                   Campaign notes
                   <textarea
+                    key={`${c.id}:${c.notes}`}
                     maxLength={4000}
                     defaultValue={c.notes}
                     onBlur={(e) => onNotes(c.id, e.target.value)}
