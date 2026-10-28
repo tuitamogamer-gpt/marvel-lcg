@@ -1090,6 +1090,19 @@ export const VILLAINS = [
       "Stop Hydra's assault before Crossbones escapes with the Reality Stone. Experimental weapons arm his forces as the battle advances.",
     color: "#b9a28a",
   },
+  {
+    id: "absorbing_man",
+    name: "Absorbing Man",
+    codes: ["04076", "04077", "04078"],
+    schemes: ["04079b"],
+    module: "hydra_patrol",
+    difficulty: 2,
+    title: "None Shall Pass",
+    location: "The wilderness",
+    description:
+      "Race past Crusher Creel as he absorbs his surroundings. Every delay makes the environment more dangerous.",
+    color: "#95b2a1",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },

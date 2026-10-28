@@ -256,6 +256,9 @@ export interface Attack {
   isVillain: boolean;
 }
 export interface GameState {
+  /** Local standalone campaign link; the journal is stored outside the engine. */
+  campaign?: { id: string; stage: number };
+  absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */
   crossbones?: import("./crossbones.js").CrossbonesState;
   /** Original Magneto main stages, future villains and set-aside Orbital Decay. */

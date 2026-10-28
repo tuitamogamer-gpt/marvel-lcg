@@ -99,6 +99,8 @@ jobs:
             scripts: test:audio
           - group: experimental-weapons
             scripts: test:experimental-weapons
+          - group: campaigns
+            scripts: test:campaigns
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules
