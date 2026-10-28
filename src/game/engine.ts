@@ -1,3 +1,4 @@
+import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
 import * as nickFury from "./nick-fury.js";
 import * as magnetoHero from "./magneto-hero.js";
@@ -4014,17 +4015,23 @@ function advanceVillain(
     );
     return;
   }
-  if (["magneto", "crossbones"].includes(s.villainId)) {
+  if (["magneto", "crossbones", "absorbing_man"].includes(s.villainId)) {
     const next = (
-      s.villainId === "crossbones" ? s.crossbones : s.magneto
+      s.villainId === "absorbing_man"
+        ? s.absorbingMan
+        : s.villainId === "crossbones"
+          ? s.crossbones
+          : s.magneto
     )?.villainDeck?.shift();
     if (!next) {
       endGame(
         s,
         true,
-        s.villainId === "crossbones"
-          ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
-          : "Magneto is defeated. Asteroid M is safe.",
+        s.villainId === "absorbing_man"
+          ? "Absorbing Man is defeated. The way is clear."
+          : s.villainId === "crossbones"
+            ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
+            : "Magneto is defeated. Asteroid M is safe.",
       );
       return;
     }
@@ -4039,7 +4046,9 @@ function advanceVillain(
       stunCards: old.stunCards,
       confuseCards: old.confuseCards,
       toughCards: old.toughCards,
-      ...(s.villainId === "crossbones" ? { counters: old.counters } : {}),
+      ...(["crossbones", "absorbing_man"].includes(s.villainId)
+        ? { counters: old.counters }
+        : {}),
     });
     s.villain = next as GameState["villain"];
     if (s.attack?.attacker === old.id) s.attack.attacker = next.id;
@@ -4047,7 +4056,7 @@ function advanceVillain(
     for (const p of [...s.attachments, ...allInPlay(s)])
       if (p.attachedTo === old.id) p.attachedTo = next.id;
     s.removed.push(resetPiece(old));
-    if (s.villainId === "crossbones") {
+    if (["crossbones", "absorbing_man"].includes(s.villainId)) {
       s.villain.maxHp =
         card(s.villain).health! * s.playerCount +
         wideawake.projectWideawakeModifiers(s, s.villain, { isTextBlank })
@@ -4113,7 +4122,11 @@ function advanceVillain(
   villainSetup(s);
 }
 function villainSetup(s: GameState) {
-  add(s, ...(crossbones.crossbonesReveal(s, s.villain) || []));
+  add(
+    s,
+    ...(crossbones.crossbonesReveal(s, s.villain) || []),
+    ...(absorbingMan.absorbingReveal(s, s.villain) || []),
+  );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
     s,
@@ -4952,6 +4965,11 @@ function captainPackHasTrait(
       trait,
       captainPrintedHasTrait,
     )
+  )
+    return true;
+  if (
+    (target === "villain" || target === s.villain.id) &&
+    absorbingMan.absorbingTraits(s).includes(trait.replace(/\.$/, ""))
   )
     return true;
   if (mariaHill.mariaHillTrait(s, target, trait)) return true;
@@ -7115,6 +7133,9 @@ export function newGame(config: {
           c.code !== "32088b" &&
           !(v.id === "magneto" && ["32144b", "32145b"].includes(c.code)) &&
           (c.type_code !== "environment" ||
+            (v.id === "absorbing_man" &&
+              c.set_code === v.id &&
+              c.pack_code === scenarioPack) ||
             selectedModules.includes(c.set_code || ""))) ||
           (team.some(
             (h) =>
@@ -7131,7 +7152,42 @@ export function newGame(config: {
   deadpool.deadpoolSetupPool(s, makePiece);
   if (s.deadpool?.initializedPoolSeats.length)
     s.encounter.deck = shuffle(s, s.encounter.deck);
-  if (v.id === "crossbones") {
+  if (v.id === "absorbing_man") {
+    s.scheme.threat = 2 * s.playerCount;
+    s.absorbingMan = {
+      delay: 0,
+      currentMain: makePiece(s, "04079b"),
+      villainDeck: [makePiece(s, v.codes[stage])],
+    };
+    s.villain = Object.assign(makePiece(s, v.codes[stage - 1]), {
+      hp,
+      maxHp: hp,
+      stage,
+    });
+    const index = s.encounter.deck.findIndex(
+      (p) => card(p).type_code === "environment",
+    );
+    need(index >= 0, "Absorbing Man requires an environment.");
+    const discarded = s.encounter.deck.splice(0, index + 1);
+    const environment = discarded.pop()!;
+    visionPorts.putEnvironment(s, environment);
+    s.encounter.deck = shuffle(s, [
+      ...s.encounter.deck,
+      ...s.encounter.discard,
+      ...discarded,
+    ]);
+    s.encounter.discard = [];
+    s.queue.push(
+      ...(absorbingMan.absorbingReveal(s, s.villain) || []).map((e) =>
+        effectContext(s, { ...e, actorId: s.firstPlayerId }),
+      ),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "crossbones") {
     s.crossbones = {
       weaponDeck: shuffle(
         s,
@@ -9365,6 +9421,7 @@ export function abilityOptions(
     ...zzzax.zzzaxActions(s, p, zzzaxPorts),
     ...experimentalWeapons.experimentalWeaponsActions(s, p),
     ...redSkullModules.redSkullActions(s, p),
+    ...absorbingMan.absorbingActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
     ...mutagenAttachmentActions(s, p),
     ...scarletWitch.scarletWitchAttachmentActions(s, p, scarletPorts),
@@ -9792,6 +9849,14 @@ function ability(s: GameState, id: string, action = "special") {
     return;
   const moduleSource = find(s, id);
   if (moduleSource) {
+    if (moduleSource.code === "04084") {
+      const selected = absorbingMan
+        .absorbingActions(s, moduleSource)
+        .find((o) => !action || action === "special" || o.id === action);
+      need(selected, "Ball and Chain's Hero Action is unavailable.");
+      add(s, ...selected!.effects);
+      return;
+    }
     const redSkullEffects = redSkullModules.redSkullActionEffects(
       s,
       moduleSource,
@@ -13359,6 +13424,30 @@ const crossbonesPorts: crossbones.CrossbonesPorts = {
       }),
     ),
 };
+const absorbingManPorts: absorbingMan.AbsorbingManPorts = {
+  ...mutagenPorts,
+  revealHidden,
+  reveal: crossbonesPorts.reveal,
+  giveTough: crossbonesPorts.giveTough,
+  indirect: (s, playerId, amount, source) => {
+    if (s.players.some((p) => p.id === playerId && !p.eliminated))
+      crossbonesPorts.indirect(s, playerId, amount, source);
+  },
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  shuffleIntoEncounter: (s, p) => {
+    s.attachments = s.attachments.filter((q) => q.id !== p.id);
+    mutagenPorts.shuffleIntoEncounter(s, p);
+  },
+  discardHand,
+  handResources: (_s, p) => resources(card(p)).length,
+  controlledCards: (s) =>
+    [
+      ...s.player.inPlay,
+      ...s.sideSchemes.filter(
+        (p) => p.playerSideSchemeController === s.activePlayerId,
+      ),
+    ].filter((p) => !isPermanent(card(p))),
+};
 const armadilloPorts: armadillo.ArmadilloPorts = {
   ...mutagenPorts,
   shuffleEncounter: (s) => {
@@ -16146,7 +16235,8 @@ function sinisterNativeTraits(s: GameState, p: Piece): string[] {
     "Regressed",
   ])
     if (captainPackHasTrait(s, p.id, t) && !traits.includes(t)) traits.push(t);
-  return traits;
+  if (p.id === s.villain.id) traits.push(...absorbingMan.absorbingTraits(s));
+  return [...new Set(traits)];
 }
 function sinisterNativeHasTrait(s: GameState, id: string, trait: string) {
   const identityId =
@@ -17439,6 +17529,10 @@ const visionPorts: vision.VisionPorts = {
   giveObligation: spectrumPorts.giveObligation,
   putEnvironment: (s, p) => {
     removeEncounterInstance(s, p.id);
+    if (s.absorbingMan && !isTextBlank(s, s.absorbingMan.currentMain)) {
+      for (const old of [...(s.environments || [])])
+        if (old.id !== p.id && !isPermanent(card(old))) discardPiece(s, old.id);
+    }
     if (!(s.environments ||= []).some((q) => q.id === p.id))
       s.environments.push(p);
   },
@@ -21141,6 +21235,7 @@ function boostEffects(s: GameState, p: Piece) {
     return;
   }
   const rise =
+    absorbingMan.absorbingBoost(s, p) ??
     crossbones.crossbonesBoost(s, p) ??
     redSkullModules.redSkullBoost(s, p, redSkullModulePorts) ??
     starLord.starLordBoost(s, p) ??
@@ -21569,6 +21664,7 @@ function finishScheme(s: GameState) {
           .filter((p) => rulesCode(p) === "01180")
           .map((p) => E("threat", { target: p.id, amount: 2 }))
       : []),
+    ...absorbingMan.absorbingActivation(s, id, s.activePlayerId),
     ...sabretooth.sabretoothAfterActivation(s, {
       token: (activation.id ||= `scheme${s.nextId++}`),
       enemyId: id,
@@ -22334,6 +22430,7 @@ function finishAttackAfterDamage(
               ]
             : []),
           ...ironspider.ironspiderSinisterActivationResponses(s, a.attacker),
+          ...absorbingMan.absorbingAttackResponses(s, a, recipientId),
           ...redSkullModules.redSkullAttackResponses(s, a, redSkullModulePorts),
           ...experimentalWeapons.experimentalWeaponsAttackResponses(
             s,
@@ -22956,6 +23053,10 @@ function reveal(
       mansionAttack.MANSION_ATTACK_SCRIPT_CODES.some(
         (code) => code === p.code,
       ) ||
+      (absorbingMan.ABSORBING_MAN_SCRIPT_CODES.some(
+        (code) => code === p.code,
+      ) &&
+        c.type_code !== "attachment") ||
       (crossbones.CROSSBONES_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       masterMold.MASTER_MOLD_SCRIPT_CODES.some((code) => code === p.code) ||
@@ -23034,6 +23135,7 @@ function reveal(
       ...experimentalWeapons.EXPERIMENTAL_WEAPONS_SCRIPT_CODES,
       ...redSkullModules.RED_SKULL_MODULE_SCRIPT_CODES,
       ...crossbones.CROSSBONES_SCRIPT_CODES,
+      ...absorbingMan.ABSORBING_MAN_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       ...RISKY_BUSINESS_SCRIPT_CODES,
@@ -23111,6 +23213,7 @@ function reveal(
       ...experimentalWeapons.EXPERIMENTAL_WEAPONS_SCRIPT_CODES,
       ...redSkullModules.RED_SKULL_MODULE_SCRIPT_CODES,
       ...crossbones.CROSSBONES_SCRIPT_CODES,
+      ...absorbingMan.ABSORBING_MAN_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -23140,6 +23243,7 @@ function reveal(
       mutagenEncounterReveal(s, p) ??
       armadillo.armadilloReveal(s, p) ??
       experimentalWeapons.experimentalWeaponsReveal(s, p) ??
+      absorbingMan.absorbingReveal(s, p) ??
       crossbones.crossbonesReveal(s, p) ??
       redSkullModules.redSkullReveal(s, p) ??
       zzzax.zzzaxReveal(s, p) ??
@@ -23206,6 +23310,7 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    absorbingMan.absorbingReveal(s, p) ??
     crossbones.crossbonesReveal(s, p) ??
     redSkullModules.redSkullReveal(s, p) ??
     domino.dominoEncounter(s, p) ??
@@ -24208,18 +24313,24 @@ function resolve(s: GameState, e: Effect) {
   )
     return;
   // Capture the canonical alias as the current original-source villain ID.
-  if (["mansion_attack", "magneto", "crossbones"].includes(s.villainId)) {
+  if (
+    ["mansion_attack", "magneto", "crossbones", "absorbing_man"].includes(
+      s.villainId,
+    )
+  ) {
     // Target references identify the continuing same-title character. Physical
     // card IDs, source IDs and snapshots retain their original stage identity.
     const retiredVillains =
-      s.villainId === "crossbones"
-        ? ["04058", "04059", "04060"]
-        : s.villainId === "magneto"
-          ? ["32138", "32139", "32140"]
-          : [];
+      s.villainId === "absorbing_man"
+        ? ["04076", "04077", "04078"]
+        : s.villainId === "crossbones"
+          ? ["04058", "04059", "04060"]
+          : s.villainId === "magneto"
+            ? ["32138", "32139", "32140"]
+            : [];
     const characterFields = ["target", "targetId", "enemyId", "attacker"];
     if (
-      s.villainId === "crossbones" &&
+      ["crossbones", "absorbing_man"].includes(s.villainId) &&
       [
         "enemyAttack",
         "enemyScheme",
@@ -24228,7 +24339,7 @@ function resolve(s: GameState, e: Effect) {
       ].includes(e.type)
     )
       characterFields.push("id");
-    if (s.villainId === "crossbones") {
+    if (["crossbones", "absorbing_man"].includes(s.villainId)) {
       if (e.type === "ms:melee-second") characterFields.push("firstId");
       if (e.type === "target" && e.group === "enemy")
         characterFields.push("exclude");
@@ -24479,6 +24590,7 @@ function resolve(s: GameState, e: Effect) {
           ironspider.ironspiderSinisterReveal(state, piece) ??
           armadillo.armadilloReveal(state, piece) ??
           experimentalWeapons.experimentalWeaponsReveal(state, piece) ??
+          absorbingMan.absorbingReveal(state, piece) ??
           crossbones.crossbonesReveal(state, piece) ??
           redSkullModules.redSkullReveal(state, piece) ??
           zzzax.zzzaxReveal(state, piece) ??
@@ -24565,6 +24677,7 @@ function resolve(s: GameState, e: Effect) {
     })
   )
     return;
+  if (absorbingMan.resolveAbsorbingEffect(s, e, absorbingManPorts)) return;
   if (crossbones.resolveCrossbonesEffect(s, e, crossbonesPorts)) return;
   if (redSkullModules.resolveRedSkullModuleEffect(s, e, redSkullModulePorts))
     return;
@@ -32925,6 +33038,7 @@ function resolve(s: GameState, e: Effect) {
         ![
           "mutagen_formula",
           "crossbones",
+          "absorbing_man",
           "project_wideawake",
           "mansion_attack",
           "magneto",
@@ -33169,6 +33283,7 @@ function resolve(s: GameState, e: Effect) {
           ? eachPlayer(s, E("ultronChoice", { amount: 2 }))
           : []),
         ...sabretooth.sabretoothVillainPhaseStepOne(s),
+        ...(s.absorbingMan ? [E("absorbing:delay")] : []),
       );
       break;
     case "villainActivate": {
@@ -33658,6 +33773,7 @@ function run(s: GameState) {
       e.type.startsWith("sw:hydra") ||
       e.type === "red-skull-modules:patrol-search" ||
       e.type.startsWith("crossbones:") ||
+      e.type.startsWith("absorbing:") ||
       e.type.startsWith("sabretooth:") ||
       e.type.startsWith("sabretooth-native:") ||
       e.type.startsWith("wideawake:") ||
@@ -34021,6 +34137,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...zzzax.zzzaxActions(s, p, zzzaxPorts),
               ...experimentalWeapons.experimentalWeaponsActions(s, p),
               ...redSkullModules.redSkullActions(s, p),
+              ...absorbingMan.absorbingActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
               ...goblinModuleAttachmentActions(s, p),
               ...mutagenAttachmentActions(s, p),

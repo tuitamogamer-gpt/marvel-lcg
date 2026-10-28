@@ -216,11 +216,16 @@ function ownedPieces(s: GameState, originalIds?: Set<string>): Piece[] {
 /** Native scenario piles own original main/villain/progress cards. Public
  * scheme counters, attacker snapshots and retired villain views own no cards. */
 function scenarioPhysicalPieces(s: GameState): Piece[] {
-  if (!["mansion_attack", "magneto", "crossbones"].includes(s.villainId))
+  if (
+    !["mansion_attack", "magneto", "crossbones", "absorbing_man"].includes(
+      s.villainId,
+    )
+  )
     return [];
   const m = s.mansionAttack;
   const g = s.magneto;
   const c = s.crossbones;
+  const a = s.absorbingMan;
   const pieces: Piece[] = [];
   const visit = (p: Piece) => {
     pieces.push(p);
@@ -256,7 +261,11 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
     ...(m?.activeVillainRetired ? [] : [s.villain]),
-    ...(m?.villainDeck || g?.villainDeck || c?.villainDeck || []),
+    ...(m?.villainDeck ||
+      g?.villainDeck ||
+      c?.villainDeck ||
+      a?.villainDeck ||
+      []),
     ...(m?.mainDeck || g?.mainDeck || c?.mainDeck || []),
     ...(m?.currentMain
       ? [m.currentMain]
@@ -264,7 +273,9 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
         ? [g.currentMain]
         : c?.currentMain
           ? [c.currentMain]
-          : []),
+          : a?.currentMain
+            ? [a.currentMain]
+            : []),
     ...(g?.orbital ? [g.orbital] : []),
     ...s.minions,
     ...s.sideSchemes,
@@ -408,7 +419,9 @@ function runMission(config: (typeof missions)[number]) {
         ? "magneto_villain"
         : s.villainId === "crossbones"
           ? "crossbones"
-          : undefined;
+          : s.villainId === "absorbing_man"
+            ? "absorbing_man"
+            : undefined;
   const scenarioSources = scenarioSet
     ? scenarioPhysicalPieces(s).filter((p) => card(p).set_code === scenarioSet)
     : [];
@@ -422,7 +435,9 @@ function runMission(config: (typeof missions)[number]) {
         ? 25
         : scenarioSet === "crossbones"
           ? 18
-          : 29;
+          : scenarioSet === "absorbing_man"
+            ? 24
+            : 29;
     expect(
       scenarioSources,
       "All selected original scenario cards begin in physical zones",
@@ -661,10 +676,10 @@ describe("published expansion starters across every supported mission setting", 
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(11);
+    expect(VILLAINS).toHaveLength(12);
     expect(MODULES).toHaveLength(30);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(33904);
+    expect(missions).toHaveLength(37024);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -676,11 +691,17 @@ describe("published expansion starters across every supported mission setting", 
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
     expect(
-      createHash("sha256").update(manifest(missions).join("\n")).digest("hex"),
+      createHash("sha256")
+        .update(
+          manifest(
+            missions.filter((m) => m.villainId !== "absorbing_man"),
+          ).join("\n"),
+        )
+        .digest("hex"),
     ).toBe("6a4742e07325a1c84c1f98ec22302ae79769a2dc9efff1e71eae461d644ba6a0");
     const combined = partitions.flat();
     const previousMissions = missions.filter(
-      (mission) => mission.villainId !== "crossbones",
+      (mission) => !["crossbones", "absorbing_man"].includes(mission.villainId),
     );
     expect(previousMissions).toHaveLength(30888);
     expect(
@@ -691,6 +712,9 @@ describe("published expansion starters across every supported mission setting", 
     expect(
       missions.filter((mission) => mission.villainId === "crossbones"),
     ).toHaveLength(3016);
+    expect(
+      missions.filter((m) => m.villainId === "absorbing_man"),
+    ).toHaveLength(3120);
     // New heroes and modular sets extend the published mission grid without
     // changing the names or seeded shuffles of the 11,328 prior missions.
     const retained = previousMissions.filter(
@@ -810,12 +834,12 @@ describe("published expansion starters across every supported mission setting", 
           partition.filter((mission) => mission.villainId === "crossbones")
             .length,
       ),
-    ).toEqual([364, 364, 390, 390, 364, 364, 390, 390]);
-    expect(new Set(missions.map(key)).size).toBe(33904);
-    expect(new Set(combined.map(key)).size).toBe(33904);
+    ).toEqual([364, 364, 416, 416, 364, 364, 364, 364]);
+    expect(new Set(missions.map(key)).size).toBe(37024);
+    expect(new Set(combined.map(key)).size).toBe(37024);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(4238);
+      expect(partition).toHaveLength(4628);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -823,11 +847,11 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(81);
-      expect(Math.max(...perShard)).toBe(82);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(652);
+      expect(Math.min(...perShard)).toBe(89);
+      expect(Math.max(...perShard)).toBe(89);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(712);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 4238 : 33904);
+    expect(selectedMissions).toHaveLength(isSharded ? 4628 : 37024);
   });
   for (const mission of selectedMissions)
     it(

@@ -1,3 +1,4 @@
+import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
 import { RED_SKULL_MODULE_SCRIPT_CODES } from "./red-skull-modules.js";
 import { NICK_FURY_SCRIPT_CODES } from "./nick-fury.js";
@@ -240,6 +241,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...EXPERIMENTAL_WEAPONS_SCRIPT_CODES,
   ...RED_SKULL_MODULE_SCRIPT_CODES,
   ...CROSSBONES_SCRIPT_CODES,
+  ...ABSORBING_MAN_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,
   ...SABRETOOTH_SCRIPT_CODES,

@@ -248,7 +248,7 @@ describe("Crossbones exact standalone setup", () => {
     expect(faces).toHaveLength(17);
     for (const p of faces)
       expect(hasExecutableScript(p.code), p.code).toBe(true);
-    expect(VILLAINS.at(-1)?.id).toBe("crossbones");
+    expect(VILLAINS.findIndex((v) => v.id === "crossbones")).toBe(10);
     expect(VILLAINS.find((v) => v.id === "crossbones")?.moduleCount).toBe(3);
     expect(
       scenarioModules("crossbones").some((m) => m.id === "exper_weapon"),

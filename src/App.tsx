@@ -1,3 +1,15 @@
+import { Campaigns } from "./Campaigns";
+import {
+  CAMPAIGN_LIMIT,
+  campaignStage,
+  createCampaign,
+  launchCampaign,
+  readCampaigns,
+  recordCampaignGame,
+  writeCampaigns,
+  type Campaign,
+  type CampaignStage,
+} from "./campaigns";
 import {
   magikRevealedTop,
   magikTopPlayable,
@@ -209,7 +221,7 @@ import type {
   Resource,
 } from "./game/types";
 
-type Screen = "lobby" | "game" | "collection" | "account";
+type Screen = "lobby" | "game" | "collection" | "account" | "campaigns";
 type Inspect = {
   code: string;
   piece?: Piece;
@@ -708,6 +720,38 @@ export default function App() {
   const [game, setGame] = useState<GameState | null>(readSave);
   const [gameOwner, setGameOwner] = useState<string | null>(null);
   const missionSync = useMissionSync(account, game, gameOwner);
+  const [campaignLibrary, setCampaignLibrary] = useState(readCampaigns);
+  const campaignsRef = useRef(campaignLibrary.campaigns);
+  const [campaignSaveError, setCampaignSaveError] = useState(false);
+  function saveCampaignLibrary(next: Campaign[]) {
+    campaignsRef.current = next;
+    setCampaignLibrary({ campaigns: next, warning: "" });
+    const saved = writeCampaigns(next);
+    setCampaignSaveError(!saved);
+    return saved;
+  }
+  useEffect(() => {
+    if (!game?.campaign || gameOwner || campaignLibrary.warning) return;
+    const current = campaignsRef.current.find(
+      (c) => c.id === game.campaign!.id,
+    );
+    if (!current) return;
+    try {
+      const updated = recordCampaignGame(current, game);
+      if (updated !== current)
+        saveCampaignLibrary(
+          campaignsRef.current.map((c) => (c.id === updated.id ? updated : c)),
+        );
+    } catch {
+      setCampaignSaveError(true);
+    }
+  }, [game, gameOwner]);
+  useEffect(() => {
+    if (!campaignSaveError) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [campaignSaveError]);
   const [team, setTeam] = useState<
     {
       heroId: string;
@@ -1217,6 +1261,78 @@ export default function App() {
     setScreen("game");
     setRestart(false);
   }
+  function addCampaign(name: string, stages: CampaignStage[]) {
+    if (campaignLibrary.warning) throw Error(campaignLibrary.warning);
+    if (campaignsRef.current.length >= CAMPAIGN_LIMIT)
+      throw Error("Ten campaigns are already saved.");
+    const c = createCampaign({
+      name,
+      heroes: team,
+      stages,
+      difficulty,
+      heroic,
+    });
+    const saved = saveCampaignLibrary([c, ...campaignsRef.current]);
+    setToast(
+      saved
+        ? "Campaign created on this device."
+        : "Campaign created, but not saved. Keep this tab open and retry saving.",
+    );
+    return true;
+  }
+  async function openCampaign(id: string) {
+    const c = campaignsRef.current.find((c) => c.id === id);
+    if (!c || campaignLibrary.warning) return;
+    await missionSync.flush();
+    if (missionSync.hasUnsaved()) {
+      setToast("Save your current account mission before opening a campaign.");
+      return;
+    }
+    if (
+      game &&
+      !game.campaign &&
+      !gameOwner &&
+      !["won", "lost"].includes(game.phase) &&
+      !window.confirm(
+        "Opening a campaign replaces the current guest table. Continue?",
+      )
+    )
+      return;
+    try {
+      // Save an active campaign table before switching to another one.
+      if (game?.campaign && !gameOwner) {
+        const prior = campaignsRef.current.find(
+          (entry) => entry.id === game.campaign!.id,
+        );
+        if (prior) {
+          const updated = recordCampaignGame(prior, game);
+          saveCampaignLibrary(
+            campaignsRef.current.map((entry) =>
+              entry.id === prior.id ? updated : entry,
+            ),
+          );
+        }
+      }
+      const latest = campaignsRef.current.find((entry) => entry.id === id)!;
+      const next =
+        latest.game && !["won", "lost"].includes(latest.game.phase)
+          ? latest
+          : launchCampaign(latest, pacing);
+      saveCampaignLibrary(
+        campaignsRef.current.map((entry) => (entry.id === id ? next : entry)),
+      );
+      audio.resetSession();
+      setCombat(null);
+      clearHistory();
+      missionSync.reset();
+      setGameOwner(null);
+      setGame(upgradeSave(structuredClone(next.game!)));
+      setTutorialMissionId(null);
+      setScreen("game");
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : "Unable to open campaign.");
+    }
+  }
   function startRequest(tutorial = false) {
     setTutorialRequested(tutorial);
     if (game && !["won", "lost"].includes(game.phase)) setRestart(true);
@@ -1335,6 +1451,12 @@ export default function App() {
             onClick={() => setScreen("collection")}
           >
             <Cards size={17} /> Card library<small>02</small>
+          </button>
+          <button
+            className={screen === "campaigns" ? "active" : ""}
+            onClick={() => setScreen("campaigns")}
+          >
+            <BookOpen size={17} /> Campaigns
           </button>
           <button onClick={() => setHelp(true)}>
             How to play
@@ -1456,6 +1578,52 @@ export default function App() {
           </button>
         </div>
       )}
+      {campaignSaveError && (
+        <div className="storage-notice" role="alert">
+          <span>
+            Campaign progress is not saved. Keep this tab open or export your
+            campaign saves.
+          </span>
+          <button
+            onClick={() => {
+              if (writeCampaigns(campaignsRef.current))
+                setCampaignSaveError(false);
+            }}
+          >
+            Retry campaign save
+          </button>
+        </div>
+      )}
+      {screen === "campaigns" && (
+        <Campaigns
+          campaigns={campaignLibrary.campaigns}
+          warning={campaignLibrary.warning}
+          teamLabel={team
+            .map((seat) => HEROES.find((h) => h.id === seat.heroId)!.name)
+            .join(" · ")}
+          difficulty={`${difficulty}${heroic ? ` · Heroic ${heroic}` : ""}`}
+          onCreate={addCampaign}
+          onOpen={openCampaign}
+          onBack={() => setScreen("lobby")}
+          onNotes={(id, notes) =>
+            saveCampaignLibrary(
+              campaignsRef.current.map((c) =>
+                c.id === id ? { ...c, notes } : c,
+              ),
+            )
+          }
+          onDelete={(id) => {
+            saveCampaignLibrary(
+              campaignsRef.current.filter((c) => c.id !== id),
+            );
+            if (!gameOwner && game?.campaign?.id === id) {
+              setGame(null);
+              writeStorage(SAVE_KEY, "null");
+              clearHistory();
+            }
+          }}
+        />
+      )}
       {gameOwner && (
         <div
           className={`account-sync ${missionSync.status === "error" ? "error" : ""}`}
@@ -1495,6 +1663,7 @@ export default function App() {
           onImportGuest={
             game &&
             !gameOwner &&
+            !game.campaign &&
             account.session?.user &&
             !["won", "lost"].includes(game.phase)
               ? async () => {
@@ -2130,6 +2299,13 @@ export default function App() {
                       </select>
                     </label>
                   ))}
+                  {villain.id === "absorbing_man" && (
+                    <p className="setting-help">
+                      Absorbing Man gains traits from the current environment.
+                      At five delay counters, undefended attacks become more
+                      dangerous. Hydra Patrol is the recommended modular set.
+                    </p>
+                  )}
                   {villain.id === "crossbones" && (
                     <p>
                       Choose three different modular sets. Hydra Assault, Weapon
@@ -2920,7 +3096,30 @@ export default function App() {
                 {game.heroic ? ` · Heroic ${game.heroic}` : ""}
                 {game.startSeed ? ` · seed ${game.startSeed}` : ""}
               </span>
+              {game.campaign && (
+                <p>
+                  Campaign mission {game.campaign.stage + 1} ·{" "}
+                  {game.phase === "won"
+                    ? "Victory recorded in your campaign journal."
+                    : "Your team can retry this mission."}
+                </p>
+              )}
               <div className="modal-actions">
+                {game.campaign && (
+                  <button
+                    className="primary-button"
+                    onClick={() => setScreen("campaigns")}
+                  >
+                    {(() => {
+                      const c = campaignsRef.current.find(
+                        (c) => c.id === game.campaign!.id,
+                      );
+                      return c && campaignStage(c) === c.stages.length
+                        ? "View completed campaign"
+                        : "Continue campaign";
+                    })()}
+                  </button>
+                )}
                 <button
                   className="secondary-button"
                   onClick={() => setScreen("lobby")}
@@ -2944,7 +3143,8 @@ export default function App() {
                   className="primary-button"
                   onClick={() => void start(true)}
                 >
-                  <ArrowsClockwise size={17} /> Play again
+                  <ArrowsClockwise size={17} />{" "}
+                  {game.campaign ? "Play outside campaign" : "Play again"}
                 </button>
               </div>
             </div>
@@ -5283,6 +5483,17 @@ function Tabletop({
                     }
                   />
                 </div>
+                {s.absorbingMan && (
+                  <p
+                    role="status"
+                    aria-label={`Delay counters: ${s.absorbingMan.delay}`}
+                  >
+                    Delay counters · {s.absorbingMan.delay}
+                    {s.absorbingMan.delay >= 5
+                      ? " · Environments strengthened"
+                      : ""}
+                  </p>
+                )}
                 {s.crossbones && (
                   <span
                     className="encounter-dealt"

@@ -1107,6 +1107,7 @@ export async function generateAudit(
     "src/game/experimental-weapons.ts",
     "src/game/red-skull-modules.ts",
     "src/game/crossbones.ts",
+    "src/game/absorbing-man.ts",
     "src/game/reveal-window.ts",
     "src/game/black-widow.ts",
     "src/game/doctor-strange.ts",
