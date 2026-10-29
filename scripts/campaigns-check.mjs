@@ -210,6 +210,9 @@ try {
     .getByLabel("Mission preset", { exact: true })
     .selectOption("hydra");
   await page
+    .getByRole("button", { name: "Remove mission 5", exact: true })
+    .click();
+  await page
     .getByRole("button", { name: "Remove mission 4", exact: true })
     .click();
   await page
@@ -365,6 +368,9 @@ try {
   await page
     .getByLabel("Mission preset", { exact: true })
     .selectOption("hydra");
+  await page
+    .getByRole("button", { name: "Remove mission 5", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Remove mission 4", exact: true })
     .click();

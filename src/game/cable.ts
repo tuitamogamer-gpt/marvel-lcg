@@ -746,6 +746,8 @@ export function resolveCableEffect(s: GameState, e: Effect, ports: CablePorts) {
             title: "Askani'son",
             action: E("thwart", {
               amount: ports.thw(s),
+              thwartStatAmount: ports.thw(s),
+              thwartStatPlayerId: s.activePlayerId,
               action: true,
               source: "hero",
             }),

@@ -51,6 +51,7 @@ import { deckSizeFor } from "./game/decks";
 import { resourcesFor } from "./game/payment";
 import { inheritorsModifiers } from "./game/inheritors";
 import { zolaKeyword } from "./game/zola";
+import { redSkullProtected } from "./game/red-skull";
 import {
   SPECTRUM_FORM_CODES,
   spectrumEnergyForm,
@@ -2345,6 +2346,14 @@ export default function App() {
                       </select>
                     </label>
                   ))}
+                  {villain.id === "red_skull" && (
+                    <p className="setting-help">
+                      Side schemes have their own deck. Reveal one each villain
+                      phase; each side scheme in play increases Red Skull's
+                      attack. Defeat the Red House to damage him. Hydra Assault
+                      and Hydra Patrol are the recommended modular sets.
+                    </p>
+                  )}
                   {villain.id === "zola" && (
                     <p className="setting-help">
                       Hydra Prison captures hero-specific allies. Test counters
@@ -4712,6 +4721,8 @@ function AttachedCards({
                 "04073",
                 "04074",
                 "04075",
+                "04132",
+                "04133",
                 "04148",
                 "04149",
                 "25032",
@@ -4738,6 +4749,8 @@ function AttachedCards({
                     "04073",
                     "04074",
                     "04075",
+                    "04132",
+                    "04133",
                     "04148",
                     "04149",
                     "29038",
@@ -4751,6 +4764,8 @@ function AttachedCards({
                     "04073",
                     "04074",
                     "04075",
+                    "04132",
+                    "04133",
                     "04148",
                     "04149",
                     "29038",
@@ -4767,6 +4782,8 @@ function AttachedCards({
                   "04073",
                   "04074",
                   "04075",
+                  "04132",
+                  "04133",
                   "04148",
                   "04149",
                   "29038",
@@ -5201,6 +5218,11 @@ function Tabletop({
                     Before boosts & triggered abilities
                   </span>
                   <Status piece={s.villain} />
+                  {redSkullProtected(s) && (
+                    <span className="stat-caption" role="status">
+                      Protected by the Red House · cannot take damage
+                    </span>
+                  )}
                   {s.magneto &&
                     magnetoDamageCap(s, { isTextBlank }) !== undefined && (
                       <span
@@ -5464,6 +5486,7 @@ function Tabletop({
                     >
                       <CardImage code={p.code} />
                     </button>
+                    <AttachedCards game={s} host={p} inspect={inspect} />
                     <div className="side-scheme-counter">
                       <span className="threat-chip">
                         <PremiumToken kind="threat" />
@@ -5546,6 +5569,30 @@ function Tabletop({
                     }
                   />
                 </div>
+                {s.redSkull && (
+                  <>
+                    <span className="table-group-label">SIDE-SCHEME DECK</span>
+                    <div className="table-piles">
+                      <TablePile
+                        kind="encounter"
+                        count={s.redSkull.sideDeck.length}
+                        label="Side-scheme draw pile"
+                      />
+                      <TablePile
+                        kind="discard"
+                        count={s.redSkull.sideDiscard.length}
+                        top={s.redSkull.sideDiscard.at(-1)}
+                        label="Side-scheme discard"
+                        onOpen={() =>
+                          setPile({
+                            title: "Side-scheme discard",
+                            cards: s.redSkull!.sideDiscard,
+                          })
+                        }
+                      />
+                    </div>
+                  </>
+                )}
                 {s.zola && (
                   <span
                     className="encounter-dealt"

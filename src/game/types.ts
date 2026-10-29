@@ -258,6 +258,7 @@ export interface Attack {
 export interface GameState {
   /** Local standalone campaign link; the journal is stored outside the engine. */
   campaign?: { id: string; stage: number };
+  redSkull?: import("./red-skull.js").RedSkullState;
   zola?: import("./zola.js").ZolaState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;

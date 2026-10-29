@@ -64,7 +64,8 @@
     "test:red-skull-modules": "node scripts/red-skull-modules-check.mjs",
     "test:crossbones": "node scripts/crossbones-check.mjs",
     "test:campaigns": "node scripts/campaigns-check.mjs",
-    "test:zola": "node scripts/zola-check.mjs"
+    "test:zola": "node scripts/zola-check.mjs",
+    "test:red-skull": "node scripts/red-skull-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

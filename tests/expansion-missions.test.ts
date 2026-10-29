@@ -182,6 +182,9 @@ function ownedPieces(s: GameState, originalIds?: Set<string>): Piece[] {
     ...(s.encounter.storedBoosts || []),
     ...(s.crossbones?.weaponDeck || []),
     ...(s.taskmaster?.captives || []),
+    ...(s.redSkull?.sideDeck || []),
+    ...(s.redSkull?.sideDiscard || []),
+    ...(s.redSkull?.sleeper ? [s.redSkull.sleeper] : []),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
     ...(s.attack?.pendingBoosts || []),
@@ -225,6 +228,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       "absorbing_man",
       "taskmaster",
       "zola",
+      "red_skull",
     ].includes(s.villainId)
   )
     return [];
@@ -234,6 +238,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
   const a = s.absorbingMan;
   const t = s.taskmaster;
   const z = s.zola;
+  const r = s.redSkull;
   const pieces: Piece[] = [];
   const visit = (p: Piece) => {
     pieces.push(p);
@@ -267,6 +272,9 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
     ...(s.encounter.storedBoosts || []),
     ...(s.crossbones?.weaponDeck || []),
     ...(s.taskmaster?.captives || []),
+    ...(s.redSkull?.sideDeck || []),
+    ...(s.redSkull?.sideDiscard || []),
+    ...(s.redSkull?.sleeper ? [s.redSkull.sleeper] : []),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
     ...(m?.activeVillainRetired ? [] : [s.villain]),
@@ -276,8 +284,14 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       a?.villainDeck ||
       t?.villainDeck ||
       z?.villainDeck ||
+      r?.villainDeck ||
       []),
-    ...(m?.mainDeck || g?.mainDeck || c?.mainDeck || z?.mainDeck || []),
+    ...(m?.mainDeck ||
+      g?.mainDeck ||
+      c?.mainDeck ||
+      z?.mainDeck ||
+      r?.mainDeck ||
+      []),
     ...(m?.currentMain
       ? [m.currentMain]
       : g?.currentMain
@@ -290,7 +304,9 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
               ? [t.currentMain]
               : z?.currentMain
                 ? [z.currentMain]
-                : []),
+                : r?.currentMain
+                  ? [r.currentMain]
+                  : []),
     ...(g?.orbital ? [g.orbital] : []),
     ...s.minions,
     ...s.sideSchemes,
@@ -440,7 +456,9 @@ function runMission(config: (typeof missions)[number]) {
               ? "taskmaster"
               : s.villainId === "zola"
                 ? "zola"
-                : undefined;
+                : s.villainId === "red_skull"
+                  ? "red_skull"
+                  : undefined;
   const scenarioSources = scenarioSet
     ? scenarioPhysicalPieces(s).filter((p) => card(p).set_code === scenarioSet)
     : [];
@@ -460,7 +478,9 @@ function runMission(config: (typeof missions)[number]) {
               ? 22
               : scenarioSet === "zola"
                 ? 30
-                : 29;
+                : scenarioSet === "red_skull"
+                  ? 27
+                  : 29;
     expect(
       scenarioSources,
       "All selected original scenario cards begin in physical zones",
@@ -699,10 +719,10 @@ describe("published expansion starters across every supported mission setting", 
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(14);
+    expect(VILLAINS).toHaveLength(15);
     expect(MODULES).toHaveLength(30);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(43160);
+    expect(missions).toHaveLength(46280);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -719,14 +739,16 @@ describe("published expansion starters across every supported mission setting", 
           manifest(
             missions.filter(
               (m) =>
-                !["absorbing_man", "taskmaster", "zola"].includes(m.villainId),
+                !["absorbing_man", "taskmaster", "zola", "red_skull"].includes(
+                  m.villainId,
+                ),
             ),
           ).join("\n"),
         )
         .digest("hex"),
     ).toBe("6a4742e07325a1c84c1f98ec22302ae79769a2dc9efff1e71eae461d644ba6a0");
     const absorbingSnapshot = missions.filter(
-      (m) => !["taskmaster", "zola"].includes(m.villainId),
+      (m) => !["taskmaster", "zola", "red_skull"].includes(m.villainId),
     );
     expect(absorbingSnapshot).toHaveLength(37024);
     expect(
@@ -737,7 +759,9 @@ describe("published expansion starters across every supported mission setting", 
     expect(missions.filter((m) => m.villainId === "taskmaster")).toHaveLength(
       3016,
     );
-    const taskmasterSnapshot = missions.filter((m) => m.villainId !== "zola");
+    const taskmasterSnapshot = missions.filter(
+      (m) => !["zola", "red_skull"].includes(m.villainId),
+    );
     expect(taskmasterSnapshot).toHaveLength(40040);
     expect(
       createHash("sha256")
@@ -745,12 +769,26 @@ describe("published expansion starters across every supported mission setting", 
         .digest("hex"),
     ).toBe("5649977ca5e521c574a85b5af8b992349d64bd06605b1d8207217f1ae853c8a6");
     expect(missions.filter((m) => m.villainId === "zola")).toHaveLength(3120);
+    const zolaSnapshot = missions.filter((m) => m.villainId !== "red_skull");
+    expect(zolaSnapshot).toHaveLength(43160);
+    expect(
+      createHash("sha256")
+        .update(manifest(zolaSnapshot).join("\n"))
+        .digest("hex"),
+    ).toBe("dc71d9702420d7de9ca79f5ebea5447740a195b314adbc288dfa39fb7a4117a8");
+    expect(missions.filter((m) => m.villainId === "red_skull")).toHaveLength(
+      3120,
+    );
     const combined = partitions.flat();
     const previousMissions = missions.filter(
       (mission) =>
-        !["crossbones", "absorbing_man", "taskmaster", "zola"].includes(
-          mission.villainId,
-        ),
+        ![
+          "crossbones",
+          "absorbing_man",
+          "taskmaster",
+          "zola",
+          "red_skull",
+        ].includes(mission.villainId),
     );
     expect(previousMissions).toHaveLength(30888);
     expect(
@@ -884,11 +922,11 @@ describe("published expansion starters across every supported mission setting", 
             .length,
       ),
     ).toEqual([377, 377, 377, 377, 377, 377, 377, 377]);
-    expect(new Set(missions.map(key)).size).toBe(43160);
-    expect(new Set(combined.map(key)).size).toBe(43160);
+    expect(new Set(missions.map(key)).size).toBe(46280);
+    expect(new Set(combined.map(key)).size).toBe(46280);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(5395);
+      expect(partition).toHaveLength(5785);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -896,11 +934,11 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(103);
-      expect(Math.max(...perShard)).toBe(104);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(830);
+      expect(Math.min(...perShard)).toBe(111);
+      expect(Math.max(...perShard)).toBe(112);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(890);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 5395 : 43160);
+    expect(selectedMissions).toHaveLength(isSharded ? 5785 : 46280);
   });
   for (const mission of selectedMissions)
     it(

@@ -265,12 +265,12 @@ describe("Crossbones original retail source contract", () => {
 });
 
 describe("Crossbones executable setup and source acceptance", () => {
-  it("retains Crossbones support and the still-pending later boxed scenario gaps", () => {
+  it("retains Crossbones support and the still-pending official campaign gaps", () => {
     for (const code of scenarioCodes) {
       expect(hasExecutableScript(code), code).toBe(true);
       expect(EXPLICIT_CARD_SCRIPTS.has(code), code).toBe(true);
     }
-    for (const code of ["04125"])
+    for (const code of ["04155", "04159a", "04159b", "04163"])
       expect(hasExecutableScript(code), code).toBe(false);
     expect(VILLAINS[10]).toMatchObject({
       id: "crossbones",

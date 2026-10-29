@@ -895,7 +895,22 @@ export function resolveNovaIronheartPackEffect(
       const amount = e.totalStats
         ? Object.values(ports.heroStats(s)).reduce((sum, n) => sum + n, 0)
         : e.amount;
-      ports.thwartProgram(s, [P("thwart-target", { id: e.id, amount })], after);
+      ports.thwartProgram(
+        s,
+        [
+          P("thwart-target", {
+            id: e.id,
+            amount,
+            ...(e.totalStats
+              ? {
+                  thwartStatAmount: ports.heroStats(s).thwart,
+                  thwartStatPlayerId: s.activePlayerId,
+                }
+              : {}),
+          }),
+        ],
+        after,
+      );
       break;
     }
     case "nova-ironheart-pack:thwart-target":
@@ -914,7 +929,17 @@ export function resolveNovaIronheartPackEffect(
       );
       ports.queue(
         s,
-        E("thwart", { target: e.target, amount: e.amount, source: e.id }),
+        E("thwart", {
+          target: e.target,
+          amount: e.amount,
+          source: e.id,
+          ...(e.thwartStatAmount !== undefined
+            ? {
+                thwartStatAmount: e.thwartStatAmount,
+                thwartStatPlayerId: e.thwartStatPlayerId,
+              }
+            : {}),
+        }),
         ...after,
       );
       break;

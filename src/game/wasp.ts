@@ -54,6 +54,7 @@ export interface WaspPorts extends AntManPorts {
   cardCost(s: GameState, p: Piece): number;
   heroStat(s: GameState, power: WaspPower): number;
   basicThwartUsesAttack?(s: GameState, target: string): boolean;
+  basicThwartMayUseAttack?(s: GameState, target: string): boolean;
   shufflePlayerDeck(s: GameState): void;
   shuffleEncounter(s: GameState): void;
   /** Commit the entire legal target snapshot simultaneously, then open the
@@ -588,7 +589,11 @@ export function resolveWaspEffect(
           power === "thwart" &&
             ports
               .schemeTargets(s, true)
-              .some((t) => ports.basicThwartUsesAttack?.(s, t.id))
+              .some(
+                (t) =>
+                  ports.basicThwartUsesAttack?.(s, t.id) ||
+                  ports.basicThwartMayUseAttack?.(s, t.id),
+              )
             ? ports.heroStat(s, "attack") +
                 Number(e.bonus || 0) +
                 Number(e.amount || 0) -
@@ -731,43 +736,47 @@ export function resolveWaspEffect(
         // substitutes ATK for that pool; start there before dividing the rest.
         // A THW division may only select targets that do not require ATK.
         const starts = legal.flatMap((t) => {
-          const attack = !!ports.basicThwartUsesAttack?.(s, t.id);
-          const total = attack ? e.attackThwartAmount : e.total;
-          const available = attack
-            ? legal
-            : legal.filter((q) => !ports.basicThwartUsesAttack?.(s, q.id));
-          const amounts =
-            total <= 0
-              ? []
-              : available.length === 1
-                ? [total]
-                : Array.from({ length: total }, (_, i) => i + 1);
-          return amounts.map((amount) => {
-            const next = {
-              ...e,
-              type: amount === total ? "wasp:division-commit" : "wasp:divide",
-              attackThwartAmount: undefined,
-              total,
-              remaining: total - amount,
-              legal: available,
-              packets: [{ target: t.id, amount }],
-            };
-            return option(
-              `${t.id}:${amount}`,
-              `${t.label} · ${amount} threat (${attack ? "ATK" : "THW"})`,
-              [next],
-              t.code,
-            );
+          const required = !!ports.basicThwartUsesAttack?.(s, t.id);
+          const optional =
+            !required && !!ports.basicThwartMayUseAttack?.(s, t.id);
+          return (
+            required ? [true] : optional ? [true, false] : [false]
+          ).flatMap((attack) => {
+            const total = attack ? e.attackThwartAmount : e.total;
+            const available = attack
+              ? legal
+              : legal.filter((q) => !ports.basicThwartUsesAttack?.(s, q.id));
+            const amounts =
+              total <= 0
+                ? []
+                : available.length === 1
+                  ? [total]
+                  : Array.from({ length: total }, (_, i) => i + 1);
+            return amounts.map((amount) => {
+              const next = {
+                ...e,
+                type: amount === total ? "wasp:division-commit" : "wasp:divide",
+                attackThwartAmount: undefined,
+                total,
+                remaining: total - amount,
+                legal: available,
+                packets: [{ target: t.id, amount }],
+              };
+              return option(
+                `${t.id}:${amount}${optional ? (attack ? ":atk" : ":thw") : ""}`,
+                `${t.label} · ${amount} threat (${attack ? "ATK" : "THW"})`,
+                [next],
+                t.code,
+              );
+            });
           });
         });
-        if (legal.length === 1) {
-          const last = starts.at(-1);
-          if (last) ports.queue(s, ...last.effects);
-        } else if (starts.length)
+        if (starts.length === 1) ports.queue(s, ...starts[0].effects);
+        else if (starts.length)
           ports.choose(
             s,
             e.title,
-            "Start on an Assault scheme to divide ATK, or use THW on other schemes.",
+            "Choose a scheme and the power to divide for this thwart.",
             starts,
           );
         break;

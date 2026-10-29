@@ -373,6 +373,7 @@ try {
     "absorbing_man",
     "taskmaster",
     "zola",
+    "red_skull",
   ].entries())
     assert.equal(
       await page
@@ -380,6 +381,9 @@ try {
         .inputValue(),
       id,
     );
+  await page
+    .getByRole("button", { name: "Remove mission 5", exact: true })
+    .click();
   for (let i = 0; i < 3; i++)
     await page
       .getByRole("button", { name: "Remove mission 1", exact: true })

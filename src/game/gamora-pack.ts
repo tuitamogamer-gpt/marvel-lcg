@@ -570,6 +570,8 @@ export function resolveGamoraPackEffect(
           title: "True Grit",
           action: E("thwart", {
             amount: ports.heroThwart(s),
+            thwartStatAmount: ports.heroThwart(s),
+            thwartStatPlayerId: s.activePlayerId,
             source: "hero",
             action: true,
             thwartInitiated: true,

@@ -16,7 +16,7 @@ import {
 } from "../src/campaigns";
 import { dispatch } from "../src/game/engine";
 import { card } from "../src/game/cards";
-import { reload } from "./dv-test-helpers";
+import { choose, command, reload } from "./dv-test-helpers";
 import type { Campaign } from "../src/campaigns";
 const create = () =>
   createCampaign({
@@ -141,7 +141,9 @@ describe("saved standalone campaigns", () => {
     const skipped = structuredClone(c);
     skipped.attempts[0].stage = 1;
     expect(() => validateCampaign(skipped)).toThrow();
-    expect(() => defaultCampaignStage("red_skull")).toThrow(/implemented/);
+    expect(() => defaultCampaignStage("brotherhood_of_badoon")).toThrow(
+      /implemented/,
+    );
     expect(() =>
       createCampaign({
         ...create(),
@@ -187,6 +189,60 @@ describe("saved standalone campaigns", () => {
     expect(mergeCampaignBackup([], parsed)).toEqual(parsed);
     parsed[0].notes = "Changed after import";
     expect(active.notes).toBe("");
+  });
+  it("restores Red Skull's separate piles and a partially chosen Censor the Past reward", () => {
+    const campaign = create();
+    campaign.stages = [defaultCampaignStage("red_skull")];
+    const launched = launchCampaign(campaign, "expert");
+    const oldGuest = reload(launched.game!);
+    expect(launched.game!.modules).toEqual(["hydra_assault", "hydra_patrol"]);
+    let game = command(launched.game!, { type: "MULLIGAN", ids: [] });
+    game = command(game, { type: "FLIP" });
+    // Move the actual scenario card into a one-threat position and retain its
+    // original ID. The basic thwart, defeat response and choices are native.
+    const index = game.redSkull!.sideDeck.findIndex((p) => p.code === "04142");
+    expect(index).toBeGreaterThanOrEqual(0);
+    const censor = game.redSkull!.sideDeck.splice(index, 1)[0];
+    censor.counters = 1;
+    game.sideSchemes.push(censor);
+    const discarded = game.player.deck.splice(0, 3);
+    game.player.discard.push(...discarded);
+    game = command(game, { type: "BASIC", action: "thwart" });
+    game = choose(game, censor.id);
+    expect(game.prompt?.title).toBe("Censor the Past");
+    game = choose(game, discarded[0].id);
+    expect(game.prompt?.title).toBe("Censor the Past");
+    expect(game.prompt?.options.some((o) => o.id === discarded[0].id)).toBe(
+      false,
+    );
+    expect(game.redSkull!.sideDiscard.map((p) => p.id)).toContain(censor.id);
+    expect(game.redSkull!.sleeper?.code).toBe("04130");
+
+    const checkpoint = recordCampaignGame(launched, game);
+    const parsed = parseCampaignBackup(JSON.stringify([checkpoint]));
+    const imported = mergeCampaignBackup([], parsed);
+    const restored = restoreCampaignTable(oldGuest, {
+      campaigns: imported,
+      warning: "",
+    })!;
+    expect(restored.redSkull).toEqual(game.redSkull);
+    expect(restored.prompt).toEqual(game.prompt);
+    expect(restored.queue).toEqual(game.queue);
+    expect(restored.redSkull).not.toBe(game.redSkull);
+    const resume = (state: NonNullable<Campaign["game"]>) =>
+      choose(choose(state, discarded[1].id), "done");
+    const uninterrupted = resume(game);
+    const resumed = resume(restored);
+    expect(resumed).toEqual(uninterrupted);
+    expect(resumed.prompt).toBeNull();
+    expect(resumed.player.discard.map((p) => p.id)).toContain(discarded[2].id);
+    for (const original of discarded.slice(0, 2))
+      expect(
+        resumed.player.deck.filter((p) => p.id === original.id),
+      ).toHaveLength(1);
+    expect(resumed.redSkull!.sideDiscard.map((p) => p.id)).toContain(censor.id);
+    expect(resumed.redSkull!.sideDeck).toEqual(game.redSkull!.sideDeck);
+    expect(resumed.redSkull!.sleeper).toEqual(game.redSkull!.sleeper);
   });
   it("preserves matching campaigns unless replacement is explicitly selected", () => {
     const current = launchCampaign(create(), "guided");

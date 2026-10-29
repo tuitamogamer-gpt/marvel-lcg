@@ -134,6 +134,7 @@ export function Campaigns({
                       "absorbing_man",
                       "taskmaster",
                       "zola",
+                      "red_skull",
                     ],
                   };
                   if (presets[e.target.value])
@@ -147,7 +148,7 @@ export function Campaigns({
                   Mutant Genesis standalone missions
                 </option>
                 <option value="hydra">
-                  Rise of Red Skull · imported missions
+                  Rise of Red Skull standalone missions
                 </option>
               </select>
             </label>

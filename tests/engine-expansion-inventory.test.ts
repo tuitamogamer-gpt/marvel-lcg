@@ -372,9 +372,9 @@ describe("complete expansion rules inventory", () => {
         "hydra_patrol",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2355);
-    expect(coverage.unsupportedFaces).toBe(2196);
-    expect(coverage.dedicatedFaces).toBe(1916);
+    expect(coverage.executableFaces).toBe(2377);
+    expect(coverage.unsupportedFaces).toBe(2174);
+    expect(coverage.dedicatedFaces).toBe(1938);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -539,6 +539,7 @@ describe("complete expansion rules inventory", () => {
         18 -
         17 -
         18 -
+        22 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -781,7 +782,7 @@ describe("complete expansion rules inventory", () => {
       .filter(
         (entry: AuditedCard) =>
           entry.installedRegistry.executable &&
-          !(entry.code >= "04076" && entry.code <= "04124") &&
+          !(entry.code >= "04076" && entry.code <= "04144") &&
           !newCodes.has(entry.code) &&
           !(
             entry.code >= "04058" &&
@@ -803,12 +804,18 @@ describe("complete expansion rules inventory", () => {
     );
     expect(product).toMatchObject({
       faceCount: 181,
-      executableFaces: 143,
+      executableFaces: 165,
       installedCardClosure: false,
     });
-    expect(product.unsupportedFaceCodes).toHaveLength(38);
+    expect(product.unsupportedFaceCodes).toHaveLength(16);
     expect(product.unsupportedFaceCodes).toEqual(
-      expect.arrayContaining(["04125"]),
+      cards
+        .filter(
+          (entry: { pack_code: string; code: string }) =>
+            entry.pack_code === "trors" && entry.code >= "04155",
+        )
+        .map((entry: { code: string }) => entry.code)
+        .sort(),
     );
     expect(inventory.installedRegistryCoverage.campaignSupport).toEqual([]);
   });
@@ -831,7 +838,7 @@ describe("complete expansion rules inventory", () => {
       .filter(
         (entry: AuditedCard) =>
           entry.installedRegistry.executable &&
-          !(entry.code >= "04076" && entry.code <= "04124") &&
+          !(entry.code >= "04076" && entry.code <= "04144") &&
           (!codes.has(entry.code) || entry.code === "04066"),
       )
       .map((entry: AuditedCard) => entry.code)
@@ -842,7 +849,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(14);
+    ).toHaveLength(15);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "crossbones",
@@ -857,6 +864,82 @@ describe("complete expansion rules inventory", () => {
       reservedSets: ["exper_weapon"],
     });
     expect(inventory.sourceHashes["src/game/crossbones.ts"]).toMatch(
+      /^[a-f0-9]{64}$/,
+    );
+    expect(inventory.installedRegistryCoverage.campaignSupport).toEqual([]);
+  });
+  it("registers the complete Red Skull scenario while preserving the previous 2,355 executable faces", () => {
+    const codes = [
+      "04125",
+      "04126",
+      "04127",
+      "04128a",
+      "04128b",
+      "04129a",
+      "04129b",
+      "04130",
+      "04131",
+      "04132",
+      "04133",
+      "04134",
+      "04135",
+      "04136",
+      "04137",
+      "04138",
+      "04139",
+      "04140",
+      "04141",
+      "04142",
+      "04143",
+      "04144",
+    ];
+    const source = cards.filter(
+      (entry: { set_code: string }) => entry.set_code === "red_skull",
+    );
+    expect(source.map((entry: { code: string }) => entry.code).sort()).toEqual(
+      codes,
+    );
+    expect(
+      source
+        .filter((entry: { code: string }) => !entry.code.endsWith("b"))
+        .reduce(
+          (count: number, entry: { quantity: number }) =>
+            count + entry.quantity,
+          0,
+        ),
+    ).toBe(28);
+    for (const code of codes) {
+      expect(EXPLICIT_CARD_SCRIPTS.has(code), code).toBe(true);
+      expect(audited.get(code)?.installedRegistry, code).toMatchObject({
+        executable: true,
+        mechanism: "dedicated-module",
+      });
+    }
+    const retained = inventory.cards
+      .filter(
+        (entry: AuditedCard) =>
+          entry.installedRegistry.executable && !codes.includes(entry.code),
+      )
+      .map((entry: AuditedCard) => entry.code)
+      .sort();
+    expect(retained).toHaveLength(2355);
+    expect(createHash("sha256").update(retained.join("\n")).digest("hex")).toBe(
+      "2544d53831d10806923660e7cc4b2681efcec978fc933bd59f783916f3604f31",
+    );
+    expect(
+      inventory.installedRegistryCoverage.registeredScenarios.find(
+        (entry: { id: string }) => entry.id === "red_skull",
+      ),
+    ).toMatchObject({
+      codes: ["04125", "04126", "04127"],
+      schemes: ["04128b", "04129b"],
+      defaultModule: "hydra_assault",
+      moduleCount: 2,
+      defaultModules: ["hydra_assault", "hydra_patrol"],
+      fixedSets: [],
+      reservedSets: [],
+    });
+    expect(inventory.sourceHashes["src/game/red-skull.ts"]).toMatch(
       /^[a-f0-9]{64}$/,
     );
     expect(inventory.installedRegistryCoverage.campaignSupport).toEqual([]);
@@ -906,7 +989,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(132);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(133);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

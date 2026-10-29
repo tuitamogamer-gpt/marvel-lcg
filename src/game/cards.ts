@@ -1131,6 +1131,21 @@ export const VILLAINS = [
       "Free your imprisoned allies and stop Zola's army of genetically enhanced minions before his tests are complete.",
     color: "#9ca36b",
   },
+  {
+    id: "red_skull",
+    name: "Red Skull",
+    codes: ["04125", "04126", "04127"],
+    schemes: ["04128b", "04129b"],
+    module: "hydra_assault",
+    moduleCount: 2,
+    defaultModules: ["hydra_assault", "hydra_patrol"],
+    difficulty: 4,
+    title: "The Rise of Red Skull",
+    location: "The Red House",
+    description:
+      "Break Hydra's grip on the world. Confront a separate deck of side schemes and awaken the Sleeper before Red Skull bends reality to his will.",
+    color: "#be6865",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },

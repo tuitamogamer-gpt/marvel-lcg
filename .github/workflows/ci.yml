@@ -103,6 +103,8 @@ jobs:
             scripts: test:campaigns
           - group: zola
             scripts: test:zola
+          - group: red-skull
+            scripts: test:red-skull
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules
