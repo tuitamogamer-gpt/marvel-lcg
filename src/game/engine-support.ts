@@ -1,3 +1,4 @@
+import { ZOLA_SCRIPT_CODES } from "./zola.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -244,6 +245,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...CROSSBONES_SCRIPT_CODES,
   ...ABSORBING_MAN_SCRIPT_CODES,
   ...TASKMASTER_SCRIPT_CODES,
+  ...ZOLA_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,
   ...SABRETOOTH_SCRIPT_CODES,

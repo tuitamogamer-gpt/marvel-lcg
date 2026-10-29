@@ -416,6 +416,54 @@ describe("Taskmaster original-source scenario", () => {
     ]);
     exact(s);
   });
+  it("Hunted by Hydra retains its physical source through multiplayer prevention and reload", () => {
+    let s = settle(
+      newGame({
+        heroId: "cable",
+        aspect: "leadership",
+        heroes: [
+          { heroId: "cable", aspect: "leadership" },
+          { heroId: "spider_man", aspect: "justice" },
+        ],
+        villainId: "taskmaster",
+        difficulty: "standard",
+        seed: 4093,
+        pacing: "expert",
+      }),
+    );
+    for (let i = 0; i < 2; i++)
+      s = settle(command(s, { type: "MULLIGAN", ids: [] }));
+    for (const seat of s.players) seatView(s, seat).player.form = "hero";
+    const field = take(s, "40012");
+    s.player.inPlay.push(field);
+    const hunted = take(s, "04106");
+    const hp = s.players.map((seat) => seatView(s, seat).player.hp);
+    s = native(s, { type: "reveal", piece: hunted });
+    while (s.prompt && s.prompt.title !== "Telekinetic Force Field") {
+      const proceed =
+        passId(s) ||
+        s.prompt.options.find((o) => o.id === "resolve")?.id ||
+        s.prompt.options[0]?.id;
+      expect(proceed, JSON.stringify(s.prompt)).toBeTruthy();
+      s = choose(s, proceed!);
+    }
+    expect(s.prompt?.title).toBe("Telekinetic Force Field");
+    for (const playerId of ["p1", "p2"]) {
+      s = reload(s);
+      const proceed = s.prompt!.options.find((o) => o.id === "continue")!;
+      expect(proceed.effects[0]).toMatchObject({
+        type: "damage",
+        actorId: playerId,
+        source: hunted.id,
+      });
+      s = choose(s, "continue");
+    }
+    s = settle(s);
+    expect(s.players.map((seat) => seatView(s, seat).player.hp)).toEqual(
+      hp.map((value) => value - 1),
+    );
+    exact(s);
+  });
   it.each(["hero", "alter"] as const)(
     "Mimicry discards five originals and activates only for the matching %s trait",
     (form) => {

@@ -372,9 +372,9 @@ describe("complete expansion rules inventory", () => {
         "hydra_patrol",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2337);
-    expect(coverage.unsupportedFaces).toBe(2214);
-    expect(coverage.dedicatedFaces).toBe(1898);
+    expect(coverage.executableFaces).toBe(2355);
+    expect(coverage.unsupportedFaces).toBe(2196);
+    expect(coverage.dedicatedFaces).toBe(1916);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -533,7 +533,13 @@ describe("complete expansion rules inventory", () => {
       )
       .flatMap((module: { faceCodes: string[] }) => module.faceCodes);
     expect(
-      coverage.executableFaces - laterModularFaces.length - 16 - 18 - 17 - 2135,
+      coverage.executableFaces -
+        laterModularFaces.length -
+        16 -
+        18 -
+        17 -
+        18 -
+        2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
       "crazy_gang",
@@ -775,7 +781,7 @@ describe("complete expansion rules inventory", () => {
       .filter(
         (entry: AuditedCard) =>
           entry.installedRegistry.executable &&
-          !(entry.code >= "04076" && entry.code <= "04108") &&
+          !(entry.code >= "04076" && entry.code <= "04124") &&
           !newCodes.has(entry.code) &&
           !(
             entry.code >= "04058" &&
@@ -797,12 +803,12 @@ describe("complete expansion rules inventory", () => {
     );
     expect(product).toMatchObject({
       faceCount: 181,
-      executableFaces: 125,
+      executableFaces: 143,
       installedCardClosure: false,
     });
-    expect(product.unsupportedFaceCodes).toHaveLength(56);
+    expect(product.unsupportedFaceCodes).toHaveLength(38);
     expect(product.unsupportedFaceCodes).toEqual(
-      expect.arrayContaining(["04109", "04125"]),
+      expect.arrayContaining(["04125"]),
     );
     expect(inventory.installedRegistryCoverage.campaignSupport).toEqual([]);
   });
@@ -825,7 +831,7 @@ describe("complete expansion rules inventory", () => {
       .filter(
         (entry: AuditedCard) =>
           entry.installedRegistry.executable &&
-          !(entry.code >= "04076" && entry.code <= "04108") &&
+          !(entry.code >= "04076" && entry.code <= "04124") &&
           (!codes.has(entry.code) || entry.code === "04066"),
       )
       .map((entry: AuditedCard) => entry.code)
@@ -836,7 +842,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(13);
+    ).toHaveLength(14);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "crossbones",
@@ -900,7 +906,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(131);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(132);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

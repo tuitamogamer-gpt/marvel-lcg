@@ -1,3 +1,4 @@
+import { zolaHealth } from "./zola.js";
 import { nickFuryAerial } from "./nick-fury.js";
 import { bishopAllyHP, bishopCharacterBonus } from "./bishop.js";
 import { nightcrawlerStats } from "./nightcrawler.js";
@@ -1117,6 +1118,19 @@ export const VILLAINS = [
       "Rescue captured heroes while Taskmaster mirrors your attacks and hunts each change of form.",
     color: "#bca88e",
   },
+  {
+    id: "zola",
+    name: "Zola",
+    codes: ["04109", "04110", "04111"],
+    schemes: ["04112b", "04113b"],
+    module: "under_attack",
+    difficulty: 4,
+    title: "The Island of Dr. Zola",
+    location: "Hydra Island",
+    description:
+      "Free your imprisoned allies and stop Zola's army of genetically enhanced minions before his tests are complete.",
+    color: "#9ca36b",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1746,6 +1760,7 @@ export function enemyAttachmentModifier(
 
 export function pieceHP(s: GameState, p: Piece) {
   return (
+    zolaHealth(s, p) +
     jubileeEnemyHealth(s, p) +
     magnetoHeroNewModifiers(s, p, captainPackHasTrait).health +
     (p.code === "drone"

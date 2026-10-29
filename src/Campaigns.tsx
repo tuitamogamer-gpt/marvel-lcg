@@ -129,7 +129,12 @@ export function Campaigns({
                       "mansion_attack",
                       "magneto",
                     ],
-                    hydra: ["crossbones", "absorbing_man", "taskmaster"],
+                    hydra: [
+                      "crossbones",
+                      "absorbing_man",
+                      "taskmaster",
+                      "zola",
+                    ],
                   };
                   if (presets[e.target.value])
                     setStages(

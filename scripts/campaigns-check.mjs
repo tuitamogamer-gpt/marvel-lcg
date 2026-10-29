@@ -210,6 +210,9 @@ try {
     .getByLabel("Mission preset", { exact: true })
     .selectOption("hydra");
   await page
+    .getByRole("button", { name: "Remove mission 4", exact: true })
+    .click();
+  await page
     .getByRole("button", { name: "Remove mission 3", exact: true })
     .click();
   await page
@@ -363,6 +366,9 @@ try {
     .getByLabel("Mission preset", { exact: true })
     .selectOption("hydra");
   await page
+    .getByRole("button", { name: "Remove mission 4", exact: true })
+    .click();
+  await page
     .getByRole("button", { name: "Remove mission 1", exact: true })
     .click();
   await page
@@ -396,7 +402,7 @@ try {
   assert.equal((await saved()).encounter.deck.length, taskmasterDeck - 1);
   await audit("taskmaster-table-1280");
   checks.push(
-    "The three-mission Rise of Red Skull preset includes Taskmaster with four original captive allies; suiting up resolves his native encounter-card discard response.",
+    "The Rise of Red Skull preset includes Taskmaster with four original captive allies; suiting up resolves his native encounter-card discard response.",
   );
   await journal();
   await page.evaluate(() => {

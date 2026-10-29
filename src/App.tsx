@@ -50,6 +50,7 @@ import {
 import { deckSizeFor } from "./game/decks";
 import { resourcesFor } from "./game/payment";
 import { inheritorsModifiers } from "./game/inheritors";
+import { zolaKeyword } from "./game/zola";
 import {
   SPECTRUM_FORM_CODES,
   spectrumEnergyForm,
@@ -2344,6 +2345,14 @@ export default function App() {
                       </select>
                     </label>
                   ))}
+                  {villain.id === "zola" && (
+                    <p className="setting-help">
+                      Hydra Prison captures hero-specific allies. Test counters
+                      build on the main scheme; at three counters, Zola brings
+                      another minion into play. Under Attack is the recommended
+                      modular set.
+                    </p>
+                  )}
                   {villain.id === "absorbing_man" && (
                     <p className="setting-help">
                       Absorbing Man gains traits from the current environment.
@@ -5472,6 +5481,15 @@ function Tabletop({
                       {(p.accelerationTokens || 0) > 0 && (
                         <span>Acceleration tokens: {p.accelerationTokens}</span>
                       )}
+                      {p.code === "04122" && (
+                        <span
+                          aria-label={`Hydra Prison: ${p.captured?.length || 0} captive ${p.captured?.length === 1 ? "ally" : "allies"}, face down`}
+                        >
+                          {p.captured?.length || 0} captive{" "}
+                          {p.captured?.length === 1 ? "ally" : "allies"} ·
+                          facedown
+                        </span>
+                      )}
                       {p.code === "32104" && (
                         <>
                           {zeroToleranceIsPermanent(s, p) && (
@@ -5528,6 +5546,16 @@ function Tabletop({
                     }
                   />
                 </div>
+                {s.zola && (
+                  <span
+                    className="encounter-dealt"
+                    role="status"
+                    aria-label={`Test counters: ${s.zola.currentMain.counters}`}
+                    title="After threat is placed each villain phase, add a test counter. At three or more counters, put a minion into play and remove three counters."
+                  >
+                    Test counters · {s.zola.currentMain.counters} / 3
+                  </span>
+                )}
                 {s.absorbingMan && (
                   <p
                     role="status"
@@ -5563,7 +5591,7 @@ function Tabletop({
                 <div className="encounter-field" aria-label="Engaged minions">
                   <span className="table-group-label">ENGAGED MINIONS</span>
                   {s.minions.map((p) => (
-                    <div className="enemy-unit" key={p.id}>
+                    <div className="enemy-unit" key={p.id} data-piece-id={p.id}>
                       <button
                         className="enemy-tile"
                         key={p.id}
@@ -5637,7 +5665,8 @@ function Tabletop({
                             </span>
                           </span>
                           {(card(p).text?.includes("Guard.") ||
-                            inheritorsModifiers(s, p).guard) && (
+                            inheritorsModifiers(s, p).guard ||
+                            zolaKeyword(s, p, "Guard") > 0) && (
                             <span className="minion-keyword">GUARD</span>
                           )}
                           {!!p.inheritorBoosts?.length && (

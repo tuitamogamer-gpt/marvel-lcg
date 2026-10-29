@@ -80,16 +80,16 @@ export function taskmasterReveal(s: GameState, p: Piece): Effect[] | null {
       return [T("mimicry", { hero: s.player.form === "hero" })];
     case "04106":
       return playerOrder(s)
-        .filter((p) => seatView(s, p).player.form === "hero")
-        .flatMap((p) => [
+        .filter((seat) => seatView(s, seat).player.form === "hero")
+        .flatMap((seat) => [
           {
             type: "damage",
             target: "hero",
             amount: 1,
             source: p.id,
-            actorId: p.id,
+            actorId: seat.id,
           },
-          { type: "randomDiscard", actorId: p.id },
+          { type: "randomDiscard", actorId: seat.id },
         ]);
     case "04107":
       return [T("capture", { id: p.id })];

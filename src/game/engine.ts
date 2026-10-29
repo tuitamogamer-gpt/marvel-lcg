@@ -1,3 +1,4 @@
+import * as zola from "./zola.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -538,7 +539,7 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
       s &&
       typeof p !== "string" &&
       name === "Guard" &&
-      acolytes.acolytesGuard(s, p)
+      (zola.zolaKeyword(s, p, "Guard") || acolytes.acolytesGuard(s, p))
     ) ||
     !!(
       s &&
@@ -818,7 +819,10 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
   const intrinsic = Math.max(
     isTextBlank(s, p) ? 0 : printedKeyword(card(p), name),
     Number(
-      name === "Guard" && (moldKeywords.guard || acolytes.acolytesGuard(s, p)),
+      name === "Guard" &&
+        (zola.zolaKeyword(s, p, "Guard") ||
+          moldKeywords.guard ||
+          acolytes.acolytesGuard(s, p)),
     ),
     Number(
       name === "Stalwart" &&
@@ -897,6 +901,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     ? storm.stormGlobal(s).retaliate +
         intrinsic +
         grantedValue +
+        zola.zolaKeyword(s, p, "Retaliate") +
         taskmaster.taskmasterKeyword(s, p, "Retaliate") +
         experimentalWeapons.experimentalWeaponsRetaliate(s, p.id) +
         mansionKeywords.retaliate
@@ -3131,6 +3136,7 @@ function dealDamage(
         : (isTextBlank(s, retaliationTarget)
             ? 0
             : printedKeyword(card(retaliationTarget), "Retaliate")) +
+          zola.zolaKeyword(s, retaliationTarget, "Retaliate") +
           taskmaster.taskmasterKeyword(s, retaliationTarget, "Retaliate") +
           antMan.antManEnemyRetaliate(s, retaliationTarget) +
           experimentalWeapons.experimentalWeaponsRetaliate(
@@ -4036,30 +4042,34 @@ function advanceVillain(
     return;
   }
   if (
-    ["magneto", "crossbones", "absorbing_man", "taskmaster"].includes(
+    ["magneto", "crossbones", "absorbing_man", "taskmaster", "zola"].includes(
       s.villainId,
     )
   ) {
     const next = (
-      s.villainId === "taskmaster"
-        ? s.taskmaster
-        : s.villainId === "absorbing_man"
-          ? s.absorbingMan
-          : s.villainId === "crossbones"
-            ? s.crossbones
-            : s.magneto
+      s.villainId === "zola"
+        ? s.zola
+        : s.villainId === "taskmaster"
+          ? s.taskmaster
+          : s.villainId === "absorbing_man"
+            ? s.absorbingMan
+            : s.villainId === "crossbones"
+              ? s.crossbones
+              : s.magneto
     )?.villainDeck?.shift();
     if (!next) {
       endGame(
         s,
         true,
-        s.villainId === "taskmaster"
-          ? "Taskmaster is defeated. The captives are safe."
-          : s.villainId === "absorbing_man"
-            ? "Absorbing Man is defeated. The way is clear."
-            : s.villainId === "crossbones"
-              ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
-              : "Magneto is defeated. Asteroid M is safe.",
+        s.villainId === "zola"
+          ? "Zola is defeated. His experiments are over."
+          : s.villainId === "taskmaster"
+            ? "Taskmaster is defeated. The captives are safe."
+            : s.villainId === "absorbing_man"
+              ? "Absorbing Man is defeated. The way is clear."
+              : s.villainId === "crossbones"
+                ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
+                : "Magneto is defeated. Asteroid M is safe.",
       );
       return;
     }
@@ -4074,7 +4084,9 @@ function advanceVillain(
       stunCards: old.stunCards,
       confuseCards: old.confuseCards,
       toughCards: old.toughCards,
-      ...(["crossbones", "absorbing_man", "taskmaster"].includes(s.villainId)
+      ...(["crossbones", "absorbing_man", "taskmaster", "zola"].includes(
+        s.villainId,
+      )
         ? { counters: old.counters }
         : {}),
     });
@@ -4084,7 +4096,11 @@ function advanceVillain(
     for (const p of [...s.attachments, ...allInPlay(s)])
       if (p.attachedTo === old.id) p.attachedTo = next.id;
     s.removed.push(resetPiece(old));
-    if (["crossbones", "absorbing_man", "taskmaster"].includes(s.villainId)) {
+    if (
+      ["crossbones", "absorbing_man", "taskmaster", "zola"].includes(
+        s.villainId,
+      )
+    ) {
       s.villain.maxHp =
         card(s.villain).health! * s.playerCount +
         wideawake.projectWideawakeModifiers(s, s.villain, { isTextBlank })
@@ -4155,6 +4171,7 @@ function villainSetup(s: GameState) {
     ...(crossbones.crossbonesReveal(s, s.villain) || []),
     ...(absorbingMan.absorbingReveal(s, s.villain) || []),
     ...(taskmaster.taskmasterReveal(s, s.villain) || []),
+    ...(zola.zolaReveal(s, s.villain) || []),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -4303,6 +4320,29 @@ function threat(
           s,
           ...magneto.magnetoMainRevealed(s, next.code),
           E("magneto-native:main-back", { actorId: s.firstPlayerId }),
+        );
+        return;
+      }
+      if (s.villainId === "zola") {
+        if (s.pendingMainCompletion) return;
+        const next = s.zola?.mainDeck.shift();
+        if (!next) {
+          endGame(s, false, "The Mad Doctor is complete. The players lose.");
+          return;
+        }
+        s.pendingMainCompletion = true;
+        discardMainAttachments(s);
+        s.removed.push(resetPiece(s.zola!.currentMain));
+        s.zola!.currentMain = next;
+        next.counters = 0;
+        s.scheme.index++;
+        s.scheme.code = next.code;
+        s.scheme.threat = 0;
+        add(
+          s,
+          ...(zola.zolaReveal(s, next) || []),
+          E("zola:main-back"),
+          E("clearMainCompletion"),
         );
         return;
       }
@@ -4540,6 +4580,7 @@ function defeatScheme(
     ...iceman.icemanSchemeDefeated(s, p),
     ...mariaHill.mariaHillSchemeDefeated(s, p),
   );
+  const zolaDefeat = zola.zolaSchemeDefeated(s, p);
   const crossbonesDefeat = crossbones.crossbonesSideSchemeDefeated(
     s,
     p,
@@ -4590,9 +4631,15 @@ function defeatScheme(
       (isPlayerSideScheme(p) && playerSideSchemeHasVictory(p))) &&
     !isTextBlank(s, p);
   const retainFind =
-    ["32065a", "32088a", "32144a", "32144b", "32145a", "32158"].includes(
-      p.code,
-    ) && !isTextBlank(s, p);
+    [
+      "32065a",
+      "32088a",
+      "32144a",
+      "32144b",
+      "32145a",
+      "32158",
+      "04122",
+    ].includes(p.code) && !isTextBlank(s, p);
   const magikDefeat = [
     ...magik.magikSideDefeated(s, p),
     ...(!isPlayerSideScheme(p)
@@ -4602,6 +4649,15 @@ function defeatScheme(
   if (!victory && !retainFind && !taskmaster.taskmasterSchemeDefeated(s, p))
     discardPiece(s, p.id);
   const responses = [
+    ...(zolaDefeat.length
+      ? [
+          {
+            id: `${p.id}:zola-defeated`,
+            title: card(p).name,
+            effects: zolaDefeat,
+          },
+        ]
+      : []),
     ...(crossbonesDefeat.length
       ? [
           {
@@ -7182,7 +7238,29 @@ export function newGame(config: {
   deadpool.deadpoolSetupPool(s, makePiece);
   if (s.deadpool?.initializedPoolSeats.length)
     s.encounter.deck = shuffle(s, s.encounter.deck);
-  if (v.id === "taskmaster") {
+  if (v.id === "zola") {
+    s.scheme.threat = 0;
+    s.zola = {
+      currentMain: makePiece(s, "04112b"),
+      mainDeck: [makePiece(s, "04113a")],
+      villainDeck: [makePiece(s, v.codes[stage])],
+    };
+    s.villain = Object.assign(makePiece(s, v.codes[stage - 1]), {
+      hp,
+      maxHp: hp,
+      stage,
+    });
+    s.queue.push(
+      ...[...zola.zolaSetup(), ...(zola.zolaReveal(s, s.villain) || [])].map(
+        (e) => effectContext(s, { ...e, actorId: s.firstPlayerId }),
+      ),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "taskmaster") {
     s.scheme.threat = s.playerCount;
     const captives = s.encounter.deck.filter((p) =>
       taskmaster.TASKMASTER_CAPTIVES.includes(p.code),
@@ -13501,6 +13579,18 @@ const crossbonesPorts: crossbones.CrossbonesPorts = {
       }),
     ),
 };
+const zolaPorts: zola.ZolaPorts = {
+  ...mutagenPorts,
+  reveal: crossbonesPorts.reveal,
+  revealHidden,
+  remainingHP: (s, p) => Math.max(0, pieceHP(s, p) - p.damage),
+  shufflePlayer: (s, id) => {
+    const view = seatView(s, id);
+    revealHidden(s);
+    view.player.deck = shuffle(s, view.player.deck);
+  },
+  giveTough: crossbonesPorts.giveTough,
+};
 const taskmasterPorts: taskmaster.TaskmasterPorts = {
   ...mutagenPorts,
   random,
@@ -16242,6 +16332,7 @@ function minionEntered(s: GameState, p: Piece) {
     E("minionReactions", { id: p.id }),
     ...thorEngagementResponses(s, p),
   );
+  add(s, ...zola.zolaMinionEntered(s, p));
 }
 function minionResponses(s: GameState, p: Piece) {
   add(s, ...waspPack.waspPackMinionEngaged(s, p));
@@ -20957,6 +21048,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     cyclops.cyclopsEnemyAttackModifier(s, p.id) +
     (p.bonusAtk || 0) +
     mutagenAttackModifiers(s, p).goblinNation +
+    zola.zolaAttack(s, p) +
     armadillo.armadilloAttackBonus(s, p) +
     zzzax.zzzaxEnemyStats(s, p).attack +
     inheritors.inheritorsModifiers(s, p).attack +
@@ -21322,6 +21414,7 @@ function boostEffects(s: GameState, p: Piece) {
     return;
   }
   const rise =
+    zola.zolaBoost(s, p) ??
     taskmaster.taskmasterBoost(s, p) ??
     absorbingMan.absorbingBoost(s, p) ??
     crossbones.crossbonesBoost(s, p) ??
@@ -23141,6 +23234,8 @@ function reveal(
       mansionAttack.MANSION_ATTACK_SCRIPT_CODES.some(
         (code) => code === p.code,
       ) ||
+      (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (absorbingMan.ABSORBING_MAN_SCRIPT_CODES.some(
@@ -23227,6 +23322,7 @@ function reveal(
       ...crossbones.CROSSBONES_SCRIPT_CODES,
       ...absorbingMan.ABSORBING_MAN_SCRIPT_CODES,
       ...taskmaster.TASKMASTER_SCRIPT_CODES,
+      ...zola.ZOLA_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       ...RISKY_BUSINESS_SCRIPT_CODES,
@@ -23306,6 +23402,7 @@ function reveal(
       ...crossbones.CROSSBONES_SCRIPT_CODES,
       ...absorbingMan.ABSORBING_MAN_SCRIPT_CODES,
       ...taskmaster.TASKMASTER_SCRIPT_CODES,
+      ...zola.ZOLA_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -23335,6 +23432,7 @@ function reveal(
       mutagenEncounterReveal(s, p) ??
       armadillo.armadilloReveal(s, p) ??
       experimentalWeapons.experimentalWeaponsReveal(s, p) ??
+      zola.zolaReveal(s, p) ??
       taskmaster.taskmasterReveal(s, p) ??
       absorbingMan.absorbingReveal(s, p) ??
       crossbones.crossbonesReveal(s, p) ??
@@ -23403,6 +23501,7 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    zola.zolaReveal(s, p) ??
     taskmaster.taskmasterReveal(s, p) ??
     absorbingMan.absorbingReveal(s, p) ??
     crossbones.crossbonesReveal(s, p) ??
@@ -24414,23 +24513,28 @@ function resolve(s: GameState, e: Effect) {
       "crossbones",
       "absorbing_man",
       "taskmaster",
+      "zola",
     ].includes(s.villainId)
   ) {
     // Target references identify the continuing same-title character. Physical
     // card IDs, source IDs and snapshots retain their original stage identity.
     const retiredVillains =
-      s.villainId === "taskmaster"
-        ? ["04093", "04094", "04095"]
-        : s.villainId === "absorbing_man"
-          ? ["04076", "04077", "04078"]
-          : s.villainId === "crossbones"
-            ? ["04058", "04059", "04060"]
-            : s.villainId === "magneto"
-              ? ["32138", "32139", "32140"]
-              : [];
+      s.villainId === "zola"
+        ? ["04109", "04110", "04111"]
+        : s.villainId === "taskmaster"
+          ? ["04093", "04094", "04095"]
+          : s.villainId === "absorbing_man"
+            ? ["04076", "04077", "04078"]
+            : s.villainId === "crossbones"
+              ? ["04058", "04059", "04060"]
+              : s.villainId === "magneto"
+                ? ["32138", "32139", "32140"]
+                : [];
     const characterFields = ["target", "targetId", "enemyId", "attacker"];
     if (
-      ["crossbones", "absorbing_man", "taskmaster"].includes(s.villainId) &&
+      ["crossbones", "absorbing_man", "taskmaster", "zola"].includes(
+        s.villainId,
+      ) &&
       [
         "enemyAttack",
         "enemyScheme",
@@ -24439,7 +24543,11 @@ function resolve(s: GameState, e: Effect) {
       ].includes(e.type)
     )
       characterFields.push("id");
-    if (["crossbones", "absorbing_man", "taskmaster"].includes(s.villainId)) {
+    if (
+      ["crossbones", "absorbing_man", "taskmaster", "zola"].includes(
+        s.villainId,
+      )
+    ) {
       if (e.type === "ms:melee-second") characterFields.push("firstId");
       if (e.type === "target" && e.group === "enemy")
         characterFields.push("exclude");
@@ -24690,6 +24798,7 @@ function resolve(s: GameState, e: Effect) {
           ironspider.ironspiderSinisterReveal(state, piece) ??
           armadillo.armadilloReveal(state, piece) ??
           experimentalWeapons.experimentalWeaponsReveal(state, piece) ??
+          zola.zolaReveal(state, piece) ??
           taskmaster.taskmasterReveal(state, piece) ??
           absorbingMan.absorbingReveal(state, piece) ??
           crossbones.crossbonesReveal(state, piece) ??
@@ -24778,6 +24887,14 @@ function resolve(s: GameState, e: Effect) {
     })
   )
     return;
+  if (e.type === "zola:main-back") {
+    const p = s.zola!.currentMain;
+    p.code = "04113b";
+    s.scheme.code = p.code;
+    s.scheme.threat = s.playerCount;
+    return;
+  }
+  if (zola.resolveZolaEffect(s, e, zolaPorts)) return;
   if (taskmaster.resolveTaskmasterEffect(s, e, taskmasterPorts)) return;
   if (absorbingMan.resolveAbsorbingEffect(s, e, absorbingManPorts)) return;
   if (crossbones.resolveCrossbonesEffect(s, e, crossbonesPorts)) return;
@@ -33162,6 +33279,7 @@ function resolve(s: GameState, e: Effect) {
           "crossbones",
           "absorbing_man",
           "taskmaster",
+          "zola",
           "project_wideawake",
           "mansion_attack",
           "magneto",
@@ -33408,6 +33526,7 @@ function resolve(s: GameState, e: Effect) {
         ...sabretooth.sabretoothVillainPhaseStepOne(s),
         ...(s.absorbingMan ? [E("absorbing:delay")] : []),
         ...taskmaster.taskmasterStepOne(s),
+        ...zola.zolaStepOne(s),
       );
       break;
     case "villainActivate": {
@@ -33899,6 +34018,7 @@ function run(s: GameState) {
       e.type.startsWith("crossbones:") ||
       e.type.startsWith("absorbing:") ||
       e.type.startsWith("taskmaster:") ||
+      e.type.startsWith("zola:") ||
       e.type.startsWith("sabretooth:") ||
       e.type.startsWith("sabretooth-native:") ||
       e.type.startsWith("wideawake:") ||
