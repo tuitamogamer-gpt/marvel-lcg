@@ -6,6 +6,7 @@ const VERSION = `${PREFIX}v2`;
 const ASSET = /^\/assets\//;
 const ART = /^\/(cards|art|icons|audio|motion)\//;
 // These landing images normally load before the first worker takes control.
+// Like all art they are optional: a renamed image must not stop installation.
 const LANDING_ART = [
   "/art/core-banner.jpg",
   "/cards/01001a.png",
@@ -14,6 +15,25 @@ const LANDING_ART = [
   "/cards/01029a.png",
   "/cards/01040a.png",
 ];
+// Card backs, tokens and playmats appear in every mission, so a first mission
+// started offline still has its table.
+const TABLE_ART = [
+  "/art/player-back.svg",
+  "/art/tabletop/hero-back.webp",
+  "/art/tabletop/encounter-back.webp",
+  "/art/tabletop/premium-tokens.webp",
+  "/art/tabletop/damage-counter.png",
+  "/art/tabletop/midnight-city.webp",
+  "/art/tabletop/helicarrier.webp",
+  "/art/tabletop/cosmic-rift.webp",
+  "/art/tabletop/wakanda.webp",
+  "/art/tabletop/photon-orbit.webp",
+  "/art/tabletop/queens-rooftops.webp",
+  "/art/tabletop/stark-workshop.webp",
+  "/art/tabletop/gamma-lab.webp",
+];
+// Build files kept by the previous offline page, for tabs still open on it.
+const MANIFEST = "/__offline-build-files.json";
 // Milestone effects are only requested when a milestone happens. They are
 // tiny, so keep them ready for a mission that is finished offline.
 const MILESTONE_MEDIA = [
@@ -35,7 +55,7 @@ async function remember(cache, request, response) {
 
 // Stores a shell page only after every build file it needs is in the cache,
 // so the cached page never points at chunks that are missing offline.
-// `fresh` re-downloads everything (installation); otherwise files that are
+// `fresh` downloads everything (installation); otherwise files that are
 // already cached are kept, because hashed build files never change.
 async function prime(cache, key, shell, fresh) {
   const html = await shell.clone().text();
@@ -44,8 +64,16 @@ async function prime(cache, key, shell, fresh) {
     if (visited.has(path)) return;
     visited.add(path);
     try {
-      if (!fresh && (await cache.match(path, { ignoreVary: true }))) return;
-      const response = await fetch(path, fresh ? { cache: "reload" } : {});
+      // A stored file is still read for the files it links to, so cleanup
+      // knows they belong to this page too.
+      const hit = !fresh && (await cache.match(path, { ignoreVary: true }));
+      // Hashed build files never change, so the browser's copy is current.
+      const response =
+        hit ||
+        (await fetch(
+          path,
+          fresh && !ASSET.test(path) ? { cache: "reload" } : {},
+        ));
       if (!response.ok) throw Error("An offline table asset is unavailable.");
       let linked = [];
       if (path.endsWith(".css")) {
@@ -66,7 +94,7 @@ async function prime(cache, key, shell, fresh) {
       await Promise.all(
         linked.map((asset) => store(asset, required && path.endsWith(".css"))),
       );
-      await cache.put(path, response);
+      if (!hit) await cache.put(path, response);
     } catch (error) {
       // On-demand chunks and effects are extras: the table opens without them.
       if (required) throw error;
@@ -79,10 +107,39 @@ async function prime(cache, key, shell, fresh) {
   );
   await Promise.all([
     ...[...assets].map((path) => store(path, true)),
-    ...(fresh ? LANDING_ART.map((path) => store(path, true)) : []),
+    ...(fresh
+      ? [...LANDING_ART, ...TABLE_ART].map((path) => store(path, false))
+      : []),
     ...MILESTONE_MEDIA.map((path) => store(path, false)),
   ]);
   await cache.put(key, shell);
+  await forget(cache, visited);
+}
+
+// Each deploy adds new hashed build files. Keep this page's files and the
+// previous page's (a tab may still be open on it) and delete the rest.
+async function forget(cache, visited) {
+  try {
+    const current = [...visited].filter((path) => ASSET.test(path));
+    const previous = await cache
+      .match(MANIFEST)
+      .then((response) => (response ? response.json() : []))
+      .catch(() => []);
+    const keep = new Set([...current, ...previous]);
+    await cache.put(
+      MANIFEST,
+      new Response(JSON.stringify(current), {
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    for (const request of await cache.keys()) {
+      const { pathname } = new URL(request.url);
+      if (ASSET.test(pathname) && !keep.has(pathname))
+        await cache.delete(request);
+    }
+  } catch {
+    // Cleanup is housekeeping; a failure leaves the offline table usable.
+  }
 }
 
 self.addEventListener("install", (event) => {
@@ -124,12 +181,14 @@ self.addEventListener("fetch", (event) => {
           // Vary: Origin headers must not hide install-time cached files.
           const hit = await cache.match(request, { ignoreVary: true });
           if (hit && ASSET.test(url.pathname)) return hit;
-          const update = fetch(request, { cache: "no-cache" }).then(
-            async (response) => {
-              await remember(cache, request, response);
-              return response;
-            },
-          );
+          const update = fetch(
+            request,
+            ASSET.test(url.pathname) ? {} : { cache: "no-cache" },
+          ).then((response) => {
+            // The page receives the file while it is being stored.
+            event.waitUntil(remember(cache, request, response));
+            return response;
+          });
           if (hit) {
             event.waitUntil(update.catch(() => {}));
             return hit;
@@ -150,8 +209,11 @@ self.addEventListener("fetch", (event) => {
             if (request.mode === "navigate" && response.ok)
               // A new deploy replaces the offline copy only once all of its
               // build files are stored; until then the previous one remains.
+              // One offline copy per page, whatever its query string.
               event.waitUntil(
-                prime(cache, request, response.clone(), false).catch(() => {}),
+                prime(cache, url.pathname, response.clone(), false).catch(
+                  () => {},
+                ),
               );
             else await remember(cache, request, response);
           } catch {
@@ -162,7 +224,7 @@ self.addEventListener("fetch", (event) => {
         .catch(async () => {
           const cache = await caches.open(VERSION);
           return (
-            (await cache.match(request)) ||
+            (await cache.match(request, { ignoreSearch: true })) ||
             (request.mode === "navigate" && (await cache.match("/"))) ||
             Response.error()
           );

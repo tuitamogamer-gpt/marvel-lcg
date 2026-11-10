@@ -80,6 +80,12 @@ function worker() {
               typeof request === "string" ? undefined : request.headers?.origin,
           });
         },
+        async keys() {
+          return [...cache.keys()].map((url) => ({ url }));
+        },
+        async delete(request: RequestValue) {
+          return cache.delete(path(request));
+        },
       };
     },
     async keys() {
@@ -130,6 +136,7 @@ function worker() {
     lifecycle,
     request,
     caches,
+    stores,
     fetch,
     responses,
     goOffline: () => {
@@ -245,6 +252,62 @@ describe("offline tabletop", () => {
     expect(await (await sw.request("/assets/table-456.js"))!.text()).toBe(
       "new table code",
     );
+  });
+  it("deletes build files of older deploys but keeps the previous page's", async () => {
+    const sw = worker();
+    await sw.lifecycle("install");
+    await sw.lifecycle("activate");
+    const deploy = (build: string) => {
+      sw.responses.set(
+        "/",
+        `<script src="/assets/table-${build}.js"></script><link href="/assets/table-123.css" rel="stylesheet">`,
+      );
+      sw.responses.set(
+        `/assets/table-${build}.js`,
+        `code ${build} import("./ribbon-${build}.js") ["assets/ribbon-${build}.js"]`,
+      );
+      sw.responses.set(`/assets/ribbon-${build}.js`, `ribbon ${build}`);
+    };
+    const stored = () =>
+      [...sw.stores.get("champions-cache-v2")!.keys()]
+        .map((url) => new URL(url).pathname)
+        .filter((path) => path.startsWith("/assets/"))
+        .sort();
+    deploy("456");
+    await sw.request("/?utm_source=newsletter", "navigate");
+    deploy("789");
+    await sw.request("/", "navigate");
+    // The first build is gone; the previous one stays for tabs still open.
+    // The unchanged stylesheet keeps its font, though only the first visit
+    // downloaded them.
+    expect(stored()).toEqual([
+      "/assets/ribbon-456.js",
+      "/assets/ribbon-789.js",
+      "/assets/table-123.css",
+      "/assets/table-456.js",
+      "/assets/table-789.js",
+      "/assets/table-font.woff2",
+    ]);
+    deploy("999");
+    await sw.request("/", "navigate");
+    expect(stored()).toEqual([
+      "/assets/ribbon-789.js",
+      "/assets/ribbon-999.js",
+      "/assets/table-123.css",
+      "/assets/table-789.js",
+      "/assets/table-999.js",
+      "/assets/table-font.woff2",
+    ]);
+    // One offline copy of the page, whatever query string it was opened with.
+    expect(
+      [...sw.stores.get("champions-cache-v2")!.keys()].filter(
+        (url) => !new URL(url).pathname.startsWith("/assets/"),
+      ),
+    ).not.toContain(`${origin}/?utm_source=newsletter`);
+    sw.goOffline();
+    expect(
+      await (await sw.request("/?utm_source=newsletter", "navigate"))!.text(),
+    ).toContain("table-999.js");
   });
   it("refreshes art at the same URL and retains it when offline", async () => {
     const sw = worker();

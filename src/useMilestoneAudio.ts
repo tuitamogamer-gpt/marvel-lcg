@@ -19,12 +19,14 @@ export function useMilestoneAudio() {
     const gesture = () => controller.unlock();
     const visibility = () => controller.setVisible(!document.hidden);
     visibility();
-    window.addEventListener("pointerdown", gesture, true);
-    window.addEventListener("keydown", gesture, true);
+    // iOS only lets audio start from the end of a touch (pointerup/click),
+    // not from pointerdown.
+    const gestures = ["pointerdown", "pointerup", "click", "keydown"];
+    for (const name of gestures) window.addEventListener(name, gesture, true);
     document.addEventListener("visibilitychange", visibility);
     return () => {
-      window.removeEventListener("pointerdown", gesture, true);
-      window.removeEventListener("keydown", gesture, true);
+      for (const name of gestures)
+        window.removeEventListener(name, gesture, true);
       document.removeEventListener("visibilitychange", visibility);
       controller.dispose();
       if (controllerRef.current === controller) controllerRef.current = null;
