@@ -107,10 +107,12 @@ function validateCampaignTable(g: GameState) {
     (r.attack === undefined ||
       (object(r.attack) &&
         [r.attack.attacker, r.attack.target, r.attack.identity].every(
-          (p) =>
+          (p, index) =>
             object(p) &&
             typeof p.name === "string" &&
-            card(p.code)?.code === p.code,
+            (card(p.code)?.code === p.code ||
+              // A facedown Controlled attacker is shown by its card back.
+              (index === 0 && p.code === "back:hero")),
         ) &&
         typeof r.attack.label === "string")) &&
     (r.payment === undefined ||

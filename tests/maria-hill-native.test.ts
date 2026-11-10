@@ -19,6 +19,14 @@ import {
 import { deckErrors, deckOptions } from "../src/game/decks.js";
 import { boardSnapshot, recordReview } from "../src/game/review.js";
 import { attackContext } from "../src/game/presentation.js";
+import { validateGame } from "../server/account.js";
+import {
+  createCampaign,
+  defaultCampaignStage,
+  launchCampaign,
+  recordCampaignGame,
+  validateCampaign,
+} from "../src/campaigns.js";
 import { MARIA_HILL_SCRIPT_CODES } from "../src/game/maria-hill.js";
 import { hasExecutableScript } from "../src/game/script-registry.js";
 import {
@@ -636,6 +644,45 @@ describe("Maria Hill source limits, payment provenance and nemesis timing", () =
       code: "back:hero",
       name: "Controlled Innocent",
     });
+  });
+  it("saves a Controlled attack to accounts and campaigns while its attacker stays face down", () => {
+    const campaign = launchCampaign(
+      createCampaign({
+        name: "Helicarrier",
+        heroes: [{ heroId: "maria_hill", aspect: "leadership" }],
+        stages: ["rhino", "klaw"].map(defaultCampaignStage),
+        difficulty: "standard",
+      }),
+      "expert",
+    );
+    let s = structuredClone(campaign.game!);
+    (s.environments ||= []).push(makePiece(s, "50032"));
+    const original = top(s, "50011");
+    s = finish(native(s, { type: "maria:controller" }));
+    s = native(s, { type: "enemyAttack", id: original.id });
+    expect(s.prompt?.context?.attack?.attacker.code).toBe("back:hero");
+    const saved = JSON.parse(JSON.stringify(s));
+    expect(() => validateGame(saved)).not.toThrow();
+    const recorded = recordCampaignGame(campaign, s);
+    expect(recorded.game?.prompt?.title).toBe(s.prompt?.title);
+    expect(() =>
+      validateCampaign(JSON.parse(JSON.stringify(recorded))),
+    ).not.toThrow();
+    // Only the attacker may be a card back, and only the hero-deck back.
+    for (const tamper of [
+      (g: typeof saved) => (g.prompt.context.attack.attacker.code = "back:x"),
+      (g: typeof saved) => (g.prompt.context.attack.target.code = "back:hero"),
+    ]) {
+      const bad = JSON.parse(JSON.stringify(s));
+      tamper(bad);
+      expect(() => validateGame(bad)).toThrow("Invalid pending decision.");
+      expect(() =>
+        validateCampaign({
+          ...JSON.parse(JSON.stringify(recorded)),
+          game: bad,
+        }),
+      ).toThrow();
+    }
   });
   it("a stunned Controller never completes an activation or its forced response", () => {
     let s = base();

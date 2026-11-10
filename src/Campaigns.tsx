@@ -274,7 +274,8 @@ export function Campaigns({
                 a.href = url;
                 a.download = "marvel-campaigns.json";
                 a.click();
-                URL.revokeObjectURL(url);
+                // Some browsers cancel a download whose URL is revoked at once.
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
               }}
             >
               Export saves

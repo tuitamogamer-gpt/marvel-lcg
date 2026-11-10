@@ -1011,6 +1011,8 @@ export default function App() {
       setGameOwner(null);
       setScreen("account");
       missionSync.reset();
+      // Undo steps belong to the account mission that just left the table.
+      clearHistory();
     }
   }, [account.session?.user?.id, gameOwner, audio.resetSession]);
   useEffect(() => {
@@ -1353,13 +1355,22 @@ export default function App() {
       setToast("Save your current account mission before opening a campaign.");
       return;
     }
+    // While an account mission is on the table, the guest mission saved on
+    // this device is out of sight but would be replaced just the same.
+    const guest = gameOwner
+      ? readSave({
+          campaigns: campaignsRef.current,
+          warning: campaignLibrary.warning,
+        })
+      : game;
     if (
-      game &&
-      !game.campaign &&
-      !gameOwner &&
-      !["won", "lost"].includes(game.phase) &&
+      guest &&
+      !guest.campaign &&
+      !["won", "lost"].includes(guest.phase) &&
       !window.confirm(
-        "Opening a campaign replaces the current guest table. Continue?",
+        gameOwner
+          ? "Opening a campaign replaces the guest mission saved on this device. Continue?"
+          : "Opening a campaign replaces the current guest table. Continue?",
       )
     )
       return;
@@ -1755,6 +1766,9 @@ export default function App() {
                   )!;
                   missionSync.adopt(record);
                   audio.resetSession();
+                  // Earlier undo steps still carry the guest table's identity
+                  // and would be saved as a second account mission.
+                  clearHistory();
                   setGame(snapshot);
                   setGameOwner(response.user!.id);
                   // The mission now lives in the account. Leaving the device

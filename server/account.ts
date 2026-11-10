@@ -200,8 +200,11 @@ const effects = (value: unknown) =>
   list(value, (e) => object(e) && typeof e.type === "string");
 function validReview(value: unknown): boolean {
   if (!object(value)) return false;
-  const person = (p: unknown) =>
-    object(p) && knownCard(p.code) && typeof p.name === "string";
+  // A facedown Controlled attacker is shown by its card back, not its face.
+  const person = (p: unknown, facedown = false) =>
+    object(p) &&
+    (knownCard(p.code) || (facedown && p.code === "back:hero")) &&
+    typeof p.name === "string";
   return (
     Number.isInteger(value.id) &&
     typeof value.title === "string" &&
@@ -230,7 +233,7 @@ function validReview(value: unknown): boolean {
       )) &&
     (value.attack === undefined ||
       (object(value.attack) &&
-        person(value.attack.attacker) &&
+        person(value.attack.attacker, true) &&
         person(value.attack.target) &&
         person(value.attack.identity) &&
         typeof value.attack.target.playerId === "string" &&
