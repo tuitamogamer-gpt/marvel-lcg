@@ -55,7 +55,9 @@ export function CardPreview() {
       return (
         direct ||
         target
-          .closest("button, [tabindex]")
+          // A container focused by script (tabindex -1, such as a dialog)
+          // is not a card control.
+          .closest('button, [tabindex]:not([tabindex="-1"])')
           ?.querySelector<HTMLElement>("[data-card-preview]") ||
         null
       );

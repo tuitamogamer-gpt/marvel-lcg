@@ -232,7 +232,7 @@ function AuthForm({ account }: { account: AccountController }) {
                 required
                 autoComplete="off"
                 spellCheck={false}
-                maxLength={48}
+                maxLength={64}
               />
             </label>
           )}

@@ -1003,7 +1003,7 @@ async function checkpoint(name, width, f) {
     );
     assert.ok(
       mainText.includes(
-        `${victoryCount(state, "main_scheme") - 1}/2 rooms completed · ${state.mansionAttack.mainDeck.length} rooms in the main scheme deck`,
+        `${victoryCount(state, "main_scheme") - 1}/2 rooms completed · ${state.mansionAttack.mainDeck.length} ${state.mansionAttack.mainDeck.length === 1 ? "room" : "rooms"} in the main scheme deck`,
       ),
       "Actual public room progress excludes opening1B",
     );

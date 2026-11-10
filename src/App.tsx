@@ -228,7 +228,7 @@ import {
 import { seatView, upgradeSave } from "./game/team";
 import { grootGrowthCounters } from "./game/groot";
 import { warMachineAmmo } from "./game/war-machine";
-import { effectTitle } from "./game/review";
+import { effectTitle, pacingOf } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
 import type { PaymentSource } from "./game/payment";
 import { dailySeedText, parseSeed } from "./game/seed";
@@ -262,6 +262,8 @@ const resIcon = {
 };
 const aspectStyle = (color: string) => ({ "--accent": color }) as CSSProperties;
 const PACING_KEY = "champions.pacing";
+const plural = (n: number, one: string, many = `${one}s`) =>
+  `${n} ${n === 1 ? one : many}`;
 const PACINGS: { id: Pacing; name: string; text: string }[] = [
   {
     id: "guided",
@@ -533,6 +535,8 @@ function Modal({
   wide = false,
   className = "",
   eyebrow = "MARVEL CHAMPIONS",
+  initialFocus = "first",
+  hidden = false,
 }: {
   title: string;
   children: ReactNode;
@@ -540,6 +544,13 @@ function Modal({
   wide?: boolean;
   className?: string;
   eyebrow?: string;
+  /**
+   * "dialog" focuses the dialog itself, so a held or repeated Enter from the
+   * previous step cannot activate the first choice unseen.
+   */
+  initialFocus?: "first" | "dialog";
+  /** Kept mounted (and its state kept) under a dialog opened from it. */
+  hidden?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
@@ -548,9 +559,12 @@ function Modal({
     const prev = document.activeElement as HTMLElement;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const target = ref.current?.querySelector<HTMLElement>(
-      "button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, a[href]",
-    );
+    const target =
+      initialFocus === "dialog"
+        ? ref.current
+        : ref.current?.querySelector<HTMLElement>(
+            "button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, a[href]",
+          );
     target?.focus();
     const key = (e: KeyboardEvent) => {
       const dialogs = Array.from(
@@ -571,7 +585,10 @@ function Modal({
         if (!nodes?.length) return;
         const first = nodes[0],
           last = nodes[nodes.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
+        if (document.activeElement === ref.current) {
+          e.preventDefault();
+          (e.shiftKey ? last : first).focus();
+        } else if (e.shiftKey && document.activeElement === first) {
           e.preventDefault();
           last.focus();
         } else if (!e.shiftKey && document.activeElement === last) {
@@ -590,6 +607,7 @@ function Modal({
   return createPortal(
     <div
       className="modal-backdrop"
+      hidden={hidden}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose?.();
       }}
@@ -599,6 +617,7 @@ function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={initialFocus === "dialog" ? -1 : undefined}
         ref={ref}
       >
         <div className="modal-heading">
@@ -966,7 +985,11 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "instant" });
   }, [screen]);
   useEffect(() => {
-    if (screen !== "game") audio.stop();
+    if (screen !== "game") {
+      audio.stop();
+      // An interrupted ribbon must not replay when the table is reopened.
+      setCombat(null);
+    }
     soundSettings.current?.removeAttribute("open");
   }, [screen, audio.stop]);
   useEffect(() => {
@@ -1023,7 +1046,7 @@ export default function App() {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (
-        e.key.toLowerCase() === "f" &&
+        e.key?.toLowerCase() === "f" &&
         !e.ctrlKey &&
         !e.metaKey &&
         !e.altKey &&
@@ -1071,7 +1094,7 @@ export default function App() {
     // Ctrl/Cmd+Z takes back the last action of the current hero phase.
     const key = (e: KeyboardEvent) => {
       if (
-        e.key.toLowerCase() !== "z" ||
+        e.key?.toLowerCase() !== "z" ||
         !(e.metaKey || e.ctrlKey) ||
         e.shiftKey
       )
@@ -1210,12 +1233,92 @@ export default function App() {
       setToast(summary);
     }
   }
+  // A save the server keeps refusing (for example a mission finished on
+  // another device) must not trap the player at this table.
+  function keepUnsaved(next: string) {
+    return (
+      missionSync.hasUnsaved() &&
+      !window.confirm(
+        `Your account mission has changes that could not be saved. Discard them and ${next}?`,
+      )
+    );
+  }
   async function start(replay = false, sameSeed = false, tutorial = false) {
     audio.stop();
     await missionSync.flush();
-    if (missionSync.hasUnsaved()) {
+    if (keepUnsaved("start a new mission")) {
       setToast(
         "Save the current mission before starting another. Use Retry save or open your profile.",
+      );
+      return;
+    }
+    let mission: GameState & {
+      accountMission: { id: string; startedAt: string };
+    };
+    try {
+      mission = {
+        ...newGame(
+          tutorial
+            ? { ...TUTORIAL_SETUP, guided: true, pacing: "guided" }
+            : replay && game
+              ? {
+                  heroId: game.players[0].heroId,
+                  aspect: game.players[0].aspect,
+                  heroes: game.players.map((p) => ({
+                    heroId: p.heroId,
+                    aspect: p.aspect,
+                    deckCards: p.deckCards,
+                    deckAspects: p.deckAspects,
+                  })),
+                  villainId: game.villainId,
+                  difficulty: game.difficulty,
+                  module: game.module,
+                  modules: game.modules,
+                  senatorDamage: game.sabretooth?.startingDamage,
+                  captureAllocation: game.projectWideawake?.captureAllocation
+                    ? [...game.projectWideawake.captureAllocation]
+                    : undefined,
+                  guided: true,
+                  pacing,
+                  heroic: game.heroic || 0,
+                  seed: sameSeed ? game.startSeed || undefined : undefined,
+                }
+              : {
+                  heroId: hero.id,
+                  aspect,
+                  heroes: team,
+                  guided: true,
+                  villainId: villain.id,
+                  difficulty,
+                  module,
+                  modules: selectedModules,
+                  ...(villain.id === "sabretooth"
+                    ? {
+                        senatorDamage:
+                          senatorDamage === ""
+                            ? undefined
+                            : Number(senatorDamage),
+                      }
+                    : {}),
+                  ...(villain.id === "project_wideawake"
+                    ? { captureAllocation: resolvedCaptureAllocation }
+                    : {}),
+                  pacing,
+                  heroic,
+                  seed: parseSeed(seedText),
+                },
+        ),
+        accountMission: {
+          id: crypto.randomUUID(),
+          startedAt: new Date().toISOString(),
+        },
+      };
+    } catch (error) {
+      // The current table and its owner stay as they were.
+      setToast(
+        error instanceof Error
+          ? `This mission could not be set up: ${error.message}`
+          : "This mission could not be set up.",
       );
       return;
     }
@@ -1224,63 +1327,6 @@ export default function App() {
     clearHistory();
     missionSync.reset();
     setGameOwner(account.session?.user?.id || null);
-    const mission = {
-      ...newGame(
-        tutorial
-          ? { ...TUTORIAL_SETUP, guided: true, pacing: "guided" }
-          : replay && game
-            ? {
-                heroId: game.players[0].heroId,
-                aspect: game.players[0].aspect,
-                heroes: game.players.map((p) => ({
-                  heroId: p.heroId,
-                  aspect: p.aspect,
-                  deckCards: p.deckCards,
-                  deckAspects: p.deckAspects,
-                })),
-                villainId: game.villainId,
-                difficulty: game.difficulty,
-                module: game.module,
-                modules: game.modules,
-                senatorDamage: game.sabretooth?.startingDamage,
-                captureAllocation: game.projectWideawake?.captureAllocation
-                  ? [...game.projectWideawake.captureAllocation]
-                  : undefined,
-                guided: true,
-                pacing,
-                heroic: game.heroic || 0,
-                seed: sameSeed ? game.startSeed || undefined : undefined,
-              }
-            : {
-                heroId: hero.id,
-                aspect,
-                heroes: team,
-                guided: true,
-                villainId: villain.id,
-                difficulty,
-                module,
-                modules: selectedModules,
-                ...(villain.id === "sabretooth"
-                  ? {
-                      senatorDamage:
-                        senatorDamage === ""
-                          ? undefined
-                          : Number(senatorDamage),
-                    }
-                  : {}),
-                ...(villain.id === "project_wideawake"
-                  ? { captureAllocation: resolvedCaptureAllocation }
-                  : {}),
-                pacing,
-                heroic,
-                seed: parseSeed(seedText),
-              },
-      ),
-      accountMission: {
-        id: crypto.randomUUID(),
-        startedAt: new Date().toISOString(),
-      },
-    };
     if (tutorial) {
       setPacingState("guided");
       try {
@@ -1351,18 +1397,19 @@ export default function App() {
     const c = campaignsRef.current.find((c) => c.id === id);
     if (!c || campaignLibrary.warning) return;
     await missionSync.flush();
-    if (missionSync.hasUnsaved()) {
+    if (keepUnsaved("open this campaign")) {
       setToast("Save your current account mission before opening a campaign.");
       return;
     }
     // While an account mission is on the table, the guest mission saved on
     // this device is out of sight but would be replaced just the same.
-    const guest = gameOwner
-      ? readSave({
-          campaigns: campaignsRef.current,
-          warning: campaignLibrary.warning,
-        })
-      : game;
+    const guest =
+      gameOwner || !game
+        ? readSave({
+            campaigns: campaignsRef.current,
+            warning: campaignLibrary.warning,
+          })
+        : game;
     if (
       guest &&
       !guest.campaign &&
@@ -1463,20 +1510,24 @@ export default function App() {
   async function signOut() {
     audio.stop();
     await missionSync.flush();
-    if (missionSync.hasUnsaved())
+    if (keepUnsaved("sign out"))
       throw Error(
         "Your mission has unsaved changes. Retry saving before signing out.",
       );
     await account.request("logout");
     audio.resetSession();
-    setGame(
-      readSave({
-        campaigns: campaignsRef.current,
-        warning: campaignLibrary.warning,
-      }),
-    );
+    // A guest table already on screen stays; it may be newer than the device
+    // copy when storage is failing.
+    if (gameOwner) {
+      setGame(
+        readSave({
+          campaigns: campaignsRef.current,
+          warning: campaignLibrary.warning,
+        }),
+      );
+      clearHistory();
+    }
     setGameOwner(null);
-    clearHistory();
     missionSync.reset();
   }
   async function saveSetupDeck() {
@@ -1736,9 +1787,17 @@ export default function App() {
           onSignOut={signOut}
           onMissionDeleted={(id) => {
             if (gameOwner && game?.accountMission?.id === id) {
+              // Like signing out: the guest table saved on this device returns.
               audio.resetSession();
-              setGame(null);
+              setCombat(null);
+              setGame(
+                readSave({
+                  campaigns: campaignsRef.current,
+                  warning: campaignLibrary.warning,
+                }),
+              );
               setGameOwner(null);
+              clearHistory();
               missionSync.reset();
             }
           }}
@@ -2813,7 +2872,7 @@ export default function App() {
           }
           onHome={() => setScreen("lobby")}
           onHelp={() => setHelp(true)}
-          pacing={pacing}
+          pacing={pacingOf(game)}
           onPacing={choosePacing}
           canUndo={undoDepth > 0}
           onUndo={undo}
@@ -2847,12 +2906,13 @@ export default function App() {
             onConfirm={(ids) => send({ type: "MULLIGAN", ids })}
           />
         )}
-      {screen === "game" && game?.prompt && !game.review && !inspect && (
+      {screen === "game" && game?.prompt && !game.review && (
         <Decision
           key={`${game.prompt.title}-${game.prompt.kind}-${game.nextId}`}
           game={game}
           send={send}
           inspect={setInspect}
+          covered={!!inspect}
         />
       )}
       {endTurn && game && (
@@ -2999,7 +3059,7 @@ export default function App() {
                         : game,
                       inspect.piece,
                     ) ||
-                      `Pay ${cardCost(game, card(inspect.piece || inspect.code), inspect.piece)} resources to play this card.`}
+                      `Pay ${plural(cardCost(game, card(inspect.piece || inspect.code), inspect.piece), "resource")} to play this card.`}
                   </p>
                   <button
                     className="primary-button"
@@ -3531,7 +3591,8 @@ function PaymentDecision({
               </p>
             </div>
             <span>
-              {sources.filter((x) => x.kind === "card").length} CARDS AVAILABLE
+              {plural(sources.filter((x) => x.kind === "card").length, "CARD")}{" "}
+              AVAILABLE
             </span>
           </div>
           {(["ability", "card"] as const).map((kind) => {
@@ -3648,7 +3709,7 @@ function PaymentDecision({
                 ? `${discards} card${discards === 1 ? "" : "s"} to discard${abilities ? ` · ${abilities} abilit${abilities === 1 ? "y" : "ies"} to use` : ""}`
                 : "Nothing selected yet. Your hand is unchanged."}
               {status.total > (p.cost || 0)
-                ? ` · ${status.total - (p.cost || 0)} extra resource(s) will be spent.`
+                ? ` · ${plural(status.total - (p.cost || 0), "extra resource")} will be spent.`
                 : ""}
             </small>
           </span>
@@ -3708,10 +3769,13 @@ function Decision({
   game: s,
   send,
   inspect,
+  covered = false,
 }: {
   game: GameState;
   send: (c: Command) => void;
   inspect: (c: Inspect) => void;
+  /** A card opened from this decision is on top; picks are kept meanwhile. */
+  covered?: boolean;
 }) {
   const p = s.prompt!;
   const [selected, setSelected] = useState<string[]>([]);
@@ -3721,10 +3785,13 @@ function Decision({
         ? selected.filter((x) => x !== id)
         : [...selected, id],
     );
-  if (p.kind === "payment") return <PaymentDecision game={s} send={send} />;
+  if (p.kind === "payment")
+    return covered ? null : <PaymentDecision game={s} send={send} />;
   const hint = advisePrompt(s);
   return (
     <Modal
+      hidden={covered}
+      initialFocus="dialog"
       title={p.title}
       className={`action-decision ${s.attack ? "attack-decision" : ""}`}
       eyebrow={
@@ -4667,14 +4734,14 @@ function TablePile({
     <button
       className={`table-pile ${kind}-pile`}
       onClick={onOpen}
-      aria-label={`${label}, ${count} cards. Inspect pile`}
+      aria-label={`${label}, ${plural(count, "card")}. Inspect pile`}
     >
       {face}
     </button>
   ) : (
     <div
       className={`table-pile ${kind}-pile`}
-      aria-label={`${label}, ${count} cards${count ? ", face down" : ", empty"}`}
+      aria-label={`${label}, ${plural(count, "card")}${count ? ", face down" : ", empty"}`}
     >
       {face}
     </div>
@@ -5347,8 +5414,9 @@ function Tabletop({
                       className="stat-caption"
                       aria-label={`Magnet counters: ${s.magneto.magnetCounters}`}
                     >
-                      <strong>{s.magneto.magnetCounters}</strong> magnet
-                      counters · 3 trigger a Magnetic card
+                      <strong>{s.magneto.magnetCounters}</strong> magnet{" "}
+                      {s.magneto.magnetCounters === 1 ? "counter" : "counters"}{" "}
+                      · 3 trigger a Magnetic card
                     </p>
                   )}
                   {hasThreatLimit ? (
@@ -5386,8 +5454,9 @@ function Tabletop({
                               p.code !== "32125b",
                           ).length
                         }
-                        /2 rooms completed · {s.mansionAttack.mainDeck.length}{" "}
-                        rooms in the main scheme deck
+                        /2 rooms completed ·{" "}
+                        {plural(s.mansionAttack.mainDeck.length, "room")} in the
+                        main scheme deck
                       </p>
                       <details>
                         <summary>
@@ -5761,7 +5830,10 @@ function Tabletop({
                           )}
                           {!!p.inheritorBoosts?.length && (
                             <span className="minion-keyword">
-                              {p.inheritorBoosts.length} FACEDOWN BOOST
+                              {p.inheritorBoosts.length} FACEDOWN{" "}
+                              {p.inheritorBoosts.length === 1
+                                ? "BOOST"
+                                : "BOOSTS"}
                             </span>
                           )}
                           <Status piece={p} />
@@ -6168,8 +6240,8 @@ function Tabletop({
                     >
                       <CardImage code={p.code} />
                       <span>
-                        Play Lockjaw from discard · {cardCost(s, card(p))}{" "}
-                        resources
+                        Play Lockjaw from discard ·{" "}
+                        {plural(cardCost(s, card(p)), "resource")}
                       </span>
                     </button>
                   ))}
@@ -6497,7 +6569,7 @@ function Tabletop({
                               aria-label={`Play from Quiver: ${card(arrow).name}`}
                               title={
                                 reason ||
-                                `Pay ${cardCost(s, card(arrow))} resources`
+                                `Pay ${plural(cardCost(s, card(arrow)), "resource")}`
                               }
                               disabled={!canUseAction || !!reason}
                               onClick={() =>
@@ -6545,7 +6617,7 @@ function Tabletop({
                               aria-label={`Play from Black Panther: ${card(event).name}`}
                               title={
                                 reason ||
-                                `Pay ${cardCost(s, card(event))} resources`
+                                `Pay ${plural(cardCost(s, card(event)), "resource")}`
                               }
                               disabled={!canUseAction || !!reason}
                               onClick={() =>
@@ -6592,7 +6664,9 @@ function Tabletop({
                             <button
                               className="ability-button"
                               aria-label={`Play from George Stacy: ${card(event).name}`}
-                              title={reason || `Pay ${cost} resources`}
+                              title={
+                                reason || `Pay ${plural(cost, "resource")}`
+                              }
                               disabled={!canUseAction || !!reason}
                               onClick={() =>
                                 sendAction({ type: "PLAY", id: event.id })
@@ -6637,7 +6711,9 @@ function Tabletop({
                             <button
                               className="ability-button"
                               aria-label={`Play from Jocasta: ${card(event).name}`}
-                              title={reason || `Pay ${cost} resources`}
+                              title={
+                                reason || `Pay ${plural(cost, "resource")}`
+                              }
                               disabled={!canUseAction || !!reason}
                               onClick={() =>
                                 sendAction({ type: "PLAY", id: event.id })
@@ -6687,8 +6763,10 @@ function Tabletop({
                       </div>
                       <small>
                         {card(doctorStrangeTopInvocation(s)!).name} ·{" "}
-                        {card(doctorStrangeTopInvocation(s)!).cost || 0}{" "}
-                        resources
+                        {plural(
+                          card(doctorStrangeTopInvocation(s)!).cost || 0,
+                          "resource",
+                        )}
                       </small>
                     </section>
                   )}
@@ -6700,12 +6778,12 @@ function Tabletop({
                   >
                     <CardBack kind="encounter" />
                     <span>
-                      {
+                      {plural(
                         s.encounter.dealt.filter(
                           (p) => p.dealtTo === s.activePlayerId,
-                        ).length
-                      }{" "}
-                      facedown encounter(s)
+                        ).length,
+                        "facedown encounter",
+                      )}
                     </span>
                   </div>
                 )}
@@ -7133,11 +7211,14 @@ function Tabletop({
                     <strong>Play {card(p).name}</strong>
                     <small>
                       Pay{" "}
-                      {Math.max(
-                        0,
-                        (card(p).cost || 0) - Number(s.flags.discount || 0),
+                      {plural(
+                        Math.max(
+                          0,
+                          (card(p).cost || 0) - Number(s.flags.discount || 0),
+                        ),
+                        "resource",
                       )}{" "}
-                      resources · Scientist can provide 1 mental
+                      · Scientist can provide 1 mental
                     </small>
                   </span>
                   <ArrowRight size={18} />

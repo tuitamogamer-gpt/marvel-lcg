@@ -467,7 +467,7 @@ try {
         );
         await page
           .getByRole("button", {
-            name: "Side-scheme discard, 1 cards. Inspect pile",
+            name: "Side-scheme discard, 1 card. Inspect pile",
             exact: true,
           })
           .click();

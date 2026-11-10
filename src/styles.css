@@ -2270,6 +2270,13 @@ option {
   padding: 28px;
   animation: veil-in 170ms var(--ease);
 }
+.modal-backdrop[hidden] {
+  display: none;
+}
+/* Decisions focus the dialog itself; it is not a control, so no ring. */
+.modal:focus {
+  outline: none;
+}
 .modal {
   border-radius: var(--radius-panel);
   width: min(660px, 100%);
