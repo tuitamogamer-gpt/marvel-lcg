@@ -13,6 +13,12 @@ export function searchTerms(query: string): string[] {
   return searchText(query).split(/\s+/).filter(Boolean);
 }
 
+/** A term also matches across word breaks, so "spiderman" finds Spider-Man. */
 export function matchesSearch(text: string, terms: string[]): boolean {
-  return terms.every((term) => text.includes(term));
+  let compact: string | undefined;
+  return terms.every(
+    (term) =>
+      text.includes(term) ||
+      (compact ??= text.replace(/ /g, "")).includes(term),
+  );
 }

@@ -63,6 +63,10 @@ describe("forgiving catalog search", () => {
     ["S.H.I.E.L.D. Agent", "shield"],
     ["01005 Swinging Web Kick", "#01005"],
     ["Péni Parker", "peni"],
+    ["Spider-Man Peter Parker", "spiderman"],
+    ["X-23 Laura Kinney", "x23"],
+    ["She-Hulk Jennifer Walters", "shehulk"],
+    ["Ms. Marvel Kamala Khan", "msmarvel"],
   ])("finds %s using %s", (text, query) => {
     expect(matchesSearch(searchText(text), searchTerms(query))).toBe(true);
   });
@@ -72,6 +76,9 @@ describe("forgiving catalog search", () => {
         searchText("Spider-Man Peter Parker"),
         searchTerms("spider miles"),
       ),
+    ).toBe(false);
+    expect(
+      matchesSearch(searchText("Spider-Woman Jessica Drew"), ["spiderman"]),
     ).toBe(false);
     expect(matchesSearch(searchText("Spider-Man"), searchTerms("  "))).toBe(
       true,
