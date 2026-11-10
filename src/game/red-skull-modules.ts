@@ -148,6 +148,9 @@ export function redSkullAttackResponses(
     !p ||
     p.code !== "04145" ||
     isTextBlank(s, p) ||
+    // At attack completion a defender defeated by the attack's own damage
+    // still defended. An ally lost during boosts was cleared before damage.
+    (a.defender && a.defender !== "none") ||
     !ports.undefended(s, a) ||
     !s.players.some((seat) => seat.id === playerId && !seat.eliminated) ||
     !ports.supports(seatView(s, playerId)).length

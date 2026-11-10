@@ -402,6 +402,31 @@ describe("Absorbing Man original-source scenario", () => {
     expect(s.attachments.some((q) => q.id === p.id)).toBe(true);
     exact(s);
   });
+  it("Abandoned Facility takes nothing from a teammate when the attacked hero is eliminated", () => {
+    let s = environment(started("standard", 2), "04083");
+    expect(s.activePlayerId).toBe("p1");
+    const victim = s.players.find((p) => p.id === "p2")!;
+    victim.player.form = "hero";
+    victim.player.hp = 1;
+    boost(s);
+    const hand = s.player.hand.map((p) => p.id);
+    const prompts: string[] = [];
+    s = settle(
+      native(s, {
+        type: "enemyAttack",
+        id: s.villain.id,
+        actorId: "p2",
+        activation: { enemyId: s.villain.id, playerId: "p2", kind: "attack" },
+      }),
+      (v) => {
+        prompts.push(v.prompt!.title);
+        return undefined;
+      },
+    );
+    expect(s.players.find((p) => p.id === "p2")!.eliminated).toBe(true);
+    expect(prompts).not.toContain("Abandoned Facility");
+    expect(seatView(s, "p1").player.hand.map((p) => p.id)).toEqual(hand);
+  });
   it("an ally defeated by attack damage still prevents undefended environment responses", () => {
     let s = environment(started(), "04081");
     const ally = s.player.deck.splice(

@@ -391,6 +391,18 @@ describe("Hydra Assault native attacks and boosts", () => {
       expect(s.player.inPlay.some((p) => p.id === held.id)).toBe(true);
     },
   );
+  it("Flame-Soldier preserves supports when the defending ally is defeated by the attack", () => {
+    let s = base("hydra_assault");
+    const flame = minion(s, "04145"),
+      held = support(s),
+      ally = put(s, "01041");
+    ally.damage = card(ally).health! - 1;
+    s = native(s, { type: "enemyAttack", id: flame.id });
+    s = settle(choose(reload(s), ally.id));
+    expect(s.player.discard.some((p) => p.id === ally.id)).toBe(true);
+    expect(s.prompt?.title).not.toBe("Hydra Flame-Soldier");
+    expect(s.player.inPlay.some((p) => p.id === held.id)).toBe(true);
+  });
   it("Tough does not turn an undefended Flame-Soldier attack into a defended one", () => {
     let s = base("hydra_assault");
     const flame = minion(s, "04145"),

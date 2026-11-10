@@ -346,6 +346,9 @@ export function resolveAbsorbingEffect(
       break;
     }
     case "absorbing:discard-resources": {
+      // "You" is the attacked player. Once that player is eliminated the
+      // engine resolves this for the first player's seat, who owes nothing.
+      if (s.players.some((p) => p.id === e.actorId && p.eliminated)) break;
       const choices = s.player.hand
         .filter((p) => ports.handResources(s, p) > 0)
         .map((p) => ({
