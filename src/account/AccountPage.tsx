@@ -1,11 +1,15 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import {
+  ArrowCounterClockwise,
   ArrowRight,
   ArrowsClockwise,
   Cards,
   CheckCircle,
+  ClipboardText,
   Clock,
+  Copy,
+  MagnifyingGlass,
   ShieldCheck,
   SignOut,
   Trash,
@@ -36,8 +40,19 @@ import {
   heroStarterAspects,
   heroAllowsOffAspectEvent,
 } from "../game/hero-runtime.js";
-import type { Aspect } from "../game/types.js";
+import type { Aspect, Card } from "../game/types.js";
 import type { AccountController } from "./useAccount.js";
+import {
+  TYPE_LABELS,
+  costBucket,
+  deckSummary,
+  formatDeckList,
+  groupPrintings,
+  normalizeName,
+  parseDeckList,
+  setRowCount,
+} from "./deck-list.js";
+import type { DeckRow } from "./deck-list.js";
 import type { DeckDraft, MissionRecord, SavedDeck } from "./types.js";
 import "./account.css";
 
@@ -289,6 +304,88 @@ function AuthForm({ account }: { account: AccountController }) {
   );
 }
 
+const COST_FILTERS = ["0", "1", "2", "3", "4", "5+", "X"] as const;
+const searchCache = new WeakMap<Card, string>();
+function searchText(c: Card) {
+  let text = searchCache.get(c);
+  if (text === undefined) {
+    text = normalizeName(
+      `${c.name} ${c.subname || ""} ${c.traits || ""} ${(c.text || "").replace(/<[^>]*>/g, " ")}`,
+    );
+    searchCache.set(c, text);
+  }
+  return text;
+}
+const costOrder = (c: Card) => {
+  const bucket = costBucket(c);
+  return bucket === "none" ? 99 : bucket === "X" ? 98 : c.cost!;
+};
+const cards = (n: number) => `${n} ${n === 1 ? "card" : "cards"}`;
+
+function DeckGlance({ codes }: { codes: string[] }) {
+  const summary = deckSummary(codes);
+  const tallest = Math.max(1, ...Object.values(summary.curve));
+  const resources = [
+    ["Energy", summary.resources.energy],
+    ["Mental", summary.resources.mental],
+    ["Physical", summary.resources.physical],
+    ["Wild", summary.resources.wild],
+  ] as const;
+  return (
+    <div className="deck-glance" role="group" aria-label="Deck at a glance">
+      <div className="deck-curve">
+        <span className="deck-glance-label">Cost curve</span>
+        <ol>
+          {COST_FILTERS.map((bucket) => (
+            <li key={bucket}>
+              <b>{summary.curve[bucket]}</b>
+              <span
+                aria-hidden="true"
+                style={{
+                  height: `${Math.round((summary.curve[bucket] / tallest) * 56)}px`,
+                }}
+              />
+              <small>
+                <span className="sr-only">
+                  {summary.curve[bucket] === 1 ? "card" : "cards"} costing{" "}
+                </span>
+                {bucket}
+              </small>
+            </li>
+          ))}
+        </ol>
+        <small>
+          {summary.averageCost === null
+            ? "No cards with a cost yet"
+            : `Average cost ${summary.averageCost.toFixed(1)}`}
+        </small>
+      </div>
+      <div className="deck-breakdown">
+        <span className="deck-glance-label">Card types</span>
+        <dl>
+          {summary.types.map((t) => (
+            <div key={t.type}>
+              <dt>{t.label}</dt>
+              <dd>{t.count}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      <div className="deck-breakdown">
+        <span className="deck-glance-label">Printed resources</span>
+        <dl>
+          {resources.map(([label, count]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{count}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </div>
+  );
+}
+
 export function DeckEditor({
   initial,
   busy,
@@ -319,6 +416,17 @@ export function DeckEditor({
   const [codes, setCodes] = useState(
     initial?.cards || deckCodes(heroId, aspect, initialAspects),
   );
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [costFilter, setCostFilter] = useState("any");
+  const [sort, setSort] = useState<"release" | "name" | "cost">("release");
+  const [inDeckOnly, setInDeckOnly] = useState(false);
+  const [listMode, setListMode] = useState<"closed" | "paste" | "copy">(
+    "closed",
+  );
+  const [listText, setListText] = useState("");
+  const [listMessage, setListMessage] = useState("");
+  const [undoCodes, setUndoCodes] = useState<string[] | null>(null);
   const dualAspect = heroDeckRule(heroId)?.aspects === "two-equal";
   const fourAspects = heroDeckRule(heroId)?.aspects === "four-equal-singleton";
   const aspects = fourAspects
@@ -355,6 +463,111 @@ export function DeckEditor({
     ).map((a) => a.id),
     "basic",
   ];
+  const needle = normalizeName(query);
+  const filtering =
+    needle !== "" || typeFilter !== "all" || costFilter !== "any" || inDeckOnly;
+  const rowCount = (row: DeckRow) =>
+    row.codes.reduce((total, code) => total + (counts[code] || 0), 0);
+  const shows = (row: DeckRow) =>
+    (!needle || searchText(row.card).includes(needle)) &&
+    (typeFilter === "all" || row.card.type_code === typeFilter) &&
+    (costFilter === "any" || costBucket(row.card) === costFilter) &&
+    (!inDeckOnly || rowCount(row) > 0);
+  const sorted = (rows: DeckRow[]) =>
+    sort === "release"
+      ? rows
+      : [...rows].sort(
+          (a, b) =>
+            (sort === "cost" ? costOrder(a.card) - costOrder(b.card) : 0) ||
+            a.card.name.localeCompare(b.card.name),
+        );
+  const poolRows = pools.map((faction) => {
+    const rows =
+      faction === "hero"
+        ? options
+            .filter((c) => Object.hasOwn(required, c.code))
+            .map((c) => ({ key: c.code, card: c, codes: [c.code] }))
+        : groupPrintings(
+            options.filter(
+              (c) =>
+                !Object.hasOwn(required, c.code) && c.faction_code === faction,
+            ),
+          );
+    return { faction, total: rows.length, rows: sorted(rows.filter(shows)) };
+  });
+  const totalRows = poolRows.reduce((total, pool) => total + pool.total, 0);
+  const shownRows = poolRows.reduce(
+    (total, pool) => total + pool.rows.length,
+    0,
+  );
+  const typesInPool = Object.keys(TYPE_LABELS).filter((type) =>
+    options.some((c) => c.type_code === type),
+  );
+  function clearFilters() {
+    setQuery("");
+    setTypeFilter("all");
+    setCostFilter("any");
+    setInDeckOnly(false);
+  }
+  const heroLabel = (() => {
+    const hero = HEROES.find((h) => h.id === heroId);
+    return hero ? `${hero.name} (${hero.identity})` : heroId;
+  })();
+  const listHeading = `${heroLabel} · ${ASPECTS.filter((a) =>
+    aspects.includes(a.id),
+  )
+    .map((a) => a.name)
+    .join(" / ")}`;
+  async function copyList() {
+    const text = formatDeckList({ name, heading: listHeading, codes });
+    try {
+      await navigator.clipboard.writeText(text);
+      setListMode("closed");
+      setUndoCodes(null);
+      setListMessage("Deck list copied to the clipboard.");
+    } catch {
+      setListText(text);
+      setListMode("copy");
+      setListMessage("");
+    }
+  }
+  function applyList() {
+    const parsed = parseDeckList(listText, {
+      heroId,
+      options,
+      fixed: required,
+    });
+    if (!parsed.codes.length && !parsed.fixed) {
+      setListMessage(
+        "No cards found. Write one card per line, such as \u201c2x Energy (Core Set)\u201d.",
+      );
+      return;
+    }
+    setUndoCodes(codes);
+    setCodes([
+      ...codes.filter((code) => Object.hasOwn(required, code)),
+      ...parsed.codes,
+    ]);
+    const skipped = [
+      ...parsed.unavailable.map((n) => `${n} (not in this deck's pool)`),
+      ...parsed.unknown.map((n) => `${n} (unknown card)`),
+    ];
+    setListMessage(
+      [
+        `Loaded ${cards(parsed.codes.length)}; hero cards stay as they are.`,
+        parsed.limited.length &&
+          `Reduced to the copy limit: ${parsed.limited.join(", ")}.`,
+        skipped.length && `Skipped ${skipped.join(", ")}.`,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+    setListText("");
+    setListMode("closed");
+  }
+  const stopEnter = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") e.preventDefault();
+  };
   function reset(h: string, a: Aspect, secondary?: Aspect, four?: Aspect[]) {
     const next = editorAspects(
       h,
@@ -368,6 +581,8 @@ export function DeckEditor({
     setSecondAspect(next[1] || "aggression");
     setFourChosenAspects(next);
     setCodes(deckCodes(h, a, next));
+    setUndoCodes(null);
+    setListMessage("");
   }
   return (
     <section className="account-editor" aria-label="Deck builder">
@@ -526,61 +741,251 @@ export function DeckEditor({
             aspects. {offAspectCount} / 6 selected.
           </p>
         )}
+        <div className="deck-glance-row">
+          <DeckGlance codes={codes} />
+        </div>
+        <div className="deck-list-actions">
+          <button type="button" className="text-button" onClick={copyList}>
+            <Copy size={18} aria-hidden="true" />
+            Copy deck list
+          </button>
+          <button
+            type="button"
+            className="text-button"
+            aria-expanded={listMode === "paste"}
+            onClick={() => {
+              setListMode(listMode === "paste" ? "closed" : "paste");
+              setListText("");
+              setListMessage("");
+              setUndoCodes(null);
+            }}
+          >
+            <ClipboardText size={18} aria-hidden="true" />
+            Paste a deck list
+          </button>
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => {
+              setUndoCodes(codes);
+              setCodes(deckCodes(heroId, aspect, aspects));
+              setListMessage("Starter list restored.");
+            }}
+          >
+            <ArrowCounterClockwise size={18} aria-hidden="true" />
+            Restore starter list
+          </button>
+        </div>
+        {listMode !== "closed" && (
+          <div className="deck-list-panel">
+            <label>
+              {listMode === "paste" ? "Deck list to load" : "Your deck list"}
+              <textarea
+                value={listText}
+                readOnly={listMode === "copy"}
+                rows={8}
+                spellCheck={false}
+                placeholder={"3x Energy (Core Set)\n2x For Justice! (Core Set)"}
+                onFocus={(e) => listMode === "copy" && e.target.select()}
+                onChange={(e) => setListText(e.target.value)}
+              />
+            </label>
+            <p className="account-hint">
+              {listMode === "paste"
+                ? "Choose the hero and aspects first. Write one card per line, such as \u201c2x Energy (Core Set)\u201d. Hero cards stay fixed; the list replaces your other cards."
+                : "The clipboard is not available here. Select the list and copy it."}
+            </p>
+            <div className="deck-list-buttons">
+              {listMode === "paste" && (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={!listText.trim()}
+                  onClick={applyList}
+                >
+                  Load this list
+                </button>
+              )}
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setListMode("closed")}
+              >
+                {listMode === "paste" ? "Cancel" : "Close"}
+              </button>
+            </div>
+          </div>
+        )}
+        {listMessage && (
+          <p className="deck-list-message" aria-live="polite">
+            {listMessage}
+            {undoCodes && (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => {
+                  setCodes(undoCodes);
+                  setUndoCodes(null);
+                  setListMessage("Your previous cards are back.");
+                }}
+              >
+                Undo
+              </button>
+            )}
+          </p>
+        )}
+        <div className="deck-tools" role="search" aria-label="Find cards">
+          <label className="deck-search">
+            Search
+            <span>
+              <MagnifyingGlass size={18} aria-hidden="true" />
+              <input
+                type="search"
+                value={query}
+                placeholder="Name, trait or text"
+                onKeyDown={stopEnter}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </span>
+          </label>
+          <label>
+            Type
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+            >
+              <option value="all">All types</option>
+              {typesInPool.map((type) => (
+                <option key={type} value={type}>
+                  {TYPE_LABELS[type]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Cost
+            <select
+              value={costFilter}
+              onChange={(e) => setCostFilter(e.target.value)}
+            >
+              <option value="any">Any cost</option>
+              {COST_FILTERS.map((bucket) => (
+                <option key={bucket} value={bucket}>
+                  {bucket}
+                </option>
+              ))}
+              <option value="none">No cost</option>
+            </select>
+          </label>
+          <label>
+            Sort
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as typeof sort)}
+            >
+              <option value="release">Release order</option>
+              <option value="name">Name</option>
+              <option value="cost">Cost</option>
+            </select>
+          </label>
+          <label className="deck-check">
+            <input
+              type="checkbox"
+              checked={inDeckOnly}
+              onKeyDown={stopEnter}
+              onChange={(e) => setInDeckOnly(e.target.checked)}
+            />
+            In deck only
+          </label>
+          <p className="deck-tools-count" aria-live="polite">
+            {filtering
+              ? `Showing ${shownRows} of ${cards(totalRows)}`
+              : cards(totalRows)}
+          </p>
+          {filtering && (
+            <button
+              type="button"
+              className="text-button"
+              onClick={clearFilters}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+        {filtering && shownRows === 0 && (
+          <p className="deck-empty">
+            No cards match these filters.{" "}
+            <button
+              type="button"
+              className="text-button"
+              onClick={clearFilters}
+            >
+              Show all cards
+            </button>
+          </p>
+        )}
         <div className="account-deck-columns">
-          {pools.map((faction) => (
-            <section key={faction}>
-              <h3>{faction.toUpperCase()}</h3>
-              {options
-                .filter((c) =>
-                  faction === "hero"
-                    ? Object.hasOwn(required, c.code)
-                    : !Object.hasOwn(required, c.code) &&
-                      c.faction_code === faction,
-                )
-                .map((c) => (
-                  <div className="account-card-row" key={c.code}>
-                    <span data-card-preview={c.code} tabIndex={0}>
-                      {c.name}
-                      <small>
-                        {c.type_code}{" "}
-                        {c.cost !== undefined ? `· cost ${c.cost}` : ""}
-                        {Object.hasOwn(setup, c.code)
-                          ? " · starts in play"
-                          : ""}
-                      </small>
-                    </span>
-                    {Object.hasOwn(required, c.code) ? (
-                      <strong className="account-fixed-count">
-                        ×{counts[c.code] || 0}
-                      </strong>
-                    ) : (
-                      <label>
-                        <span className="sr-only">Copies of {c.name}</span>
-                        <select
-                          aria-label={`Copies of ${c.name}`}
-                          value={counts[c.code] || 0}
-                          onChange={(e) =>
-                            setCodes([
-                              ...codes.filter((code) => code !== c.code),
-                              ...Array(Number(e.target.value)).fill(c.code),
-                            ])
-                          }
-                        >
-                          {Array.from(
-                            { length: copyLimit(c, heroId) + 1 },
-                            (_, n) => (
-                              <option key={n} value={n}>
-                                {n}
-                              </option>
-                            ),
-                          )}
-                        </select>
-                      </label>
-                    )}
-                  </div>
-                ))}
-            </section>
-          ))}
+          {poolRows
+            .filter((pool) => !filtering || pool.rows.length > 0)
+            .map(({ faction, rows }) => (
+              <section key={faction}>
+                <h3>{faction.toUpperCase()}</h3>
+                {rows.map((row) => {
+                  const c = row.card;
+                  const count = rowCount(row);
+                  const label = c.subname ? `${c.name} (${c.subname})` : c.name;
+                  return (
+                    <div className="account-card-row" key={row.key}>
+                      <span data-card-preview={c.code} tabIndex={0}>
+                        {c.name}
+                        <small>
+                          {[
+                            c.subname,
+                            TYPE_LABELS[c.type_code] || c.type_code,
+                            c.cost !== undefined &&
+                              `cost ${c.cost < 0 ? "X" : c.cost}`,
+                            Object.hasOwn(setup, c.code) && "starts in play",
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </small>
+                      </span>
+                      {Object.hasOwn(required, c.code) ? (
+                        <strong className="account-fixed-count">
+                          ×{count}
+                        </strong>
+                      ) : (
+                        <label>
+                          <span className="sr-only">Copies of {label}</span>
+                          <select
+                            aria-label={`Copies of ${label}`}
+                            value={count}
+                            onChange={(e) => {
+                              setCodes(
+                                setRowCount(codes, row, Number(e.target.value)),
+                              );
+                              setUndoCodes(null);
+                            }}
+                          >
+                            {Array.from(
+                              {
+                                length:
+                                  Math.max(copyLimit(c, heroId), count) + 1,
+                              },
+                              (_, n) => (
+                                <option key={n} value={n}>
+                                  {n}
+                                </option>
+                              ),
+                            )}
+                          </select>
+                        </label>
+                      )}
+                    </div>
+                  );
+                })}
+              </section>
+            ))}
         </div>
         <div className="account-editor-footer">
           <div>
