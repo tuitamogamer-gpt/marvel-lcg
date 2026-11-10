@@ -12,6 +12,9 @@ import type { Campaign, CampaignStage } from "./campaigns";
 import { readStorage } from "./browser-storage";
 import "./campaigns.css";
 
+const difficultyLabel = (difficulty: string) =>
+  difficulty === "expert" ? "Expert" : "Standard";
+
 export function Campaigns({
   campaigns,
   teamLabel,
@@ -89,7 +92,7 @@ export function Campaigns({
           <p>
             <strong>{teamLabel}</strong>
             <br />
-            {difficulty} · Uses the decks selected in Play.
+            {difficultyLabel(difficulty)} · Uses the decks selected in Play.
           </p>
           <form
             onSubmit={(e) => {
@@ -418,7 +421,7 @@ export function Campaigns({
                     .map((s) => HEROES.find((h) => h.id === s.heroId)?.name)
                     .join(" · ")}
                   <br />
-                  {c.difficulty}
+                  {difficultyLabel(c.difficulty)}
                   {c.heroic ? ` · Heroic ${c.heroic}` : ""}
                 </p>
                 <label className="campaign-progress">
