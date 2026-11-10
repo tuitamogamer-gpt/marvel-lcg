@@ -67,6 +67,7 @@ import {
   goblinIdentityLocked,
 } from "./game/goblin-modules";
 import {
+  Component,
   lazy,
   Suspense,
   useCallback,
@@ -91,6 +92,26 @@ import { significantEvent, type Milestone } from "./milestones";
 import { useMilestoneAudio } from "./useMilestoneAudio";
 import "./milestone-audio.css";
 const MilestoneAnimation = lazy(() => import("./MilestoneAnimation"));
+/**
+ * The ribbon is decoration loaded on demand. When its chunk cannot be fetched
+ * (offline, or a tab left open across a deploy) the mission simply continues
+ * without it instead of replacing the table with the crash screen.
+ */
+class MilestoneBoundary extends Component<
+  { children: ReactNode; onError: () => void },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch() {
+    this.props.onError();
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
 import { HeroEmblem } from "./HeroEmblem";
 import { HeroRoster } from "./HeroRoster";
 import { readStorage, writeStorage } from "./browser-storage";
@@ -1001,6 +1022,9 @@ export default function App() {
     const key = (e: KeyboardEvent) => {
       if (
         e.key.toLowerCase() === "f" &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
         !["INPUT", "SELECT", "TEXTAREA"].includes(
           (e.target as HTMLElement).tagName,
         )
@@ -1733,6 +1757,10 @@ export default function App() {
                   audio.resetSession();
                   setGame(snapshot);
                   setGameOwner(response.user!.id);
+                  // The mission now lives in the account. Leaving the device
+                  // copy behind would bring the pre-import table back as a
+                  // second guest mission after a reload or sign-out.
+                  writeStorage(SAVE_KEY, "null");
                 }
               : undefined
           }
@@ -3215,13 +3243,14 @@ export default function App() {
         )}
       <CardPreview />
       {screen === "game" && combat && (
-        <Suspense fallback={null}>
-          <MilestoneAnimation
-            key={combat.id}
-            event={combat.event}
-            onComplete={finishCombat}
-          />
-        </Suspense>
+        <MilestoneBoundary key={combat.id} onError={finishCombat}>
+          <Suspense fallback={null}>
+            <MilestoneAnimation
+              event={combat.event}
+              onComplete={finishCombat}
+            />
+          </Suspense>
+        </MilestoneBoundary>
       )}
       {toast && (
         <div className="toast" role="status">

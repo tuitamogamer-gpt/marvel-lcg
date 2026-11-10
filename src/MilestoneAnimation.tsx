@@ -91,6 +91,9 @@ export default function MilestoneAnimation({
           clickToPlay={false}
           doubleClickToFullscreen={false}
           spaceKeyToPlayOrPause={false}
+          // The ribbon is silent. Remotion's default pre-mounted audio tags
+          // use data: URLs, which the site's media-src policy rejects.
+          numberOfSharedAudioTags={0}
           style={{ width: "100%" }}
         />
       )}

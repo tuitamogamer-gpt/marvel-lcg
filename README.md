@@ -113,7 +113,7 @@ Run the same browser checks against a deployment with `BASE_URL=https://your-pro
 - Visual resource payment: full card faces, enlarged inspection, resource icons, selected discard/ability labels, typed-cost validation, and a payment receipt. Paying pauses before the purchased card resolves.
 - Encounter cards and individual attack boosts are revealed before their effects resolve, with separate acknowledgements for boost abilities and damage. Drawn/discarded cards are shown by image; unrevealed encounter cards stay face down.
 - Local autosave, including a pending Proceed checkpoint, mid-payment and mid-encounter decisions. Resume from the lobby after a reload. A rendering error shows a recovery screen with reload and clear-save actions instead of a blank page.
-- Installable as a web app with offline card art: a service worker caches card faces, playmats and build assets after first use, while pages and the account API always use the network first. Card art and hashed assets are served with one-year immutable cache headers.
+- Installable as a web app with offline card art: a service worker caches card faces, playmats, milestone effects and build assets (including chunks loaded on demand), while pages and the account API always use the network first. Card art and hashed assets are served with one-year immutable cache headers.
 - **Customize table** switches between three illustrated playmats and remembers your choice. Foil-style hero/encounter backs, metal health/threat/defense/counter tokens, stitched borders, and layered deck edges give the table a collector finish. [Artwork and prompts](docs/collector-tabletop-art.md).
 
 ## Card API and artwork

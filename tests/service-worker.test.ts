@@ -135,6 +135,9 @@ function worker() {
     goOffline: () => {
       offline = true;
     },
+    goOnline: () => {
+      offline = false;
+    },
     blockWrites: () => {
       failWrites = true;
     },
@@ -165,6 +168,83 @@ describe("offline tabletop", () => {
     expect(
       await (await sw.request("/art/core-banner.jpg", "no-cors"))!.text(),
     ).toBe("landing art");
+  });
+  it("keeps on-demand chunks and milestone effects for offline play without requiring them", async () => {
+    const sw = worker();
+    sw.responses.set(
+      "/assets/table-123.js",
+      'table code import("./ribbon-123.js") deps(["assets/ribbon-123.js","assets/ribbon-123.css","assets/removed-123.js"])',
+    );
+    sw.responses.set("/assets/ribbon-123.js", "ribbon code");
+    sw.responses.set("/assets/ribbon-123.css", ".ribbon{}");
+    sw.responses.set("/audio/milestones/victory.mp3", "fanfare");
+    sw.responses.set("/motion/milestone-ink.png", "ink");
+    // removed-123.js and the other three sounds answer 404: extras never
+    // stop the table itself from being installed.
+    await sw.lifecycle("install");
+    await sw.lifecycle("activate");
+    sw.goOffline();
+    expect(await (await sw.request("/", "navigate"))!.text()).toContain(
+      "table-123.js",
+    );
+    expect(await (await sw.request("/assets/ribbon-123.js"))!.text()).toBe(
+      "ribbon code",
+    );
+    expect(await (await sw.request("/assets/ribbon-123.css"))!.text()).toBe(
+      ".ribbon{}",
+    );
+    expect(
+      await (await sw.request("/audio/milestones/victory.mp3"))!.text(),
+    ).toBe("fanfare");
+    expect(
+      await (await sw.request("/motion/milestone-ink.png", "no-cors"))!.text(),
+    ).toBe("ink");
+  });
+  it("still refuses to install when a file the table needs is missing", async () => {
+    const sw = worker();
+    sw.responses.delete("/assets/cards-123.js");
+    await expect(sw.lifecycle("install")).rejects.toThrow(
+      "An offline table asset is unavailable.",
+    );
+  });
+  it("switches the offline table to a new deploy only once its build files are stored", async () => {
+    const sw = worker();
+    await sw.lifecycle("install");
+    await sw.lifecycle("activate");
+    const deploy = (build: string) =>
+      sw.responses.set(
+        "/",
+        `<script src="/assets/table-${build}.js"></script><link href="/assets/table-123.css" rel="stylesheet">`,
+      );
+    // A deploy whose chunk cannot be downloaded yet keeps the previous table.
+    deploy("456");
+    expect(await (await sw.request("/", "navigate"))!.text()).toContain(
+      "table-456.js",
+    );
+    sw.goOffline();
+    expect(await (await sw.request("/", "navigate"))!.text()).toContain(
+      "table-123.js",
+    );
+    sw.goOnline();
+    // Once the chunk is reachable, visiting the page is enough: the worker
+    // stores it even though this page never requested it.
+    sw.responses.set("/assets/table-456.js", "new table code");
+    const calls = sw.fetch.mock.calls.length;
+    await sw.request("/", "navigate");
+    // Only the page and its one new file are downloaded; cached files stay.
+    expect(
+      sw.fetch.mock.calls
+        .slice(calls)
+        .map(([request]) => (typeof request === "string" ? request : "/"))
+        .filter((url) => !/^\/(audio|motion)\//.test(url)),
+    ).toEqual(["/", "/assets/table-456.js"]);
+    sw.goOffline();
+    expect(await (await sw.request("/", "navigate"))!.text()).toContain(
+      "table-456.js",
+    );
+    expect(await (await sw.request("/assets/table-456.js"))!.text()).toBe(
+      "new table code",
+    );
   });
   it("refreshes art at the same URL and retains it when offline", async () => {
     const sw = worker();
