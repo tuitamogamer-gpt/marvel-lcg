@@ -542,6 +542,9 @@
   color: #1f5132;
   font-weight: 700;
 }
+.deck-list-message.is-error {
+  color: #9b1c25;
+}
 .deck-list-message .text-button {
   margin-left: 12px;
   font-size: 13px;

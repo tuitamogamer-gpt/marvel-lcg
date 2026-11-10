@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 import {
   ArrowCounterClockwise,
   ArrowRight,
@@ -46,12 +46,16 @@ import {
   TYPE_LABELS,
   costBucket,
   deckSummary,
+  fetchMarvelCdbDeck,
   formatDeckList,
   groupPrintings,
+  importSlots,
+  marvelCdbLink,
   normalizeName,
   parseDeckList,
   setRowCount,
 } from "./deck-list.js";
+import type { ParsedDeckList } from "./deck-list.js";
 import type { DeckRow } from "./deck-list.js";
 import type { DeckDraft, MissionRecord, SavedDeck } from "./types.js";
 import "./account.css";
@@ -426,7 +430,29 @@ export function DeckEditor({
   );
   const [listText, setListText] = useState("");
   const [listMessage, setListMessage] = useState("");
-  const [undoCodes, setUndoCodes] = useState<string[] | null>(null);
+  const [listError, setListError] = useState(false);
+  const say = (text: string, error = false) => {
+    setListMessage(text);
+    setListError(error);
+  };
+  const [listBusy, setListBusy] = useState(false);
+  // A name filled in by an earlier import is replaced by the next one.
+  const [importedName, setImportedName] = useState("");
+  // What a loaded list replaced, including the hero when a link changed it.
+  const [undoState, setUndoState] = useState<{
+    heroId: string;
+    aspect: Aspect;
+    secondAspect: Aspect;
+    fourChosenAspects: Aspect[];
+    codes: string[];
+  } | null>(null);
+  const snapshot = () => ({
+    heroId,
+    aspect,
+    secondAspect,
+    fourChosenAspects,
+    codes,
+  });
   const dualAspect = heroDeckRule(heroId)?.aspects === "two-equal";
   const fourAspects = heroDeckRule(heroId)?.aspects === "four-equal-singleton";
   const aspects = fourAspects
@@ -523,49 +549,138 @@ export function DeckEditor({
     try {
       await navigator.clipboard.writeText(text);
       setListMode("closed");
-      setUndoCodes(null);
-      setListMessage("Deck list copied to the clipboard.");
+      setUndoState(null);
+      say("Deck list copied to the clipboard.");
     } catch {
       setListText(text);
       setListMode("copy");
-      setListMessage("");
+      say("");
     }
   }
-  function applyList() {
+  const listReport = (lead: string, parsed: ParsedDeckList) => {
+    const skipped = [
+      ...parsed.unavailable.map((n) => `${n} (not in this deck's pool)`),
+      ...parsed.unknown.map((n) => `${n} (unknown card)`),
+    ];
+    return [
+      lead,
+      parsed.limited.length &&
+        `Reduced to the copy limit: ${parsed.limited.join(", ")}.`,
+      skipped.length && `Skipped ${skipped.join(", ")}.`,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  };
+  async function applyList() {
+    const link = marvelCdbLink(listText);
+    if (link) return importMarvelCdb(link);
     const parsed = parseDeckList(listText, {
       heroId,
       options,
       fixed: required,
     });
     if (!parsed.codes.length && !parsed.fixed) {
-      setListMessage(
-        "No cards found. Write one card per line, such as \u201c2x Energy (Core Set)\u201d.",
+      say(
+        "No cards found. Write one card per line, such as \u201c2x Energy (Core Set)\u201d, or paste a MarvelCDB deck link.",
+        true,
       );
       return;
     }
-    setUndoCodes(codes);
+    setUndoState(snapshot());
     setCodes([
       ...codes.filter((code) => Object.hasOwn(required, code)),
       ...parsed.codes,
     ]);
-    const skipped = [
-      ...parsed.unavailable.map((n) => `${n} (not in this deck's pool)`),
-      ...parsed.unknown.map((n) => `${n} (unknown card)`),
-    ];
-    setListMessage(
-      [
+    say(
+      listReport(
         `Loaded ${cards(parsed.codes.length)}; hero cards stay as they are.`,
-        parsed.limited.length &&
-          `Reduced to the copy limit: ${parsed.limited.join(", ")}.`,
-        skipped.length && `Skipped ${skipped.join(", ")}.`,
-      ]
-        .filter(Boolean)
-        .join(" "),
+        parsed,
+      ),
     );
     setListText("");
     setListMode("closed");
   }
-  const stopEnter = (e: React.KeyboardEvent) => {
+  async function importMarvelCdb(
+    link: NonNullable<ReturnType<typeof marvelCdbLink>>,
+  ) {
+    setListBusy(true);
+    setUndoState(null);
+    say("Loading the deck from MarvelCDB\u2026");
+    try {
+      const deck = await fetchMarvelCdbDeck(link);
+      const hero = HEROES.find((h) => h.code === deck.heroCode);
+      if (!hero) {
+        say(
+          `${deck.heroName} cannot be played at this table yet, so this deck was not loaded.`,
+          true,
+        );
+        return;
+      }
+      const listed = Object.entries(deck.slots).flatMap(([code, count]) =>
+        Array<string>(count).fill(code),
+      );
+      const known = deck.aspects.filter((a): a is Aspect =>
+        ASPECTS.some((option) => option.id === a),
+      );
+      const primary =
+        known[0] ||
+        ASPECTS.find((a) =>
+          listed.some((code) => card(code)?.faction_code === a.id),
+        )?.id ||
+        hero.aspect;
+      const nextAspects = editorAspects(
+        hero.id,
+        primary,
+        listed,
+        known.length > 1 ? known : undefined,
+      );
+      const nextRequired = heroRequiredCards(hero.id);
+      const parsed = importSlots(deck.slots, {
+        heroId: hero.id,
+        options: deckOptions(hero.id, primary, nextAspects),
+        fixed: nextRequired,
+      });
+      setUndoState(snapshot());
+      setHero(hero.id);
+      setAspect(primary);
+      setSecondAspect(nextAspects[1] || "aggression");
+      setFourChosenAspects(nextAspects);
+      setCodes([
+        ...deckCodes(hero.id, primary, nextAspects).filter((code) =>
+          Object.hasOwn(nextRequired, code),
+        ),
+        ...parsed.codes,
+      ]);
+      if (deck.name && (!name.trim() || name === importedName)) {
+        setName(deck.name);
+        setImportedName(deck.name);
+      }
+      setListText("");
+      setListMode("closed");
+      say(
+        listReport(
+          `Loaded \u201c${deck.name || "MarvelCDB deck"}\u201d: ${hero.name}, ${ASPECTS.filter(
+            (a) => nextAspects.includes(a.id),
+          )
+            .map((a) => a.name)
+            .join(
+              " / ",
+            )}, ${cards(parsed.codes.length)} besides the hero cards.`,
+          parsed,
+        ),
+      );
+    } catch (error) {
+      say(
+        error instanceof Error
+          ? error.message
+          : "The deck could not be loaded.",
+        true,
+      );
+    } finally {
+      setListBusy(false);
+    }
+  }
+  const stopEnter = (e: KeyboardEvent) => {
     if (e.key === "Enter") e.preventDefault();
   };
   function reset(h: string, a: Aspect, secondary?: Aspect, four?: Aspect[]) {
@@ -581,8 +696,8 @@ export function DeckEditor({
     setSecondAspect(next[1] || "aggression");
     setFourChosenAspects(next);
     setCodes(deckCodes(h, a, next));
-    setUndoCodes(null);
-    setListMessage("");
+    setUndoState(null);
+    say("");
   }
   return (
     <section className="account-editor" aria-label="Deck builder">
@@ -756,8 +871,8 @@ export function DeckEditor({
             onClick={() => {
               setListMode(listMode === "paste" ? "closed" : "paste");
               setListText("");
-              setListMessage("");
-              setUndoCodes(null);
+              say("");
+              setUndoState(null);
             }}
           >
             <ClipboardText size={18} aria-hidden="true" />
@@ -767,9 +882,9 @@ export function DeckEditor({
             type="button"
             className="text-button"
             onClick={() => {
-              setUndoCodes(codes);
+              setUndoState(snapshot());
               setCodes(deckCodes(heroId, aspect, aspects));
-              setListMessage("Starter list restored.");
+              say("Starter list restored.");
             }}
           >
             <ArrowCounterClockwise size={18} aria-hidden="true" />
@@ -785,14 +900,16 @@ export function DeckEditor({
                 readOnly={listMode === "copy"}
                 rows={8}
                 spellCheck={false}
-                placeholder={"3x Energy (Core Set)\n2x For Justice! (Core Set)"}
+                placeholder={
+                  "https://marvelcdb.com/decklist/view/\u2026\nor\n3x Energy (Core Set)\n2x For Justice! (Core Set)"
+                }
                 onFocus={(e) => listMode === "copy" && e.target.select()}
                 onChange={(e) => setListText(e.target.value)}
               />
             </label>
             <p className="account-hint">
               {listMode === "paste"
-                ? "Choose the hero and aspects first. Write one card per line, such as \u201c2x Energy (Core Set)\u201d. Hero cards stay fixed; the list replaces your other cards."
+                ? "Paste a link to a public MarvelCDB deck, or write one card per line, such as \u201c2x Energy (Core Set)\u201d. A link sets the hero and aspects; a written list uses the ones chosen above. Hero cards stay fixed; the list replaces your other cards."
                 : "The clipboard is not available here. Select the list and copy it."}
             </p>
             <div className="deck-list-buttons">
@@ -800,10 +917,14 @@ export function DeckEditor({
                 <button
                   type="button"
                   className="secondary-button"
-                  disabled={!listText.trim()}
-                  onClick={applyList}
+                  disabled={!listText.trim() || listBusy}
+                  onClick={() => void applyList()}
                 >
-                  Load this list
+                  {listBusy
+                    ? "Loading\u2026"
+                    : marvelCdbLink(listText)
+                      ? "Load from MarvelCDB"
+                      : "Load this list"}
                 </button>
               )}
               <button
@@ -817,16 +938,23 @@ export function DeckEditor({
           </div>
         )}
         {listMessage && (
-          <p className="deck-list-message" aria-live="polite">
+          <p
+            className={`deck-list-message${listError ? " is-error" : ""}`}
+            aria-live="polite"
+          >
             {listMessage}
-            {undoCodes && (
+            {undoState && (
               <button
                 type="button"
                 className="text-button"
                 onClick={() => {
-                  setCodes(undoCodes);
-                  setUndoCodes(null);
-                  setListMessage("Your previous cards are back.");
+                  setHero(undoState.heroId);
+                  setAspect(undoState.aspect);
+                  setSecondAspect(undoState.secondAspect);
+                  setFourChosenAspects(undoState.fourChosenAspects);
+                  setCodes(undoState.codes);
+                  setUndoState(null);
+                  say("Your previous deck is back.");
                 }}
               >
                 Undo
@@ -964,7 +1092,7 @@ export function DeckEditor({
                               setCodes(
                                 setRowCount(codes, row, Number(e.target.value)),
                               );
-                              setUndoCodes(null);
+                              setUndoState(null);
                             }}
                           >
                             {Array.from(

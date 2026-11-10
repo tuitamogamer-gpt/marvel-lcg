@@ -4,8 +4,11 @@ import { describe, expect, it } from "vitest";
 import { DeckEditor } from "../src/account/AccountPage.js";
 import {
   deckSummary,
+  fetchMarvelCdbDeck,
   formatDeckList,
   groupPrintings,
+  importSlots,
+  marvelCdbLink,
   parseDeckList,
   setRowCount,
 } from "../src/account/deck-list.js";
@@ -144,5 +147,125 @@ describe("plain-text deck lists", () => {
     // Backflip is a fixed Spider-Man card: it stays as the deck has it.
     expect(parsed.fixed).toBe(1);
     expect(parsed.codes.some((c) => card(c).name === "Backflip")).toBe(false);
+  });
+});
+
+// The published Core Set Black Panther starter (MarvelCDB decklist 1).
+const blackPantherStarter = {
+  id: 1,
+  name: "Black Panther - Protection - Starter Deck",
+  hero_code: "01040a",
+  hero_name: "Black Panther",
+  meta: '{"aspect":"protection"}',
+  slots: {
+    "01041": 1,
+    "01042": 1,
+    "01043a": 1,
+    "01043b": 1,
+    "01043c": 1,
+    "01043d": 2,
+    "01044": 3,
+    "01045": 1,
+    "01046": 1,
+    "01047": 1,
+    "01048": 1,
+    "01049": 1,
+    "01075": 1,
+    "01076": 1,
+    "01077": 2,
+    "01078": 2,
+    "01079": 2,
+    "01080": 2,
+    "01081": 2,
+    "01082": 2,
+    "01083": 1,
+    "01084": 1,
+    "01085": 1,
+    "01086": 1,
+    "01087": 1,
+    "01088": 1,
+    "01089": 1,
+    "01090": 1,
+    "01091": 1,
+    "01092": 1,
+    "01093": 1,
+  },
+};
+const json = (body: unknown, type = "application/json") =>
+  new Response(typeof body === "string" ? body : JSON.stringify(body), {
+    headers: { "content-type": type },
+  });
+
+describe("MarvelCDB decks", () => {
+  it("recognizes published and shared deck links", () => {
+    expect(
+      marvelCdbLink("https://marvelcdb.com/decklist/view/40000/phoenix-1.0"),
+    ).toEqual({ kind: "decklist", id: "40000" });
+    expect(marvelCdbLink(" marvelcdb.com/deck/view/123 ")).toEqual({
+      kind: "deck",
+      id: "123",
+    });
+    expect(marvelCdbLink("3x Energy (Core Set)")).toBeNull();
+  });
+
+  it("reads a public deck and rejects missing ones", async () => {
+    const urls: string[] = [];
+    const fetcher = (async (url: string) => {
+      urls.push(url);
+      return json(blackPantherStarter);
+    }) as unknown as typeof fetch;
+    const deck = await fetchMarvelCdbDeck(
+      { kind: "decklist", id: "1" },
+      fetcher,
+    );
+    expect(urls).toEqual(["https://marvelcdb.com/api/public/decklist/1"]);
+    expect(deck.heroCode).toBe("01040a");
+    expect(deck.aspects).toEqual(["protection"]);
+    expect(Object.values(deck.slots).reduce((a, b) => a + b, 0)).toBe(40);
+    // A missing deck answers with MarvelCDB's HTML page.
+    await expect(
+      fetchMarvelCdbDeck({ kind: "decklist", id: "9" }, (async () =>
+        json("<html></html>", "text/html")) as unknown as typeof fetch),
+    ).rejects.toThrow("no public deck");
+    await expect(
+      fetchMarvelCdbDeck({ kind: "deck", id: "9" }, (async () => {
+        throw TypeError("Failed to fetch");
+      }) as unknown as typeof fetch),
+    ).rejects.toThrow(
+      "no public deck at this link, or it could not be reached",
+    );
+  });
+
+  it("turns the starter's slots into a valid deck for the same hero", async () => {
+    const options = deckOptions("black_panther", "protection");
+    const fixed = heroRequiredCards("black_panther");
+    const parsed = importSlots(blackPantherStarter.slots, {
+      heroId: "black_panther",
+      options,
+      fixed,
+    });
+    expect(parsed.unknown).toEqual([]);
+    expect(parsed.unavailable).toEqual([]);
+    expect(parsed.limited).toEqual([]);
+    const deck = [
+      ...deckCodes("black_panther", "protection").filter((code) =>
+        Object.hasOwn(fixed, code),
+      ),
+      ...parsed.codes,
+    ];
+    expect(deck).toHaveLength(40);
+    expect(deckErrors("black_panther", "protection", deck)).toEqual([]);
+  });
+
+  it("maps reprint codes to the card's row and reports unknown codes", () => {
+    const parsed = importSlots(
+      { "21049": 2, "99999": 1 },
+      { heroId: "spider_man", options, fixed: required },
+    );
+    expect(parsed.codes.map((code) => card(code).name)).toEqual([
+      "For Justice!",
+      "For Justice!",
+    ]);
+    expect(parsed.unknown).toEqual(["99999"]);
   });
 });

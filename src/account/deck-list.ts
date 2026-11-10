@@ -185,13 +185,7 @@ export function parseDeckList(
   }: { heroId: string; options: Card[]; fixed: Record<string, number> },
 ): ParsedDeckList {
   const rows = groupPrintings(options);
-  const result: ParsedDeckList = {
-    codes: [],
-    fixed: 0,
-    unknown: [],
-    unavailable: [],
-    limited: [],
-  };
+  const result = emptyResult();
   const chosen = new Map<DeckRow, number>();
   for (const raw of text.split(/\r?\n/)) {
     const match = LINE.exec(raw);
@@ -225,6 +219,22 @@ export function parseDeckList(
     }
     chosen.set(row, (chosen.get(row) || 0) + count);
   }
+  return finish(chosen, heroId, result);
+}
+
+const emptyResult = (): ParsedDeckList => ({
+  codes: [],
+  fixed: 0,
+  unknown: [],
+  unavailable: [],
+  limited: [],
+});
+
+function finish(
+  chosen: Map<DeckRow, number>,
+  heroId: string,
+  result: ParsedDeckList,
+) {
   for (const [row, count] of chosen) {
     const limit = copyLimit(row.card, heroId);
     if (count > limit) result.limited.push(`${row.card.name} (max ${limit})`);
@@ -233,4 +243,133 @@ export function parseDeckList(
     );
   }
   return result;
+}
+
+/** Card codes and quantities (MarvelCDB "slots") read against a hero's pool. */
+export function importSlots(
+  slots: Record<string, number>,
+  {
+    heroId,
+    options,
+    fixed,
+  }: { heroId: string; options: Card[]; fixed: Record<string, number> },
+): ParsedDeckList {
+  const rows = groupPrintings(options);
+  const result = emptyResult();
+  const chosen = new Map<DeckRow, number>();
+  for (const [code, count] of Object.entries(slots)) {
+    const printed = card(code);
+    if (!printed) {
+      result.unknown.push(code);
+      continue;
+    }
+    const key = printingKey(printed);
+    const row =
+      rows.find((r) => r.codes.includes(code)) ||
+      rows.find((r) => r.key === key);
+    if (
+      Object.hasOwn(fixed, code) ||
+      row?.codes.some((c) => Object.hasOwn(fixed, c))
+    ) {
+      result.fixed++;
+      continue;
+    }
+    if (!row) {
+      result.unavailable.push(printed.name);
+      continue;
+    }
+    chosen.set(row, (chosen.get(row) || 0) + count);
+  }
+  return finish(chosen, heroId, result);
+}
+
+export interface MarvelCdbLink {
+  kind: "decklist" | "deck";
+  id: string;
+}
+
+/** A published decklist or a shared deck link from marvelcdb.com. */
+export function marvelCdbLink(text: string): MarvelCdbLink | null {
+  const match = /marvelcdb\.com\/(decklist|deck)\/(?:view\/)?(\d+)/i.exec(text);
+  return match
+    ? { kind: match[1].toLowerCase() as MarvelCdbLink["kind"], id: match[2] }
+    : null;
+}
+
+export interface MarvelCdbDeck {
+  name: string;
+  heroCode: string;
+  heroName: string;
+  aspects: string[];
+  slots: Record<string, number>;
+}
+
+export async function fetchMarvelCdbDeck(
+  link: MarvelCdbLink,
+  fetcher: typeof fetch = fetch,
+): Promise<MarvelCdbDeck> {
+  let response: Response;
+  try {
+    response = await fetcher(
+      `https://marvelcdb.com/api/public/${link.kind}/${link.id}`,
+      {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+  } catch {
+    // A missing deck's page carries no CORS header, so the browser reports
+    // it as a network failure too.
+    throw Error(
+      typeof navigator !== "undefined" && navigator.onLine === false
+        ? "MarvelCDB could not be reached while offline."
+        : "MarvelCDB has no public deck at this link, or it could not be reached.",
+    );
+  }
+  // Missing or private decks answer with an HTML page rather than JSON.
+  if (
+    !response.ok ||
+    !(response.headers.get("content-type") || "").includes("json")
+  )
+    throw Error("MarvelCDB has no public deck at this link.");
+  const data = (await response.json().catch(() => null)) as {
+    name?: unknown;
+    hero_code?: unknown;
+    hero_name?: unknown;
+    meta?: unknown;
+    slots?: unknown;
+  } | null;
+  if (
+    !data ||
+    typeof data.hero_code !== "string" ||
+    !data.slots ||
+    typeof data.slots !== "object"
+  )
+    throw Error("MarvelCDB returned a deck this table cannot read.");
+  let meta: Record<string, unknown> = {};
+  try {
+    meta =
+      typeof data.meta === "string"
+        ? JSON.parse(data.meta)
+        : (data.meta as Record<string, unknown>) || {};
+  } catch {
+    // Older decks have no aspect metadata; the cards decide.
+  }
+  return {
+    name: typeof data.name === "string" ? data.name.slice(0, 60) : "",
+    heroCode: data.hero_code,
+    heroName:
+      typeof data.hero_name === "string" ? data.hero_name : data.hero_code,
+    aspects: [meta?.aspect, meta?.aspect2].filter(
+      (a): a is string => typeof a === "string",
+    ),
+    slots: Object.fromEntries(
+      Object.entries(data.slots as Record<string, unknown>).filter(
+        (entry): entry is [string, number] =>
+          Number.isInteger(entry[1]) &&
+          (entry[1] as number) > 0 &&
+          (entry[1] as number) < 100,
+      ),
+    ),
+  };
 }
