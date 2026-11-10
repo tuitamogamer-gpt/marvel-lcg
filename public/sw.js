@@ -32,6 +32,9 @@ const TABLE_ART = [
   "/art/tabletop/stark-workshop.webp",
   "/art/tabletop/gamma-lab.webp",
 ];
+// Art is checked for a newer version once per worker lifetime, not on every
+// card shown: a mission displays the same faces many times.
+const refreshed = new Set();
 // Build files kept by the previous offline page, for tabs still open on it.
 const MANIFEST = "/__offline-build-files.json";
 // Milestone effects are only requested when a milestone happens. They are
@@ -180,7 +183,9 @@ self.addEventListener("fetch", (event) => {
           // Static files have one representation at each URL. CDN or preview
           // Vary: Origin headers must not hide install-time cached files.
           const hit = await cache.match(request, { ignoreVary: true });
-          if (hit && ASSET.test(url.pathname)) return hit;
+          if (hit && (ASSET.test(url.pathname) || refreshed.has(url.pathname)))
+            return hit;
+          if (hit) refreshed.add(url.pathname);
           const update = fetch(
             request,
             ASSET.test(url.pathname) ? {} : { cache: "no-cache" },

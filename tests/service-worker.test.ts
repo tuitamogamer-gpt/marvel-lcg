@@ -318,6 +318,24 @@ describe("offline tabletop", () => {
     sw.goOffline();
     expect(await (await sw.request("/art/table.webp"))!.text()).toBe("new art");
   });
+  it("checks stored art for a newer version only once while the worker runs", async () => {
+    const sw = worker();
+    sw.responses.set("/cards/01001a.webp", "card art");
+    await sw.request("/cards/01001a.webp");
+    const artFetches = () =>
+      sw.fetch.mock.calls.filter(([request]) =>
+        String(typeof request === "string" ? request : request.url).includes(
+          "/cards/01001a.webp",
+        ),
+      ).length;
+    expect(artFetches()).toBe(1);
+    for (let i = 0; i < 5; i++)
+      expect(await (await sw.request("/cards/01001a.webp"))!.text()).toBe(
+        "card art",
+      );
+    // One background check after the first stored hit, then the cache alone.
+    expect(artFetches()).toBe(2);
+  });
   it("keeps account APIs out of the cache and preserves unrelated app caches", async () => {
     const sw = worker();
     await sw.caches.open("champions-cache-v1");
