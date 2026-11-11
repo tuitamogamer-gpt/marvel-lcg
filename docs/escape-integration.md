@@ -33,6 +33,6 @@ Rules references: The Galaxy's Most Wanted rules insert, [Rules Reference 1.8](h
 - The inventory (19 cases) pins all 136 source hashes; manifest hashes retain every previous mission name and seed.
 - The new browser check (`npm run test:escape`) passes 16 flows, 14 accessibility audits and 14 layout checks at 1280, 768, 390 and 320 px with no browser errors: standalone setup for both difficulties, Library Labyrinth, the wounded Collector, The Great Escape's Milano action and the escape win.
 - TypeScript and formatting pass.
-- The 3,328 new source configurations were still running locally when this was written; remote CI runs them in the mission shards.
+- All 3,328 new source configurations pass with the physical-card audit (52 expansion starters × two difficulties × thirty-two modular sets). The other 56,056 configured cases were not rerun locally.
 
 Remote CI runs the full matrix and browser groups, including the new `escape` group.
