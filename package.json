@@ -66,7 +66,8 @@
     "test:campaigns": "node scripts/campaigns-check.mjs",
     "test:zola": "node scripts/zola-check.mjs",
     "test:red-skull": "node scripts/red-skull-check.mjs",
-    "test:badoon": "node scripts/badoon-check.mjs"
+    "test:badoon": "node scripts/badoon-check.mjs",
+    "test:collector": "node scripts/collector-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

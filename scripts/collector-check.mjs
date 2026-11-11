@@ -1,0 +1,411 @@
+import { chromium } from "playwright";
+import { build } from "esbuild";
+import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import assert from "node:assert/strict";
+
+const output = process.env.OUTPUT_DIR || "output/collector/browser";
+const url = process.env.BASE_URL || "http://127.0.0.1:5174";
+const widths = (process.env.COLLECTOR_VIEWPORTS || "1280,768,390,320")
+  .split(",")
+  .map(Number);
+assert.ok(
+  widths.length && widths.every((w) => Number.isInteger(w) && w >= 320),
+);
+await mkdir(output, { recursive: true });
+for (const file of ["report.json", "failure.txt", "failure.png"])
+  await rm(resolve(output, file), { force: true });
+const fixturePath = resolve(output, "native-fixtures.mjs");
+await build({
+  stdin: {
+    resolveDir: process.cwd(),
+    contents: [
+      "import {newGame,dispatch} from './src/game/engine.ts';",
+      "import {card} from './src/game/cards.ts';",
+      "import {syncSeat,seatView} from './src/game/team.ts';",
+      "export const definition=p=>card(p);",
+      "export function fixture(kind){",
+      " let s=newGame({heroId:'spider_man',aspect:'justice',villainId:'infiltrate_the_museum',difficulty:'standard',seed:16070,pacing:'expert',heroes:[{heroId:'spider_man',aspect:'justice'},{heroId:'captain_marvel',aspect:'aggression'}]});",
+      " function command(c){s=dispatch(s,c);if(s.error)throw Error(s.error);}",
+      " for(let n=0;n<100;n++){",
+      "  if(s.review){command({type:'PROCEED'});continue;}",
+      "  if(s.prompt?.kind==='choice'){const o=s.prompt.options.find(o=>/^(pass|skip|continue|none|collect)$/.test(o.id))||s.prompt.options[0];command({type:'CHOOSE',id:o.id});continue;}",
+      "  if(s.phase==='mulligan'&&!s.prompt){command({type:'MULLIGAN',ids:[]});continue;}break;",
+      " }",
+      " if(s.phase!=='player'||s.prompt||s.review||!s.collector)throw Error('Original Infiltrate the Museum setup incomplete');",
+      " function take(code){for(const zone of[s.encounter.deck,s.encounter.discard,s.encounter.dealt]){const i=zone.findIndex(p=>p.code===code);if(i>=0)return zone.splice(i,1)[0];}throw Error('Missing original encounter '+code);}",
+      " function native(effects){s.prompt={kind:'choice',title:'Original Collector encounter',text:'Resolve the original encounter effect.',options:[{id:'go',label:'Resolve original encounter',effects}]};}",
+      " const result={};",
+      " if(kind==='release'){s.player.form='hero';s.player.exhausted=false;result.ids=s.collector.collection.map(p=>p.id);result.owners=s.collector.collection.map(p=>p.ownerId);}",
+      " else if(kind==='biogram'){const p=take('16074');p.attachedTo=s.villain.id;s.attachments.push(p);result.id=p.id;result.hp=s.villain.hp;result.threat=s.scheme.threat;native([{type:'damage',target:s.villain.id,amount:4}]);}",
+      " else if(kind==='complete'){const limit=5*s.playerCount;for(const seat of s.players){const p=seatView(s,seat).player;while(s.collector.collection.length<limit-1&&p.deck.length){const c=p.deck.pop();c.ownerId=seat.id;s.collector.collection.push(c);}}result.size=s.collector.collection.length;native([{type:'collector:top',playerId:s.activePlayerId,actorId:s.activePlayerId}]);}",
+      " else throw Error('Unknown fixture '+kind);",
+      " syncSeat(s);return{state:s,...result};",
+      "}",
+    ].join("\n"),
+  },
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  outfile: fixturePath,
+  logLevel: "silent",
+});
+const { fixture, definition } = await import(pathToFileURL(fixturePath).href);
+const require = createRequire(import.meta.url);
+const axe = await readFile(require.resolve("axe-core/axe.min.js"), "utf8");
+const browser = await chromium.launch({ headless: true });
+const errors = [],
+  checks = [],
+  audits = [],
+  layouts = [];
+let context, page, current;
+const saved = () =>
+  page.evaluate(() => JSON.parse(localStorage.getItem("champions.save.v1")));
+const seatPlayer = (s, seat) =>
+  seat.id === s.activePlayerId ? s.player : seat.player;
+function pieces(s) {
+  return [
+    s.villain,
+    s.collector.currentMain,
+    ...s.collector.villainDeck,
+    ...s.collector.collection,
+    ...s.players.flatMap((seat) => {
+      const p = seatPlayer(s, seat);
+      return [
+        ...p.hand,
+        ...p.deck,
+        ...p.discard,
+        ...p.inPlay,
+        ...(p.setAside || []),
+      ];
+    }),
+    ...s.minions,
+    ...s.sideSchemes,
+    ...s.attachments,
+    ...(s.environments || []),
+    ...s.removed,
+    ...s.resolving,
+    ...(s.victoryDisplay || []),
+    ...s.encounter.deck,
+    ...s.encounter.discard,
+    ...s.encounter.dealt,
+    ...(s.encounter.storedBoosts || []),
+    ...(s.attack?.pendingBoosts || []),
+  ];
+}
+function originals(s) {
+  const all = pieces(s);
+  assert.equal(
+    new Set(all.map((p) => p.id)).size,
+    all.length,
+    "Each physical card has one owner",
+  );
+  return all.map((p) => p.id + ":" + p.code).sort();
+}
+async function open(width, state) {
+  if (context) await context.close();
+  context = await browser.newContext({
+    viewport: { width, height: 900 },
+    reducedMotion: "reduce",
+  });
+  page = await context.newPage();
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.addInitScript((state) => {
+    if (sessionStorage.getItem("collector-check")) return;
+    sessionStorage.setItem("collector-check", "1");
+    localStorage.setItem("champions.sound", "off");
+    localStorage.setItem("champions.pacing", "expert");
+    if (state) localStorage.setItem("champions.save.v1", JSON.stringify(state));
+  }, state);
+  await page.goto(url);
+  if (state) await page.getByRole("button", { name: /Resume mission/ }).click();
+}
+async function settle(stop = () => false) {
+  for (let n = 0; n < 100; n++) {
+    const s = await saved();
+    assert.ok(!s.error, s.error);
+    if (stop(s)) return s;
+    if (s.review) {
+      await page.locator("[role=dialog] [data-proceed]").last().click();
+      continue;
+    }
+    if (!s.prompt) return s;
+    assert.equal(
+      s.prompt.kind,
+      "choice",
+      "Expected native choice: " + JSON.stringify(s.prompt),
+    );
+    const o =
+      s.prompt.options.find((o) =>
+        /^(pass|skip|continue|none|resolve|take|allow|no|collect)$/.test(o.id),
+      ) ||
+      (s.prompt.options.length === 1 || s.prompt.title === "Forced responses"
+        ? s.prompt.options[0]
+        : undefined);
+    assert.ok(o, "Unhandled native prompt: " + JSON.stringify(s.prompt));
+    await page
+      .locator("[role=dialog]")
+      .last()
+      .getByRole("button", { name: o.label, exact: true })
+      .click();
+  }
+  throw Error("Native Collector continuation did not finish");
+}
+async function begin() {
+  await settle();
+  await page
+    .getByRole("button", { name: "Keep hand & begin", exact: true })
+    .click();
+  const s = await settle();
+  assert.equal(s.phase, "player");
+  return s;
+}
+async function resumeExact() {
+  const before = await saved();
+  await page.reload();
+  await page.getByRole("button", { name: /Resume mission/ }).click();
+  assert.deepEqual(
+    await saved(),
+    before,
+    "The Collection, its owners and physical cards survive reload",
+  );
+}
+async function audit(name, width) {
+  await page.mouse.move(0, 0);
+  await page.locator(".card-hover-preview").waitFor({ state: "hidden" });
+  await page.evaluate(axe);
+  const violations = await page.evaluate(async () =>
+    (
+      await window.axe.run(document, {
+        runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
+      })
+    ).violations.map((v) => ({
+      id: v.id,
+      nodes: v.nodes.map((n) => ({
+        target: n.target,
+        message: n.failureSummary,
+      })),
+    })),
+  );
+  audits.push({ name, width, violations });
+  assert.deepEqual(violations, [], name);
+  const layout = await page.evaluate(() => ({
+    width: innerWidth,
+    content: document.documentElement.scrollWidth,
+  }));
+  layouts.push({ name, ...layout });
+  assert.ok(layout.content <= layout.width + 1, name + ": horizontal overflow");
+  await page.screenshot({
+    path: resolve(output, name + "-" + width + ".png"),
+    fullPage: true,
+  });
+}
+const collectionPile = (limit) =>
+  page.getByRole("button", {
+    name: new RegExp("^The Collection · lose at " + limit + ", "),
+  });
+async function setupEvidence(s, difficulty) {
+  assert.equal(s.villainId, "infiltrate_the_museum");
+  assert.deepEqual(s.modules, ["menagerie_medley"]);
+  assert.equal(s.villain.code, difficulty === "expert" ? "16071" : "16070");
+  assert.equal(s.collector.currentMain.code, "16073b");
+  assert.equal(s.scheme.threat, 4);
+  // Setup puts the top card of the player's deck into The Collection; Expert's
+  // Collector (II) collects another card (or deals 3 damage) when revealed.
+  assert.equal(s.collector.collection.length, difficulty === "expert" ? 2 : 1);
+  assert.ok(
+    s.collector.collection.every((p) => p.ownerId === s.activePlayerId),
+    "Collected player cards keep their owner",
+  );
+  assert.equal(
+    pieces(s).filter((p) => definition(p).set_code === "infiltrate_the_museum")
+      .length,
+    12,
+    "Two villain stages select twelve original physical scenario cards",
+  );
+  assert.equal(
+    pieces(s).filter((p) => definition(p).set_code === "galactic_artifacts")
+      .length,
+    9,
+  );
+  assert.ok(
+    pieces(s).filter((p) => definition(p).set_code === "menagerie_medley")
+      .length > 0,
+  );
+  await collectionPile(5).waitFor();
+  assert.equal(s.player.form, "alter");
+  assert.equal(
+    await page.getByRole("button", { name: /free 1 collected card$/ }).count(),
+    0,
+    "The Grand Collection's Hero Action needs hero form",
+  );
+  for (const code of [s.villain.code, s.collector.currentMain.code]) {
+    const img = page.locator('img[src*="' + code + '"]').first();
+    await img.waitFor();
+    await img.evaluate(async (image) => {
+      await image.decode();
+      if (!image.naturalWidth) throw Error("Missing original artwork");
+    });
+  }
+}
+try {
+  for (const width of widths) {
+    for (const difficulty of ["standard", "expert"]) {
+      current = { kind: "standalone-setup", width, difficulty };
+      await open(width);
+      await page
+        .locator(".villain-tabs")
+        .getByRole("button", { name: "Collector", exact: true })
+        .click();
+      assert.equal(
+        await page
+          .getByRole("combobox", { name: "Modular encounter", exact: true })
+          .inputValue(),
+        "menagerie_medley",
+      );
+      await page
+        .locator(".setting-line")
+        .filter({ has: page.locator("span", { hasText: /^Difficulty$/ }) })
+        .getByRole("button", {
+          name: difficulty === "expert" ? "Expert" : "Standard",
+          exact: true,
+        })
+        .click();
+      await page.locator("#mission-seed").fill("16070");
+      await page.locator("#start-btn").click();
+      const s = await begin();
+      await setupEvidence(s, difficulty);
+      const owned = originals(s);
+      await resumeExact();
+      assert.deepEqual(originals(await saved()), owned);
+      await audit("standalone-" + difficulty, width);
+      checks.push({
+        ...current,
+        physicalCards: owned.length,
+        collection: s.collector.collection.length,
+        exactReload: true,
+      });
+    }
+  }
+  for (const width of [widths[0], widths.at(-1)]) {
+    current = { kind: "release", width };
+    let f = fixture("release");
+    const ownedRelease = originals(f.state);
+    await open(width, f.state);
+    await resumeExact();
+    await collectionPile(10).click();
+    await page
+      .locator("[role=dialog]")
+      .last()
+      .getByText(/The Collection · 2 of 10/)
+      .waitFor();
+    await page.keyboard.press("Escape");
+    await page
+      .getByRole("button", {
+        name: "Exhaust · free 1 collected card",
+        exact: true,
+      })
+      .click();
+    let s = await saved();
+    assert.equal(s.prompt?.title, "The Grand Collection");
+    const released = s.prompt.options[0];
+    await page
+      .locator("[role=dialog]")
+      .last()
+      .getByRole("button", { name: released.label, exact: true })
+      .first()
+      .click();
+    s = await settle();
+    assert.equal(s.collector.collection.length, 1);
+    assert.ok(s.player.exhausted, "The hero exhausts as the action's cost");
+    const owner = s.players.find(
+      (seat) => seat.id === f.owners[f.ids.indexOf(released.id)],
+    );
+    assert.ok(
+      seatPlayer(s, owner).discard.some((p) => p.id === released.id),
+      "The released card returns to its owner's discard pile",
+    );
+    assert.equal(
+      await page
+        .getByRole("button", {
+          name: /free 1 collected card$/,
+        })
+        .count(),
+      0,
+      "The Hero Action is limited to once per round",
+    );
+    assert.deepEqual(originals(s), ownedRelease);
+    await resumeExact();
+    await audit("release", width);
+    checks.push({ ...current, exactReload: true });
+
+    current = { kind: "biogram", width };
+    f = fixture("biogram");
+    const ownedBiogram = originals(f.state);
+    await open(width, f.state);
+    await page
+      .getByRole("button", { name: "Resolve original encounter", exact: true })
+      .click();
+    s = await settle();
+    assert.equal(s.villain.hp, f.hp, "Biogram Image prevents the damage");
+    assert.equal(s.scheme.threat, f.threat + 4, "Prevented damage is threat");
+    assert.ok(s.collector.collection.some((p) => p.id === f.id));
+    assert.deepEqual(originals(s), ownedBiogram);
+    await audit("biogram", width);
+    checks.push({ ...current, threat: s.scheme.threat });
+
+    current = { kind: "complete", width };
+    f = fixture("complete");
+    assert.equal(f.size, 9);
+    await open(width, f.state);
+    await page
+      .getByRole("button", { name: "Resolve original encounter", exact: true })
+      .click();
+    s = await settle(
+      (s) => s.phase === "lost" || s.phase === "won" || !s.prompt,
+    );
+    assert.equal(s.phase, "lost");
+    assert.equal(s.collector.collection.length, 10);
+    await page
+      .getByText(/The Collection is complete/)
+      .first()
+      .waitFor();
+    checks.push({ ...current, collection: s.collector.collection.length });
+  }
+  assert.deepEqual(errors, []);
+  await writeFile(
+    resolve(output, "report.json"),
+    JSON.stringify(
+      { checks, audits, layouts, errors, widths, baseURL: url },
+      null,
+      2,
+    ),
+  );
+  console.log(
+    JSON.stringify({
+      flows: checks.length,
+      audits: audits.length,
+      layouts: layouts.length,
+      errors: errors.length,
+    }),
+  );
+} catch (error) {
+  await writeFile(
+    resolve(output, "failure.txt"),
+    String(error) +
+      "\n" +
+      JSON.stringify(current) +
+      "\n" +
+      (page ? await page.locator("body").innerText() : ""),
+  );
+  if (page)
+    await page
+      .screenshot({ path: resolve(output, "failure.png"), fullPage: true })
+      .catch(() => {});
+  throw error;
+} finally {
+  if (context) await context.close();
+  await browser.close();
+}

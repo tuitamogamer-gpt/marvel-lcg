@@ -1,0 +1,38 @@
+# Infiltrate the Museum native scenario
+
+This continuation starts from `b64c3c385ac40714cab3446a1791bfe358723880` and adds the second scenario of The Galaxy's Most Wanted.
+
+## Original source and scope
+
+Infiltrate the Museum registers ten original scenario faces: Collector (I)–(III) `16070`–`16072`, both sides of The Grand Collection `16073a`/`16073b`, Biogram Image `16074`, Monarch Starstalker `16075`, Inconspicuous Box `16076`, View the Cosmos `16077` and Stay Awhile `16078`. Caught Off Guard `16079` keeps its existing Core alias. The required Galactic Artifacts set registers its nine faces `16122`–`16130`, and the Menagerie Medley modular set its three faces `16135`–`16137`. All 22 faces are dedicated registrations in `src/game/collector.ts`; the imported catalog, original source decks and artwork remain unchanged.
+
+Standard selects Collector (I) and (II), Expert Collector (II) and (III). Each game uses twelve physical scenario cards: two villain stages, the main scheme, Biogram Image, Monarch Starstalker, two each of Inconspicuous Box, View the Cosmos and Stay Awhile, and Caught Off Guard. Galactic Artifacts adds nine cards: five artifact attachments and four Victory 0 side schemes. Menagerie Medley (nine physical cards) is the default modular set; it is also a new selectable modular set for every other scenario, so the selector lists thirty-two sets. Galactic Artifacts is a fixed set of this scenario and is never offered as a modular choice.
+
+## Native rules
+
+- **The Collection:** setup creates The Collection and puts the top card of each player's deck into it faceup. While Collector is in play, every player or encounter card that would be discarded from play goes into The Collection instead; collected player cards keep their owner. The table shows The Collection as its own pile, with the loss threshold, and it can be inspected. Victory display cards, removed cards and cards discarded from hand or deck are unaffected.
+- **The Grand Collection (1B):** starts with 4 threat per player. Its Hero Action (once per round per player, hero form) exhausts the hero or spends 2 resources of any type to return one card from The Collection to its owner's discard pile. The players lose when The Collection holds five cards per player or when the stage is completed.
+- **Collector:** Collector (II) makes each player, in player order, either collect the top card of their deck or take 3 damage when revealed. Collector (III) collects the top card of each player's deck when revealed and places 1 threat per card in The Collection; while he is in play each collected discard also places 1 threat.
+- **Biogram Image:** attaches to Collector. When Collector would take damage, Biogram Image goes into The Collection, prevents all of that damage and places that much threat on the main scheme. As a boost it is revealed after the activation ends.
+- **Treacheries:** Inconspicuous Box collects the lowest-cost card you control, or surges, and as a boost collects your top card while The Collection holds at most three cards per player. View the Cosmos collects or discards (with threat equal to its cost) the highest-cost card in your hand. Stay Awhile makes an alter-ego spend physical + physical or collect the top card; a hero is attacked with +1 ATK and collects the top card if damaged. Monarch Starstalker uses the native Villainous keyword.
+- **Galactic Artifacts:** Cloak of Hercules attaches to the enemy with the lowest ATK, The Beyonder's Blazer to the highest SCH and Vandarian Power Stone to the lowest SCH; Obedience Potion (−1 ATK, THW and DEF) and The Poison (a counter at the start of each of your turns, then that much damage) attach to your identity. Each has a Hero Action that pays its printed cost to discard it — into The Collection while Collector is in play. The four Victory 0 side schemes go to the victory display when defeated and let the defeater ready their identity (Hujahdarian Monarch Egg), heal 4 (Magical Teapot), draw 2 (Philosopher's Stone) or play a card from hand for 3 less (Crystal Ball).
+- **Menagerie Medley:** Psionic Ghost confuses you, or deals 1 damage if you are already confused, and its boost puts it into play engaged with you. Servant Bot uses the native Guard and Patrol keywords. Starshark (Quickstrike) deals indirect damage with its attacks, and its boost deals 1 damage to each character you control.
+
+## Coverage boundaries
+
+The executable registry contains 2,425 faces, including 1,986 dedicated faces, with 2,126 imported faces still unsupported. There are 57 playable identities, seventeen scenarios and thirty-two modular sets. The Galaxy's Most Wanted has 108 of its 207 faces registered: its other three scenarios, their modular sets and the campaign remain pending. The inventory pins 135 source files. No official campaign rules are automated.
+
+The configured source matrix contains 56,056 cases in eight disjoint shards of 7,007. Infiltrate the Museum adds 3,328 cases (52 expansion starter identities × two difficulties × thirty-two primary modular sets), and Menagerie Medley adds 1,664 cases to the sixteen earlier scenarios. Manifest hashes retain all 51,064 previous mission names and seeds.
+
+Rules references: The Galaxy's Most Wanted rules insert, [Rules Reference 1.8](https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf), and the original imported card texts.
+
+## Measured local validation — 2026-11-11
+
+- The regular regression runs 10,627 tests across 289 files. Its first run exposed 57 expected count failures (thirty-two modular sets) and two harness gaps in the complete-mission suite: The Collection was not counted as a card zone, and the harness tried to thwart while Baron Zemo blocked it. After those fixes all 57 affected tests pass, including the 970 complete seeded missions (57 identities × seventeen scenarios).
+- 22 focused engine cases pass, covering setup for one to three players, both villain sequences, the win and both losses, The Collection's interrupt for allies and minions, Victory 0 rewards, Collector (III)'s threat, the once-per-round release Hero Action, Biogram Image, every treachery, every artifact and every Menagerie Medley minion. Each command crosses a JSON save/reload boundary.
+- The inventory (19 cases) pins all 135 source hashes; manifest hashes retain every previous mission name and seed.
+- The new browser check (`npm run test:collector`) passes 14 flows, 12 accessibility audits and 12 layout checks at 1280, 768, 390 and 320 px with no browser errors: standalone setup for both difficulties, The Collection pile, the release Hero Action, Biogram Image and the Collection loss. The retained Brotherhood of Badoon browser check passes.
+- TypeScript and formatting pass.
+- The 4,992 new source configurations (3,328 Infiltrate the Museum and 1,664 Menagerie Medley missions) were still running locally when this was written; remote CI runs them in the mission shards.
+
+Remote CI runs the full matrix and browser groups, including the new `collector` group.

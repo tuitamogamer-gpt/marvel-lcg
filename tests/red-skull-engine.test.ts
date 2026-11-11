@@ -231,7 +231,7 @@ describe("Red Skull original standalone source", () => {
     },
   );
   it("accepts each replaceable set and isolates all its side schemes", () => {
-    expect(scenarioModules("red_skull")).toHaveLength(31);
+    expect(scenarioModules("red_skull")).toHaveLength(32);
     for (const m of scenarioModules("red_skull")) {
       const partner =
         m.id === "hydra_patrol" ? "hydra_assault" : "hydra_patrol";

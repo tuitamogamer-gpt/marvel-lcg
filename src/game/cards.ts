@@ -36,6 +36,7 @@ import {
 } from "./ant-man-pack.js";
 import { thorStats } from "./thor.js";
 import { isTextBlank, textActiveState } from "./card-text.js";
+import { collectorIdentityStats } from "./collector.js";
 import { hawkeyeStats, hawkeyeAllyMaxHP } from "./hawkeye.js";
 import {
   spiderWomanStats,
@@ -1160,6 +1161,20 @@ export const VILLAINS = [
       "Fly the Milano against Drang's armada. Every Badoon scheme charges the ship's barrage until it fires on the heroes below.",
     color: "#7f9c6c",
   },
+  {
+    id: "infiltrate_the_museum",
+    name: "Collector",
+    codes: ["16070", "16071", "16072"],
+    schemes: ["16073b"],
+    module: "menagerie_medley",
+    fixedSets: ["galactic_artifacts"],
+    difficulty: 3,
+    title: "Infiltrate the Museum",
+    location: "Knowhere",
+    description:
+      "Slip through the Collector's museum before he adds you to The Collection. Every card discarded from play becomes one of his exhibits.",
+    color: "#a88c5b",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1203,6 +1218,7 @@ export const MODULES = [
   { id: "weap_master", name: "Weapon Master", difficulty: 3 },
   { id: "hydra_patrol", name: "Hydra Patrol", difficulty: 2 },
   { id: "band_of_badoon", name: "Band of Badoon", difficulty: 3 },
+  { id: "menagerie_medley", name: "Menagerie Medley", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -1606,6 +1622,7 @@ export function heroStats(s: GameState) {
   return {
     attack:
       h.attack! +
+      collectorIdentityStats(s).attack +
       stormGlobal(s).attack +
       s.attachments
         .filter(
@@ -1663,6 +1680,7 @@ export function heroStats(s: GameState) {
       mansionAttackModifiers(s, "hero", { isTextBlank }).attack,
     thwart:
       h.thwart! +
+      collectorIdentityStats(s).thwart +
       stormStats(s).thwart +
       (has(s, "01065") ? 1 : 0) +
       Number(s.flags.lead || 0) +
@@ -1704,6 +1722,7 @@ export function heroStats(s: GameState) {
       captainPackStats(s).thwart,
     defense:
       h.defense! +
+      collectorIdentityStats(s).defense +
       stormStats(s).defense +
       psylockeStats(s).defense +
       cableStatBonus(s) +

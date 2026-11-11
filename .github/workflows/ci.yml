@@ -107,6 +107,8 @@ jobs:
             scripts: test:red-skull
           - group: badoon
             scripts: test:badoon
+          - group: collector
+            scripts: test:collector
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

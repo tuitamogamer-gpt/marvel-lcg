@@ -30,6 +30,7 @@ import { heroRequiredCards, heroRuntime } from "../src/game/hero-runtime";
 import { visionCanAttack } from "../src/game/vision";
 import { cyclopsCanAttack } from "../src/game/cyclops";
 import { valkyrieCannotBasicAttack } from "../src/game/valkyrie";
+import { captainThwartBlocked } from "../src/game/captain-america";
 function base(
   heroId = "spider_man",
   villainId = "rhino",
@@ -654,6 +655,10 @@ describe("complete seeded missions", () => {
             ...s.sideSchemes
               .flatMap((p) => p.captured || [])
               .filter((p) => p.ownerId === s.activePlayerId),
+            // Infiltrate the Museum setup collects each player's top card.
+            ...(s.collector?.collection || []).filter(
+              (p) => p.ownerId === s.activePlayerId,
+            ),
           ].map((p) => p.id),
         );
         if (h.id === "vision") expect(originalIds.size).toBe(41);
@@ -731,8 +736,9 @@ describe("complete seeded missions", () => {
               !cyclopsCanAttack(s) ||
               valkyrieCannotBasicAttack(s);
             const canThwart =
-              s.player.confused ||
-              (targets(s, "scheme").length > 0 && heroStats(s).thwart > 0);
+              !captainThwartBlocked(s) &&
+              (s.player.confused ||
+                (targets(s, "scheme").length > 0 && heroStats(s).thwart > 0));
             if (!cannotAttack || canThwart)
               command({
                 type: "BASIC",
@@ -771,6 +777,7 @@ describe("complete seeded missions", () => {
             ...(s.victoryDisplay || []),
             ...(s.deadpool?.poolSetAside || []),
             ...(s.environments || []),
+            ...(s.collector?.collection || []),
           ]
             .flatMap(function walk(this: void, p: Piece): Piece[] {
               return [

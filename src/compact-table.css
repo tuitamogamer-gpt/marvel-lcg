@@ -163,6 +163,9 @@
     margin: 3px 0 5px;
     font-size: 26px;
   }
+  .app .physical-table .villain-info h2.villain-name-long {
+    font-size: 20px;
+  }
   .app .physical-table .villain-info .health-dial {
     zoom: 0.85;
   }

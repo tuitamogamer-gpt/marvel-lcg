@@ -263,6 +263,10 @@
   font-size: 28px;
   margin: 4px 0 9px;
 }
+/* One long word (COLLECTOR, ABSORBING) stays on one line beside attachments. */
+.physical-table .villain-info h2.villain-name-long {
+  font-size: 22px;
+}
 .health-dial {
   position: relative;
   display: flex;
@@ -830,7 +834,8 @@ button.table-pile:hover .pile-face {
 }
 /* Brotherhood of Badoon: the narrow main-scheme column wraps its Milano action. */
 .main-scheme .in-play-actions {
-  flex-wrap: wrap;
+  flex-direction: column;
+  margin-top: 10px;
 }
 .main-scheme .in-play-actions button {
   white-space: normal;
@@ -1611,7 +1616,11 @@ button.table-pile:hover .pile-face {
 .physical-table .main-scheme > .stat-token {
   position: absolute;
   right: -5px;
-  bottom: 21px;
+  /* Printed First Player / Hero Actions sit below the card and caption. */
+  bottom: calc(
+    21px + min(var(--scheme-actions, 0), 1) * 10px + var(--scheme-actions, 0) *
+      27px
+  );
   z-index: 1;
   background: #d8b953;
   border: 2px solid #f5e8ac;

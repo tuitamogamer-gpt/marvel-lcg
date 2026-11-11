@@ -2447,6 +2447,15 @@ export default function App() {
                       </select>
                     </label>
                   ))}
+                  {villain.id === "infiltrate_the_museum" && (
+                    <p className="setting-help">
+                      Every card discarded from play goes into The Collection
+                      instead; with 5 cards per player there, you lose. Use the
+                      main scheme's Hero Action once per round to free a
+                      collected card. Galactic Artifacts is always included;
+                      Menagerie Medley is the recommended modular set.
+                    </p>
+                  )}
                   {villain.id === "brotherhood_of_badoon" && (
                     <p className="setting-help">
                       The first player controls the Milano: exhaust it for a
@@ -4844,6 +4853,11 @@ function AttachedCards({
                 "04132",
                 "04133",
                 "16064",
+                "16122",
+                "16123",
+                "16124",
+                "16125",
+                "16126",
                 "04148",
                 "04149",
                 "25032",
@@ -4873,6 +4887,11 @@ function AttachedCards({
                     "04132",
                     "04133",
                     "16064",
+                    "16122",
+                    "16123",
+                    "16124",
+                    "16125",
+                    "16126",
                     "04148",
                     "04149",
                     "29038",
@@ -4889,6 +4908,11 @@ function AttachedCards({
                     "04132",
                     "04133",
                     "16064",
+                    "16122",
+                    "16123",
+                    "16124",
+                    "16125",
+                    "16126",
                     "04148",
                     "04149",
                     "29038",
@@ -4908,6 +4932,11 @@ function AttachedCards({
                   "04132",
                   "04133",
                   "16064",
+                  "16122",
+                  "16123",
+                  "16124",
+                  "16125",
+                  "16126",
                   "04148",
                   "04149",
                   "29038",
@@ -5020,6 +5049,8 @@ function Tabletop({
   const threatLimit = schemeLimit(s);
   const hasThreatLimit = Number.isFinite(threatLimit) && threatLimit > 0;
   const threatCritical = hasThreatLimit && s.scheme.threat >= threatLimit - 2;
+  // Main schemes whose printed actions are offered on the table.
+  const mainActionPiece = s.badoon?.currentMain || s.collector?.currentMain;
   const [pile, setPile] = useState<{ title: string; cards: Piece[] } | null>(
     null,
   );
@@ -5317,7 +5348,19 @@ function Tabletop({
                       ? `VILLAIN · SIDE ${s.difficulty === "expert" ? "B" : "A"}`
                       : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                   </span>
-                  <h2>{card(s.villain).name.toUpperCase()}</h2>
+                  <h2
+                    className={
+                      Math.max(
+                        ...card(s.villain)
+                          .name.split(/\s+/)
+                          .map((word) => word.length),
+                      ) >= 9
+                        ? "villain-name-long"
+                        : undefined
+                    }
+                  >
+                    {card(s.villain).name.toUpperCase()}
+                  </h2>
                   <HealthDial
                     value={s.villain.hp}
                     max={s.villain.maxHp}
@@ -5392,6 +5435,13 @@ function Tabletop({
               >
                 <div
                   className={`main-scheme ${threatCritical ? "critical" : ""}`}
+                  style={
+                    {
+                      "--scheme-actions": mainActionPiece
+                        ? abilityOptions(s, mainActionPiece).length
+                        : 0,
+                    } as CSSProperties
+                  }
                 >
                   <div className="scheme-heading">
                     <span className="small-label">MAIN SCHEME</span>
@@ -5458,10 +5508,10 @@ function Tabletop({
                       )}{" "}
                     threat each villain phase
                   </p>
-                  {s.badoon &&
-                    abilityOptions(s, s.badoon.currentMain).length > 0 && (
+                  {mainActionPiece &&
+                    abilityOptions(s, mainActionPiece).length > 0 && (
                       <div className="in-play-actions">
-                        {abilityOptions(s, s.badoon.currentMain).map((a) => (
+                        {abilityOptions(s, mainActionPiece).map((a) => (
                           <button
                             key={a.id}
                             disabled={!canUseAction || !!a.disabled}
@@ -5469,14 +5519,18 @@ function Tabletop({
                             onClick={() =>
                               sendAction({
                                 type: "ABILITY",
-                                id: s.badoon!.currentMain.id,
+                                id: mainActionPiece.id,
                                 action: a.id,
                               })
                             }
                           >
                             {a.id === "milano-minion"
                               ? "Milano · 3 damage to a minion"
-                              : "Milano · remove 3 threat"}
+                              : a.id === "release-exhaust"
+                                ? "Exhaust · free 1 collected card"
+                                : a.id === "release-pay"
+                                  ? "Pay 2 · free 1 collected card"
+                                  : "Milano · remove 3 threat"}
                           </button>
                         ))}
                       </div>
@@ -5746,6 +5800,25 @@ function Tabletop({
                           setPile({
                             title: "Side-scheme discard",
                             cards: s.redSkull!.sideDiscard,
+                          })
+                        }
+                      />
+                    </div>
+                  </>
+                )}
+                {s.collector && (
+                  <>
+                    <span className="table-group-label">THE COLLECTION</span>
+                    <div className="table-piles">
+                      <TablePile
+                        kind="discard"
+                        count={s.collector.collection.length}
+                        top={s.collector.collection.at(-1)}
+                        label={`The Collection · lose at ${5 * s.playerCount}`}
+                        onOpen={() =>
+                          setPile({
+                            title: `The Collection · ${s.collector!.collection.length} of ${5 * s.playerCount}`,
+                            cards: s.collector!.collection,
                           })
                         }
                       />

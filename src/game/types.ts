@@ -264,6 +264,8 @@ export interface GameState {
   zola?: import("./zola.js").ZolaState;
   /** Original Drang stages and Brotherhood of Badoon main schemes. */
   badoon?: import("./badoon.js").BadoonState;
+  /** Original Collector stages and The Collection. */
+  collector?: import("./collector.js").CollectorState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */

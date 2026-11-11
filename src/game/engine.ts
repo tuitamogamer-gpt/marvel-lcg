@@ -1,6 +1,7 @@
 import * as redSkull from "./red-skull.js";
 import * as zola from "./zola.js";
 import * as badoon from "./badoon.js";
+import * as collector from "./collector.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -1572,6 +1573,7 @@ function movePieceFromPlay(
   setAsideOwnerId?: string,
   victory = false,
   movement = false,
+  collect = false,
 ) {
   const controlling = controller(s, id);
   const viewBefore = controlling ? seatView(s, controlling) : s;
@@ -1838,14 +1840,19 @@ function movePieceFromPlay(
         taskmaster.TASKMASTER_CAPTIVES.includes(p.code)) &&
       p.ownerId
     )
-  )
-    (removed
-      ? s.removed
-      : victory
-        ? (s.victoryDisplay ||= [])
-        : s.encounter.discard
-    ).push(resetPiece(p));
-  else {
+  ) {
+    // Collector's Forced Interrupt: a card that would be discarded from play
+    // goes faceup into The Collection instead.
+    if (!removed && !victory && (collect || collector.collectorActive(s)))
+      add(s, ...collectInto(s, resetPiece(p), collect));
+    else
+      (removed
+        ? s.removed
+        : victory
+          ? (s.victoryDisplay ||= [])
+          : s.encounter.discard
+      ).push(resetPiece(p));
+  } else {
     const owner =
       s.players.find((x) => x.id === p!.ownerId) ||
       controlling ||
@@ -1869,6 +1876,9 @@ function movePieceFromPlay(
         seatView(s, target).player.deck,
       );
       delete s.flags[`niLeaveShuffle:${id}`];
+    } else if (collect || collector.collectorActive(s)) {
+      discarded.ownerId = owner.id;
+      add(s, ...collectInto(s, discarded, collect));
     } else {
       seatView(s, owner).player.discard.push(discarded);
       // A discard cost is paid at this native destination commit. Keep the
@@ -1897,6 +1907,15 @@ function movePieceFromPlay(
     if (angelHealthTarget) seatView(s, angelHealthTarget).player.hp--;
     view.player.hp = Math.min(view.player.hp, maxHP(view));
   }
+}
+/** Collector (III) also places 1 threat when his interrupt replaces a discard;
+ * an effect that puts a card into The Collection directly does not. */
+function collectInto(s: GameState, p: Piece, direct: boolean): Effect[] {
+  if (direct) {
+    s.collector?.collection.push(p);
+    return [];
+  }
+  return collector.collectorCollect(s, p);
 }
 function endGame(s: GameState, won: boolean, reason: string) {
   // A saved Mystique callback owns the outer activation's real facedown
@@ -2282,6 +2301,14 @@ function check(s: GameState) {
   wideawake.projectWideawakeFirstPlayerChanged(s, wideawakePorts);
   masterMold.masterMoldFirstPlayerChanged(s, masterMoldPorts);
   badoonFirstPlayerChanged(s);
+  if (collector.collectorLost(s) && !["won", "lost"].includes(s.phase)) {
+    endGame(
+      s,
+      false,
+      "The Collection is complete. The Collector keeps the heroes' treasures.",
+    );
+    return;
+  }
   if (zeroTolerance.zeroToleranceCheckLoss(s, zeroTolerancePorts)) return;
   // Simultaneous Spectrum batches place every prepared packet before checking
   // hero elimination. This flag exists only during the synchronous commit.
@@ -2862,6 +2889,7 @@ function attackExcess(s: GameState, packet: Effect): number {
       riskyDamageReplacement(s, target.id, amount) ||
       villainAt(s, "01098").length ||
       !!crossbones.crossbonesArmor(s) ||
+      !!collector.collectorBiogram(s) ||
       (s.villainId === "ultron" &&
         s.villain.stage === 3 &&
         s.minions.some((p) => card(p).traits?.includes("Drone.")))
@@ -3417,6 +3445,15 @@ function applyDamage(
       log(s, `Crossbones' Armor absorbs ${n} damage.`);
       if (armor.damage >= 5) discardPiece(s, armor.id);
       return traits.overkillDamage ? { ...none, damageDealt: n } : none;
+    }
+    // Biogram Image: put it into The Collection to prevent all of the damage,
+    // then place that much threat on the main scheme.
+    const biogram = collector.collectorBiogram(s);
+    if (biogram) {
+      movePieceFromPlay(s, biogram.id, false, undefined, false, false, true);
+      log(s, `Biogram Image prevents ${n} damage to the Collector.`);
+      add(s, E("threat", { target: "main", amount: n }));
+      return none;
     }
     const magnetic = magneto.magnetoReplaceDamage(s, target, n, magnetoPorts);
     if (magnetic !== undefined) return none;
@@ -4079,40 +4116,45 @@ function advanceVillain(
       "zola",
       "red_skull",
       "brotherhood_of_badoon",
+      "infiltrate_the_museum",
     ].includes(s.villainId)
   ) {
     const next = (
-      s.villainId === "brotherhood_of_badoon"
-        ? s.badoon
-        : s.villainId === "red_skull"
-          ? s.redSkull
-          : s.villainId === "zola"
-            ? s.zola
-            : s.villainId === "taskmaster"
-              ? s.taskmaster
-              : s.villainId === "absorbing_man"
-                ? s.absorbingMan
-                : s.villainId === "crossbones"
-                  ? s.crossbones
-                  : s.magneto
+      s.villainId === "infiltrate_the_museum"
+        ? s.collector
+        : s.villainId === "brotherhood_of_badoon"
+          ? s.badoon
+          : s.villainId === "red_skull"
+            ? s.redSkull
+            : s.villainId === "zola"
+              ? s.zola
+              : s.villainId === "taskmaster"
+                ? s.taskmaster
+                : s.villainId === "absorbing_man"
+                  ? s.absorbingMan
+                  : s.villainId === "crossbones"
+                    ? s.crossbones
+                    : s.magneto
     )?.villainDeck?.shift();
     if (!next) {
       endGame(
         s,
         true,
-        s.villainId === "brotherhood_of_badoon"
-          ? "Drang is defeated. The Badoon invasion is broken."
-          : s.villainId === "red_skull"
-            ? "Red Skull is defeated. His reign is over."
-            : s.villainId === "zola"
-              ? "Zola is defeated. His experiments are over."
-              : s.villainId === "taskmaster"
-                ? "Taskmaster is defeated. The captives are safe."
-                : s.villainId === "absorbing_man"
-                  ? "Absorbing Man is defeated. The way is clear."
-                  : s.villainId === "crossbones"
-                    ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
-                    : "Magneto is defeated. Asteroid M is safe.",
+        s.villainId === "infiltrate_the_museum"
+          ? "The Collector is defeated. The museum's prisoners go free."
+          : s.villainId === "brotherhood_of_badoon"
+            ? "Drang is defeated. The Badoon invasion is broken."
+            : s.villainId === "red_skull"
+              ? "Red Skull is defeated. His reign is over."
+              : s.villainId === "zola"
+                ? "Zola is defeated. His experiments are over."
+                : s.villainId === "taskmaster"
+                  ? "Taskmaster is defeated. The captives are safe."
+                  : s.villainId === "absorbing_man"
+                    ? "Absorbing Man is defeated. The way is clear."
+                    : s.villainId === "crossbones"
+                      ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
+                      : "Magneto is defeated. Asteroid M is safe.",
       );
       return;
     }
@@ -4134,6 +4176,7 @@ function advanceVillain(
         "zola",
         "red_skull",
         "brotherhood_of_badoon",
+        "infiltrate_the_museum",
       ].includes(s.villainId)
         ? { counters: old.counters }
         : {}),
@@ -4152,6 +4195,7 @@ function advanceVillain(
         "zola",
         "red_skull",
         "brotherhood_of_badoon",
+        "infiltrate_the_museum",
       ].includes(s.villainId)
     ) {
       s.villain.maxHp =
@@ -4227,6 +4271,7 @@ function villainSetup(s: GameState) {
     ...(zola.zolaReveal(s, s.villain) || []),
     ...(redSkull.redSkullReveal(s, s.villain) || []),
     ...(badoon.badoonReveal(s, s.villain) || []),
+    ...(collector.collectorReveal(s, s.villain) || []),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -4697,6 +4742,12 @@ function defeatScheme(
   );
   const redSkullDefeat = redSkull.redSkullSchemeDefeated(s, p);
   const zolaDefeat = zola.zolaSchemeDefeated(s, p);
+  const collectorDefeat = collector.collectorSchemeDefeated(
+    s,
+    p,
+    s.activePlayerId,
+    collectorPorts,
+  );
   const crossbonesDefeat = crossbones.crossbonesSideSchemeDefeated(
     s,
     p,
@@ -4743,7 +4794,12 @@ function defeatScheme(
     { isTextBlank },
   );
   const victory =
-    (["32071", "32100", "32120"].includes(p.code) ||
+    ([
+      "32071",
+      "32100",
+      "32120",
+      ...collector.COLLECTOR_VICTORY_SCHEMES,
+    ].includes(p.code) ||
       (isPlayerSideScheme(p) && playerSideSchemeHasVictory(p))) &&
     !isTextBlank(s, p);
   const retainFind =
@@ -4780,6 +4836,15 @@ function defeatScheme(
             id: `${p.id}:zola-defeated`,
             title: card(p).name,
             effects: zolaDefeat,
+          },
+        ]
+      : []),
+    ...(collectorDefeat.length
+      ? [
+          {
+            id: `${p.id}:collector-defeated`,
+            title: card(p).name,
+            effects: collectorDefeat,
           },
         ]
       : []),
@@ -7300,7 +7365,8 @@ export function newGame(config: {
                     "hydra_patrol",
                   ].includes(c.set_code || "")
                 ? "trors"
-                : c.set_code === "band_of_badoon"
+                : c.set_code === "band_of_badoon" ||
+                    c.set_code === "menagerie_medley"
                   ? "gmw"
                   : c.set_code === "exodus"
                     ? "gambit"
@@ -7388,6 +7454,31 @@ export function newGame(config: {
         ...(redSkull.redSkullReveal(s, s.villain) || []),
         E("openingHands"),
       ].map((e) => effectContext(s, { ...e, actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "infiltrate_the_museum") {
+    s.collector = {
+      currentMain: makePiece(s, "16073b"),
+      villainDeck: [makePiece(s, v.codes[stage])],
+      collection: [],
+    };
+    s.scheme.threat = (card("16073b").base_threat || 0) * s.playerCount;
+    s.villain = Object.assign(makePiece(s, v.codes[stage - 1]), {
+      hp,
+      maxHp: hp,
+      stage,
+    });
+    // The Grand Collection (1A) setup: create The Collection and put the top
+    // card of each player's deck into it.
+    s.queue.push(
+      ...[
+        ...collector.collectorSetup(s),
+        ...(collector.collectorReveal(s, s.villain) || []),
+      ].map((e) => effectContext(s, { actorId: s.firstPlayerId, ...e })),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
     );
     const pacing = s.pacing;
     s.pacing = "expert";
@@ -9752,6 +9843,7 @@ export function abilityOptions(
     ...redSkullModules.redSkullActions(s, p),
     ...absorbingMan.absorbingActions(s, p),
     ...badoon.badoonActions(s, p, badoonPorts),
+    ...collector.collectorActions(s, p, collectorPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -13836,6 +13928,35 @@ const absorbingManPorts: absorbingMan.AbsorbingManPorts = {
         (p) => p.playerSideSchemeController === s.activePlayerId,
       ),
     ].filter((p) => !isPermanent(card(p))),
+};
+const collectorPorts: collector.CollectorPorts = {
+  ...mutagenPorts,
+  revealHidden,
+  reveal: crossbonesPorts.reveal,
+  collectFromPlay: (s, id) =>
+    movePieceFromPlay(s, id, false, undefined, false, false, true),
+  takeTop: (s, playerId) => {
+    const p = seatView(s, playerId).player.deck.shift();
+    if (p) revealHidden(s);
+    return p;
+  },
+  discardFromHand: (s, id) => {
+    discardHand(s, id);
+  },
+  controlledCards: (s, playerId) =>
+    seatView(s, playerId).player.inPlay.filter(
+      (p) => card(p).faction_code !== "encounter" && !isPermanent(card(p)),
+    ),
+  enemyStat: (s, p, stat) => enemyStats(s, p)[stat],
+  canPlayWithDiscount: (s, p, discount) =>
+    antPackPorts.playableWithDiscount(s, p, discount),
+  returnFromCollection: (s, p) => {
+    const owner = s.players.find((seat) => seat.id === p.ownerId);
+    if (card(p).faction_code === "encounter" || !p.ownerId)
+      s.encounter.discard.push(p);
+    else if (!owner || owner.eliminated) s.removed.push(p);
+    else seatView(s, owner).player.discard.push(p);
+  },
 };
 /** "The first player controls the Milano": its one piece follows the token. */
 function badoonFirstPlayerChanged(s: GameState) {
@@ -21672,6 +21793,7 @@ function boostEffects(s: GameState, p: Piece) {
     return;
   }
   const rise =
+    collector.collectorBoost(s, p) ??
     badoon.badoonBoost(s, p) ??
     redSkull.redSkullBoost(s, p) ??
     zola.zolaBoost(s, p) ??
@@ -22323,18 +22445,24 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
   if (
     p &&
     damage > 0 &&
-    (angel.angelIndirectAttack(s, p) || iceman.icemanPyroIndirect(s, p))
+    (angel.angelIndirectAttack(s, p) ||
+      iceman.icemanPyroIndirect(s, p) ||
+      collector.collectorIndirectAttack(s, p))
   ) {
     add(
       s,
       E("indirect", {
         amount: damage,
         source: a.attacker,
-        sourceTitle: "Hook, Line, and Sinker",
+        sourceTitle: collector.collectorIndirectAttack(s, p)
+          ? "Starshark"
+          : "Hook, Line, and Sinker",
         zzzaxBatchId: `angel-attack:${s.nextId++}`,
         zzzaxBatchOwner: s.activePlayerId,
         attackDamage: true,
-        exhaustDamaged: !iceman.icemanPyroIndirect(s, p),
+        exhaustDamaged:
+          !iceman.icemanPyroIndirect(s, p) &&
+          !collector.collectorIndirectAttack(s, p),
         zzzaxAfter: E("ironspiderAttackComplete", {
           attack: structuredClone(a),
           target,
@@ -23501,6 +23629,8 @@ function reveal(
         c.type_code !== "attachment") ||
       (badoon.BADOON_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (collector.COLLECTOR_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -23673,6 +23803,7 @@ function reveal(
       ...zola.ZOLA_SCRIPT_CODES,
       ...redSkull.RED_SKULL_SCRIPT_CODES,
       ...badoon.BADOON_SCRIPT_CODES,
+      ...collector.COLLECTOR_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -23702,6 +23833,7 @@ function reveal(
       mutagenEncounterReveal(s, p) ??
       armadillo.armadilloReveal(s, p) ??
       experimentalWeapons.experimentalWeaponsReveal(s, p) ??
+      collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
       zola.zolaReveal(s, p) ??
@@ -23773,6 +23905,7 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
     zola.zolaReveal(s, p) ??
@@ -24790,26 +24923,29 @@ function resolve(s: GameState, e: Effect) {
       "zola",
       "red_skull",
       "brotherhood_of_badoon",
+      "infiltrate_the_museum",
     ].includes(s.villainId)
   ) {
     // Target references identify the continuing same-title character. Physical
     // card IDs, source IDs and snapshots retain their original stage identity.
     const retiredVillains =
-      s.villainId === "brotherhood_of_badoon"
-        ? ["16058", "16059", "16060"]
-        : s.villainId === "red_skull"
-          ? ["04125", "04126", "04127"]
-          : s.villainId === "zola"
-            ? ["04109", "04110", "04111"]
-            : s.villainId === "taskmaster"
-              ? ["04093", "04094", "04095"]
-              : s.villainId === "absorbing_man"
-                ? ["04076", "04077", "04078"]
-                : s.villainId === "crossbones"
-                  ? ["04058", "04059", "04060"]
-                  : s.villainId === "magneto"
-                    ? ["32138", "32139", "32140"]
-                    : [];
+      s.villainId === "infiltrate_the_museum"
+        ? ["16070", "16071", "16072"]
+        : s.villainId === "brotherhood_of_badoon"
+          ? ["16058", "16059", "16060"]
+          : s.villainId === "red_skull"
+            ? ["04125", "04126", "04127"]
+            : s.villainId === "zola"
+              ? ["04109", "04110", "04111"]
+              : s.villainId === "taskmaster"
+                ? ["04093", "04094", "04095"]
+                : s.villainId === "absorbing_man"
+                  ? ["04076", "04077", "04078"]
+                  : s.villainId === "crossbones"
+                    ? ["04058", "04059", "04060"]
+                    : s.villainId === "magneto"
+                      ? ["32138", "32139", "32140"]
+                      : [];
     const characterFields = ["target", "targetId", "enemyId", "attacker"];
     if (
       [
@@ -24819,6 +24955,7 @@ function resolve(s: GameState, e: Effect) {
         "zola",
         "red_skull",
         "brotherhood_of_badoon",
+        "infiltrate_the_museum",
       ].includes(s.villainId) &&
       [
         "enemyAttack",
@@ -24836,6 +24973,7 @@ function resolve(s: GameState, e: Effect) {
         "zola",
         "red_skull",
         "brotherhood_of_badoon",
+        "infiltrate_the_museum",
       ].includes(s.villainId)
     ) {
       if (e.type === "ms:melee-second") characterFields.push("firstId");
@@ -25088,6 +25226,7 @@ function resolve(s: GameState, e: Effect) {
           ironspider.ironspiderSinisterReveal(state, piece) ??
           armadillo.armadilloReveal(state, piece) ??
           experimentalWeapons.experimentalWeaponsReveal(state, piece) ??
+          collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
           zola.zolaReveal(state, piece) ??
@@ -25207,6 +25346,7 @@ function resolve(s: GameState, e: Effect) {
   if (redSkull.resolveRedSkullEffect(s, e, redSkullPorts)) return;
   if (zola.resolveZolaEffect(s, e, zolaPorts)) return;
   if (badoon.resolveBadoonEffect(s, e, badoonPorts)) return;
+  if (collector.resolveCollectorEffect(s, e, collectorPorts)) return;
   if (taskmaster.resolveTaskmasterEffect(s, e, taskmasterPorts)) return;
   if (absorbingMan.resolveAbsorbingEffect(s, e, absorbingManPorts)) return;
   if (crossbones.resolveCrossbonesEffect(s, e, crossbonesPorts)) return;
@@ -33674,6 +33814,7 @@ function resolve(s: GameState, e: Effect) {
           "zola",
           "red_skull",
           "brotherhood_of_badoon",
+          "infiltrate_the_museum",
           "project_wideawake",
           "mansion_attack",
           "magneto",
@@ -33711,6 +33852,7 @@ function resolve(s: GameState, e: Effect) {
       log(s, `${heroCard(s).name} takes their turn.`, "phase");
       add(s, ...captainPackTurnStart(s));
       add(s, ...nebula.nebulaTurnBegan(s, s.turnPlayerId, nebulaPorts));
+      add(s, ...collector.collectorTurnBegan(s, s.turnPlayerId));
       break;
     case "prepareDiscard": {
       if (e.selected) {
@@ -34224,6 +34366,7 @@ function resolve(s: GameState, e: Effect) {
         E("wolverinePlayerPhase"),
         ...nebula.nebulaTurnBegan(s, s.turnPlayerId, nebulaPorts),
         ...niPack.novaIronheartPackTurnBegan(s, s.turnPlayerId),
+        ...collector.collectorTurnBegan(s, s.turnPlayerId),
       );
       break;
     }
@@ -34424,6 +34567,7 @@ function run(s: GameState) {
       e.type.startsWith("taskmaster:") ||
       e.type.startsWith("zola:") ||
       e.type.startsWith("badoon:") ||
+      e.type.startsWith("collector:") ||
       e.type.startsWith("red-skull:") ||
       e.type.startsWith("sabretooth:") ||
       e.type.startsWith("sabretooth-native:") ||
@@ -34791,6 +34935,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...redSkullModules.redSkullActions(s, p),
               ...absorbingMan.absorbingActions(s, p),
               ...badoon.badoonActions(s, p, badoonPorts),
+              ...collector.collectorActions(s, p, collectorPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -34844,6 +34989,15 @@ export function dispatch(state: GameState, command: Command): GameState {
                 true,
               );
             }
+          } else if (s.collector?.currentMain.id === command.id) {
+            const selected = collector
+              .collectorActions(s, s.collector.currentMain, collectorPorts)
+              .find((o) => o.id === (command.action || "release-exhaust"));
+            need(
+              selected,
+              "This Hero Action needs hero form, a card in The Collection and your once-per-round use.",
+            );
+            add(s, ...selected!.effects);
           } else if (badoon.badoonActionSource(s, command.id)) {
             const selected = badoon
               .badoonActions(

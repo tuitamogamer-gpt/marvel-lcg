@@ -185,6 +185,7 @@ function ownedPieces(s: GameState, originalIds?: Set<string>): Piece[] {
     ...(s.redSkull?.sideDeck || []),
     ...(s.redSkull?.sideDiscard || []),
     ...(s.redSkull?.sleeper ? [s.redSkull.sleeper] : []),
+    ...(s.collector?.collection || []),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
     ...(s.attack?.pendingBoosts || []),
@@ -230,6 +231,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       "zola",
       "red_skull",
       "brotherhood_of_badoon",
+      "infiltrate_the_museum",
     ].includes(s.villainId)
   )
     return [];
@@ -241,6 +243,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
   const z = s.zola;
   const r = s.redSkull;
   const b = s.badoon;
+  const k = s.collector;
   const pieces: Piece[] = [];
   const visit = (p: Piece) => {
     pieces.push(p);
@@ -277,6 +280,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
     ...(s.redSkull?.sideDeck || []),
     ...(s.redSkull?.sideDiscard || []),
     ...(s.redSkull?.sleeper ? [s.redSkull.sleeper] : []),
+    ...(k?.collection || []),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
     ...(m?.activeVillainRetired ? [] : [s.villain]),
@@ -288,6 +292,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       z?.villainDeck ||
       r?.villainDeck ||
       b?.villainDeck ||
+      k?.villainDeck ||
       []),
     ...(m?.mainDeck ||
       g?.mainDeck ||
@@ -312,7 +317,9 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
                   ? [r.currentMain]
                   : b?.currentMain
                     ? [b.currentMain]
-                    : []),
+                    : k?.currentMain
+                      ? [k.currentMain]
+                      : []),
     ...(g?.orbital ? [g.orbital] : []),
     ...s.minions,
     ...s.sideSchemes,
@@ -392,6 +399,10 @@ function runMission(config: (typeof missions)[number]) {
     ...s.sideSchemes
       .flatMap((p) => p.captured || [])
       .filter((p) => p.ownerId === s.activePlayerId && codes.includes(p.code)),
+    // The Grand Collection's setup puts each player's top card into The Collection.
+    ...(s.collector?.collection || []).filter(
+      (p) => p.ownerId === s.activePlayerId && codes.includes(p.code),
+    ),
   ];
   expect(initial.map((p) => p.code).sort()).toEqual([...codes].sort());
   const supplementary = [
@@ -466,7 +477,9 @@ function runMission(config: (typeof missions)[number]) {
                   ? "red_skull"
                   : s.villainId === "brotherhood_of_badoon"
                     ? "brotherhood_of_badoon"
-                    : undefined;
+                    : s.villainId === "infiltrate_the_museum"
+                      ? "infiltrate_the_museum"
+                      : undefined;
   const scenarioSources = scenarioSet
     ? scenarioPhysicalPieces(s).filter((p) => card(p).set_code === scenarioSet)
     : [];
@@ -490,7 +503,9 @@ function runMission(config: (typeof missions)[number]) {
                   ? 27
                   : scenarioSet === "brotherhood_of_badoon"
                     ? 12
-                    : 29;
+                    : scenarioSet === "infiltrate_the_museum"
+                      ? 12
+                      : 29;
     expect(
       scenarioSources,
       "All selected original scenario cards begin in physical zones",
@@ -731,10 +746,10 @@ describe("published expansion starters across every supported mission setting", 
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(16);
-    expect(MODULES).toHaveLength(31);
+    expect(VILLAINS).toHaveLength(17);
+    expect(MODULES).toHaveLength(32);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(51064);
+    expect(missions).toHaveLength(56056);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -745,10 +760,34 @@ describe("published expansion starters across every supported mission setting", 
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
-    // Brotherhood of Badoon and its Band of Badoon modular set extend the grid.
-    // Every earlier name and seed stays in place, so all retained snapshots
-    // below are computed from the same 46,280 configurations.
-    const priorGrid = missions.filter(
+    // Infiltrate the Museum and its Menagerie Medley modular set extend the
+    // grid after Brotherhood of Badoon. Every earlier name and seed stays in
+    // place: the 51,064 configurations before this import hash identically.
+    const badoonGrid = missions.filter(
+      (m) =>
+        m.villainId !== "infiltrate_the_museum" &&
+        m.module !== "menagerie_medley",
+    );
+    expect(badoonGrid).toHaveLength(51064);
+    expect(
+      createHash("sha256")
+        .update(manifest(badoonGrid).join("\n"))
+        .digest("hex"),
+    ).toBe("4d5c7c4c61d182ec83bcf32fa9a7215afff649c0299413a4aacb3b437b15b466");
+    expect(
+      missions.filter((m) => m.villainId === "infiltrate_the_museum"),
+    ).toHaveLength(3328);
+    expect(
+      missions.filter(
+        (m) =>
+          m.module === "menagerie_medley" &&
+          m.villainId !== "infiltrate_the_museum",
+      ),
+    ).toHaveLength(1664);
+    // Brotherhood of Badoon and its Band of Badoon modular set extended the
+    // grid before that. All retained snapshots below are computed from the
+    // same 46,280 configurations.
+    const priorGrid = badoonGrid.filter(
       (m) =>
         m.villainId !== "brotherhood_of_badoon" &&
         m.module !== "band_of_badoon",
@@ -758,10 +797,10 @@ describe("published expansion starters across every supported mission setting", 
       createHash("sha256").update(manifest(priorGrid).join("\n")).digest("hex"),
     ).toBe("bc765bcb35cc55cebe6415eb50a784a8e9b19f3b0617322dd7075ec8b209917a");
     expect(
-      missions.filter((m) => m.villainId === "brotherhood_of_badoon"),
+      badoonGrid.filter((m) => m.villainId === "brotherhood_of_badoon"),
     ).toHaveLength(3224);
     expect(
-      missions.filter(
+      badoonGrid.filter(
         (m) =>
           m.module === "band_of_badoon" &&
           m.villainId !== "brotherhood_of_badoon",
@@ -955,7 +994,7 @@ describe("published expansion starters across every supported mission setting", 
           partition.filter((mission) => mission.villainId === "crossbones")
             .length,
       ),
-    ).toEqual([390, 390, 390, 390, 390, 390, 390, 390]);
+    ).toEqual([403, 403, 403, 403, 403, 403, 403, 403]);
     expect(
       partitions.map(
         (partition) =>
@@ -963,12 +1002,20 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "brotherhood_of_badoon",
           ).length,
       ),
-    ).toEqual([403, 403, 403, 403, 403, 403, 403, 403]);
-    expect(new Set(missions.map(key)).size).toBe(51064);
-    expect(new Set(combined.map(key)).size).toBe(51064);
+    ).toEqual([416, 416, 416, 416, 416, 416, 416, 416]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter(
+            (mission) => mission.villainId === "infiltrate_the_museum",
+          ).length,
+      ),
+    ).toEqual([416, 416, 416, 416, 416, 416, 416, 416]);
+    expect(new Set(missions.map(key)).size).toBe(56056);
+    expect(new Set(combined.map(key)).size).toBe(56056);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(6383);
+      expect(partition).toHaveLength(7007);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -976,11 +1023,11 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(122);
-      expect(Math.max(...perShard)).toBe(123);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(982);
+      expect(Math.min(...perShard)).toBe(134);
+      expect(Math.max(...perShard)).toBe(135);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(1078);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 6383 : 51064);
+    expect(selectedMissions).toHaveLength(isSharded ? 7007 : 56056);
   });
   for (const mission of selectedMissions)
     it(
