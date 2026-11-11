@@ -186,6 +186,7 @@ function ownedPieces(s: GameState, originalIds?: Set<string>): Piece[] {
     ...(s.redSkull?.sideDiscard || []),
     ...(s.redSkull?.sleeper ? [s.redSkull.sleeper] : []),
     ...(s.collector?.collection || []),
+    ...(s.escape?.setAside || []),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
     ...(s.attack?.pendingBoosts || []),
@@ -232,6 +233,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       "red_skull",
       "brotherhood_of_badoon",
       "infiltrate_the_museum",
+      "escape_the_museum",
     ].includes(s.villainId)
   )
     return [];
@@ -244,6 +246,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
   const r = s.redSkull;
   const b = s.badoon;
   const k = s.collector;
+  const x = s.escape;
   const pieces: Piece[] = [];
   const visit = (p: Piece) => {
     pieces.push(p);
@@ -281,6 +284,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
     ...(s.redSkull?.sideDiscard || []),
     ...(s.redSkull?.sleeper ? [s.redSkull.sleeper] : []),
     ...(k?.collection || []),
+    ...(x?.setAside || []),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
     ...(m?.activeVillainRetired ? [] : [s.villain]),
@@ -300,6 +304,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       z?.mainDeck ||
       r?.mainDeck ||
       b?.mainDeck ||
+      x?.mainDeck ||
       []),
     ...(m?.currentMain
       ? [m.currentMain]
@@ -319,7 +324,9 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
                     ? [b.currentMain]
                     : k?.currentMain
                       ? [k.currentMain]
-                      : []),
+                      : x?.currentMain
+                        ? [x.currentMain]
+                        : []),
     ...(g?.orbital ? [g.orbital] : []),
     ...s.minions,
     ...s.sideSchemes,
@@ -479,7 +486,9 @@ function runMission(config: (typeof missions)[number]) {
                     ? "brotherhood_of_badoon"
                     : s.villainId === "infiltrate_the_museum"
                       ? "infiltrate_the_museum"
-                      : undefined;
+                      : s.villainId === "escape_the_museum"
+                        ? "escape_the_museum"
+                        : undefined;
   const scenarioSources = scenarioSet
     ? scenarioPhysicalPieces(s).filter((p) => card(p).set_code === scenarioSet)
     : [];
@@ -505,7 +514,9 @@ function runMission(config: (typeof missions)[number]) {
                     ? 12
                     : scenarioSet === "infiltrate_the_museum"
                       ? 12
-                      : 29;
+                      : scenarioSet === "escape_the_museum"
+                        ? 11
+                        : 29;
     expect(
       scenarioSources,
       "All selected original scenario cards begin in physical zones",
@@ -746,10 +757,10 @@ describe("published expansion starters across every supported mission setting", 
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(17);
+    expect(VILLAINS).toHaveLength(18);
     expect(MODULES).toHaveLength(32);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(56056);
+    expect(missions).toHaveLength(59384);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -760,10 +771,25 @@ describe("published expansion starters across every supported mission setting", 
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
-    // Infiltrate the Museum and its Menagerie Medley modular set extend the
-    // grid after Brotherhood of Badoon. Every earlier name and seed stays in
-    // place: the 51,064 configurations before this import hash identically.
-    const badoonGrid = missions.filter(
+    // Escape the Museum extends the grid without a new modular set. Every
+    // earlier name and seed stays in place: the 56,056 configurations before
+    // this import hash identically.
+    const collectorGrid = missions.filter(
+      (m) => m.villainId !== "escape_the_museum",
+    );
+    expect(collectorGrid).toHaveLength(56056);
+    expect(
+      createHash("sha256")
+        .update(manifest(collectorGrid).join("\n"))
+        .digest("hex"),
+    ).toBe("48cc1a99662b97eedbe4ee218503ce44ebd6a5e313dd24f44fd8faaff06f1792");
+    expect(
+      missions.filter((m) => m.villainId === "escape_the_museum"),
+    ).toHaveLength(3328);
+    // Infiltrate the Museum and its Menagerie Medley modular set extended the
+    // grid after Brotherhood of Badoon: the 51,064 configurations before that
+    // import hash identically.
+    const badoonGrid = collectorGrid.filter(
       (m) =>
         m.villainId !== "infiltrate_the_museum" &&
         m.module !== "menagerie_medley",
@@ -775,10 +801,10 @@ describe("published expansion starters across every supported mission setting", 
         .digest("hex"),
     ).toBe("4d5c7c4c61d182ec83bcf32fa9a7215afff649c0299413a4aacb3b437b15b466");
     expect(
-      missions.filter((m) => m.villainId === "infiltrate_the_museum"),
+      collectorGrid.filter((m) => m.villainId === "infiltrate_the_museum"),
     ).toHaveLength(3328);
     expect(
-      missions.filter(
+      collectorGrid.filter(
         (m) =>
           m.module === "menagerie_medley" &&
           m.villainId !== "infiltrate_the_museum",
@@ -1011,11 +1037,19 @@ describe("published expansion starters across every supported mission setting", 
           ).length,
       ),
     ).toEqual([416, 416, 416, 416, 416, 416, 416, 416]);
-    expect(new Set(missions.map(key)).size).toBe(56056);
-    expect(new Set(combined.map(key)).size).toBe(56056);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter(
+            (mission) => mission.villainId === "escape_the_museum",
+          ).length,
+      ),
+    ).toEqual([416, 416, 416, 416, 416, 416, 416, 416]);
+    expect(new Set(missions.map(key)).size).toBe(59384);
+    expect(new Set(combined.map(key)).size).toBe(59384);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(7007);
+      expect(partition).toHaveLength(7423);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -1023,11 +1057,11 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(134);
-      expect(Math.max(...perShard)).toBe(135);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(1078);
+      expect(Math.min(...perShard)).toBe(142);
+      expect(Math.max(...perShard)).toBe(143);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(1142);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 7007 : 56056);
+    expect(selectedMissions).toHaveLength(isSharded ? 7423 : 59384);
   });
   for (const mission of selectedMissions)
     it(

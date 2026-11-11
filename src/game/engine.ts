@@ -2,6 +2,7 @@ import * as redSkull from "./red-skull.js";
 import * as zola from "./zola.js";
 import * as badoon from "./badoon.js";
 import * as collector from "./collector.js";
+import * as escape from "./escape-museum.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -1917,6 +1918,26 @@ function collectInto(s: GameState, p: Piece, direct: boolean): Effect[] {
   }
   return collector.collectorCollect(s, p);
 }
+/** Escape the Museum: the last threat left stage 1 or 2, so the players
+ * advance (and win by advancing) to the next stage's A side. */
+function advanceEscapeMain(s: GameState, next: Piece) {
+  s.pendingMainCompletion = true;
+  discardMainAttachments(s);
+  s.removed.push(resetPiece(s.escape!.currentMain));
+  s.escape!.currentMain = next;
+  s.scheme.index++;
+  s.scheme.code = next.code;
+  s.scheme.threat = 0;
+  log(s, `The players advance the main scheme: ${card(next).name}.`, "good");
+  add(
+    s,
+    ...escape
+      .escapeMainRevealed(s, next)
+      .map((e) => ({ ...e, actorId: s.firstPlayerId })),
+    E("escape:main-back", { actorId: s.firstPlayerId }),
+    E("clearMainCompletion"),
+  );
+}
 function endGame(s: GameState, won: boolean, reason: string) {
   // A saved Mystique callback owns the outer activation's real facedown
   // cards until that activation resumes. Terminal loss clears those callbacks.
@@ -2309,6 +2330,9 @@ function check(s: GameState) {
     );
     return;
   }
+  const escapeNext = escape.escapeLastThreatRemoved(s, escapePorts);
+  if (escapeNext === "won") return;
+  if (escapeNext) advanceEscapeMain(s, escapeNext);
   if (zeroTolerance.zeroToleranceCheckLoss(s, zeroTolerancePorts)) return;
   // Simultaneous Spectrum batches place every prepared packet before checking
   // hero elimination. This flag exists only during the synchronous commit.
@@ -4040,6 +4064,19 @@ function advanceVillain(
   attack = false,
   captured?: valkyrie.ValkyrieDefeatReceipt[],
 ) {
+  // Escape the Museum: Collector flips instead of being defeated, and his
+  // wounded side cannot be defeated until the round ends.
+  const escaped = escape.escapeVillainWouldBeDefeated(s);
+  if (escaped === "wound") {
+    log(s, "Collector flips instead of being defeated.", "good");
+    add(s, ...escape.escapeWoundEffects(s));
+    return;
+  }
+  if (escaped === "immune") return;
+  if (escaped === "defeated") {
+    endGame(s, true, "Collector is defeated. The heroes escape the museum.");
+    return;
+  }
   const priorityKey = `cyclopsPriority:${s.villain.id}:${s.villain.stage}`;
   if (!s.flags[priorityKey]) {
     const winner = source.startsWith("hero:")
@@ -4542,6 +4579,14 @@ function threat(
             E("clearMainCompletion"),
           );
         }
+        return;
+      }
+      if (s.villainId === "escape_the_museum") {
+        endGame(
+          s,
+          false,
+          `${card(s.scheme.code).name} is complete. The Collector keeps the heroes in his museum.`,
+        );
         return;
       }
       const mutagen =
@@ -7411,6 +7456,7 @@ export function newGame(config: {
           !["villain", "main_scheme"].includes(c.type_code) &&
           c.code !== "32088b" &&
           c.code !== badoon.MILANO &&
+          !(v.id === "escape_the_museum" && c.set_code === "ship_command") &&
           !(v.id === "magneto" && ["32144b", "32145b"].includes(c.code)) &&
           (c.type_code !== "environment" ||
             (v.id === "absorbing_man" &&
@@ -7478,6 +7524,32 @@ export function newGame(config: {
         ...collector.collectorSetup(s),
         ...(collector.collectorReveal(s, s.villain) || []),
       ].map((e) => effectContext(s, { actorId: s.firstPlayerId, ...e })),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "escape_the_museum") {
+    s.escape = {
+      currentMain: makePiece(s, "16082b"),
+      mainDeck: [makePiece(s, "16083a"), makePiece(s, "16084a")],
+      // The Missing Milano (1A) setup: set aside the Ship Command set.
+      setAside: CATALOG_CARDS.filter(
+        (c) => c.set_code === "ship_command" && c.pack_code === scenarioPack,
+      ).flatMap((c) =>
+        Array.from({ length: c.quantity }, () => makePiece(s, c.code)),
+      ),
+    };
+    s.scheme.threat = (card("16082b").base_threat || 0) * s.playerCount;
+    s.villain = Object.assign(makePiece(s, v.codes[stage - 1]), {
+      hp,
+      maxHp: hp,
+      stage,
+    });
+    // Put the Library Labyrinth environment into play.
+    visionPorts.putEnvironment(s, makePiece(s, escape.LIBRARY_LABYRINTH));
+    s.queue.push(
       effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
     );
     const pacing = s.pacing;
@@ -9844,6 +9916,7 @@ export function abilityOptions(
     ...absorbingMan.absorbingActions(s, p),
     ...badoon.badoonActions(s, p, badoonPorts),
     ...collector.collectorActions(s, p, collectorPorts),
+    ...escape.escapeActions(s, p),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -13961,6 +14034,22 @@ const collectorPorts: collector.CollectorPorts = {
     else if (!owner || owner.eliminated) s.removed.push(p);
     else seatView(s, owner).player.discard.push(p);
   },
+};
+const escapePorts: escape.EscapePorts = {
+  ...mutagenPorts,
+  revealHidden,
+  giveTough: crossbonesPorts.giveTough,
+  indirect: (s, playerId, amount, source) => {
+    if (s.players.some((p) => p.id === playerId && !p.eliminated))
+      crossbonesPorts.indirect(s, playerId, amount, source);
+  },
+  controlledCards: (s, playerId) =>
+    seatView(s, playerId).player.inPlay.filter(
+      (p) => card(p).faction_code !== "encounter" && !isPermanent(card(p)),
+    ),
+  milano: (s) => badoon.badoonMilano(s),
+  endGame,
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
 };
 /** "The first player controls the Milano": its one piece follows the token. */
 function badoonFirstPlayerChanged(s: GameState) {
@@ -21435,6 +21524,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     armadillo.armadilloAttackBonus(s, p) +
     zzzax.zzzaxEnemyStats(s, p).attack +
     inheritors.inheritorsModifiers(s, p).attack +
+    escape.escapeVillainStat(s, p) +
     mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).attack;
   const attachments = enemyAttachmentModifier(s, p.id, "attack");
   const base =
@@ -21797,6 +21887,7 @@ function boostEffects(s: GameState, p: Piece) {
     return;
   }
   const rise =
+    escape.escapeBoost(s, p) ??
     collector.collectorBoost(s, p) ??
     badoon.badoonBoost(s, p) ??
     redSkull.redSkullBoost(s, p) ??
@@ -22126,7 +22217,8 @@ function enemySCH(s: GameState, p: Piece, playerId: string): number {
     blackWidowEnemyModifier(s, p, playerId) +
     ironheart.ironheartEnemyStats(s, p, { isTextBlank }).scheme +
     enemyAttachmentModifier(s, p.id, "scheme") +
-    iceman.icemanEnemyModifier(s, p.id)
+    iceman.icemanEnemyModifier(s, p.id) +
+    escape.escapeVillainStat(s, p)
   );
 }
 export function enemyStats(
@@ -23635,6 +23727,7 @@ function reveal(
         c.type_code !== "attachment") ||
       (collector.COLLECTOR_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      escape.ESCAPE_SCRIPT_CODES.some((code) => code === p.code) ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -23837,6 +23930,7 @@ function reveal(
       mutagenEncounterReveal(s, p) ??
       armadillo.armadilloReveal(s, p) ??
       experimentalWeapons.experimentalWeaponsReveal(s, p) ??
+      escape.escapeReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -23909,6 +24003,7 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    escape.escapeReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -25230,6 +25325,7 @@ function resolve(s: GameState, e: Effect) {
           ironspider.ironspiderSinisterReveal(state, piece) ??
           armadillo.armadilloReveal(state, piece) ??
           experimentalWeapons.experimentalWeaponsReveal(state, piece) ??
+          escape.escapeReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -25351,6 +25447,7 @@ function resolve(s: GameState, e: Effect) {
   if (zola.resolveZolaEffect(s, e, zolaPorts)) return;
   if (badoon.resolveBadoonEffect(s, e, badoonPorts)) return;
   if (collector.resolveCollectorEffect(s, e, collectorPorts)) return;
+  if (escape.resolveEscapeEffect(s, e, escapePorts)) return;
   if (taskmaster.resolveTaskmasterEffect(s, e, taskmasterPorts)) return;
   if (absorbingMan.resolveAbsorbingEffect(s, e, absorbingManPorts)) return;
   if (crossbones.resolveCrossbonesEffect(s, e, crossbonesPorts)) return;
@@ -33819,6 +33916,7 @@ function resolve(s: GameState, e: Effect) {
           "red_skull",
           "brotherhood_of_badoon",
           "infiltrate_the_museum",
+          "escape_the_museum",
           "project_wideawake",
           "mansion_attack",
           "magneto",
@@ -33981,6 +34079,7 @@ function resolve(s: GameState, e: Effect) {
         E("villainPhaseForcedInterrupts", {
           remaining: [
             ...inheritors.inheritorsVillainPhaseInterrupts(s),
+            ...escape.escapeVillainPhaseInterrupts(s),
             ...(s.environments || [])
               .filter((p) => p.code === "29039" && !isTextBlank(s, p))
               .map((p) =>
@@ -34206,6 +34305,7 @@ function resolve(s: GameState, e: Effect) {
         }
       }
       nova.novaRoundEnded(s);
+      escape.escapeRoundEnded(s);
       niPack.novaIronheartPackPhaseEnded(s);
       spiderHam.spiderHamPhaseEnded(s);
       spiderHamPack.spiderHamPackPhaseEnded(s);
@@ -34572,6 +34672,7 @@ function run(s: GameState) {
       e.type.startsWith("zola:") ||
       e.type.startsWith("badoon:") ||
       e.type.startsWith("collector:") ||
+      e.type.startsWith("escape:") ||
       e.type.startsWith("red-skull:") ||
       e.type.startsWith("sabretooth:") ||
       e.type.startsWith("sabretooth-native:") ||
@@ -35000,6 +35101,15 @@ export function dispatch(state: GameState, command: Command): GameState {
             need(
               selected,
               "This Hero Action needs hero form, a card in The Collection and your once-per-round use.",
+            );
+            add(s, ...selected!.effects);
+          } else if (escape.escapeActionSource(s, command.id)) {
+            const selected = escape
+              .escapeActions(s, escape.escapeActionSource(s, command.id)!)
+              .find((o) => o.id === (command.action || "labyrinth"));
+            need(
+              selected,
+              "This Hero Action needs hero form and your once-per-round use.",
             );
             add(s, ...selected!.effects);
           } else if (badoon.badoonActionSource(s, command.id)) {

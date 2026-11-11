@@ -1175,6 +1175,20 @@ export const VILLAINS = [
       "Slip through the Collector's museum before he adds you to The Collection. Every card discarded from play becomes one of his exhibits.",
     color: "#a88c5b",
   },
+  {
+    id: "escape_the_museum",
+    name: "Escape the Museum",
+    codes: ["16080a", "16081a"],
+    schemes: ["16082b"],
+    module: "menagerie_medley",
+    fixedSets: ["galactic_artifacts", "ship_command"],
+    difficulty: 3,
+    title: "Escape the Museum",
+    location: "Knowhere",
+    description:
+      "Find the Milano and break out of the Collector's museum. Remove every threat from each stage to advance; the Collector cannot be defeated, only slowed down.",
+    color: "#5f87a3",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },

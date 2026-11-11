@@ -2,6 +2,7 @@ import { RED_SKULL_SCRIPT_CODES } from "./red-skull.js";
 import { ZOLA_SCRIPT_CODES } from "./zola.js";
 import { BADOON_SCRIPT_CODES } from "./badoon.js";
 import { COLLECTOR_SCRIPT_CODES } from "./collector.js";
+import { ESCAPE_SCRIPT_CODES } from "./escape-museum.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -251,6 +252,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ZOLA_SCRIPT_CODES,
   ...BADOON_SCRIPT_CODES,
   ...COLLECTOR_SCRIPT_CODES,
+  ...ESCAPE_SCRIPT_CODES,
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

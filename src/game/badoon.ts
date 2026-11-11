@@ -67,10 +67,12 @@ const B = (type: string, args: Record<string, unknown> = {}): Effect => ({
 });
 const known = (p: Piece) =>
   (BADOON_SCRIPT_CODES as readonly string[]).includes(p.code);
-/** Side schemes and main stages whose First Player Action removes 3 threat. */
+/** Side schemes and main stages whose First Player Action removes 3 threat,
+ * including Escape the Museum's The Great Escape (3B). */
 const MILANO_SCHEMES = [
   "16061b",
   "16062b",
+  "16084b",
   "16066",
   "16067",
   "16068",
@@ -252,7 +254,8 @@ export function badoonActions(
   p: Piece,
   ports?: Pick<BadoonPorts, "canPay" | "canPayWithoutMilano">,
 ): Option[] {
-  if (!known(p) || isTextBlank(s, p)) return [];
+  if ((!known(p) && !MILANO_SCHEMES.includes(p.code)) || isTextBlank(s, p))
+    return [];
   if (p.code === SPEAR) {
     if (
       s.player.form !== "hero" ||
@@ -274,6 +277,7 @@ export function badoonActions(
   const inPlay =
     s.sideSchemes.some((q) => q.id === p.id) ||
     s.badoon?.currentMain.id === p.id ||
+    s.escape?.currentMain.id === p.id ||
     (s.environments || []).some((q) => q.id === p.id);
   if (!inPlay) return [];
   if (p.code === ROGUE_VESSEL)
@@ -289,7 +293,8 @@ export function badoonActions(
         ]
       : [];
   if (!MILANO_SCHEMES.includes(p.code)) return [];
-  const main = s.badoon?.currentMain.id === p.id;
+  const main =
+    s.badoon?.currentMain.id === p.id || s.escape?.currentMain.id === p.id;
   const options: Option[] = [
     {
       id: "milano",
@@ -315,6 +320,7 @@ export function badoonActionSource(
   id: string,
 ): Piece | undefined {
   if (s.badoon?.currentMain.id === id) return s.badoon.currentMain;
+  if (s.escape?.currentMain.id === id) return s.escape.currentMain;
   return [...s.sideSchemes, ...(s.environments || [])].find(
     (p) =>
       p.id === id &&

@@ -52,6 +52,7 @@ import { resourcesFor } from "./game/payment";
 import { inheritorsModifiers } from "./game/inheritors";
 import { zolaKeyword } from "./game/zola";
 import { redSkullProtected } from "./game/red-skull";
+import { escapeStage, escapeWounded } from "./game/escape-museum";
 import {
   SPECTRUM_FORM_CODES,
   spectrumEnergyForm,
@@ -2454,6 +2455,17 @@ export default function App() {
                       main scheme's Hero Action once per round to free a
                       collected card. Galactic Artifacts is always included;
                       Menagerie Medley is the recommended modular set.
+                    </p>
+                  )}
+                  {villain.id === "escape_the_museum" && (
+                    <p className="setting-help">
+                      Collector cannot be defeated: at 0 hit points he flips,
+                      removes 3 threat per player and recovers when the round
+                      ends. Remove every threat from each main scheme stage to
+                      advance and win. Library Labyrinth removes 5 threat once
+                      per round for a facedown encounter card; the Milano joins
+                      you at stage 2. Galactic Artifacts and Ship Command are
+                      always included.
                     </p>
                   )}
                   {villain.id === "brotherhood_of_badoon" && (
@@ -5050,7 +5062,8 @@ function Tabletop({
   const hasThreatLimit = Number.isFinite(threatLimit) && threatLimit > 0;
   const threatCritical = hasThreatLimit && s.scheme.threat >= threatLimit - 2;
   // Main schemes whose printed actions are offered on the table.
-  const mainActionPiece = s.badoon?.currentMain || s.collector?.currentMain;
+  const mainActionPiece =
+    s.badoon?.currentMain || s.collector?.currentMain || s.escape?.currentMain;
   const [pile, setPile] = useState<{ title: string; cards: Piece[] } | null>(
     null,
   );
@@ -5178,7 +5191,11 @@ function Tabletop({
           <div className="mission-objectives">
             <span>
               <Crosshair size={18} />
-              <b>Defeat stage {s.difficulty === "expert" ? "III" : "II"}</b>
+              <b>
+                {s.escape
+                  ? `Clear all threat · stage ${escapeStage(s)} of 3`
+                  : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+              </b>
             </span>
             <span className={threatCritical ? "danger" : ""}>
               <Target size={18} />
@@ -5346,7 +5363,9 @@ function Tabletop({
                   <span className="small-label">
                     {s.villainId === "mansion_attack"
                       ? `VILLAIN · SIDE ${s.difficulty === "expert" ? "B" : "A"}`
-                      : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
+                      : s.escape
+                        ? `VILLAIN · ${s.difficulty === "expert" ? "B1" : "A1"}${escapeWounded(s) ? " · WOUNDED" : ""}`
+                        : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                   </span>
                   <h2
                     className={
@@ -5388,6 +5407,11 @@ function Tabletop({
                   {redSkullProtected(s) && (
                     <span className="stat-caption" role="status">
                       Protected by the Red House · cannot take damage
+                    </span>
+                  )}
+                  {escapeWounded(s) && (
+                    <span className="stat-caption" role="status">
+                      Wounded · cannot be defeated until the round ends
                     </span>
                   )}
                   {s.magneto &&
@@ -5642,7 +5666,9 @@ function Tabletop({
                         p.code !== "31037" &&
                         p.code !== "32065b" &&
                         p.code !== "32130" &&
-                        p.code !== "16143" && (
+                        p.code !== "16143" &&
+                        p.code !== "16085a" &&
+                        p.code !== "16085b" && (
                           <span className="environment-counter">
                             <PremiumToken kind="counter" />
                             {p.counters}{" "}
@@ -5653,10 +5679,17 @@ function Tabletop({
                                 : "Madness"}
                           </span>
                         )}
+                      {p.code === "16085b" && (
+                        <span className="stat-caption">
+                          Villain phase: exhaust the Milano or take indirect
+                          damage
+                        </span>
+                      )}
                       {(p.code === "29039" ||
                         p.code === "31037" ||
                         p.code === "32065b" ||
-                        p.code === "16143") &&
+                        p.code === "16143" ||
+                        p.code === "16085a") &&
                         abilityOptions(s, p).map((a) => (
                           <button
                             key={a.id}
@@ -5675,7 +5708,9 @@ function Tabletop({
                               ? a.label
                               : p.code === "16143"
                                 ? "Discard with the Milano"
-                                : "Remove"}
+                                : p.code === "16085a"
+                                  ? "This way? · remove 5 threat"
+                                  : "Remove"}
                           </button>
                         ))}
                     </div>

@@ -266,6 +266,7 @@ export interface GameState {
   badoon?: import("./badoon.js").BadoonState;
   /** Original Collector stages and The Collection. */
   collector?: import("./collector.js").CollectorState;
+  escape?: import("./escape-museum.js").EscapeState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */
