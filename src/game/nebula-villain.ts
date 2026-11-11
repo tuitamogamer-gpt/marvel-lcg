@@ -184,6 +184,18 @@ export function nebulaDamaged(
   return playerId ? [V("stone", { id: stone.id, to: `hero:${playerId}` })] : [];
 }
 
+/** The Power Stone is Permanent: when the hero holding it is eliminated it
+ * returns to the villain instead of leaving play. */
+export function nebulaPlayerEliminated(s: GameState, playerId: string) {
+  for (const p of s.attachments)
+    if (
+      p.code === POWER_STONE &&
+      (p.attachedTo === `hero:${playerId}` ||
+        (p.attachedTo === "hero" && s.activePlayerId === playerId))
+    )
+      p.attachedTo = s.villain.id;
+}
+
 export function nebulaAttackResponses(
   s: GameState,
   a: Attack,

@@ -2480,6 +2480,7 @@ function check(s: GameState) {
     }
     seat.eliminated = true;
     seat.ended = true;
+    nebulaVillain.nebulaPlayerEliminated(s, seat.id);
     removeDefeatedIronheartIdentities(s, seat);
     removeDefeatedSpdrIdentities(s, seat);
     if (s.attack?.targetPlayerId === seat.id) {

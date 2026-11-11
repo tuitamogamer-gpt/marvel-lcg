@@ -442,6 +442,24 @@ describe("Nebula's Ship and encounter cards", () => {
   });
 });
 
+describe("Power Stone on an eliminated hero", () => {
+  it("returns to the villain instead of leaving play", () => {
+    let s = started("standard", 2);
+    stone(s).attachedTo = `hero:${s.players[1].id}`;
+    seatView(s, s.players[1]).player.hp = 1;
+    s = settle(
+      native(s, {
+        type: "damage",
+        target: `hero:${s.players[1].id}`,
+        amount: 5,
+        source: "encounter",
+      }),
+    );
+    expect(s.players[1].eliminated).toBe(true);
+    expect(stone(s).attachedTo).toBe(s.villain.id);
+  });
+});
+
 describe("Space Pirates", () => {
   it("Pirate Lackey removes your top card after it damages you", () => {
     let s = started("standard");
