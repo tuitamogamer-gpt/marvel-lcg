@@ -11721,7 +11721,7 @@ const dsPorts: DoctorStrangePorts = {
       (seat) => seat.id === p!.ownerId && !seat.eliminated,
     );
     need(owner, "The ally's owner is unavailable.");
-    discardPiece(s, id);
+    collector.withoutCollection(() => discardPiece(s, id));
     const v = seatView(s, owner!);
     const index = v.player.discard.findIndex((x) => x.id === id);
     need(index >= 0, "The physical ally could not be returned.");
@@ -12175,7 +12175,11 @@ const waspPorts: wasp.WaspPorts = {
   finishMinionDefeat: (s, id, source, attack, shouldShuffle) => {
     const p = s.minions.find((p) => p.id === id);
     if (!p) return;
-    defeatCharacter(s, p, source, attack, true);
+    if (shouldShuffle)
+      collector.withoutCollection(() =>
+        defeatCharacter(s, p, source, attack, true),
+      );
+    else defeatCharacter(s, p, source, attack, true);
     if (shouldShuffle) {
       const index = s.encounter.discard.findIndex((piece) => piece.id === id);
       need(
@@ -12542,7 +12546,7 @@ const draxPackPorts: draxPack.DraxPackPorts = {
     }
     const owner =
       s.players.find((seat) => seat.id === p!.ownerId) || controller(s, id)!;
-    discardPiece(s, id);
+    collector.withoutCollection(() => discardPiece(s, id));
     const view = seatView(s, owner);
     const index = view.player.discard.findIndex((p) => p.id === id);
     need(index >= 0, "The returned physical ally is missing.");
@@ -13448,7 +13452,7 @@ const gmwPorts: gmwPack.GmwPlayerPackPorts = {
     const owner =
       s.players.find((seat) => seat.id === p!.ownerId) || controller(s, id)!;
     if (s.attack?.defender === id) s.attack.gmwReturnedDefender = id;
-    discardPiece(s, id);
+    collector.withoutCollection(() => discardPiece(s, id));
     const view = seatView(s, owner);
     const index = view.player.discard.findIndex((p) => p.id === id);
     need(index >= 0, "The returned ally's physical card is missing.");
@@ -13747,7 +13751,7 @@ const msPorts: MsMarvelPorts = {
       owner && !owner.eliminated,
       "The ally owner is no longer in the mission.",
     );
-    discardPiece(s, id);
+    collector.withoutCollection(() => discardPiece(s, id));
     const view = seatView(s, owner!);
     const index = view.player.discard.findIndex((p) => p.id === id);
     need(index >= 0, "The ally could not be returned.");

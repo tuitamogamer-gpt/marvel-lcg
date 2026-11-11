@@ -1,5 +1,6 @@
 import { card } from "./card-definitions.js";
 import { isTextBlank, eventPlaySources } from "./card-text.js";
+import { withoutCollection } from "./collector.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import type { PaymentSource } from "./payment.js";
 import type { Effect, GameState, Option, Piece } from "./types.js";
@@ -651,7 +652,7 @@ export function x23Cybermods(
   ports.discard(s, a.id);
   // Once the replacement attachment is gone, the ordinary leaving-play path
   // clears every attached/stored card and status while preserving this ID.
-  ports.discard(s, p.id);
+  withoutCollection(() => ports.discard(s, p.id));
   const i = s.encounter.discard.findIndex((q) => q.id === p.id);
   if (i >= 0) s.encounter.deck.push(s.encounter.discard.splice(i, 1)[0]);
   ports.shuffleEncounter(s);
@@ -1058,7 +1059,7 @@ export function resolveX23Effect(
         if (i >= 0) {
           b = zone[i];
           if (zone === s.player.inPlay) {
-            ports.discard(s, b.id);
+            withoutCollection(() => ports.discard(s, b!.id));
             const j = s.player.discard.findIndex((q) => q.id === b!.id);
             if (j >= 0) s.player.discard.splice(j, 1);
           } else zone.splice(i, 1);

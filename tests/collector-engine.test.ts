@@ -206,6 +206,15 @@ describe("The Collection", () => {
     expect(collection(s)).toHaveLength(before + 2);
     exact(s);
   });
+  it("does not collect a card that returns to hand or shuffles into a deck", () => {
+    let s = started();
+    const before = collection(s).length;
+    const returned = ally(s);
+    s = settle(native(s, { type: "ms:red-return", id: returned.id }));
+    expect(s.player.hand.map((p) => p.id)).toContain(returned.id);
+    expect(collection(s)).toHaveLength(before);
+    exact(s);
+  });
   it("sends Victory 0 artifacts to the victory display and rewards their defeater", () => {
     let s = started();
     s.player.hp = 5;

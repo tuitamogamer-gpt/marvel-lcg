@@ -1,5 +1,6 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { isTextBlank } from "./card-text.js";
+import { withoutCollection } from "./collector.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { consumeStatus } from "./keywords.js";
 import type { PaymentSource } from "./payment.js";
@@ -1110,7 +1111,7 @@ export function resolveHawkeyeEffect(
         if (zone === s.player.inPlay) {
           // A tucked card leaves play; native discard cleanup removes attachments
           // before moving the same reset physical piece beneath the scheme.
-          ports.discardPiece(s, p.id);
+          withoutCollection(() => ports.discardPiece(s, p.id));
           const owner =
             s.players.find((seat) => seat.id === p.ownerId) ||
             s.players.find((seat) => seat.id === s.activePlayerId)!;

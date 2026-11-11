@@ -1,5 +1,6 @@
 import { card, DB } from "./card-definitions.js";
 import { isTextBlank } from "./card-text.js";
+import { withoutCollection } from "./collector.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { deadpoolTriggeredBlocked } from "./deadpool.js";
 import type { PaymentSource } from "./payment.js";
@@ -1079,7 +1080,7 @@ export function resolveMariaHillEffect(
       delete globalFlags(s)[`mariaSlingshot:${p.id}`];
       const owner =
         s.players.find((seat) => seat.id === p.ownerId) || controller(s, p.id);
-      ports.discard(s, p.id);
+      withoutCollection(() => ports.discard(s, p.id));
       if (owner) {
         const v = seatView(s, owner),
           i = v.player.discard.findIndex((q) => q.id === p.id);

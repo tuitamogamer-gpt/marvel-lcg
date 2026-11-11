@@ -1,5 +1,6 @@
 import { card } from "./card-definitions.js";
 import { isTextBlank, eventPlaySources } from "./card-text.js";
+import { withoutCollection } from "./collector.js";
 import { deadpoolTriggeredBlocked } from "./deadpool.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import type { PaymentSource } from "./payment.js";
@@ -635,7 +636,7 @@ export function resolveIcemanEffect(
     case "slide-return": {
       if (!p || p.code !== "46006") break;
       const owner = controller(s, p.id);
-      ports.discard(s, p.id);
+      withoutCollection(() => ports.discard(s, p.id));
       const view = owner ? seatView(s, owner) : s,
         i = view.player.discard.findIndex((q) => q.id === p.id);
       if (i >= 0) view.player.deck.push(view.player.discard.splice(i, 1)[0]);

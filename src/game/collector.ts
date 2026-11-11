@@ -77,9 +77,23 @@ export interface CollectorPorts extends MutagenEnginePorts {
   returnFromCollection(s: GameState, p: Piece): void;
 }
 
+let collectionBypass = 0;
+/** Run an implementation step that routes a card leaving play through a
+ * discard pile on its way to another zone (a hand, a deck or beneath another
+ * card). That card is never placed in a discard pile, so Collector's Forced
+ * Interrupt does not apply to it. */
+export function withoutCollection<T>(step: () => T): T {
+  collectionBypass++;
+  try {
+    return step();
+  } finally {
+    collectionBypass--;
+  }
+}
 /** Collector's Forced Interrupt replaces discards from play while he is in play. */
 export function collectorActive(s: GameState) {
   return (
+    !collectionBypass &&
     !!s.collector &&
     COLLECTORS.includes(s.villain.code) &&
     !isTextBlank(s, s.villain)
