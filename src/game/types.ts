@@ -177,6 +177,8 @@ export interface Prompt {
   selectAction?: Effect;
 }
 export interface Attack {
+  /** Badoon Assassin's boost grants these keywords to this actual attack. */
+  badoonKeywords?: string[];
   /** Laser Rifle grants Ranged to the actual attack at initiation. */
   experimentalWeaponsRanged?: boolean;
   /** Hydra Sidearm grants Ranged to this actual attack at initiation. */
@@ -260,6 +262,8 @@ export interface GameState {
   campaign?: { id: string; stage: number };
   redSkull?: import("./red-skull.js").RedSkullState;
   zola?: import("./zola.js").ZolaState;
+  /** Original Drang stages and Brotherhood of Badoon main schemes. */
+  badoon?: import("./badoon.js").BadoonState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */

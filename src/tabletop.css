@@ -828,6 +828,15 @@ button.table-pile:hover .pile-face {
   border-color: #748c8e;
   border-radius: 5px;
 }
+/* Brotherhood of Badoon: the narrow main-scheme column wraps its Milano action. */
+.main-scheme .in-play-actions {
+  flex-wrap: wrap;
+}
+.main-scheme .in-play-actions button {
+  white-space: normal;
+  line-height: 1.2;
+  overflow: visible;
+}
 .physical-table .mini-token {
   min-width: 24px;
   min-height: 24px;

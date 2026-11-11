@@ -1146,6 +1146,20 @@ export const VILLAINS = [
       "Break Hydra's grip on the world. Confront a separate deck of side schemes and awaken the Sleeper before Red Skull bends reality to his will.",
     color: "#be6865",
   },
+  {
+    id: "brotherhood_of_badoon",
+    name: "Drang",
+    codes: ["16058", "16059", "16060"],
+    schemes: ["16061b", "16062b"],
+    module: "band_of_badoon",
+    fixedSets: ["ship_command"],
+    difficulty: 3,
+    title: "Brotherhood of Badoon",
+    location: "Low orbit",
+    description:
+      "Fly the Milano against Drang's armada. Every Badoon scheme charges the ship's barrage until it fires on the heroes below.",
+    color: "#7f9c6c",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1188,6 +1202,7 @@ export const MODULES = [
   { id: "hydra_assault", name: "Hydra Assault", difficulty: 3 },
   { id: "weap_master", name: "Weapon Master", difficulty: 3 },
   { id: "hydra_patrol", name: "Hydra Patrol", difficulty: 2 },
+  { id: "band_of_badoon", name: "Band of Badoon", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {

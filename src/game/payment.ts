@@ -49,6 +49,7 @@ import {
 import { warMachinePackResourceSources } from "./war-machine-pack.js";
 import { mtsPlayerPackCardResources } from "./mts-player-pack.js";
 import { isTextBlank } from "./card-text.js";
+import { MILANO, badoonMilanoSource } from "./badoon.js";
 import { hawkeyeResourceSources } from "./hawkeye.js";
 import { spiderWomanResourceSources } from "./spider-woman.js";
 import { blackWidowResourceSources } from "./black-widow.js";
@@ -372,6 +373,26 @@ export function paymentSources(
           : { ...jet, id: `alliance:${jet.playerId}:${jet.id}` };
       if (!sources.some((existing) => existing.id === source.id))
         sources.push(source);
+    }
+    // Milano · Piloting: the first player may exhaust it to generate a wild
+    // resource for any player, including the player who is paying now.
+    const milano = badoonMilanoSource(s);
+    if (milano?.controllerId) {
+      const id =
+        milano.controllerId === s.activePlayerId
+          ? milano.piece.id
+          : `alliance:${milano.controllerId}:${milano.piece.id}`;
+      if (!sources.some((existing) => existing.id === id))
+        sources.push({
+          id,
+          localId: milano.piece.id,
+          playerId: milano.controllerId,
+          name: "Milano",
+          code: MILANO,
+          resources: ["wild"],
+          description: "Piloting · exhaust the Milano · 1 wild for any player",
+          kind: "ability",
+        });
     }
   }
   return sources.filter(

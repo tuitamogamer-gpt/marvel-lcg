@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { BADOON_SCRIPT_CODES } from "../src/game/badoon";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -14,6 +15,7 @@ import {
   semanticFingerprint,
 } from "../scripts/audit-engine-expansion.mjs";
 
+const badoonCodes = new Set<string>(BADOON_SCRIPT_CODES);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
 const cards = read("src/data/catalog-cards.json");
@@ -254,13 +256,16 @@ describe("complete expansion rules inventory", () => {
     const gmw = coverage.products.find(
       (pack: { code: string }) => pack.code === "gmw",
     );
+    // Brotherhood of Badoon adds its 14 scenario faces, the seven Ship Command
+    // faces and the five Band of Badoon faces.
     expect(gmw).toMatchObject({
       faceCount: 207,
-      executableFaces: 60,
+      executableFaces: 86,
       installedCardClosure: false,
     });
-    expect(gmw.unsupportedFaceCodes).toHaveLength(147);
-    expect(gmw.unsupportedFaceCodes).toContain("16058");
+    expect(gmw.unsupportedFaceCodes).toHaveLength(121);
+    expect(gmw.unsupportedFaceCodes).not.toContain("16058");
+    expect(gmw.unsupportedFaceCodes).toContain("16070");
     const gmwPlayerFaces = cards.filter(
       (entry: { pack_code: string; position: number }) =>
         entry.pack_code === "gmw" && entry.position <= 57,
@@ -355,7 +360,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(30);
+    expect(MODULES).toHaveLength(31);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "deathstrike",
@@ -370,11 +375,12 @@ describe("complete expansion rules inventory", () => {
         "hydra_assault",
         "weap_master",
         "hydra_patrol",
+        "band_of_badoon",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2377);
-    expect(coverage.unsupportedFaces).toBe(2174);
-    expect(coverage.dedicatedFaces).toBe(1938);
+    expect(coverage.executableFaces).toBe(2403);
+    expect(coverage.unsupportedFaces).toBe(2148);
+    expect(coverage.dedicatedFaces).toBe(1964);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -540,6 +546,8 @@ describe("complete expansion rules inventory", () => {
         17 -
         18 -
         22 -
+        // Brotherhood of Badoon, Ship Command and Band of Badoon.
+        26 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -667,7 +675,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(30);
+    expect(coverage.registeredModules).toHaveLength(31);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -725,7 +733,7 @@ describe("complete expansion rules inventory", () => {
       ["weap_master", ["04148", "04149", "04150", "04151"], [1, 1, 2, 1]],
       ["hydra_patrol", ["04152", "04153", "04154"], [2, 3, 1]],
     ] as const;
-    expect(MODULES.slice(27).map((module) => module.id)).toEqual(
+    expect(MODULES.slice(27, 30).map((module) => module.id)).toEqual(
       expected.map(([id]) => id),
     );
     let faces = 0;
@@ -783,6 +791,7 @@ describe("complete expansion rules inventory", () => {
         (entry: AuditedCard) =>
           entry.installedRegistry.executable &&
           !(entry.code >= "04076" && entry.code <= "04144") &&
+          !badoonCodes.has(entry.code) &&
           !newCodes.has(entry.code) &&
           !(
             entry.code >= "04058" &&
@@ -839,6 +848,7 @@ describe("complete expansion rules inventory", () => {
         (entry: AuditedCard) =>
           entry.installedRegistry.executable &&
           !(entry.code >= "04076" && entry.code <= "04144") &&
+          !badoonCodes.has(entry.code) &&
           (!codes.has(entry.code) || entry.code === "04066"),
       )
       .map((entry: AuditedCard) => entry.code)
@@ -849,7 +859,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(15);
+    ).toHaveLength(16);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "crossbones",
@@ -918,7 +928,9 @@ describe("complete expansion rules inventory", () => {
     const retained = inventory.cards
       .filter(
         (entry: AuditedCard) =>
-          entry.installedRegistry.executable && !codes.includes(entry.code),
+          entry.installedRegistry.executable &&
+          !codes.includes(entry.code) &&
+          !badoonCodes.has(entry.code),
       )
       .map((entry: AuditedCard) => entry.code)
       .sort();
@@ -989,7 +1001,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(133);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(134);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

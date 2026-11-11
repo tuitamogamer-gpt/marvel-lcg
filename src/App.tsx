@@ -2447,6 +2447,16 @@ export default function App() {
                       </select>
                     </label>
                   ))}
+                  {villain.id === "brotherhood_of_badoon" && (
+                    <p className="setting-help">
+                      The first player controls the Milano: exhaust it for a
+                      wild resource, or to remove 3 threat with a First Player
+                      Action. Badoon schemes charge the Badoon Ship; at 4
+                      barrage counters it deals 2 indirect damage to each
+                      player. Ship Command is always included; Band of Badoon is
+                      the recommended modular set.
+                    </p>
+                  )}
                   {villain.id === "red_skull" && (
                     <p className="setting-help">
                       Side schemes have their own deck. Reveal one each villain
@@ -4833,6 +4843,7 @@ function AttachedCards({
                 "04075",
                 "04132",
                 "04133",
+                "16064",
                 "04148",
                 "04149",
                 "25032",
@@ -4861,6 +4872,7 @@ function AttachedCards({
                     "04075",
                     "04132",
                     "04133",
+                    "16064",
                     "04148",
                     "04149",
                     "29038",
@@ -4876,6 +4888,7 @@ function AttachedCards({
                     "04075",
                     "04132",
                     "04133",
+                    "16064",
                     "04148",
                     "04149",
                     "29038",
@@ -4894,6 +4907,7 @@ function AttachedCards({
                   "04075",
                   "04132",
                   "04133",
+                  "16064",
                   "04148",
                   "04149",
                   "29038",
@@ -5444,6 +5458,29 @@ function Tabletop({
                       )}{" "}
                     threat each villain phase
                   </p>
+                  {s.badoon &&
+                    abilityOptions(s, s.badoon.currentMain).length > 0 && (
+                      <div className="in-play-actions">
+                        {abilityOptions(s, s.badoon.currentMain).map((a) => (
+                          <button
+                            key={a.id}
+                            disabled={!canUseAction || !!a.disabled}
+                            title={a.disabled || a.label}
+                            onClick={() =>
+                              sendAction({
+                                type: "ABILITY",
+                                id: s.badoon!.currentMain.id,
+                                action: a.id,
+                              })
+                            }
+                          >
+                            {a.id === "milano-minion"
+                              ? "Milano · 3 damage to a minion"
+                              : "Milano · remove 3 threat"}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   {s.mansionAttack && (
                     <>
                       <p className="stat-caption">
@@ -5550,16 +5587,22 @@ function Tabletop({
                       {p.code !== "29039" &&
                         p.code !== "31037" &&
                         p.code !== "32065b" &&
-                        p.code !== "32130" && (
+                        p.code !== "32130" &&
+                        p.code !== "16143" && (
                           <span className="environment-counter">
                             <PremiumToken kind="counter" />
                             {p.counters}{" "}
-                            {p.code === "02006a" ? "Infamy" : "Madness"}
+                            {p.code === "02006a"
+                              ? "Infamy"
+                              : p.code === "16063"
+                                ? `Barrage · fires at 4`
+                                : "Madness"}
                           </span>
                         )}
                       {(p.code === "29039" ||
                         p.code === "31037" ||
-                        p.code === "32065b") &&
+                        p.code === "32065b" ||
+                        p.code === "16143") &&
                         abilityOptions(s, p).map((a) => (
                           <button
                             key={a.id}
@@ -5574,7 +5617,11 @@ function Tabletop({
                               })
                             }
                           >
-                            {p.code === "32065b" ? a.label : "Remove"}
+                            {p.code === "32065b"
+                              ? a.label
+                              : p.code === "16143"
+                                ? "Discard with the Milano"
+                                : "Remove"}
                           </button>
                         ))}
                     </div>

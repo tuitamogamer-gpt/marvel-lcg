@@ -229,6 +229,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       "taskmaster",
       "zola",
       "red_skull",
+      "brotherhood_of_badoon",
     ].includes(s.villainId)
   )
     return [];
@@ -239,6 +240,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
   const t = s.taskmaster;
   const z = s.zola;
   const r = s.redSkull;
+  const b = s.badoon;
   const pieces: Piece[] = [];
   const visit = (p: Piece) => {
     pieces.push(p);
@@ -285,12 +287,14 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       t?.villainDeck ||
       z?.villainDeck ||
       r?.villainDeck ||
+      b?.villainDeck ||
       []),
     ...(m?.mainDeck ||
       g?.mainDeck ||
       c?.mainDeck ||
       z?.mainDeck ||
       r?.mainDeck ||
+      b?.mainDeck ||
       []),
     ...(m?.currentMain
       ? [m.currentMain]
@@ -306,7 +310,9 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
                 ? [z.currentMain]
                 : r?.currentMain
                   ? [r.currentMain]
-                  : []),
+                  : b?.currentMain
+                    ? [b.currentMain]
+                    : []),
     ...(g?.orbital ? [g.orbital] : []),
     ...s.minions,
     ...s.sideSchemes,
@@ -458,7 +464,9 @@ function runMission(config: (typeof missions)[number]) {
                 ? "zola"
                 : s.villainId === "red_skull"
                   ? "red_skull"
-                  : undefined;
+                  : s.villainId === "brotherhood_of_badoon"
+                    ? "brotherhood_of_badoon"
+                    : undefined;
   const scenarioSources = scenarioSet
     ? scenarioPhysicalPieces(s).filter((p) => card(p).set_code === scenarioSet)
     : [];
@@ -480,7 +488,9 @@ function runMission(config: (typeof missions)[number]) {
                 ? 30
                 : scenarioSet === "red_skull"
                   ? 27
-                  : 29;
+                  : scenarioSet === "brotherhood_of_badoon"
+                    ? 12
+                    : 29;
     expect(
       scenarioSources,
       "All selected original scenario cards begin in physical zones",
@@ -602,6 +612,8 @@ function runMission(config: (typeof missions)[number]) {
         !magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
       )
         act({ type: "BASIC", action: "recover" });
+      // A recover can end the mission, e.g. Superpower Feedback's damage.
+      if (ended(s)) break;
       const identity = [
         ...nativeHeroAbilityOptions(s),
         ...doctorStrangeAbilityOptions(s, "identity"),
@@ -719,10 +731,10 @@ describe("published expansion starters across every supported mission setting", 
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(15);
-    expect(MODULES).toHaveLength(30);
+    expect(VILLAINS).toHaveLength(16);
+    expect(MODULES).toHaveLength(31);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(46280);
+    expect(missions).toHaveLength(51064);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -733,11 +745,33 @@ describe("published expansion starters across every supported mission setting", 
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
+    // Brotherhood of Badoon and its Band of Badoon modular set extend the grid.
+    // Every earlier name and seed stays in place, so all retained snapshots
+    // below are computed from the same 46,280 configurations.
+    const priorGrid = missions.filter(
+      (m) =>
+        m.villainId !== "brotherhood_of_badoon" &&
+        m.module !== "band_of_badoon",
+    );
+    expect(priorGrid).toHaveLength(46280);
+    expect(
+      createHash("sha256").update(manifest(priorGrid).join("\n")).digest("hex"),
+    ).toBe("bc765bcb35cc55cebe6415eb50a784a8e9b19f3b0617322dd7075ec8b209917a");
+    expect(
+      missions.filter((m) => m.villainId === "brotherhood_of_badoon"),
+    ).toHaveLength(3224);
+    expect(
+      missions.filter(
+        (m) =>
+          m.module === "band_of_badoon" &&
+          m.villainId !== "brotherhood_of_badoon",
+      ),
+    ).toHaveLength(1560);
     expect(
       createHash("sha256")
         .update(
           manifest(
-            missions.filter(
+            priorGrid.filter(
               (m) =>
                 !["absorbing_man", "taskmaster", "zola", "red_skull"].includes(
                   m.villainId,
@@ -747,7 +781,7 @@ describe("published expansion starters across every supported mission setting", 
         )
         .digest("hex"),
     ).toBe("6a4742e07325a1c84c1f98ec22302ae79769a2dc9efff1e71eae461d644ba6a0");
-    const absorbingSnapshot = missions.filter(
+    const absorbingSnapshot = priorGrid.filter(
       (m) => !["taskmaster", "zola", "red_skull"].includes(m.villainId),
     );
     expect(absorbingSnapshot).toHaveLength(37024);
@@ -756,10 +790,10 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(absorbingSnapshot).join("\n"))
         .digest("hex"),
     ).toBe("a0b4128d53ac2aae65b810f07cae056b5179fbf9851e910b56b3f5b0dac296dc");
-    expect(missions.filter((m) => m.villainId === "taskmaster")).toHaveLength(
+    expect(priorGrid.filter((m) => m.villainId === "taskmaster")).toHaveLength(
       3016,
     );
-    const taskmasterSnapshot = missions.filter(
+    const taskmasterSnapshot = priorGrid.filter(
       (m) => !["zola", "red_skull"].includes(m.villainId),
     );
     expect(taskmasterSnapshot).toHaveLength(40040);
@@ -768,19 +802,19 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(taskmasterSnapshot).join("\n"))
         .digest("hex"),
     ).toBe("5649977ca5e521c574a85b5af8b992349d64bd06605b1d8207217f1ae853c8a6");
-    expect(missions.filter((m) => m.villainId === "zola")).toHaveLength(3120);
-    const zolaSnapshot = missions.filter((m) => m.villainId !== "red_skull");
+    expect(priorGrid.filter((m) => m.villainId === "zola")).toHaveLength(3120);
+    const zolaSnapshot = priorGrid.filter((m) => m.villainId !== "red_skull");
     expect(zolaSnapshot).toHaveLength(43160);
     expect(
       createHash("sha256")
         .update(manifest(zolaSnapshot).join("\n"))
         .digest("hex"),
     ).toBe("dc71d9702420d7de9ca79f5ebea5447740a195b314adbc288dfa39fb7a4117a8");
-    expect(missions.filter((m) => m.villainId === "red_skull")).toHaveLength(
+    expect(priorGrid.filter((m) => m.villainId === "red_skull")).toHaveLength(
       3120,
     );
     const combined = partitions.flat();
-    const previousMissions = missions.filter(
+    const previousMissions = priorGrid.filter(
       (mission) =>
         ![
           "crossbones",
@@ -797,10 +831,10 @@ describe("published expansion starters across every supported mission setting", 
         .digest("hex"),
     ).toBe("492adb711daff6578c014486b51281291235d8d3672f3d408a2689e7f8990ae1");
     expect(
-      missions.filter((mission) => mission.villainId === "crossbones"),
+      priorGrid.filter((mission) => mission.villainId === "crossbones"),
     ).toHaveLength(3016);
     expect(
-      missions.filter((m) => m.villainId === "absorbing_man"),
+      priorGrid.filter((m) => m.villainId === "absorbing_man"),
     ).toHaveLength(3120);
     // New heroes and modular sets extend the published mission grid without
     // changing the names or seeded shuffles of the 11,328 prior missions.
@@ -921,12 +955,20 @@ describe("published expansion starters across every supported mission setting", 
           partition.filter((mission) => mission.villainId === "crossbones")
             .length,
       ),
-    ).toEqual([377, 377, 377, 377, 377, 377, 377, 377]);
-    expect(new Set(missions.map(key)).size).toBe(46280);
-    expect(new Set(combined.map(key)).size).toBe(46280);
+    ).toEqual([390, 390, 390, 390, 390, 390, 390, 390]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter(
+            (mission) => mission.villainId === "brotherhood_of_badoon",
+          ).length,
+      ),
+    ).toEqual([403, 403, 403, 403, 403, 403, 403, 403]);
+    expect(new Set(missions.map(key)).size).toBe(51064);
+    expect(new Set(combined.map(key)).size).toBe(51064);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(5785);
+      expect(partition).toHaveLength(6383);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -934,11 +976,11 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(111);
-      expect(Math.max(...perShard)).toBe(112);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(890);
+      expect(Math.min(...perShard)).toBe(122);
+      expect(Math.max(...perShard)).toBe(123);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(982);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 5785 : 46280);
+    expect(selectedMissions).toHaveLength(isSharded ? 6383 : 51064);
   });
   for (const mission of selectedMissions)
     it(

@@ -105,6 +105,8 @@ jobs:
             scripts: test:zola
           - group: red-skull
             scripts: test:red-skull
+          - group: badoon
+            scripts: test:badoon
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

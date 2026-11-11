@@ -281,7 +281,7 @@ describe("Rise of Red Skull original modular sources", () => {
     },
   );
   it("appends all three modules after Experimental Weapons without shifting it", () => {
-    expect(MODULES.slice(26).map((m) => m.id)).toEqual([
+    expect(MODULES.slice(26, 30).map((m) => m.id)).toEqual([
       "exper_weapon",
       "hydra_assault",
       "weap_master",

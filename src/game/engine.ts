@@ -1,5 +1,6 @@
 import * as redSkull from "./red-skull.js";
 import * as zola from "./zola.js";
+import * as badoon from "./badoon.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -600,7 +601,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
       : armadillo.armadilloStatusModifiers(s, piece)),
     ...(storm.stormGlobal(s).stalwart ||
     inherited.stalwart ||
-    sabretooth.sabretoothModifiers(s, piece.id).stalwart
+    sabretooth.sabretoothModifiers(s, piece.id).stalwart ||
+    badoon.badoonKeyword(s, piece, "Stalwart")
       ? { stalwart: true }
       : {}),
     ...(piece.code === "50060" && !isTextBlank(s, piece)
@@ -718,6 +720,7 @@ function syncNebulaIdentityStatuses(s: GameState) {
       printedKeyword(card(p), "Stalwart") ||
       inheritors.inheritorsModifiers(s, p).stalwart ||
       sabretooth.sabretoothModifiers(s, p.id).stalwart ||
+      badoon.badoonKeyword(s, p, "Stalwart") ||
       s.villainId === "mansion_attack"
     ) {
       const modifiers = nativeStatusModifiers(s, p);
@@ -828,7 +831,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
     Number(
       name === "Stalwart" &&
         (storm.stormGlobal(s).stalwart ||
-          sabretooth.sabretoothModifiers(s, p.id).stalwart),
+          sabretooth.sabretoothModifiers(s, p.id).stalwart ||
+          badoon.badoonKeyword(s, p, "Stalwart")),
     ),
     Number(
       name === "Quickstrike" &&
@@ -841,6 +845,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
       !!(
         name === "Piercing" &&
         (redSkull.redSkullKeyword(s, p, "Piercing") ||
+          badoon.badoonKeyword(s, p, "Piercing") ||
           taskmaster.taskmasterKeyword(s, p, "Piercing") ||
           storm.stormPiercing(s, p) ||
           redSkullModules.redSkullPiercing(s, p.id) ||
@@ -868,6 +873,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
       !!(
         name === "Ranged" &&
         (redSkull.redSkullKeyword(s, p, "Ranged") ||
+          badoon.badoonKeyword(s, p, "Ranged") ||
           taskmaster.taskmasterKeyword(s, p, "Ranged") ||
           granted.ranged ||
           (s.attack?.attacker === p.id && s.attack.experimentalWeaponsRanged) ||
@@ -884,6 +890,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
       !!(
         name === "Overkill" &&
         (packTraits.overkill ||
+          badoon.badoonKeyword(s, p, "Overkill") ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
             .overkill)
       ),
@@ -2274,6 +2281,7 @@ function check(s: GameState) {
     return;
   wideawake.projectWideawakeFirstPlayerChanged(s, wideawakePorts);
   masterMold.masterMoldFirstPlayerChanged(s, masterMoldPorts);
+  badoonFirstPlayerChanged(s);
   if (zeroTolerance.zeroToleranceCheckLoss(s, zeroTolerancePorts)) return;
   // Simultaneous Spectrum batches place every prepared packet before checking
   // hero elimination. This flag exists only during the synchronous commit.
@@ -2453,6 +2461,7 @@ function check(s: GameState) {
       sabretooth.sabretoothFirstPlayerChanged(s);
       wideawake.projectWideawakeFirstPlayerChanged(s, wideawakePorts);
       masterMold.masterMoldFirstPlayerChanged(s, masterMoldPorts);
+      badoonFirstPlayerChanged(s);
     }
     const remainingNPC = sabretooth.sabretoothKelly(s);
     if (remainingNPC && controller(s, remainingNPC.id)?.id === seat.id) {
@@ -4069,36 +4078,41 @@ function advanceVillain(
       "taskmaster",
       "zola",
       "red_skull",
+      "brotherhood_of_badoon",
     ].includes(s.villainId)
   ) {
     const next = (
-      s.villainId === "red_skull"
-        ? s.redSkull
-        : s.villainId === "zola"
-          ? s.zola
-          : s.villainId === "taskmaster"
-            ? s.taskmaster
-            : s.villainId === "absorbing_man"
-              ? s.absorbingMan
-              : s.villainId === "crossbones"
-                ? s.crossbones
-                : s.magneto
+      s.villainId === "brotherhood_of_badoon"
+        ? s.badoon
+        : s.villainId === "red_skull"
+          ? s.redSkull
+          : s.villainId === "zola"
+            ? s.zola
+            : s.villainId === "taskmaster"
+              ? s.taskmaster
+              : s.villainId === "absorbing_man"
+                ? s.absorbingMan
+                : s.villainId === "crossbones"
+                  ? s.crossbones
+                  : s.magneto
     )?.villainDeck?.shift();
     if (!next) {
       endGame(
         s,
         true,
-        s.villainId === "red_skull"
-          ? "Red Skull is defeated. His reign is over."
-          : s.villainId === "zola"
-            ? "Zola is defeated. His experiments are over."
-            : s.villainId === "taskmaster"
-              ? "Taskmaster is defeated. The captives are safe."
-              : s.villainId === "absorbing_man"
-                ? "Absorbing Man is defeated. The way is clear."
-                : s.villainId === "crossbones"
-                  ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
-                  : "Magneto is defeated. Asteroid M is safe.",
+        s.villainId === "brotherhood_of_badoon"
+          ? "Drang is defeated. The Badoon invasion is broken."
+          : s.villainId === "red_skull"
+            ? "Red Skull is defeated. His reign is over."
+            : s.villainId === "zola"
+              ? "Zola is defeated. His experiments are over."
+              : s.villainId === "taskmaster"
+                ? "Taskmaster is defeated. The captives are safe."
+                : s.villainId === "absorbing_man"
+                  ? "Absorbing Man is defeated. The way is clear."
+                  : s.villainId === "crossbones"
+                    ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
+                    : "Magneto is defeated. Asteroid M is safe.",
       );
       return;
     }
@@ -4119,6 +4133,7 @@ function advanceVillain(
         "taskmaster",
         "zola",
         "red_skull",
+        "brotherhood_of_badoon",
       ].includes(s.villainId)
         ? { counters: old.counters }
         : {}),
@@ -4136,6 +4151,7 @@ function advanceVillain(
         "taskmaster",
         "zola",
         "red_skull",
+        "brotherhood_of_badoon",
       ].includes(s.villainId)
     ) {
       s.villain.maxHp =
@@ -4210,6 +4226,7 @@ function villainSetup(s: GameState) {
     ...(taskmaster.taskmasterReveal(s, s.villain) || []),
     ...(zola.zolaReveal(s, s.villain) || []),
     ...(redSkull.redSkullReveal(s, s.villain) || []),
+    ...(badoon.badoonReveal(s, s.villain) || []),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -4379,6 +4396,32 @@ function threat(
           s,
           ...(redSkull.redSkullReveal(s, next) || []),
           E("red-skull:main-back"),
+          E("clearMainCompletion"),
+        );
+        return;
+      }
+      if (s.villainId === "brotherhood_of_badoon") {
+        if (s.pendingMainCompletion) return;
+        const next = s.badoon?.mainDeck.shift();
+        if (!next) {
+          endGame(
+            s,
+            false,
+            "Protect the Planet is complete. The Badoon conquer the planet.",
+          );
+          return;
+        }
+        s.pendingMainCompletion = true;
+        discardMainAttachments(s);
+        s.removed.push(resetPiece(s.badoon!.currentMain));
+        s.badoon!.currentMain = next;
+        s.scheme.index++;
+        s.scheme.code = next.code;
+        s.scheme.threat = 0;
+        add(
+          s,
+          ...(badoon.badoonReveal(s, next) || []),
+          E("badoon:main-back"),
           E("clearMainCompletion"),
         );
         return;
@@ -7257,38 +7300,40 @@ export function newGame(config: {
                     "hydra_patrol",
                   ].includes(c.set_code || "")
                 ? "trors"
-                : c.set_code === "exodus"
-                  ? "gambit"
-                  : c.set_code === "sauron"
-                    ? "iceman"
-                    : c.set_code === "crazy_gang"
-                      ? "ncrawler"
-                      : c.set_code === "hellfire"
-                        ? "magneto"
-                        : c.set_code === "arcade"
-                          ? "jubilee"
-                          : c.set_code === "reavers"
-                            ? "rogue"
-                            : c.set_code === "deathstrike"
-                              ? "wolv"
-                              : c.set_code === "shadow_king"
-                                ? "storm"
-                                : c.set_code === "ironspider_sinister"
-                                  ? "spdr"
-                                  : c.set_code === "inheritors"
-                                    ? "spiderham"
-                                    : c.set_code === "zzzax"
-                                      ? "ironheart"
-                                      : c.set_code === "armadillo"
-                                        ? "nova"
-                                        : [
-                                              "goblin_gimmicks",
-                                              "a_mess_of_things",
-                                              "power_drain",
-                                              "running_interference",
-                                            ].includes(c.set_code || "")
-                                          ? "gob"
-                                          : "core")) ||
+                : c.set_code === "band_of_badoon"
+                  ? "gmw"
+                  : c.set_code === "exodus"
+                    ? "gambit"
+                    : c.set_code === "sauron"
+                      ? "iceman"
+                      : c.set_code === "crazy_gang"
+                        ? "ncrawler"
+                        : c.set_code === "hellfire"
+                          ? "magneto"
+                          : c.set_code === "arcade"
+                            ? "jubilee"
+                            : c.set_code === "reavers"
+                              ? "rogue"
+                              : c.set_code === "deathstrike"
+                                ? "wolv"
+                                : c.set_code === "shadow_king"
+                                  ? "storm"
+                                  : c.set_code === "ironspider_sinister"
+                                    ? "spdr"
+                                    : c.set_code === "inheritors"
+                                      ? "spiderham"
+                                      : c.set_code === "zzzax"
+                                        ? "ironheart"
+                                        : c.set_code === "armadillo"
+                                          ? "nova"
+                                          : [
+                                                "goblin_gimmicks",
+                                                "a_mess_of_things",
+                                                "power_drain",
+                                                "running_interference",
+                                              ].includes(c.set_code || "")
+                                            ? "gob"
+                                            : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -7299,11 +7344,14 @@ export function newGame(config: {
             c.pack_code === "core")) &&
           !["villain", "main_scheme"].includes(c.type_code) &&
           c.code !== "32088b" &&
+          c.code !== badoon.MILANO &&
           !(v.id === "magneto" && ["32144b", "32145b"].includes(c.code)) &&
           (c.type_code !== "environment" ||
             (v.id === "absorbing_man" &&
               c.set_code === v.id &&
               c.pack_code === scenarioPack) ||
+            (v.id === "brotherhood_of_badoon" &&
+              c.code === badoon.ROGUE_VESSEL) ||
             selectedModules.includes(c.set_code || ""))) ||
           (team.some(
             (h) =>
@@ -7340,6 +7388,34 @@ export function newGame(config: {
         ...(redSkull.redSkullReveal(s, s.villain) || []),
         E("openingHands"),
       ].map((e) => effectContext(s, { ...e, actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "brotherhood_of_badoon") {
+    s.badoon = {
+      currentMain: makePiece(s, "16061b"),
+      mainDeck: [makePiece(s, "16062a")],
+      villainDeck: [makePiece(s, v.codes[stage])],
+    };
+    s.scheme.threat = (card("16061b").base_threat || 0) * s.playerCount;
+    s.villain = Object.assign(makePiece(s, v.codes[stage - 1]), {
+      hp,
+      maxHp: hp,
+      stage,
+    });
+    // Terrestrial Invasion (1A) setup: the Badoon Ship and the Milano start
+    // in play; the first player controls the Milano.
+    visionPorts.putEnvironment(s, makePiece(s, badoon.BADOON_SHIP));
+    const milano = makePiece(s, badoon.MILANO);
+    delete milano.ownerId;
+    seatView(s, s.firstPlayerId).player.inPlay.push(milano);
+    s.queue.push(
+      ...(badoon.badoonReveal(s, s.villain) || []).map((e) =>
+        effectContext(s, { ...e, actorId: s.firstPlayerId }),
+      ),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
     );
     const pacing = s.pacing;
     s.pacing = "expert";
@@ -9675,6 +9751,7 @@ export function abilityOptions(
     ...experimentalWeapons.experimentalWeaponsActions(s, p),
     ...redSkullModules.redSkullActions(s, p),
     ...absorbingMan.absorbingActions(s, p),
+    ...badoon.badoonActions(s, p, badoonPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -13760,6 +13837,40 @@ const absorbingManPorts: absorbingMan.AbsorbingManPorts = {
       ),
     ].filter((p) => !isPermanent(card(p))),
 };
+/** "The first player controls the Milano": its one piece follows the token. */
+function badoonFirstPlayerChanged(s: GameState) {
+  const milano = badoon.badoonMilano(s);
+  if (!milano) return;
+  const holder = controller(s, milano.id);
+  if (!holder || holder.id === s.firstPlayerId) return;
+  if (!s.players.some((p) => p.id === s.firstPlayerId && !p.eliminated)) return;
+  const from = seatView(s, holder.id).player.inPlay;
+  from.splice(
+    from.findIndex((p) => p.id === milano.id),
+    1,
+  );
+  seatView(s, s.firstPlayerId).player.inPlay.push(milano);
+}
+const badoonPorts: badoon.BadoonPorts = {
+  ...mutagenPorts,
+  revealHidden,
+  reveal: crossbonesPorts.reveal,
+  giveTough: crossbonesPorts.giveTough,
+  indirect: (s, playerId, amount, source) => {
+    if (s.players.some((p) => p.id === playerId && !p.eliminated))
+      crossbonesPorts.indirect(s, playerId, amount, source);
+  },
+  canPayWithoutMilano: (s, cost) => {
+    const milano = badoon.badoonMilano(s);
+    const ready = milano && !milano.exhausted;
+    if (ready) milano!.exhausted = true;
+    try {
+      return canPay(s, cost);
+    } finally {
+      if (ready) milano!.exhausted = false;
+    }
+  },
+};
 const armadilloPorts: armadillo.ArmadilloPorts = {
   ...mutagenPorts,
   shuffleEncounter: (s) => {
@@ -16471,6 +16582,7 @@ function minionEntered(s: GameState, p: Piece) {
     ...thorEngagementResponses(s, p),
   );
   add(s, ...zola.zolaMinionEntered(s, p));
+  add(s, ...badoon.badoonMinionEngaged(s, p));
 }
 function minionResponses(s: GameState, p: Piece) {
   add(s, ...waspPack.waspPackMinionEngaged(s, p));
@@ -21560,6 +21672,7 @@ function boostEffects(s: GameState, p: Piece) {
     return;
   }
   const rise =
+    badoon.badoonBoost(s, p) ??
     redSkull.redSkullBoost(s, p) ??
     zola.zolaBoost(s, p) ??
     taskmaster.taskmasterBoost(s, p) ??
@@ -21994,6 +22107,7 @@ function finishScheme(s: GameState) {
           .map((p) => E("threat", { target: p.id, amount: 2 }))
       : []),
     ...absorbingMan.absorbingActivation(s, id, s.activePlayerId),
+    ...badoon.badoonSchemed(s, id),
     ...sabretooth.sabretoothAfterActivation(s, {
       token: (activation.id ||= `scheme${s.nextId++}`),
       enemyId: id,
@@ -22760,6 +22874,7 @@ function finishAttackAfterDamage(
             : []),
           ...ironspider.ironspiderSinisterActivationResponses(s, a.attacker),
           ...absorbingMan.absorbingAttackResponses(s, a, recipientId),
+          ...badoon.badoonAttackResponses(s, a),
           ...redSkullModules.redSkullAttackResponses(s, a, redSkullModulePorts),
           ...experimentalWeapons.experimentalWeaponsAttackResponses(
             s,
@@ -23384,6 +23499,8 @@ function reveal(
       ) ||
       (redSkull.RED_SKULL_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (badoon.BADOON_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -23555,6 +23672,7 @@ function reveal(
       ...taskmaster.TASKMASTER_SCRIPT_CODES,
       ...zola.ZOLA_SCRIPT_CODES,
       ...redSkull.RED_SKULL_SCRIPT_CODES,
+      ...badoon.BADOON_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -23584,6 +23702,7 @@ function reveal(
       mutagenEncounterReveal(s, p) ??
       armadillo.armadilloReveal(s, p) ??
       experimentalWeapons.experimentalWeaponsReveal(s, p) ??
+      badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
       zola.zolaReveal(s, p) ??
       taskmaster.taskmasterReveal(s, p) ??
@@ -23654,6 +23773,7 @@ function reveal(
   const risky = riskyEncounterReveal(s, p);
   const mutagen = mutagenEncounterReveal(s, p);
   const rise =
+    badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
     zola.zolaReveal(s, p) ??
     taskmaster.taskmasterReveal(s, p) ??
@@ -24669,24 +24789,27 @@ function resolve(s: GameState, e: Effect) {
       "taskmaster",
       "zola",
       "red_skull",
+      "brotherhood_of_badoon",
     ].includes(s.villainId)
   ) {
     // Target references identify the continuing same-title character. Physical
     // card IDs, source IDs and snapshots retain their original stage identity.
     const retiredVillains =
-      s.villainId === "red_skull"
-        ? ["04125", "04126", "04127"]
-        : s.villainId === "zola"
-          ? ["04109", "04110", "04111"]
-          : s.villainId === "taskmaster"
-            ? ["04093", "04094", "04095"]
-            : s.villainId === "absorbing_man"
-              ? ["04076", "04077", "04078"]
-              : s.villainId === "crossbones"
-                ? ["04058", "04059", "04060"]
-                : s.villainId === "magneto"
-                  ? ["32138", "32139", "32140"]
-                  : [];
+      s.villainId === "brotherhood_of_badoon"
+        ? ["16058", "16059", "16060"]
+        : s.villainId === "red_skull"
+          ? ["04125", "04126", "04127"]
+          : s.villainId === "zola"
+            ? ["04109", "04110", "04111"]
+            : s.villainId === "taskmaster"
+              ? ["04093", "04094", "04095"]
+              : s.villainId === "absorbing_man"
+                ? ["04076", "04077", "04078"]
+                : s.villainId === "crossbones"
+                  ? ["04058", "04059", "04060"]
+                  : s.villainId === "magneto"
+                    ? ["32138", "32139", "32140"]
+                    : [];
     const characterFields = ["target", "targetId", "enemyId", "attacker"];
     if (
       [
@@ -24695,6 +24818,7 @@ function resolve(s: GameState, e: Effect) {
         "taskmaster",
         "zola",
         "red_skull",
+        "brotherhood_of_badoon",
       ].includes(s.villainId) &&
       [
         "enemyAttack",
@@ -24711,6 +24835,7 @@ function resolve(s: GameState, e: Effect) {
         "taskmaster",
         "zola",
         "red_skull",
+        "brotherhood_of_badoon",
       ].includes(s.villainId)
     ) {
       if (e.type === "ms:melee-second") characterFields.push("firstId");
@@ -24963,6 +25088,7 @@ function resolve(s: GameState, e: Effect) {
           ironspider.ironspiderSinisterReveal(state, piece) ??
           armadillo.armadilloReveal(state, piece) ??
           experimentalWeapons.experimentalWeaponsReveal(state, piece) ??
+          badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
           zola.zolaReveal(state, piece) ??
           taskmaster.taskmasterReveal(state, piece) ??
@@ -25062,6 +25188,15 @@ function resolve(s: GameState, e: Effect) {
       (card(p).base_threat_fixed ? 1 : s.playerCount);
     return;
   }
+  if (e.type === "badoon:main-back") {
+    const p = s.badoon!.currentMain;
+    p.code = card(p).back_link || p.code;
+    s.scheme.code = p.code;
+    s.scheme.threat =
+      (card(p).base_threat || 0) *
+      (card(p).base_threat_fixed ? 1 : s.playerCount);
+    return;
+  }
   if (e.type === "zola:main-back") {
     const p = s.zola!.currentMain;
     p.code = "04113b";
@@ -25071,6 +25206,7 @@ function resolve(s: GameState, e: Effect) {
   }
   if (redSkull.resolveRedSkullEffect(s, e, redSkullPorts)) return;
   if (zola.resolveZolaEffect(s, e, zolaPorts)) return;
+  if (badoon.resolveBadoonEffect(s, e, badoonPorts)) return;
   if (taskmaster.resolveTaskmasterEffect(s, e, taskmasterPorts)) return;
   if (absorbingMan.resolveAbsorbingEffect(s, e, absorbingManPorts)) return;
   if (crossbones.resolveCrossbonesEffect(s, e, crossbonesPorts)) return;
@@ -33537,6 +33673,7 @@ function resolve(s: GameState, e: Effect) {
           "taskmaster",
           "zola",
           "red_skull",
+          "brotherhood_of_badoon",
           "project_wideawake",
           "mansion_attack",
           "magneto",
@@ -33785,6 +33922,7 @@ function resolve(s: GameState, e: Effect) {
         ...taskmaster.taskmasterStepOne(s),
         ...zola.zolaStepOne(s),
         ...redSkull.redSkullStepOne(s),
+        ...badoon.badoonStepOne(s),
       );
       break;
     case "villainActivate": {
@@ -33899,6 +34037,13 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "newRound": {
+      if (!e.badoonEnded) {
+        const effects = badoon.badoonVillainPhaseEnds(s);
+        if (effects.length) {
+          add(s, ...effects, { ...e, badoonEnded: true });
+          break;
+        }
+      }
       if (!e.stormEnded) {
         const effects = storm.stormPhaseEnded(s);
         if (effects.length) {
@@ -34060,6 +34205,7 @@ function resolve(s: GameState, e: Effect) {
       s.firstPlayerId = (order[1] || order[0]).id;
       sabretooth.sabretoothFirstPlayerChanged(s);
       wideawake.projectWideawakeFirstPlayerChanged(s, wideawakePorts);
+      badoonFirstPlayerChanged(s);
       s.round++;
       s.phase = "player";
       s.villainStep = "newRound";
@@ -34277,6 +34423,7 @@ function run(s: GameState) {
       e.type.startsWith("absorbing:") ||
       e.type.startsWith("taskmaster:") ||
       e.type.startsWith("zola:") ||
+      e.type.startsWith("badoon:") ||
       e.type.startsWith("red-skull:") ||
       e.type.startsWith("sabretooth:") ||
       e.type.startsWith("sabretooth-native:") ||
@@ -34643,6 +34790,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...experimentalWeapons.experimentalWeaponsActions(s, p),
               ...redSkullModules.redSkullActions(s, p),
               ...absorbingMan.absorbingActions(s, p),
+              ...badoon.badoonActions(s, p, badoonPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -34696,6 +34844,19 @@ export function dispatch(state: GameState, command: Command): GameState {
                 true,
               );
             }
+          } else if (badoon.badoonActionSource(s, command.id)) {
+            const selected = badoon
+              .badoonActions(
+                s,
+                badoon.badoonActionSource(s, command.id)!,
+                badoonPorts,
+              )
+              .find((o) => o.id === (command.action || "milano"));
+            need(
+              selected,
+              "This First Player Action needs the first player and the ready Milano.",
+            );
+            add(s, ...selected!.effects);
           } else {
             const source = find(s, command.id);
             const identity = ["identity", "hero"].includes(command.id);

@@ -48,6 +48,10 @@
 .physical-table .scheme-area .scenario-environment strong {
   font-size: 11px;
 }
+.physical-table .scheme-area .scenario-environment > div > button {
+  font-size: 8px;
+  padding: 3px 5px;
+}
 .physical-table .scheme-area .environment-counter {
   font-size: 10px;
   gap: 3px;

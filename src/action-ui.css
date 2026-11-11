@@ -1057,6 +1057,21 @@
   font-family: var(--font-display);
   font-size: 18px;
 }
+.scenario-environment > div > button {
+  border: 1px solid #6d839f;
+  border-radius: 5px;
+  background: #233750;
+  color: #f4f7fc;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 5px 8px;
+  text-align: left;
+}
+.scenario-environment > div > button:hover:not(:disabled) {
+  background: var(--yellow);
+  color: var(--ink);
+}
 .environment-counter {
   display: flex;
   align-items: center;
