@@ -28,11 +28,12 @@ Rules references: The Galaxy's Most Wanted rules insert, [Rules Reference 1.8](h
 
 ## Measured local validation — 2026-11-11
 
+- The complete regular regression passes 10,699 tests across 290 files, with one intentional skip.
 - 15 focused engine cases pass, covering registration, setup for one to three players in both difficulties, Collector's stage bonus, the wounded flip and its threat removal (including an advance it causes), recovery when the round ends, all three main scheme stages with the Milano, the shuffled Ship Command set and The Great Escape's First Player Action, the win and the stage loss, Library Labyrinth, Museum Ship's two choices with the assignment among players, and both treacheries with the boost. Each command crosses a JSON save/reload boundary.
 - All 57 complete seeded missions against Escape the Museum (one per playable identity) reach a result without losing cards or locking.
 - The inventory (19 cases) pins all 136 source hashes; manifest hashes retain every previous mission name and seed.
 - The new browser check (`npm run test:escape`) passes 16 flows, 14 accessibility audits and 14 layout checks at 1280, 768, 390 and 320 px with no browser errors: standalone setup for both difficulties, Library Labyrinth, the wounded Collector, The Great Escape's Milano action and the escape win.
-- TypeScript and formatting pass.
+- TypeScript, formatting, the production build and the native API entry pass.
 - All 3,328 new source configurations pass with the physical-card audit (52 expansion starters × two difficulties × thirty-two modular sets). The other 56,056 configured cases were not rerun locally.
 
 Remote CI runs the full matrix and browser groups, including the new `escape` group.
