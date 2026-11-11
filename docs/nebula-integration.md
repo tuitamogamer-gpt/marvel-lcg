@@ -30,11 +30,12 @@ Rules references: The Galaxy's Most Wanted rules insert, [Rules Reference 1.8](h
 
 ## Measured local validation — 2026-11-11
 
+- The complete regular regression runs 10,780 tests across 291 files, with one intentional skip. Its one failure was a configuration test that used Space Pirates as its example of an unimplemented modular set; it now uses Kree Militant and passes.
 - 23 focused engine cases pass, covering registration, setup for one to three players in both difficulties, the evasion-based acceleration, Warp Drive Initiated and its loss, both villain sequences and the win, Technique reveals with the once-per-round surge, all three versions of Nebula's Forced Interrupt, the granted stalwart and retaliate, Wide Stance's reduction with Cutthroat Ambition's cap, Technique boosts (including a facedown boost card given after the activation), Nebula's Ship and its thrusters action, Barrel Roll, Ruthless, Combat Ready, Lethal Intent, the Power Stone moving both ways (and back to the villain when its hero is eliminated) and every Space Pirates card. Each command crosses a JSON save/reload boundary.
 - All 57 complete seeded missions against Nebula reach a result without losing cards or locking. One exposed a Space Pirates boost trying to boost a Villainous minion's activation; it now only adds a boost card while the villain itself activates.
 - The inventory (19 cases) pins all 137 source hashes; manifest hashes retain every previous mission name and seed.
 - The new browser check (`npm run test:nebula`) passes 16 flows, 16 accessibility audits and 16 layout checks at 1280, 768, 390 and 320 px with no browser errors: standalone setup for both difficulties, the Milano's thrusters with a real payment, Nebula's Techniques resolving and discarding, the Power Stone moving to a hero and Warp Drive Initiated.
-- TypeScript and formatting pass.
+- TypeScript, formatting, the production build and the native API entry pass.
 - All 5,304 new source configurations pass with the physical-card audit: 3,432 Nebula missions (52 expansion starters × two difficulties × thirty-three modular sets) and 1,872 Space Pirates missions in the eighteen earlier scenarios. They exposed two engine gaps, both fixed with focused cases: a Technique boost gave its facedown boost card to the finished activation, which lost that card, and eliminating the hero holding the Permanent Power Stone tried to discard it (it now returns to the villain). The three shards with failures were rerun in full after the fixes. The other 59,384 configured cases were not rerun locally.
 
 Remote CI runs the full matrix and browser groups, including the new `nebula` group.

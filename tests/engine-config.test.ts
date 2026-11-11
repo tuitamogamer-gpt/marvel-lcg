@@ -12,7 +12,7 @@ const setup = {
 
 describe("complete mission dependency checks", () => {
   it("rejects unimplemented modular sets instead of silently omitting their cards", () => {
-    expect(() => newGame({ ...setup, module: "space_pirates" })).toThrow(
+    expect(() => newGame({ ...setup, module: "kree_militant" })).toThrow(
       "This modular set’s complete rules are not implemented yet.",
     );
   });
