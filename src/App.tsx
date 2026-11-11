@@ -2457,6 +2457,17 @@ export default function App() {
                       Menagerie Medley is the recommended modular set.
                     </p>
                   )}
+                  {villain.id === "nebula" && (
+                    <p className="setting-help">
+                      Whenever Nebula activates against you, every Technique
+                      attached to her resolves its Special ability before some
+                      are discarded. Each evasion counter on Nebula's Ship adds
+                      1 threat per player each villain phase; the first player
+                      can exhaust the Milano and spend resources to remove them.
+                      Power Stone and Ship Command are always included; Space
+                      Pirates is the recommended modular set.
+                    </p>
+                  )}
                   {villain.id === "escape_the_museum" && (
                     <p className="setting-help">
                       Collector cannot be defeated: at 0 hit points he flips,
@@ -5676,7 +5687,9 @@ function Tabletop({
                               ? "Infamy"
                               : p.code === "16063"
                                 ? `Barrage · fires at 4`
-                                : "Madness"}
+                                : p.code === "16093"
+                                  ? "Evasion"
+                                  : "Madness"}
                           </span>
                         )}
                       {p.code === "16085b" && (
@@ -5689,7 +5702,8 @@ function Tabletop({
                         p.code === "31037" ||
                         p.code === "32065b" ||
                         p.code === "16143" ||
-                        p.code === "16085a") &&
+                        p.code === "16085a" ||
+                        p.code === "16093") &&
                         abilityOptions(s, p).map((a) => (
                           <button
                             key={a.id}
@@ -5710,7 +5724,9 @@ function Tabletop({
                                 ? "Discard with the Milano"
                                 : p.code === "16085a"
                                   ? "This way? · remove 5 threat"
-                                  : "Remove"}
+                                  : p.code === "16093"
+                                    ? `Thrusters · remove ${a.id.slice(-1)}`
+                                    : "Remove"}
                           </button>
                         ))}
                     </div>

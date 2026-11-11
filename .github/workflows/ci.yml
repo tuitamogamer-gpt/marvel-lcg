@@ -111,6 +111,8 @@ jobs:
             scripts: test:collector
           - group: escape
             scripts: test:escape
+          - group: nebula
+            scripts: test:nebula
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

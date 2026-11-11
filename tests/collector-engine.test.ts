@@ -140,7 +140,7 @@ describe("Infiltrate the Museum original source", () => {
       ))
         expect(hasExecutableScript(c.code), c.code).toBe(true);
     expect(COLLECTOR_SCRIPT_CODES).toHaveLength(22);
-    expect(scenarioModules("infiltrate_the_museum")).toHaveLength(32);
+    expect(scenarioModules("infiltrate_the_museum")).toHaveLength(33);
   });
   it.each([1, 2, 3])(
     "creates The Collection with each player's top card for %i players",

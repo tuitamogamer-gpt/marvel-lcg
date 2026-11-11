@@ -234,6 +234,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       "brotherhood_of_badoon",
       "infiltrate_the_museum",
       "escape_the_museum",
+      "nebula",
     ].includes(s.villainId)
   )
     return [];
@@ -247,6 +248,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
   const b = s.badoon;
   const k = s.collector;
   const x = s.escape;
+  const n = s.nebulaVillain;
   const pieces: Piece[] = [];
   const visit = (p: Piece) => {
     pieces.push(p);
@@ -297,6 +299,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       r?.villainDeck ||
       b?.villainDeck ||
       k?.villainDeck ||
+      n?.villainDeck ||
       []),
     ...(m?.mainDeck ||
       g?.mainDeck ||
@@ -305,6 +308,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       r?.mainDeck ||
       b?.mainDeck ||
       x?.mainDeck ||
+      n?.mainDeck ||
       []),
     ...(m?.currentMain
       ? [m.currentMain]
@@ -326,7 +330,9 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
                       ? [k.currentMain]
                       : x?.currentMain
                         ? [x.currentMain]
-                        : []),
+                        : n?.currentMain
+                          ? [n.currentMain]
+                          : []),
     ...(g?.orbital ? [g.orbital] : []),
     ...s.minions,
     ...s.sideSchemes,
@@ -488,7 +494,9 @@ function runMission(config: (typeof missions)[number]) {
                       ? "infiltrate_the_museum"
                       : s.villainId === "escape_the_museum"
                         ? "escape_the_museum"
-                        : undefined;
+                        : s.villainId === "nebula"
+                          ? "nebula"
+                          : undefined;
   const scenarioSources = scenarioSet
     ? scenarioPhysicalPieces(s).filter((p) => card(p).set_code === scenarioSet)
     : [];
@@ -516,7 +524,9 @@ function runMission(config: (typeof missions)[number]) {
                       ? 12
                       : scenarioSet === "escape_the_museum"
                         ? 11
-                        : 29;
+                        : scenarioSet === "nebula"
+                          ? 21
+                          : 29;
     expect(
       scenarioSources,
       "All selected original scenario cards begin in physical zones",
@@ -757,10 +767,10 @@ describe("published expansion starters across every supported mission setting", 
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(18);
-    expect(MODULES).toHaveLength(32);
+    expect(VILLAINS).toHaveLength(19);
+    expect(MODULES).toHaveLength(33);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(59384);
+    expect(missions).toHaveLength(64688);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -771,10 +781,27 @@ describe("published expansion starters across every supported mission setting", 
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
-    // Escape the Museum extends the grid without a new modular set. Every
-    // earlier name and seed stays in place: the 56,056 configurations before
-    // this import hash identically.
-    const collectorGrid = missions.filter(
+    // Nebula and its Space Pirates modular set extend the grid. Every earlier
+    // name and seed stays in place: the 59,384 configurations before this
+    // import hash identically.
+    const escapeGrid = missions.filter(
+      (m) => m.villainId !== "nebula" && m.module !== "space_pirates",
+    );
+    expect(escapeGrid).toHaveLength(59384);
+    expect(
+      createHash("sha256")
+        .update(manifest(escapeGrid).join("\n"))
+        .digest("hex"),
+    ).toBe("b95aaedb68243c5efa561cee935ffb462534c163bfb2bda9ca98380ad202097a");
+    expect(missions.filter((m) => m.villainId === "nebula")).toHaveLength(3432);
+    expect(
+      missions.filter(
+        (m) => m.module === "space_pirates" && m.villainId !== "nebula",
+      ),
+    ).toHaveLength(1872);
+    // Escape the Museum extended the grid without a new modular set: the
+    // 56,056 configurations before that import hash identically.
+    const collectorGrid = escapeGrid.filter(
       (m) => m.villainId !== "escape_the_museum",
     );
     expect(collectorGrid).toHaveLength(56056);
@@ -784,7 +811,7 @@ describe("published expansion starters across every supported mission setting", 
         .digest("hex"),
     ).toBe("48cc1a99662b97eedbe4ee218503ce44ebd6a5e313dd24f44fd8faaff06f1792");
     expect(
-      missions.filter((m) => m.villainId === "escape_the_museum"),
+      escapeGrid.filter((m) => m.villainId === "escape_the_museum"),
     ).toHaveLength(3328);
     // Infiltrate the Museum and its Menagerie Medley modular set extended the
     // grid after Brotherhood of Badoon: the 51,064 configurations before that
@@ -1020,7 +1047,7 @@ describe("published expansion starters across every supported mission setting", 
           partition.filter((mission) => mission.villainId === "crossbones")
             .length,
       ),
-    ).toEqual([403, 403, 403, 403, 403, 403, 403, 403]);
+    ).toEqual([416, 416, 416, 416, 416, 416, 416, 416]);
     expect(
       partitions.map(
         (partition) =>
@@ -1028,7 +1055,7 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "brotherhood_of_badoon",
           ).length,
       ),
-    ).toEqual([416, 416, 416, 416, 416, 416, 416, 416]);
+    ).toEqual([442, 442, 416, 416, 442, 442, 416, 416]);
     expect(
       partitions.map(
         (partition) =>
@@ -1036,7 +1063,7 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "infiltrate_the_museum",
           ).length,
       ),
-    ).toEqual([416, 416, 416, 416, 416, 416, 416, 416]);
+    ).toEqual([416, 416, 442, 442, 416, 416, 442, 442]);
     expect(
       partitions.map(
         (partition) =>
@@ -1044,12 +1071,18 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "escape_the_museum",
           ).length,
       ),
-    ).toEqual([416, 416, 416, 416, 416, 416, 416, 416]);
-    expect(new Set(missions.map(key)).size).toBe(59384);
-    expect(new Set(combined.map(key)).size).toBe(59384);
+    ).toEqual([442, 442, 416, 416, 442, 442, 416, 416]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter((mission) => mission.villainId === "nebula").length,
+      ),
+    ).toEqual([416, 416, 442, 442, 416, 416, 442, 442]);
+    expect(new Set(missions.map(key)).size).toBe(64688);
+    expect(new Set(combined.map(key)).size).toBe(64688);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(7423);
+      expect(partition).toHaveLength(8086);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -1057,11 +1090,11 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(142);
-      expect(Math.max(...perShard)).toBe(143);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(1142);
+      expect(Math.min(...perShard)).toBe(155);
+      expect(Math.max(...perShard)).toBe(156);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(1244);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 7423 : 59384);
+    expect(selectedMissions).toHaveLength(isSharded ? 8086 : 64688);
   });
   for (const mission of selectedMissions)
     it(

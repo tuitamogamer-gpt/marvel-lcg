@@ -1189,6 +1189,20 @@ export const VILLAINS = [
       "Find the Milano and break out of the Collector's museum. Remove every threat from each stage to advance; the Collector cannot be defeated, only slowed down.",
     color: "#5f87a3",
   },
+  {
+    id: "nebula",
+    name: "Nebula",
+    codes: ["16088", "16089", "16090"],
+    schemes: ["16091b"],
+    module: "space_pirates",
+    fixedSets: ["power_stone", "ship_command"],
+    difficulty: 3,
+    title: "Nebula",
+    location: "Deep space",
+    description:
+      "Chase Nebula and the Power Stone across space. Her Techniques strike whenever she activates, and every evasion counter on her ship speeds up her escape.",
+    color: "#4b6fb8",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1233,6 +1247,7 @@ export const MODULES = [
   { id: "hydra_patrol", name: "Hydra Patrol", difficulty: 2 },
   { id: "band_of_badoon", name: "Band of Badoon", difficulty: 3 },
   { id: "menagerie_medley", name: "Menagerie Medley", difficulty: 3 },
+  { id: "space_pirates", name: "Space Pirates", difficulty: 2 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {

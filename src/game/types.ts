@@ -267,6 +267,7 @@ export interface GameState {
   /** Original Collector stages and The Collection. */
   collector?: import("./collector.js").CollectorState;
   escape?: import("./escape-museum.js").EscapeState;
+  nebulaVillain?: import("./nebula-villain.js").NebulaVillainState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */

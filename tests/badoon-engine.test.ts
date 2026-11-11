@@ -160,7 +160,7 @@ describe("Brotherhood of Badoon original source", () => {
         expect(hasExecutableScript(c.code), c.code).toBe(true);
     }
     expect(BADOON_SCRIPT_CODES).toHaveLength(26);
-    expect(scenarioModules("brotherhood_of_badoon")).toHaveLength(32);
+    expect(scenarioModules("brotherhood_of_badoon")).toHaveLength(33);
     expect(
       scenarioModules("brotherhood_of_badoon").some(
         (m) => m.id === "band_of_badoon",

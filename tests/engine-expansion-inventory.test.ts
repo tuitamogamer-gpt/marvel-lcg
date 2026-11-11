@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { BADOON_SCRIPT_CODES } from "../src/game/badoon";
 import { COLLECTOR_SCRIPT_CODES } from "../src/game/collector";
 import { ESCAPE_SCRIPT_CODES } from "../src/game/escape-museum";
+import { NEBULA_VILLAIN_SCRIPT_CODES } from "../src/game/nebula-villain";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -22,6 +23,7 @@ const badoonCodes = new Set<string>([
   ...BADOON_SCRIPT_CODES,
   ...COLLECTOR_SCRIPT_CODES,
   ...ESCAPE_SCRIPT_CODES,
+  ...NEBULA_VILLAIN_SCRIPT_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -266,17 +268,19 @@ describe("complete expansion rules inventory", () => {
     // Brotherhood of Badoon adds its 14 scenario faces, the seven Ship Command
     // faces and the five Band of Badoon faces. Infiltrate the Museum adds its
     // ten scenario faces, nine Galactic Artifacts and three Menagerie Medley,
-    // and Escape the Museum its fourteen scenario faces.
+    // Escape the Museum its fourteen scenario faces, and Nebula its 17
+    // scenario faces, the Power Stone and four Space Pirates faces.
     expect(gmw).toMatchObject({
       faceCount: 207,
-      executableFaces: 122,
+      executableFaces: 144,
       installedCardClosure: false,
     });
-    expect(gmw.unsupportedFaceCodes).toHaveLength(85);
+    expect(gmw.unsupportedFaceCodes).toHaveLength(63);
     expect(gmw.unsupportedFaceCodes).not.toContain("16058");
     expect(gmw.unsupportedFaceCodes).not.toContain("16070");
     expect(gmw.unsupportedFaceCodes).not.toContain("16080a");
-    expect(gmw.unsupportedFaceCodes).toContain("16088");
+    expect(gmw.unsupportedFaceCodes).not.toContain("16088");
+    expect(gmw.unsupportedFaceCodes).toContain("16103");
     const gmwPlayerFaces = cards.filter(
       (entry: { pack_code: string; position: number }) =>
         entry.pack_code === "gmw" && entry.position <= 57,
@@ -371,7 +375,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(32);
+    expect(MODULES).toHaveLength(33);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "deathstrike",
@@ -388,11 +392,12 @@ describe("complete expansion rules inventory", () => {
         "hydra_patrol",
         "band_of_badoon",
         "menagerie_medley",
+        "space_pirates",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2439);
-    expect(coverage.unsupportedFaces).toBe(2112);
-    expect(coverage.dedicatedFaces).toBe(2000);
+    expect(coverage.executableFaces).toBe(2461);
+    expect(coverage.unsupportedFaces).toBe(2090);
+    expect(coverage.dedicatedFaces).toBe(2022);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -564,6 +569,8 @@ describe("complete expansion rules inventory", () => {
         22 -
         // Escape the Museum.
         14 -
+        // Nebula, Power Stone and Space Pirates.
+        22 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -691,7 +698,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(32);
+    expect(coverage.registeredModules).toHaveLength(33);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -875,7 +882,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(18);
+    ).toHaveLength(19);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "crossbones",
@@ -1017,7 +1024,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(136);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(137);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

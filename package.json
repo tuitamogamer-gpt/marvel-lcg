@@ -68,7 +68,8 @@
     "test:red-skull": "node scripts/red-skull-check.mjs",
     "test:badoon": "node scripts/badoon-check.mjs",
     "test:collector": "node scripts/collector-check.mjs",
-    "test:escape": "node scripts/escape-check.mjs"
+    "test:escape": "node scripts/escape-check.mjs",
+    "test:nebula": "node scripts/nebula-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",
