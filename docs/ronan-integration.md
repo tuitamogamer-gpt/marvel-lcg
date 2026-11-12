@@ -30,11 +30,12 @@ Rules references: The Galaxy's Most Wanted rules insert, [Rules Reference 1.8](h
 
 ## Measured local validation — 2026-11-12
 
+- The complete regular regression passes 10,855 tests across 292 files, with one intentional skip. Two configuration tests used now-playable content (Kree Militants and the Ronan scenario id) as their unimplemented examples; they now name Beasty Boys and an unknown scenario id.
 - 19 focused engine cases pass, covering registration, setup for one to three players in both difficulties, "Take What Is Mine" with its Power Stone lock and loss, the facedown boost when Ronan already holds the stone, both villain sequences with Superior Tactics and the win, Interception Imminent's Milano action, the extra boost against the stone's holder, Superior Tactics keeping the stone, Single-Minded Fury's attack and surge, the Universal Weapon, Fanaticism, Kree Physiology, "You Stand Accused!", the Kree Command Ship cancelling a When Revealed with a real payment, Cut the Power's boost and Kree Militants. Each command crosses a JSON save/reload boundary.
 - All 57 complete seeded missions against Ronan the Accuser reach a result without losing cards or locking.
 - The inventory (19 cases) pins all 138 source hashes; manifest hashes retain every previous mission name and seed.
 - The new browser check (`npm run test:ronan`) passes 14 flows, 14 accessibility audits and 14 layout checks at 1280, 768, 390 and 320 px with no browser errors: standalone setup for both difficulties, the Kree Command Ship's cancellation with a real payment, the Universal Weapon's Hero Action and "Take What Is Mine".
-- TypeScript and formatting pass.
+- TypeScript, formatting, the production build and the native API entry pass.
 - All 5,512 new source configurations pass with the physical-card audit: 3,536 Ronan the Accuser missions (52 expansion starters × two difficulties × thirty-four modular sets) and 1,976 Kree Militants missions in the nineteen earlier scenarios. The other 64,688 configured cases were not rerun locally.
 
 Remote CI runs the full matrix and browser groups, including the new `ronan` group.
