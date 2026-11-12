@@ -6,6 +6,7 @@ import type {
   MutagenForcedResponse,
 } from "./mutagen-formula.js";
 import type { Attack, Effect, GameState, Option, Piece } from "./types.js";
+import { ronanStoneLocked } from "./ronan.js";
 
 /** The Galaxy's Most Wanted: the Nebula scenario, its required Power Stone set
  * and the Space Pirates modular set. Ship Command is registered by the
@@ -174,7 +175,8 @@ export function nebulaDamaged(
   const stone = s.attachments.find(
     (p) => p.code === POWER_STONE && p.attachedTo === targetId,
   );
-  if (!stone || isTextBlank(s, stone)) return [];
+  // Superior Tactics: it cannot be unattached from Ronan the Accuser.
+  if (!stone || isTextBlank(s, stone) || ronanStoneLocked(s)) return [];
   const playerId =
     source === "hero"
       ? s.activePlayerId

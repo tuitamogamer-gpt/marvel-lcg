@@ -73,6 +73,8 @@ const MILANO_SCHEMES = [
   "16061b",
   "16062b",
   "16084b",
+  "16106b",
+  "16112",
   "16066",
   "16067",
   "16068",
@@ -278,6 +280,7 @@ export function badoonActions(
     s.sideSchemes.some((q) => q.id === p.id) ||
     s.badoon?.currentMain.id === p.id ||
     s.escape?.currentMain.id === p.id ||
+    s.ronan?.currentMain.id === p.id ||
     (s.environments || []).some((q) => q.id === p.id);
   if (!inPlay) return [];
   if (p.code === ROGUE_VESSEL)
@@ -294,7 +297,9 @@ export function badoonActions(
       : [];
   if (!MILANO_SCHEMES.includes(p.code)) return [];
   const main =
-    s.badoon?.currentMain.id === p.id || s.escape?.currentMain.id === p.id;
+    s.badoon?.currentMain.id === p.id ||
+    s.escape?.currentMain.id === p.id ||
+    s.ronan?.currentMain.id === p.id;
   const options: Option[] = [
     {
       id: "milano",
@@ -321,6 +326,7 @@ export function badoonActionSource(
 ): Piece | undefined {
   if (s.badoon?.currentMain.id === id) return s.badoon.currentMain;
   if (s.escape?.currentMain.id === id) return s.escape.currentMain;
+  if (s.ronan?.currentMain.id === id) return s.ronan.currentMain;
   return [...s.sideSchemes, ...(s.environments || [])].find(
     (p) =>
       p.id === id &&

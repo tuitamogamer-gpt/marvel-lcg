@@ -4,6 +4,7 @@ import { BADOON_SCRIPT_CODES } from "./badoon.js";
 import { COLLECTOR_SCRIPT_CODES } from "./collector.js";
 import { ESCAPE_SCRIPT_CODES } from "./escape-museum.js";
 import { NEBULA_VILLAIN_SCRIPT_CODES } from "./nebula-villain.js";
+import { RONAN_SCRIPT_CODES } from "./ronan.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -255,6 +256,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...COLLECTOR_SCRIPT_CODES,
   ...ESCAPE_SCRIPT_CODES,
   ...NEBULA_VILLAIN_SCRIPT_CODES,
+  ...RONAN_SCRIPT_CODES,
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

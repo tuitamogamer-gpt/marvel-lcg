@@ -113,6 +113,8 @@ jobs:
             scripts: test:escape
           - group: nebula-villain
             scripts: test:nebula-villain
+          - group: ronan
+            scripts: test:ronan
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

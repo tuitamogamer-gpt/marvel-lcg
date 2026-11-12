@@ -235,6 +235,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       "infiltrate_the_museum",
       "escape_the_museum",
       "nebula",
+      "ronan",
     ].includes(s.villainId)
   )
     return [];
@@ -249,6 +250,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
   const k = s.collector;
   const x = s.escape;
   const n = s.nebulaVillain;
+  const o = s.ronan;
   const pieces: Piece[] = [];
   const visit = (p: Piece) => {
     pieces.push(p);
@@ -300,6 +302,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       b?.villainDeck ||
       k?.villainDeck ||
       n?.villainDeck ||
+      o?.villainDeck ||
       []),
     ...(m?.mainDeck ||
       g?.mainDeck ||
@@ -309,6 +312,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       b?.mainDeck ||
       x?.mainDeck ||
       n?.mainDeck ||
+      o?.mainDeck ||
       []),
     ...(m?.currentMain
       ? [m.currentMain]
@@ -332,7 +336,9 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
                         ? [x.currentMain]
                         : n?.currentMain
                           ? [n.currentMain]
-                          : []),
+                          : o?.currentMain
+                            ? [o.currentMain]
+                            : []),
     ...(g?.orbital ? [g.orbital] : []),
     ...s.minions,
     ...s.sideSchemes,
@@ -496,7 +502,9 @@ function runMission(config: (typeof missions)[number]) {
                         ? "escape_the_museum"
                         : s.villainId === "nebula"
                           ? "nebula"
-                          : undefined;
+                          : s.villainId === "ronan"
+                            ? "ronan"
+                            : undefined;
   const scenarioSources = scenarioSet
     ? scenarioPhysicalPieces(s).filter((p) => card(p).set_code === scenarioSet)
     : [];
@@ -526,7 +534,9 @@ function runMission(config: (typeof missions)[number]) {
                         ? 11
                         : scenarioSet === "nebula"
                           ? 21
-                          : 29;
+                          : scenarioSet === "ronan"
+                            ? 19
+                            : 29;
     expect(
       scenarioSources,
       "All selected original scenario cards begin in physical zones",
@@ -767,10 +777,10 @@ describe("published expansion starters across every supported mission setting", 
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(19);
-    expect(MODULES).toHaveLength(33);
+    expect(VILLAINS).toHaveLength(20);
+    expect(MODULES).toHaveLength(34);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(64688);
+    expect(missions).toHaveLength(70200);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -781,10 +791,27 @@ describe("published expansion starters across every supported mission setting", 
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
-    // Nebula and its Space Pirates modular set extend the grid. Every earlier
-    // name and seed stays in place: the 59,384 configurations before this
-    // import hash identically.
-    const escapeGrid = missions.filter(
+    // Ronan the Accuser and its Kree Militants modular set extend the grid.
+    // Every earlier name and seed stays in place: the 64,688 configurations
+    // before this import hash identically.
+    const nebulaGrid = missions.filter(
+      (m) => m.villainId !== "ronan" && m.module !== "kree_militant",
+    );
+    expect(nebulaGrid).toHaveLength(64688);
+    expect(
+      createHash("sha256")
+        .update(manifest(nebulaGrid).join("\n"))
+        .digest("hex"),
+    ).toBe("f1ee348fefcc2450750b390ffc3f6f36ff460123a7ffd75c248a0e393ce3d1ad");
+    expect(missions.filter((m) => m.villainId === "ronan")).toHaveLength(3536);
+    expect(
+      missions.filter(
+        (m) => m.module === "kree_militant" && m.villainId !== "ronan",
+      ),
+    ).toHaveLength(1976);
+    // Nebula and its Space Pirates modular set extended the grid before that:
+    // the 59,384 configurations before that import hash identically.
+    const escapeGrid = nebulaGrid.filter(
       (m) => m.villainId !== "nebula" && m.module !== "space_pirates",
     );
     expect(escapeGrid).toHaveLength(59384);
@@ -793,9 +820,11 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(escapeGrid).join("\n"))
         .digest("hex"),
     ).toBe("b95aaedb68243c5efa561cee935ffb462534c163bfb2bda9ca98380ad202097a");
-    expect(missions.filter((m) => m.villainId === "nebula")).toHaveLength(3432);
+    expect(nebulaGrid.filter((m) => m.villainId === "nebula")).toHaveLength(
+      3432,
+    );
     expect(
-      missions.filter(
+      nebulaGrid.filter(
         (m) => m.module === "space_pirates" && m.villainId !== "nebula",
       ),
     ).toHaveLength(1872);
@@ -1047,7 +1076,7 @@ describe("published expansion starters across every supported mission setting", 
           partition.filter((mission) => mission.villainId === "crossbones")
             .length,
       ),
-    ).toEqual([416, 416, 416, 416, 416, 416, 416, 416]);
+    ).toEqual([429, 429, 429, 429, 429, 429, 429, 429]);
     expect(
       partitions.map(
         (partition) =>
@@ -1055,7 +1084,7 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "brotherhood_of_badoon",
           ).length,
       ),
-    ).toEqual([442, 442, 416, 416, 442, 442, 416, 416]);
+    ).toEqual([442, 442, 442, 442, 442, 442, 442, 442]);
     expect(
       partitions.map(
         (partition) =>
@@ -1063,7 +1092,7 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "infiltrate_the_museum",
           ).length,
       ),
-    ).toEqual([416, 416, 442, 442, 416, 416, 442, 442]);
+    ).toEqual([442, 442, 442, 442, 442, 442, 442, 442]);
     expect(
       partitions.map(
         (partition) =>
@@ -1071,18 +1100,24 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "escape_the_museum",
           ).length,
       ),
-    ).toEqual([442, 442, 416, 416, 442, 442, 416, 416]);
+    ).toEqual([442, 442, 442, 442, 442, 442, 442, 442]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "nebula").length,
       ),
-    ).toEqual([416, 416, 442, 442, 416, 416, 442, 442]);
-    expect(new Set(missions.map(key)).size).toBe(64688);
-    expect(new Set(combined.map(key)).size).toBe(64688);
+    ).toEqual([442, 442, 442, 442, 442, 442, 442, 442]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter((mission) => mission.villainId === "ronan").length,
+      ),
+    ).toEqual([442, 442, 442, 442, 442, 442, 442, 442]);
+    expect(new Set(missions.map(key)).size).toBe(70200);
+    expect(new Set(combined.map(key)).size).toBe(70200);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(8086);
+      expect(partition).toHaveLength(8775);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -1090,11 +1125,11 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(155);
-      expect(Math.max(...perShard)).toBe(156);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(1244);
+      expect(Math.min(...perShard)).toBe(168);
+      expect(Math.max(...perShard)).toBe(169);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(1350);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 8086 : 64688);
+    expect(selectedMissions).toHaveLength(isSharded ? 8775 : 70200);
   });
   for (const mission of selectedMissions)
     it(

@@ -5,6 +5,7 @@ import { BADOON_SCRIPT_CODES } from "../src/game/badoon";
 import { COLLECTOR_SCRIPT_CODES } from "../src/game/collector";
 import { ESCAPE_SCRIPT_CODES } from "../src/game/escape-museum";
 import { NEBULA_VILLAIN_SCRIPT_CODES } from "../src/game/nebula-villain";
+import { RONAN_SCRIPT_CODES } from "../src/game/ronan";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -24,6 +25,7 @@ const badoonCodes = new Set<string>([
   ...COLLECTOR_SCRIPT_CODES,
   ...ESCAPE_SCRIPT_CODES,
   ...NEBULA_VILLAIN_SCRIPT_CODES,
+  ...RONAN_SCRIPT_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -272,15 +274,17 @@ describe("complete expansion rules inventory", () => {
     // scenario faces, the Power Stone and four Space Pirates faces.
     expect(gmw).toMatchObject({
       faceCount: 207,
-      executableFaces: 144,
+      executableFaces: 164,
       installedCardClosure: false,
     });
-    expect(gmw.unsupportedFaceCodes).toHaveLength(63);
+    expect(gmw.unsupportedFaceCodes).toHaveLength(43);
     expect(gmw.unsupportedFaceCodes).not.toContain("16058");
     expect(gmw.unsupportedFaceCodes).not.toContain("16070");
     expect(gmw.unsupportedFaceCodes).not.toContain("16080a");
     expect(gmw.unsupportedFaceCodes).not.toContain("16088");
-    expect(gmw.unsupportedFaceCodes).toContain("16103");
+    expect(gmw.unsupportedFaceCodes).not.toContain("16103");
+    // The remaining Galaxy's Most Wanted faces are the campaign's market.
+    expect(gmw.unsupportedFaceCodes).toContain("16150");
     const gmwPlayerFaces = cards.filter(
       (entry: { pack_code: string; position: number }) =>
         entry.pack_code === "gmw" && entry.position <= 57,
@@ -375,7 +379,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(33);
+    expect(MODULES).toHaveLength(34);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "deathstrike",
@@ -393,11 +397,12 @@ describe("complete expansion rules inventory", () => {
         "band_of_badoon",
         "menagerie_medley",
         "space_pirates",
+        "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2461);
-    expect(coverage.unsupportedFaces).toBe(2090);
-    expect(coverage.dedicatedFaces).toBe(2022);
+    expect(coverage.executableFaces).toBe(2481);
+    expect(coverage.unsupportedFaces).toBe(2070);
+    expect(coverage.dedicatedFaces).toBe(2042);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -571,6 +576,8 @@ describe("complete expansion rules inventory", () => {
         14 -
         // Nebula, Power Stone and Space Pirates.
         22 -
+        // Ronan the Accuser and Kree Militants.
+        20 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -698,7 +705,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(33);
+    expect(coverage.registeredModules).toHaveLength(34);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -882,7 +889,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(19);
+    ).toHaveLength(20);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "crossbones",
@@ -1024,7 +1031,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(137);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(138);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

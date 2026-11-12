@@ -4,6 +4,7 @@ import * as badoon from "./badoon.js";
 import * as collector from "./collector.js";
 import * as escape from "./escape-museum.js";
 import * as nebulaVillain from "./nebula-villain.js";
+import * as ronan from "./ronan.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -606,7 +607,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     inherited.stalwart ||
     sabretooth.sabretoothModifiers(s, piece.id).stalwart ||
     badoon.badoonKeyword(s, piece, "Stalwart") ||
-    nebulaVillain.nebulaVillainKeyword(s, piece, "Stalwart")
+    nebulaVillain.nebulaVillainKeyword(s, piece, "Stalwart") ||
+    ronan.ronanKeyword(s, piece, "Stalwart")
       ? { stalwart: true }
       : {}),
     ...(piece.code === "50060" && !isTextBlank(s, piece)
@@ -726,6 +728,7 @@ function syncNebulaIdentityStatuses(s: GameState) {
       sabretooth.sabretoothModifiers(s, p.id).stalwart ||
       badoon.badoonKeyword(s, p, "Stalwart") ||
       nebulaVillain.nebulaVillainKeyword(s, p, "Stalwart") ||
+      ronan.ronanKeyword(s, p, "Stalwart") ||
       s.villainId === "mansion_attack"
     ) {
       const modifiers = nativeStatusModifiers(s, p);
@@ -838,7 +841,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         (storm.stormGlobal(s).stalwart ||
           sabretooth.sabretoothModifiers(s, p.id).stalwart ||
           badoon.badoonKeyword(s, p, "Stalwart") ||
-          nebulaVillain.nebulaVillainKeyword(s, p, "Stalwart")),
+          nebulaVillain.nebulaVillainKeyword(s, p, "Stalwart") ||
+          ronan.ronanKeyword(s, p, "Stalwart")),
     ),
     Number(
       name === "Quickstrike" &&
@@ -852,6 +856,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         name === "Piercing" &&
         (redSkull.redSkullKeyword(s, p, "Piercing") ||
           badoon.badoonKeyword(s, p, "Piercing") ||
+          ronan.ronanKeyword(s, p, "Piercing") ||
           taskmaster.taskmasterKeyword(s, p, "Piercing") ||
           storm.stormPiercing(s, p) ||
           redSkullModules.redSkullPiercing(s, p.id) ||
@@ -897,6 +902,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         name === "Overkill" &&
         (packTraits.overkill ||
           badoon.badoonKeyword(s, p, "Overkill") ||
+          ronan.ronanKeyword(s, p, "Overkill") ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
             .overkill)
       ),
@@ -3074,6 +3080,23 @@ function dealDamage(
       log(s, `Nebula's Techniques prevent ${n - limited} damage.`);
     n = limited;
   }
+  // Kree Combat Armor reduces each attack's damage to its enemy by 1.
+  if (
+    !replaced &&
+    damageFromAttack &&
+    n > 0 &&
+    [s.villain, ...s.minions].some((p) => p.id === target)
+  ) {
+    const reduced = ronan.ronanAttackDamage(
+      s,
+      target,
+      n,
+      s.currentAttackProgramId || s.attack?.id,
+    );
+    if (reduced < n)
+      log(s, `Kree Combat Armor prevents ${n - reduced} damage.`);
+    n = reduced;
+  }
   if (
     !replaced &&
     targetPiece &&
@@ -4190,48 +4213,53 @@ function advanceVillain(
       "brotherhood_of_badoon",
       "infiltrate_the_museum",
       "nebula",
+      "ronan",
     ].includes(s.villainId)
   ) {
     const next = (
-      s.villainId === "nebula"
-        ? s.nebulaVillain
-        : s.villainId === "infiltrate_the_museum"
-          ? s.collector
-          : s.villainId === "brotherhood_of_badoon"
-            ? s.badoon
-            : s.villainId === "red_skull"
-              ? s.redSkull
-              : s.villainId === "zola"
-                ? s.zola
-                : s.villainId === "taskmaster"
-                  ? s.taskmaster
-                  : s.villainId === "absorbing_man"
-                    ? s.absorbingMan
-                    : s.villainId === "crossbones"
-                      ? s.crossbones
-                      : s.magneto
+      s.villainId === "ronan"
+        ? s.ronan
+        : s.villainId === "nebula"
+          ? s.nebulaVillain
+          : s.villainId === "infiltrate_the_museum"
+            ? s.collector
+            : s.villainId === "brotherhood_of_badoon"
+              ? s.badoon
+              : s.villainId === "red_skull"
+                ? s.redSkull
+                : s.villainId === "zola"
+                  ? s.zola
+                  : s.villainId === "taskmaster"
+                    ? s.taskmaster
+                    : s.villainId === "absorbing_man"
+                      ? s.absorbingMan
+                      : s.villainId === "crossbones"
+                        ? s.crossbones
+                        : s.magneto
     )?.villainDeck?.shift();
     if (!next) {
       endGame(
         s,
         true,
-        s.villainId === "nebula"
-          ? "Nebula is defeated. The Power Stone stays out of her hands."
-          : s.villainId === "infiltrate_the_museum"
-            ? "The Collector is defeated. The museum's prisoners go free."
-            : s.villainId === "brotherhood_of_badoon"
-              ? "Drang is defeated. The Badoon invasion is broken."
-              : s.villainId === "red_skull"
-                ? "Red Skull is defeated. His reign is over."
-                : s.villainId === "zola"
-                  ? "Zola is defeated. His experiments are over."
-                  : s.villainId === "taskmaster"
-                    ? "Taskmaster is defeated. The captives are safe."
-                    : s.villainId === "absorbing_man"
-                      ? "Absorbing Man is defeated. The way is clear."
-                      : s.villainId === "crossbones"
-                        ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
-                        : "Magneto is defeated. Asteroid M is safe.",
+        s.villainId === "ronan"
+          ? "Ronan the Accuser is defeated. The Power Stone is safe."
+          : s.villainId === "nebula"
+            ? "Nebula is defeated. The Power Stone stays out of her hands."
+            : s.villainId === "infiltrate_the_museum"
+              ? "The Collector is defeated. The museum's prisoners go free."
+              : s.villainId === "brotherhood_of_badoon"
+                ? "Drang is defeated. The Badoon invasion is broken."
+                : s.villainId === "red_skull"
+                  ? "Red Skull is defeated. His reign is over."
+                  : s.villainId === "zola"
+                    ? "Zola is defeated. His experiments are over."
+                    : s.villainId === "taskmaster"
+                      ? "Taskmaster is defeated. The captives are safe."
+                      : s.villainId === "absorbing_man"
+                        ? "Absorbing Man is defeated. The way is clear."
+                        : s.villainId === "crossbones"
+                          ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
+                          : "Magneto is defeated. Asteroid M is safe.",
       );
       return;
     }
@@ -4255,6 +4283,7 @@ function advanceVillain(
         "brotherhood_of_badoon",
         "infiltrate_the_museum",
         "nebula",
+        "ronan",
       ].includes(s.villainId)
         ? { counters: old.counters }
         : {}),
@@ -4275,6 +4304,7 @@ function advanceVillain(
         "brotherhood_of_badoon",
         "infiltrate_the_museum",
         "nebula",
+        "ronan",
       ].includes(s.villainId)
     ) {
       s.villain.maxHp =
@@ -4351,6 +4381,7 @@ function villainSetup(s: GameState) {
     ...(redSkull.redSkullReveal(s, s.villain) || []),
     ...(badoon.badoonReveal(s, s.villain) || []),
     ...(collector.collectorReveal(s, s.villain) || []),
+    ...(ronan.ronanReveal(s, s.villain) || []),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -4623,6 +4654,32 @@ function threat(
         }
         return;
       }
+      if (s.villainId === "ronan") {
+        if (s.pendingMainCompletion) return;
+        const next = s.ronan?.mainDeck.shift();
+        if (!next) {
+          endGame(
+            s,
+            false,
+            '"Take What Is Mine" is complete. Ronan claims the Power Stone.',
+          );
+          return;
+        }
+        s.pendingMainCompletion = true;
+        discardMainAttachments(s);
+        s.removed.push(resetPiece(s.ronan!.currentMain));
+        s.ronan!.currentMain = next;
+        s.scheme.index++;
+        s.scheme.code = next.code;
+        s.scheme.threat = 0;
+        add(
+          s,
+          ...(ronan.ronanReveal(s, next) || []),
+          E("ronan:main-back"),
+          E("clearMainCompletion"),
+        );
+        return;
+      }
       if (s.villainId === "nebula") {
         if (s.pendingMainCompletion) return;
         const next = s.nebulaVillain?.mainDeck.shift();
@@ -4726,6 +4783,7 @@ function thwart(
         ironspiderPorts,
       )) ||
     hulkThreatLocked(s, target) ||
+    ronan.ronanMainLocked(s, target) ||
     !gamora.gamoraCanRemoveThreat(s, target) ||
     venom.venomSchemeLocked(s, target) ||
     warlock.warlockSchemeLocked(s, target)
@@ -7480,7 +7538,8 @@ export function newGame(config: {
                 ? "trors"
                 : c.set_code === "band_of_badoon" ||
                     c.set_code === "menagerie_medley" ||
-                    c.set_code === "space_pirates"
+                    c.set_code === "space_pirates" ||
+                    c.set_code === "kree_militant"
                   ? "gmw"
                   : c.set_code === "exodus"
                     ? "gambit"
@@ -7527,12 +7586,13 @@ export function newGame(config: {
           c.code !== badoon.MILANO &&
           !(v.id === "escape_the_museum" && c.set_code === "ship_command") &&
           c.code !== nebulaVillain.POWER_STONE &&
+          c.code !== ronan.UNIVERSAL_WEAPON &&
           !(v.id === "magneto" && ["32144b", "32145b"].includes(c.code)) &&
           (c.type_code !== "environment" ||
             (v.id === "absorbing_man" &&
               c.set_code === v.id &&
               c.pack_code === scenarioPack) ||
-            (["brotherhood_of_badoon", "nebula"].includes(v.id) &&
+            (["brotherhood_of_badoon", "nebula", "ronan"].includes(v.id) &&
               c.code === badoon.ROGUE_VESSEL) ||
             selectedModules.includes(c.set_code || ""))) ||
           (team.some(
@@ -7594,6 +7654,41 @@ export function newGame(config: {
         ...collector.collectorSetup(s),
         ...(collector.collectorReveal(s, s.villain) || []),
       ].map((e) => effectContext(s, { actorId: s.firstPlayerId, ...e })),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "ronan") {
+    s.ronan = {
+      currentMain: makePiece(s, "16106b"),
+      mainDeck: [makePiece(s, "16107a")],
+      villainDeck: [makePiece(s, v.codes[stage])],
+    };
+    s.scheme.threat = (card("16106b").base_threat || 0) * s.playerCount;
+    s.villain = Object.assign(makePiece(s, v.codes[stage - 1]), {
+      hp,
+      maxHp: hp,
+      stage,
+    });
+    // Interception Imminent (1A) setup: the Kree Command Ship and the Milano
+    // enter play, the Universal Weapon attaches to Ronan and the Power Stone
+    // to the first player.
+    visionPorts.putEnvironment(s, makePiece(s, ronan.KREE_COMMAND_SHIP));
+    const milano = makePiece(s, badoon.MILANO);
+    delete milano.ownerId;
+    seatView(s, s.firstPlayerId).player.inPlay.push(milano);
+    const weapon = makePiece(s, ronan.UNIVERSAL_WEAPON);
+    weapon.attachedTo = s.villain.id;
+    s.attachments.push(weapon);
+    const stone = makePiece(s, nebulaVillain.POWER_STONE);
+    stone.attachedTo = `hero:${s.firstPlayerId}`;
+    s.attachments.push(stone);
+    s.queue.push(
+      ...(ronan.ronanReveal(s, s.villain) || []).map((e) =>
+        effectContext(s, { ...e, actorId: s.firstPlayerId }),
+      ),
       effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
     );
     const pacing = s.pacing;
@@ -10024,6 +10119,7 @@ export function abilityOptions(
     ...collector.collectorActions(s, p, collectorPorts),
     ...escape.escapeActions(s, p),
     ...nebulaVillain.nebulaActions(s, p, nebulaVillainPorts),
+    ...ronan.ronanActions(s, p, ronanPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -14141,6 +14237,21 @@ const collectorPorts: collector.CollectorPorts = {
     else if (!owner || owner.eliminated) s.removed.push(p);
     else seatView(s, owner).player.discard.push(p);
   },
+};
+const ronanPorts: ronan.RonanPorts = {
+  ...mutagenPorts,
+  revealHidden,
+  reveal: crossbonesPorts.reveal,
+  giveTough: (s, id) => {
+    const p = id === s.villain.id ? s.villain : find(s, id);
+    return !!p && giveCharacterStatus(s, p, "tough");
+  },
+  canPayWithoutMilano: (s, cost) => badoonPorts.canPayWithoutMilano(s, cost),
+  milano: (s) => badoon.badoonMilano(s),
+  enemyStat: (s, p, stat) => enemyStats(s, p)[stat],
+  cancelWhenRevealed: (s, p, after) =>
+    quicksilverPackPorts.cancelWhenRevealed(s, p, after),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
 };
 const nebulaVillainPorts: nebulaVillain.NebulaVillainPorts = {
   ...mutagenPorts,
@@ -21633,6 +21744,7 @@ function enemyAttack(
         id,
         s.attack.originalPlayerId!,
       ),
+      ...ronan.ronanActivationInitiated(s, id, s.attack.originalPlayerId!),
     );
   if (!friendlySource) {
     const strategist = redSkull.redSkullActivation(s, id);
@@ -22032,6 +22144,7 @@ function boostEffects(s: GameState, p: Piece) {
   const rise =
     escape.escapeBoost(s, p) ??
     nebulaVillain.nebulaBoost(s, p) ??
+    ronan.ronanBoost(s, p) ??
     collector.collectorBoost(s, p) ??
     badoon.badoonBoost(s, p) ??
     redSkull.redSkullBoost(s, p) ??
@@ -22346,6 +22459,7 @@ function enemyScheme(
     E("phoenixSchemeInterrupt", { id, activationId: moldReceipt.token }),
     ...redSkull.redSkullActivation(s, id),
     ...nebulaVillain.nebulaActivationInitiated(s, id, s.activePlayerId),
+    ...ronan.ronanActivationInitiated(s, id, s.activePlayerId),
     ...masterMold.masterMoldBeforeScheme(s, moldReceipt, { isTextBlank }),
     E(pendingBoosts.length ? "revealSchemeBoost" : "finishScheme"),
   );
@@ -23245,6 +23359,7 @@ function finishAttackAfterDamage(
           ...absorbingMan.absorbingAttackResponses(s, a, recipientId),
           ...badoon.badoonAttackResponses(s, a),
           ...nebulaVillain.nebulaAttackResponses(s, a, recipientId),
+          ...ronan.ronanAttackResponses(s, a),
           ...redSkullModules.redSkullAttackResponses(s, a, redSkullModulePorts),
           ...experimentalWeapons.experimentalWeaponsAttackResponses(
             s,
@@ -23711,6 +23826,15 @@ function reveal(
           ),
         );
     }
+    opts.push(
+      ...ronan.ronanRevealInterrupts(
+        s,
+        p,
+        fromEncounterDeck,
+        s.activePlayerId,
+        ronanPorts,
+      ),
+    );
     if (opts.length) {
       opts.push(
         option("resolve", "Resolve the encounter", [
@@ -23877,6 +24001,8 @@ function reveal(
       (nebulaVillain.NEBULA_VILLAIN_SCRIPT_CODES.some(
         (code) => code === p.code,
       ) &&
+        c.type_code !== "attachment") ||
+      (ronan.RONAN_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
@@ -24052,6 +24178,7 @@ function reveal(
       ...badoon.BADOON_SCRIPT_CODES,
       ...collector.COLLECTOR_SCRIPT_CODES,
       ...nebulaVillain.NEBULA_VILLAIN_SCRIPT_CODES,
+      ...ronan.RONAN_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -24083,6 +24210,7 @@ function reveal(
       experimentalWeapons.experimentalWeaponsReveal(s, p) ??
       escape.escapeReveal(s, p) ??
       nebulaVillain.nebulaReveal(s, p) ??
+      ronan.ronanReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -24157,6 +24285,7 @@ function reveal(
   const rise =
     escape.escapeReveal(s, p) ??
     nebulaVillain.nebulaReveal(s, p) ??
+    ronan.ronanReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -25177,30 +25306,33 @@ function resolve(s: GameState, e: Effect) {
       "brotherhood_of_badoon",
       "infiltrate_the_museum",
       "nebula",
+      "ronan",
     ].includes(s.villainId)
   ) {
     // Target references identify the continuing same-title character. Physical
     // card IDs, source IDs and snapshots retain their original stage identity.
     const retiredVillains =
-      s.villainId === "nebula"
-        ? ["16088", "16089", "16090"]
-        : s.villainId === "infiltrate_the_museum"
-          ? ["16070", "16071", "16072"]
-          : s.villainId === "brotherhood_of_badoon"
-            ? ["16058", "16059", "16060"]
-            : s.villainId === "red_skull"
-              ? ["04125", "04126", "04127"]
-              : s.villainId === "zola"
-                ? ["04109", "04110", "04111"]
-                : s.villainId === "taskmaster"
-                  ? ["04093", "04094", "04095"]
-                  : s.villainId === "absorbing_man"
-                    ? ["04076", "04077", "04078"]
-                    : s.villainId === "crossbones"
-                      ? ["04058", "04059", "04060"]
-                      : s.villainId === "magneto"
-                        ? ["32138", "32139", "32140"]
-                        : [];
+      s.villainId === "ronan"
+        ? ["16103", "16104", "16105"]
+        : s.villainId === "nebula"
+          ? ["16088", "16089", "16090"]
+          : s.villainId === "infiltrate_the_museum"
+            ? ["16070", "16071", "16072"]
+            : s.villainId === "brotherhood_of_badoon"
+              ? ["16058", "16059", "16060"]
+              : s.villainId === "red_skull"
+                ? ["04125", "04126", "04127"]
+                : s.villainId === "zola"
+                  ? ["04109", "04110", "04111"]
+                  : s.villainId === "taskmaster"
+                    ? ["04093", "04094", "04095"]
+                    : s.villainId === "absorbing_man"
+                      ? ["04076", "04077", "04078"]
+                      : s.villainId === "crossbones"
+                        ? ["04058", "04059", "04060"]
+                        : s.villainId === "magneto"
+                          ? ["32138", "32139", "32140"]
+                          : [];
     const characterFields = ["target", "targetId", "enemyId", "attacker"];
     if (
       [
@@ -25212,6 +25344,7 @@ function resolve(s: GameState, e: Effect) {
         "brotherhood_of_badoon",
         "infiltrate_the_museum",
         "nebula",
+        "ronan",
       ].includes(s.villainId) &&
       [
         "enemyAttack",
@@ -25231,6 +25364,7 @@ function resolve(s: GameState, e: Effect) {
         "brotherhood_of_badoon",
         "infiltrate_the_museum",
         "nebula",
+        "ronan",
       ].includes(s.villainId)
     ) {
       if (e.type === "ms:melee-second") characterFields.push("firstId");
@@ -25485,6 +25619,7 @@ function resolve(s: GameState, e: Effect) {
           experimentalWeapons.experimentalWeaponsReveal(state, piece) ??
           escape.escapeReveal(state, piece) ??
           nebulaVillain.nebulaReveal(state, piece) ??
+          ronan.ronanReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -25609,6 +25744,7 @@ function resolve(s: GameState, e: Effect) {
   if (escape.resolveEscapeEffect(s, e, escapePorts)) return;
   if (nebulaVillain.resolveNebulaVillainEffect(s, e, nebulaVillainPorts))
     return;
+  if (ronan.resolveRonanEffect(s, e, ronanPorts)) return;
   if (taskmaster.resolveTaskmasterEffect(s, e, taskmasterPorts)) return;
   if (absorbingMan.resolveAbsorbingEffect(s, e, absorbingManPorts)) return;
   if (crossbones.resolveCrossbonesEffect(s, e, crossbonesPorts)) return;
@@ -34079,6 +34215,7 @@ function resolve(s: GameState, e: Effect) {
           "infiltrate_the_museum",
           "escape_the_museum",
           "nebula",
+          "ronan",
           "project_wideawake",
           "mansion_attack",
           "magneto",
@@ -34415,6 +34552,7 @@ function resolve(s: GameState, e: Effect) {
         for (let i = 0; i <= (s.heroic || 0); i++) dealEncounter(s, seat.id);
       const hazard =
         deadpool.deadpoolPlayerIcons(s, "scheme_hazard") +
+        ronan.ronanHazard(s) +
         (card(s.scheme.code).scheme_hazard || 0) +
         s.sideSchemes.reduce(
           (n, p) =>
@@ -34837,6 +34975,7 @@ function run(s: GameState) {
       e.type.startsWith("collector:") ||
       e.type.startsWith("escape:") ||
       e.type.startsWith("nebula-villain:") ||
+      e.type.startsWith("ronan:") ||
       e.type.startsWith("red-skull:") ||
       e.type.startsWith("sabretooth:") ||
       e.type.startsWith("sabretooth-native:") ||
@@ -35205,6 +35344,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...absorbingMan.absorbingActions(s, p),
               ...badoon.badoonActions(s, p, badoonPorts),
               ...collector.collectorActions(s, p, collectorPorts),
+              ...ronan.ronanActions(s, p, ronanPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),

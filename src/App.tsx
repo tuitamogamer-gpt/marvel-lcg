@@ -2457,6 +2457,17 @@ export default function App() {
                       Menagerie Medley is the recommended modular set.
                     </p>
                   )}
+                  {villain.id === "ronan" && (
+                    <p className="setting-help">
+                      The first player starts with the Power Stone; Ronan gets
+                      an additional boost card against whoever holds it, and
+                      once he takes it the final scheme cannot lose threat. The
+                      Kree Command Ship lets the first player exhaust the Milano
+                      to cancel a revealed treachery. Power Stone and Ship
+                      Command are always included; Kree Militants is the
+                      recommended modular set.
+                    </p>
+                  )}
                   {villain.id === "nebula" && (
                     <p className="setting-help">
                       Whenever Nebula activates against you, every Technique
@@ -4876,6 +4887,8 @@ function AttachedCards({
                 "04132",
                 "04133",
                 "16064",
+                "16109",
+                "16131",
                 "16122",
                 "16123",
                 "16124",
@@ -4910,6 +4923,7 @@ function AttachedCards({
                     "04132",
                     "04133",
                     "16064",
+                    "16109",
                     "16122",
                     "16123",
                     "16124",
@@ -4931,6 +4945,7 @@ function AttachedCards({
                     "04132",
                     "04133",
                     "16064",
+                    "16109",
                     "16122",
                     "16123",
                     "16124",
@@ -4955,6 +4970,7 @@ function AttachedCards({
                   "04132",
                   "04133",
                   "16064",
+                  "16109",
                   "16122",
                   "16123",
                   "16124",
@@ -5074,7 +5090,10 @@ function Tabletop({
   const threatCritical = hasThreatLimit && s.scheme.threat >= threatLimit - 2;
   // Main schemes whose printed actions are offered on the table.
   const mainActionPiece =
-    s.badoon?.currentMain || s.collector?.currentMain || s.escape?.currentMain;
+    s.badoon?.currentMain ||
+    s.collector?.currentMain ||
+    s.escape?.currentMain ||
+    s.ronan?.currentMain;
   const [pile, setPile] = useState<{ title: string; cards: Piece[] } | null>(
     null,
   );
@@ -5384,7 +5403,7 @@ function Tabletop({
                         ...card(s.villain)
                           .name.split(/\s+/)
                           .map((word) => word.length),
-                      ) >= 9
+                      ) >= 9 || card(s.villain).name.length >= 15
                         ? "villain-name-long"
                         : undefined
                     }
@@ -5679,7 +5698,8 @@ function Tabletop({
                         p.code !== "32130" &&
                         p.code !== "16143" &&
                         p.code !== "16085a" &&
-                        p.code !== "16085b" && (
+                        p.code !== "16085b" &&
+                        p.code !== "16108" && (
                           <span className="environment-counter">
                             <PremiumToken kind="counter" />
                             {p.counters}{" "}
@@ -5692,6 +5712,13 @@ function Tabletop({
                                   : "Madness"}
                           </span>
                         )}
+                      {p.code === "16108" && (
+                        <span className="stat-caption">
+                          Treachery revealed: the first player may exhaust the
+                          Milano and spend 1 resource to cancel its When
+                          Revealed
+                        </span>
+                      )}
                       {p.code === "16085b" && (
                         <span className="stat-caption">
                           Villain phase: exhaust the Milano or take indirect

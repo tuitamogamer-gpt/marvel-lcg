@@ -1203,6 +1203,20 @@ export const VILLAINS = [
       "Chase Nebula and the Power Stone across space. Her Techniques strike whenever she activates, and every evasion counter on her ship speeds up her escape.",
     color: "#4b6fb8",
   },
+  {
+    id: "ronan",
+    name: "Ronan the Accuser",
+    codes: ["16103", "16104", "16105"],
+    schemes: ["16106b"],
+    module: "kree_militant",
+    fixedSets: ["power_stone", "ship_command"],
+    difficulty: 4,
+    title: "Ronan the Accuser",
+    location: "Kree Command Ship",
+    description:
+      "Keep the Power Stone out of Ronan's hands. He hits harder against whoever holds it, and once he claims it the final scheme cannot be slowed.",
+    color: "#2f6d63",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1248,6 +1262,7 @@ export const MODULES = [
   { id: "band_of_badoon", name: "Band of Badoon", difficulty: 3 },
   { id: "menagerie_medley", name: "Menagerie Medley", difficulty: 3 },
   { id: "space_pirates", name: "Space Pirates", difficulty: 2 },
+  { id: "kree_militant", name: "Kree Militants", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {

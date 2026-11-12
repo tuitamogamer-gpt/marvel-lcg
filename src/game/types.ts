@@ -268,6 +268,7 @@ export interface GameState {
   collector?: import("./collector.js").CollectorState;
   escape?: import("./escape-museum.js").EscapeState;
   nebulaVillain?: import("./nebula-villain.js").NebulaVillainState;
+  ronan?: import("./ronan.js").RonanState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */
