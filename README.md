@@ -1,6 +1,6 @@
 # Marvel Champions — The Tabletop
 
-**New: Nebula.** The fourth Galaxy's Most Wanted scenario: whenever Nebula activates against you, every Technique attached to her resolves its Special ability, and each evasion counter on her ship speeds up her escape. Fire the Milano's thrusters to slow her down, and fight over the Power Stone — a hero who deals 3 damage to her with one attack takes it. Space Pirates is a new modular set for every scenario. [Scope and validation](docs/nebula-integration.md). Earlier: Escape the Museum turned the main scheme around ([scope](docs/escape-integration.md)).
+**New: Nebula.** The fourth Galaxy's Most Wanted scenario: whenever Nebula activates against you, every Technique attached to her resolves its Special ability, and each evasion counter on her ship speeds up her escape. Fire the Milano's thrusters to slow her down, and fight over the Power Stone — a hero who deals 3 damage to her with one attack takes it. Space Pirates is a new modular set for every scenario. [Scope and validation](docs/nebula-scenario-integration.md). Earlier: Escape the Museum turned the main scheme around ([scope](docs/escape-integration.md)).
 
 A playable, scripted **1–3 hero hot-seat** fan implementation built with React, TypeScript, and Vite. Command one, two, or three heroes yourself. Choose each hero’s aspect and a shared villain, difficulty, and modular encounter. Play a mission at your own pace with explained action checkpoints and an automatic local save.
 
