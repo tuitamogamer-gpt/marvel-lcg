@@ -88,8 +88,27 @@ function keywordPrefix(card: Pick<Card, "text">) {
   return ability ? text.slice(0, ability.index) : text;
 }
 
+/** Printed text never changes, and keywords are read for every card on the
+ * table many times per command, so each distinct text is parsed once. */
+const declarationCache = new Map<string, readonly KeywordDeclaration[]>();
+
 /** Whole declarations only: references, grants, reminders and boost effects do not count. */
 export function keywordDeclarations(
+  card: Pick<Card, "text">,
+): readonly KeywordDeclaration[] {
+  const text = card.text || "";
+  let declarations = declarationCache.get(text);
+  if (!declarations) {
+    declarations = Object.freeze(
+      parseKeywordDeclarations(card).map((declaration) =>
+        Object.freeze(declaration),
+      ),
+    );
+    declarationCache.set(text, declarations);
+  }
+  return declarations;
+}
+function parseKeywordDeclarations(
   card: Pick<Card, "text">,
 ): KeywordDeclaration[] {
   const prefix = keywordPrefix(card);

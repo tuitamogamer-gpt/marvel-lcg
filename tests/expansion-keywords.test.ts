@@ -27,6 +27,28 @@ const empty = (): StatusState => ({
 const normal = { text: "" };
 
 describe("printed keyword declarations", () => {
+  it("parses each printed text once and never shares mutable results", () => {
+    const text = "Guard. Retaliate 2. Hinder 1[per_hero].";
+    const first = keywordDeclarations({ text });
+    // A different object with the same printed text reuses the parse.
+    expect(keywordDeclarations({ text })).toBe(first);
+    expect(first.map((declaration) => declaration.name)).toEqual([
+      "Guard",
+      "Retaliate",
+      "Hinder",
+    ]);
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(first.every((declaration) => Object.isFrozen(declaration))).toBe(
+      true,
+    );
+    // Another text is parsed on its own.
+    expect(keywordDeclarations({ text: "Surge." })).not.toBe(first);
+    expect(printedKeyword({ text }, "Retaliate")).toBe(2);
+    expect(scaledKeyword({ text }, "Hinder", 3)).toBe(3);
+    expect(
+      keywordDeclarations({ text: undefined as unknown as string }),
+    ).toEqual([]);
+  });
   it("recognizes printed Core and expansion declarations with reminders and multiple keywords", () => {
     expect(printedKeyword(card("01040a"), "Retaliate")).toBe(1);
     expect(printedKeyword(card("01172"), "Retaliate")).toBe(1);

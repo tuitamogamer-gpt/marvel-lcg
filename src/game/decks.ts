@@ -34,7 +34,27 @@ export function copyLimit(c: Card, heroId?: string) {
 export function deckSizeFor(codes: string[]) {
   return codes.filter((code) => !card(code) || !isPermanent(card(code))).length;
 }
+/** The legal pool depends only on the hero and aspects, and filtering the
+ * whole catalog is costly, so each combination is computed once. Callers get
+ * their own array. */
+const deckOptionCache = new Map<
+  string,
+  ReturnType<typeof computeDeckOptions>
+>();
 export function deckOptions(
+  heroId: string,
+  aspect: Aspect,
+  chosenAspects?: Aspect[],
+) {
+  const key = `${heroId}|${aspect}|${chosenAspects ? chosenAspects.join(",") : "*"}`;
+  let options = deckOptionCache.get(key);
+  if (!options) {
+    options = computeDeckOptions(heroId, aspect, chosenAspects);
+    deckOptionCache.set(key, options);
+  }
+  return [...options];
+}
+function computeDeckOptions(
   heroId: string,
   aspect: Aspect,
   chosenAspects?: Aspect[],

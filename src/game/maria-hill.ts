@@ -13,6 +13,9 @@ import type {
   Resource,
 } from "./types.js";
 
+/** The printed identity faces are static catalog entries: look each up once
+ * instead of scanning the whole catalog on every resource check. */
+const identityCards = new Map<string, ReturnType<typeof card>>();
 // Read the current printed identity without importing the script registry.
 const heroCard = (s: GameState) => {
   const form = s.player.form === "hero" ? "hero" : "alter_ego";
@@ -30,9 +33,15 @@ const heroCard = (s: GameState) => {
     s.player.angelForm === "archangel"
   )
     return card("42001c");
-  return Object.values(DB).find(
-    (c) => c.set_code === s.heroId && c.type_code === form,
-  )!;
+  const key = `${s.heroId}:${form}`;
+  let identity = identityCards.get(key);
+  if (!identity) {
+    identity = Object.values(DB).find(
+      (c) => c.set_code === s.heroId && c.type_code === form,
+    )!;
+    if (identity) identityCards.set(key, identity);
+  }
+  return identity;
 };
 
 const E = (type: string, args: Record<string, unknown> = {}): Effect => ({

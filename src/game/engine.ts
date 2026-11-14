@@ -35005,7 +35005,9 @@ function run(s: GameState) {
           ? s.firstPlayerId
           : e.actorId || s.activePlayerId,
     );
-    const before = boardSnapshot(s);
+    // Action reviews exist only for guided play; skip their board snapshot
+    // (every card's zone and every visible value) when nothing will read it.
+    const before = s.guided ? boardSnapshot(s) : undefined;
     s.currentEventId = e.eventId;
     s.currentAttackProgramId = e.attackProgramId;
     s.currentResponseGroup = e.responseGroup;
@@ -35032,7 +35034,7 @@ function run(s: GameState) {
     check(s);
     spdr.spdrSyncIdentity(s);
     syncSeat(s);
-    recordReview(s, before, e);
+    if (before) recordReview(s, before, e);
     const current = s.review;
     if (current) pending = mergeReviews(pending, current);
     s.review = null;
@@ -35120,7 +35122,13 @@ export function dispatch(state: GameState, command: Command): GameState {
       syncSeat(s);
       return s;
     }
-    const before = boardSnapshot(s);
+    const before = s.guided ? boardSnapshot(s) : undefined;
+    // A review attached to the answered prompt is carried into the result.
+    const promptContext = before
+      ? before.prompt?.context
+      : s.prompt?.context
+        ? structuredClone(s.prompt.context)
+        : undefined;
     if (command.type === "PROCEED") {
       need(s.review, "There is no action to acknowledge.");
       s.review = null;
@@ -35518,13 +35526,13 @@ export function dispatch(state: GameState, command: Command): GameState {
     check(s);
     spdr.spdrSyncIdentity(s);
     syncSeat(s);
-    recordReview(s, before, command);
+    if (before) recordReview(s, before, command);
     // A click on a choice/payment/basic power is already confirmation. Resolve
     // to the next real decision or result, carrying its receipt into that view.
-    if (["CHOOSE", "SELECT"].includes(command.type) && before.prompt?.context)
+    if (["CHOOSE", "SELECT"].includes(command.type) && promptContext)
       s.review = s.review
-        ? mergeReviews(before.prompt.context, s.review)
-        : before.prompt.context;
+        ? mergeReviews(promptContext, s.review)
+        : promptContext;
     run(s);
     spdr.spdrSyncIdentity(s);
     syncSeat(s);
