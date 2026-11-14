@@ -236,6 +236,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       "escape_the_museum",
       "nebula",
       "ronan",
+      "ebony_maw",
     ].includes(s.villainId)
   )
     return [];
@@ -251,6 +252,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
   const x = s.escape;
   const n = s.nebulaVillain;
   const o = s.ronan;
+  const e = s.ebonyMaw;
   const pieces: Piece[] = [];
   const visit = (p: Piece) => {
     pieces.push(p);
@@ -303,6 +305,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       k?.villainDeck ||
       n?.villainDeck ||
       o?.villainDeck ||
+      e?.villainDeck ||
       []),
     ...(m?.mainDeck ||
       g?.mainDeck ||
@@ -313,6 +316,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       x?.mainDeck ||
       n?.mainDeck ||
       o?.mainDeck ||
+      e?.mainDeck ||
       []),
     ...(m?.currentMain
       ? [m.currentMain]
@@ -338,7 +342,9 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
                           ? [n.currentMain]
                           : o?.currentMain
                             ? [o.currentMain]
-                            : []),
+                            : e?.currentMain
+                              ? [e.currentMain]
+                              : []),
     ...(g?.orbital ? [g.orbital] : []),
     ...s.minions,
     ...s.sideSchemes,
@@ -504,7 +510,9 @@ function runMission(config: (typeof missions)[number]) {
                           ? "nebula"
                           : s.villainId === "ronan"
                             ? "ronan"
-                            : undefined;
+                            : s.villainId === "ebony_maw"
+                              ? "ebony_maw"
+                              : undefined;
   const scenarioSources = scenarioSet
     ? scenarioPhysicalPieces(s).filter((p) => card(p).set_code === scenarioSet)
     : [];
@@ -536,7 +544,9 @@ function runMission(config: (typeof missions)[number]) {
                           ? 21
                           : scenarioSet === "ronan"
                             ? 19
-                            : 29;
+                            : scenarioSet === "ebony_maw"
+                              ? 21
+                              : 29;
     expect(
       scenarioSources,
       "All selected original scenario cards begin in physical zones",
@@ -777,10 +787,10 @@ describe("published expansion starters across every supported mission setting", 
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(20);
-    expect(MODULES).toHaveLength(34);
+    expect(VILLAINS).toHaveLength(21);
+    expect(MODULES).toHaveLength(36);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(70200);
+    expect(missions).toHaveLength(78104);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -791,10 +801,32 @@ describe("published expansion starters across every supported mission setting", 
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
-    // Ronan the Accuser and its Kree Militants modular set extend the grid.
-    // Every earlier name and seed stays in place: the 64,688 configurations
-    // before this import hash identically.
-    const nebulaGrid = missions.filter(
+    // Ebony Maw and its Black Order and Armies of Titan modular sets extend
+    // the grid. Every earlier name and seed stays in place: the 70,200
+    // configurations before this import hash identically.
+    const ronanGrid = missions.filter(
+      (m) =>
+        m.villainId !== "ebony_maw" &&
+        !["black_order", "armies_of_titan"].includes(m.module),
+    );
+    expect(ronanGrid).toHaveLength(70200);
+    expect(
+      createHash("sha256").update(manifest(ronanGrid).join("\n")).digest("hex"),
+    ).toBe("4a8d2fdfc9c9e0d7be67eadcb5e38cbecd153929a1c3eb28abe8a65ec36c3116");
+    expect(missions.filter((m) => m.villainId === "ebony_maw")).toHaveLength(
+      3744,
+    );
+    expect(
+      missions.filter(
+        (m) =>
+          ["black_order", "armies_of_titan"].includes(m.module) &&
+          m.villainId !== "ebony_maw",
+      ),
+    ).toHaveLength(4160);
+    // Ronan the Accuser and its Kree Militants modular set extended the grid
+    // before that: the 64,688 configurations before that import hash
+    // identically.
+    const nebulaGrid = ronanGrid.filter(
       (m) => m.villainId !== "ronan" && m.module !== "kree_militant",
     );
     expect(nebulaGrid).toHaveLength(64688);
@@ -803,9 +835,9 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(nebulaGrid).join("\n"))
         .digest("hex"),
     ).toBe("f1ee348fefcc2450750b390ffc3f6f36ff460123a7ffd75c248a0e393ce3d1ad");
-    expect(missions.filter((m) => m.villainId === "ronan")).toHaveLength(3536);
+    expect(ronanGrid.filter((m) => m.villainId === "ronan")).toHaveLength(3536);
     expect(
-      missions.filter(
+      ronanGrid.filter(
         (m) => m.module === "kree_militant" && m.villainId !== "ronan",
       ),
     ).toHaveLength(1976);
@@ -1076,7 +1108,7 @@ describe("published expansion starters across every supported mission setting", 
           partition.filter((mission) => mission.villainId === "crossbones")
             .length,
       ),
-    ).toEqual([429, 429, 429, 429, 429, 429, 429, 429]);
+    ).toEqual([455, 455, 455, 455, 455, 455, 455, 455]);
     expect(
       partitions.map(
         (partition) =>
@@ -1084,7 +1116,7 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "brotherhood_of_badoon",
           ).length,
       ),
-    ).toEqual([442, 442, 442, 442, 442, 442, 442, 442]);
+    ).toEqual([468, 468, 468, 468, 468, 468, 468, 468]);
     expect(
       partitions.map(
         (partition) =>
@@ -1092,7 +1124,7 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "infiltrate_the_museum",
           ).length,
       ),
-    ).toEqual([442, 442, 442, 442, 442, 442, 442, 442]);
+    ).toEqual([468, 468, 468, 468, 468, 468, 468, 468]);
     expect(
       partitions.map(
         (partition) =>
@@ -1100,24 +1132,31 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "escape_the_museum",
           ).length,
       ),
-    ).toEqual([442, 442, 442, 442, 442, 442, 442, 442]);
+    ).toEqual([468, 468, 468, 468, 468, 468, 468, 468]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "nebula").length,
       ),
-    ).toEqual([442, 442, 442, 442, 442, 442, 442, 442]);
+    ).toEqual([468, 468, 468, 468, 468, 468, 468, 468]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "ronan").length,
       ),
-    ).toEqual([442, 442, 442, 442, 442, 442, 442, 442]);
-    expect(new Set(missions.map(key)).size).toBe(70200);
-    expect(new Set(combined.map(key)).size).toBe(70200);
+    ).toEqual([468, 468, 468, 468, 468, 468, 468, 468]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter((mission) => mission.villainId === "ebony_maw")
+            .length,
+      ),
+    ).toEqual([468, 468, 468, 468, 468, 468, 468, 468]);
+    expect(new Set(missions.map(key)).size).toBe(78104);
+    expect(new Set(combined.map(key)).size).toBe(78104);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(8775);
+      expect(partition).toHaveLength(9763);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -1125,11 +1164,11 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(168);
-      expect(Math.max(...perShard)).toBe(169);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(1350);
+      expect(Math.min(...perShard)).toBe(187);
+      expect(Math.max(...perShard)).toBe(188);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(1502);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 8775 : 70200);
+    expect(selectedMissions).toHaveLength(isSharded ? 9763 : 78104);
   });
   for (const mission of selectedMissions)
     it(

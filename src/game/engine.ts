@@ -5,6 +5,7 @@ import * as collector from "./collector.js";
 import * as escape from "./escape-museum.js";
 import * as nebulaVillain from "./nebula-villain.js";
 import * as ronan from "./ronan.js";
+import * as ebonyMaw from "./ebony-maw.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -743,7 +744,18 @@ function syncNebulaIdentityStatuses(s: GameState) {
     }
 }
 function canReadyIdentity(s: GameState) {
-  return !goblinIdentityLocked(s) && quicksilver.quicksilverCanReady(s);
+  return (
+    !goblinIdentityLocked(s) &&
+    quicksilver.quicksilverCanReady(s) &&
+    !ebonyMaw.ebonyMawRestrained(s, `hero:${s.activePlayerId}`)
+  );
+}
+/** Every in-play card readiness check: Nova's locks and Restrained. */
+function canReadyPiece(s: GameState, p: Piece) {
+  return (
+    nova.novaCanReadyPiece(s, p, { isTextBlank }) &&
+    !ebonyMaw.ebonyMawRestrained(s, p.id)
+  );
 }
 function readyIdentity(s: GameState) {
   if (!s.player.exhausted || !canReadyIdentity(s)) return false;
@@ -903,6 +915,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         (packTraits.overkill ||
           badoon.badoonKeyword(s, p, "Overkill") ||
           ronan.ronanKeyword(s, p, "Overkill") ||
+          ebonyMaw.ebonyMawKeyword(s, p, "Overkill") ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
             .overkill)
       ),
@@ -2487,6 +2500,7 @@ function check(s: GameState) {
     seat.eliminated = true;
     seat.ended = true;
     nebulaVillain.nebulaPlayerEliminated(s, seat.id);
+    ebonyMaw.ebonyMawPlayerEliminated(s, seat.id, discardPiece);
     removeDefeatedIronheartIdentities(s, seat);
     removeDefeatedSpdrIdentities(s, seat);
     if (s.attack?.targetPlayerId === seat.id) {
@@ -3096,6 +3110,23 @@ function dealDamage(
     if (reduced < n)
       log(s, `Kree Combat Armor prevents ${n - reduced} damage.`);
     n = reduced;
+  }
+  // Abjuration prevents all damage to Ebony Maw. It is discarded after it
+  // prevents 2 or more damage from a single attack.
+  if (!replaced && n > 0 && target === s.villain.id) {
+    const abjuration = ebonyMaw.ebonyMawPreventDamage(
+      s,
+      target,
+      n,
+      damageFromAttack
+        ? s.currentAttackProgramId || s.attack?.id || `attack${s.nextId}`
+        : undefined,
+    );
+    if (abjuration.prevented) {
+      log(s, `Abjuration prevents ${abjuration.prevented} damage.`);
+      n = abjuration.amount;
+      if (abjuration.discardId) discardPiece(s, abjuration.discardId);
+    }
   }
   if (
     !replaced &&
@@ -4109,6 +4140,7 @@ function defeatCharacter(
       );
     if ((rulesCode(m) === "01182" || m.code === "04153") && !textWasBlank)
       dealEncounter(s, m.engagedWith);
+    if (!textWasBlank) add(s, ...ebonyMaw.ebonyMawMinionDefeated(m));
     const tigra = find(s, source);
     if (tigra && rulesCode(tigra) === "01051")
       tigra.damage = Math.max(0, tigra.damage - 1);
@@ -4214,52 +4246,57 @@ function advanceVillain(
       "infiltrate_the_museum",
       "nebula",
       "ronan",
+      "ebony_maw",
     ].includes(s.villainId)
   ) {
     const next = (
-      s.villainId === "ronan"
-        ? s.ronan
-        : s.villainId === "nebula"
-          ? s.nebulaVillain
-          : s.villainId === "infiltrate_the_museum"
-            ? s.collector
-            : s.villainId === "brotherhood_of_badoon"
-              ? s.badoon
-              : s.villainId === "red_skull"
-                ? s.redSkull
-                : s.villainId === "zola"
-                  ? s.zola
-                  : s.villainId === "taskmaster"
-                    ? s.taskmaster
-                    : s.villainId === "absorbing_man"
-                      ? s.absorbingMan
-                      : s.villainId === "crossbones"
-                        ? s.crossbones
-                        : s.magneto
+      s.villainId === "ebony_maw"
+        ? s.ebonyMaw
+        : s.villainId === "ronan"
+          ? s.ronan
+          : s.villainId === "nebula"
+            ? s.nebulaVillain
+            : s.villainId === "infiltrate_the_museum"
+              ? s.collector
+              : s.villainId === "brotherhood_of_badoon"
+                ? s.badoon
+                : s.villainId === "red_skull"
+                  ? s.redSkull
+                  : s.villainId === "zola"
+                    ? s.zola
+                    : s.villainId === "taskmaster"
+                      ? s.taskmaster
+                      : s.villainId === "absorbing_man"
+                        ? s.absorbingMan
+                        : s.villainId === "crossbones"
+                          ? s.crossbones
+                          : s.magneto
     )?.villainDeck?.shift();
     if (!next) {
       endGame(
         s,
         true,
-        s.villainId === "ronan"
-          ? "Ronan the Accuser is defeated. The Power Stone is safe."
-          : s.villainId === "nebula"
-            ? "Nebula is defeated. The Power Stone stays out of her hands."
-            : s.villainId === "infiltrate_the_museum"
-              ? "The Collector is defeated. The museum's prisoners go free."
-              : s.villainId === "brotherhood_of_badoon"
-                ? "Drang is defeated. The Badoon invasion is broken."
-                : s.villainId === "red_skull"
-                  ? "Red Skull is defeated. His reign is over."
-                  : s.villainId === "zola"
-                    ? "Zola is defeated. His experiments are over."
-                    : s.villainId === "taskmaster"
-                      ? "Taskmaster is defeated. The captives are safe."
-                      : s.villainId === "absorbing_man"
-                        ? "Absorbing Man is defeated. The way is clear."
-                        : s.villainId === "crossbones"
-                          ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
-                          : "Magneto is defeated. Asteroid M is safe.",
+        s.villainId === "ebony_maw"
+          ? "Ebony Maw is defeated. Knowhere holds."
+          : s.villainId === "ronan"
+            ? "Ronan the Accuser is defeated. The Power Stone is safe."
+            : s.villainId === "nebula"
+              ? "Nebula is defeated. The Power Stone stays out of her hands."
+              : s.villainId === "infiltrate_the_museum"
+                ? "The Collector is defeated. The museum's prisoners go free."
+                : s.villainId === "brotherhood_of_badoon"
+                  ? "Drang is defeated. The Badoon invasion is broken."
+                  : s.villainId === "red_skull"
+                    ? "Red Skull is defeated. His reign is over."
+                    : s.villainId === "zola"
+                      ? "Zola is defeated. His experiments are over."
+                      : s.villainId === "taskmaster"
+                        ? "Taskmaster is defeated. The captives are safe."
+                        : s.villainId === "absorbing_man"
+                          ? "Absorbing Man is defeated. The way is clear."
+                          : s.villainId === "crossbones"
+                            ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
+                            : "Magneto is defeated. Asteroid M is safe.",
       );
       return;
     }
@@ -4284,6 +4321,7 @@ function advanceVillain(
         "infiltrate_the_museum",
         "nebula",
         "ronan",
+        "ebony_maw",
       ].includes(s.villainId)
         ? { counters: old.counters }
         : {}),
@@ -4305,6 +4343,7 @@ function advanceVillain(
         "infiltrate_the_museum",
         "nebula",
         "ronan",
+        "ebony_maw",
       ].includes(s.villainId)
     ) {
       s.villain.maxHp =
@@ -4382,6 +4421,7 @@ function villainSetup(s: GameState) {
     ...(badoon.badoonReveal(s, s.villain) || []),
     ...(collector.collectorReveal(s, s.villain) || []),
     ...(ronan.ronanReveal(s, s.villain) || []),
+    ...(ebonyMaw.ebonyMawReveal(s, s.villain) || []),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -4654,6 +4694,32 @@ function threat(
         }
         return;
       }
+      if (s.villainId === "ebony_maw") {
+        if (s.pendingMainCompletion) return;
+        const next = s.ebonyMaw?.mainDeck.shift();
+        if (!next) {
+          endGame(
+            s,
+            false,
+            "The Power Stone is complete. Ebony Maw takes the Power Stone to Thanos.",
+          );
+          return;
+        }
+        s.pendingMainCompletion = true;
+        discardMainAttachments(s);
+        s.removed.push(resetPiece(s.ebonyMaw!.currentMain));
+        s.ebonyMaw!.currentMain = next;
+        s.scheme.index++;
+        s.scheme.code = next.code;
+        s.scheme.threat = 0;
+        add(
+          s,
+          ...(ebonyMaw.ebonyMawReveal(s, next) || []),
+          E("ebony:main-back"),
+          E("clearMainCompletion"),
+        );
+        return;
+      }
       if (s.villainId === "ronan") {
         if (s.pendingMainCompletion) return;
         const next = s.ronan?.mainDeck.shift();
@@ -4784,6 +4850,7 @@ function thwart(
       )) ||
     hulkThreatLocked(s, target) ||
     ronan.ronanMainLocked(s, target) ||
+    ebonyMaw.ebonyMawSchemeLocked(s, target) ||
     !gamora.gamoraCanRemoveThreat(s, target) ||
     venom.venomSchemeLocked(s, target) ||
     warlock.warlockSchemeLocked(s, target)
@@ -4925,6 +4992,9 @@ function defeatScheme(
     s.activePlayerId,
   );
   const patrolDefeat = redSkullModules.redSkullSchemeDefeated(s, p);
+  const ebonyDefeat = !isTextBlank(s, p)
+    ? ebonyMaw.ebonyMawSchemeDefeated(s, p, s.activePlayerId)
+    : [];
   const nativeDefeat = sabretooth.sabretoothSideSchemeDefeated(
     s,
     p,
@@ -5034,6 +5104,15 @@ function defeatScheme(
             id: `${p.id}:patrol-defeated`,
             title: card(p).name,
             effects: patrolDefeat,
+          },
+        ]
+      : []),
+    ...(ebonyDefeat.length
+      ? [
+          {
+            id: `${p.id}:ebony-defeated`,
+            title: card(p).name,
+            effects: ebonyDefeat,
           },
         ]
       : []),
@@ -7541,38 +7620,41 @@ export function newGame(config: {
                     c.set_code === "space_pirates" ||
                     c.set_code === "kree_militant"
                   ? "gmw"
-                  : c.set_code === "exodus"
-                    ? "gambit"
-                    : c.set_code === "sauron"
-                      ? "iceman"
-                      : c.set_code === "crazy_gang"
-                        ? "ncrawler"
-                        : c.set_code === "hellfire"
-                          ? "magneto"
-                          : c.set_code === "arcade"
-                            ? "jubilee"
-                            : c.set_code === "reavers"
-                              ? "rogue"
-                              : c.set_code === "deathstrike"
-                                ? "wolv"
-                                : c.set_code === "shadow_king"
-                                  ? "storm"
-                                  : c.set_code === "ironspider_sinister"
-                                    ? "spdr"
-                                    : c.set_code === "inheritors"
-                                      ? "spiderham"
-                                      : c.set_code === "zzzax"
-                                        ? "ironheart"
-                                        : c.set_code === "armadillo"
-                                          ? "nova"
-                                          : [
-                                                "goblin_gimmicks",
-                                                "a_mess_of_things",
-                                                "power_drain",
-                                                "running_interference",
-                                              ].includes(c.set_code || "")
-                                            ? "gob"
-                                            : "core")) ||
+                  : c.set_code === "black_order" ||
+                      c.set_code === "armies_of_titan"
+                    ? "mts"
+                    : c.set_code === "exodus"
+                      ? "gambit"
+                      : c.set_code === "sauron"
+                        ? "iceman"
+                        : c.set_code === "crazy_gang"
+                          ? "ncrawler"
+                          : c.set_code === "hellfire"
+                            ? "magneto"
+                            : c.set_code === "arcade"
+                              ? "jubilee"
+                              : c.set_code === "reavers"
+                                ? "rogue"
+                                : c.set_code === "deathstrike"
+                                  ? "wolv"
+                                  : c.set_code === "shadow_king"
+                                    ? "storm"
+                                    : c.set_code === "ironspider_sinister"
+                                      ? "spdr"
+                                      : c.set_code === "inheritors"
+                                        ? "spiderham"
+                                        : c.set_code === "zzzax"
+                                          ? "ironheart"
+                                          : c.set_code === "armadillo"
+                                            ? "nova"
+                                            : [
+                                                  "goblin_gimmicks",
+                                                  "a_mess_of_things",
+                                                  "power_drain",
+                                                  "running_interference",
+                                                ].includes(c.set_code || "")
+                                              ? "gob"
+                                              : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -7594,6 +7676,10 @@ export function newGame(config: {
               c.pack_code === scenarioPack) ||
             (["brotherhood_of_badoon", "nebula", "ronan"].includes(v.id) &&
               c.code === badoon.ROGUE_VESSEL) ||
+            // Ebony Maw's Spell environments are shuffled into the deck.
+            (v.id === "ebony_maw" &&
+              c.set_code === v.id &&
+              c.pack_code === scenarioPack) ||
             selectedModules.includes(c.set_code || ""))) ||
           (team.some(
             (h) =>
@@ -7689,6 +7775,31 @@ export function newGame(config: {
       ...(ronan.ronanReveal(s, s.villain) || []).map((e) =>
         effectContext(s, { ...e, actorId: s.firstPlayerId }),
       ),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "ebony_maw") {
+    s.ebonyMaw = {
+      currentMain: makePiece(s, "21074b"),
+      mainDeck: [makePiece(s, "21075a")],
+      villainDeck: [makePiece(s, v.codes[stage])],
+    };
+    s.scheme.threat = (card("21074b").base_threat || 0) * s.playerCount;
+    s.villain = Object.assign(makePiece(s, v.codes[stage - 1]), {
+      hp,
+      maxHp: hp,
+      stage,
+    });
+    // Expert's Ebony Maw (II) reveals first, then Attack on Knowhere (1B):
+    // each player puts a Spell into play and the discard pile is reshuffled.
+    s.queue.push(
+      ...[
+        ...(ebonyMaw.ebonyMawReveal(s, s.villain) || []),
+        ...(ebonyMaw.ebonyMawReveal(s, s.ebonyMaw.currentMain) || []),
+      ].map((e) => effectContext(s, { ...e, actorId: s.firstPlayerId })),
       effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
     );
     const pacing = s.pacing;
@@ -10120,6 +10231,7 @@ export function abilityOptions(
     ...escape.escapeActions(s, p),
     ...nebulaVillain.nebulaActions(s, p, nebulaVillainPorts),
     ...ronan.ronanActions(s, p, ronanPorts),
+    ...ebonyMaw.ebonyMawActions(s, p, ebonyMawPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -14253,6 +14365,33 @@ const ronanPorts: ronan.RonanPorts = {
     quicksilverPackPorts.cancelWhenRevealed(s, p, after),
   heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
 };
+const ebonyMawPorts: ebonyMaw.EbonyMawPorts = {
+  ...mutagenPorts,
+  revealHidden,
+  giveTough: (s, id) => {
+    const p = id === s.villain.id ? s.villain : find(s, id);
+    return !!p && giveCharacterStatus(s, p, "tough");
+  },
+  shuffleDiscardIntoDeck: (s) => {
+    revealHidden(s);
+    delete s.encounter.knownTop;
+    s.encounter.deck = shuffle(s, [
+      ...s.encounter.deck,
+      ...s.encounter.discard.splice(0),
+    ]);
+  },
+  characters: (s) => warMachinePackPorts.characters(s),
+  characterAttack: (s, id) => warMachinePackPorts.characterAttack(s, id),
+  exhaustCharacter: (s, id) => {
+    const p = id.startsWith("hero:")
+      ? seatView(s, id.slice(5)).player
+      : find(s, id);
+    if (p) p.exhausted = true;
+  },
+  discardRandomHand: (s, count) => visionPorts.discardRandomHand(s, count),
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+};
 const nebulaVillainPorts: nebulaVillain.NebulaVillainPorts = {
   ...mutagenPorts,
   revealHidden,
@@ -17985,8 +18124,7 @@ const novaPorts: nova.NovaPorts = {
   isIdentityTextBlank: (s) => isTextBlank(s, heroCard(s)),
   canReadyIdentity: (s, id) => canReadyIdentity(seatView(s, id)),
   canReadyPiece: (s, p) =>
-    nova.novaCanReadyPiece(s, p, { isTextBlank }) &&
-    warMachinePackPorts.canReady(s, p.id),
+    canReadyPiece(s, p) && warMachinePackPorts.canReady(s, p.id),
   canDraw: (s) => s.player.deck.length + s.player.discard.length > 0,
   cardCost: (s, p) => cardCost(s, card(p), p),
   canPay,
@@ -18760,8 +18898,7 @@ const dominoPorts: domino.DominoPorts = {
       ? canReadyIdentity(s)
       : id.startsWith("hero:")
         ? canReadyIdentity(seatView(s, id.slice(5)))
-        : !!find(s, id)?.exhausted &&
-          nova.novaCanReadyPiece(s, find(s, id)!, { isTextBlank }),
+        : !!find(s, id)?.exhausted && canReadyPiece(s, find(s, id)!),
   attack: niAttackProgram,
 };
 
@@ -18844,8 +18981,7 @@ const cyclopsPorts: cyclops.CyclopsPorts = {
     id.startsWith("hero:")
       ? canReadyIdentity(seatView(s, id.slice(5))) &&
         seatView(s, id.slice(5)).player.exhausted
-      : !!find(s, id)?.exhausted &&
-        nova.novaCanReadyPiece(s, find(s, id)!, { isTextBlank }),
+      : !!find(s, id)?.exhausted && canReadyPiece(s, find(s, id)!),
   canPay,
   pay: (s, title, cost, after, targetCode) =>
     requestPayment(
@@ -19483,15 +19619,13 @@ const angelPorts: angel.AngelPorts = {
       : id.startsWith("hero:")
         ? seatView(s, id.slice(5)).player.exhausted &&
           canReadyIdentity(seatView(s, id.slice(5)))
-        : !!find(s, id)?.exhausted &&
-          nova.novaCanReadyPiece(s, find(s, id)!, { isTextBlank }),
+        : !!find(s, id)?.exhausted && canReadyPiece(s, find(s, id)!),
   ready: (s, id) => {
     if (id === "hero") readyIdentity(s);
     else if (id.startsWith("hero:")) readyIdentity(seatView(s, id.slice(5)));
     else {
       const p = find(s, id);
-      if (p && nova.novaCanReadyPiece(s, p, { isTextBlank }))
-        p.exhausted = false;
+      if (p && canReadyPiece(s, p)) p.exhausted = false;
     }
   },
   exhaust: (s, id) => {
@@ -19771,7 +19905,7 @@ const bishopPorts: bishop.BishopPorts = {
     const p = find(s, id);
     return (
       !!p?.exhausted &&
-      nova.novaCanReadyPiece(s, p, { isTextBlank }) &&
+      canReadyPiece(s, p) &&
       warMachinePackPorts.canReady(s, id) &&
       !s.attachments.some(
         (q) => q.code === "21083" && q.attachedTo === id && !isTextBlank(s, q),
@@ -20147,15 +20281,14 @@ const mariaHillPorts: mariaHill.MariaHillPorts = {
       : id.startsWith("hero:")
         ? canReadyIdentity(seatView(s, id.slice(5)))
         : !!find(s, id)?.exhausted &&
-          nova.novaCanReadyPiece(s, find(s, id)!, { isTextBlank }) &&
+          canReadyPiece(s, find(s, id)!) &&
           warMachinePackPorts.canReady(s, id),
   ready: (s, id) => {
     if (id === "hero") readyIdentity(s);
     else if (id.startsWith("hero:")) readyIdentity(seatView(s, id.slice(5)));
     else {
       const p = find(s, id);
-      if (p && nova.novaCanReadyPiece(s, p, { isTextBlank }))
-        p.exhausted = false;
+      if (p && canReadyPiece(s, p)) p.exhausted = false;
     }
   },
   discard: discardPiece,
@@ -21745,6 +21878,11 @@ function enemyAttack(
         s.attack.originalPlayerId!,
       ),
       ...ronan.ronanActivationInitiated(s, id, s.attack.originalPlayerId!),
+      ...ebonyMaw.ebonyMawActivationInitiated(
+        s,
+        id,
+        s.attack.originalPlayerId!,
+      ),
     );
   if (!friendlySource) {
     const strategist = redSkull.redSkullActivation(s, id);
@@ -22145,6 +22283,7 @@ function boostEffects(s: GameState, p: Piece) {
     escape.escapeBoost(s, p) ??
     nebulaVillain.nebulaBoost(s, p) ??
     ronan.ronanBoost(s, p) ??
+    ebonyMaw.ebonyMawBoost(s, p) ??
     collector.collectorBoost(s, p) ??
     badoon.badoonBoost(s, p) ??
     redSkull.redSkullBoost(s, p) ??
@@ -22460,6 +22599,7 @@ function enemyScheme(
     ...redSkull.redSkullActivation(s, id),
     ...nebulaVillain.nebulaActivationInitiated(s, id, s.activePlayerId),
     ...ronan.ronanActivationInitiated(s, id, s.activePlayerId),
+    ...ebonyMaw.ebonyMawActivationInitiated(s, id, s.activePlayerId),
     ...masterMold.masterMoldBeforeScheme(s, moldReceipt, { isTextBlank }),
     E(pendingBoosts.length ? "revealSchemeBoost" : "finishScheme"),
   );
@@ -23360,6 +23500,16 @@ function finishAttackAfterDamage(
           ...badoon.badoonAttackResponses(s, a),
           ...nebulaVillain.nebulaAttackResponses(s, a, recipientId),
           ...ronan.ronanAttackResponses(s, a),
+          ...ebonyMaw.ebonyMawAfterAttack(s, {
+            token: a.id!,
+            attackerId: a.attacker,
+            attackerCode: a.attackerSnapshot?.code || p?.code || "",
+            targetId: target === "hero" ? `hero:${recipientId}` : target,
+            damageTaken: a.damage || 0,
+            performed: !!a.completionRecorded,
+            textBlank: !p || isTextBlank(s, p),
+            playerId: recipientId,
+          }),
           ...redSkullModules.redSkullAttackResponses(s, a, redSkullModulePorts),
           ...experimentalWeapons.experimentalWeaponsAttackResponses(
             s,
@@ -24004,6 +24154,8 @@ function reveal(
         c.type_code !== "attachment") ||
       (ronan.RONAN_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (ebonyMaw.EBONY_MAW_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -24046,7 +24198,14 @@ function reveal(
         (c.base_threat || 0) * (c.base_threat_fixed ? 1 : s.playerCount);
       s.sideSchemes.push(p);
       if (p.code === "32079") (s.brotherhoodEntered ||= {})[p.id] = true;
-    } else if (c.type_code === "environment") visionPorts.putEnvironment(s, p);
+    } else if (c.type_code === "environment" && ebonyMaw.isEbonyMawSpell(p))
+      ebonyMaw.ebonyMawPutSpell(
+        s,
+        p,
+        s.activePlayerId,
+        visionPorts.putEnvironment,
+      );
+    else if (c.type_code === "environment") visionPorts.putEnvironment(s, p);
     if (c.type_code === "obligation" && p.code === "32099") {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       if (!s.player.inPlay.some((x) => x.id === p.id)) s.player.inPlay.push(p);
@@ -24179,6 +24338,7 @@ function reveal(
       ...collector.COLLECTOR_SCRIPT_CODES,
       ...nebulaVillain.NEBULA_VILLAIN_SCRIPT_CODES,
       ...ronan.RONAN_SCRIPT_CODES,
+      ...ebonyMaw.EBONY_MAW_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -24211,6 +24371,7 @@ function reveal(
       escape.escapeReveal(s, p) ??
       nebulaVillain.nebulaReveal(s, p) ??
       ronan.ronanReveal(s, p) ??
+      ebonyMaw.ebonyMawReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -24286,6 +24447,7 @@ function reveal(
     escape.escapeReveal(s, p) ??
     nebulaVillain.nebulaReveal(s, p) ??
     ronan.ronanReveal(s, p) ??
+    ebonyMaw.ebonyMawReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -25307,32 +25469,35 @@ function resolve(s: GameState, e: Effect) {
       "infiltrate_the_museum",
       "nebula",
       "ronan",
+      "ebony_maw",
     ].includes(s.villainId)
   ) {
     // Target references identify the continuing same-title character. Physical
     // card IDs, source IDs and snapshots retain their original stage identity.
     const retiredVillains =
-      s.villainId === "ronan"
-        ? ["16103", "16104", "16105"]
-        : s.villainId === "nebula"
-          ? ["16088", "16089", "16090"]
-          : s.villainId === "infiltrate_the_museum"
-            ? ["16070", "16071", "16072"]
-            : s.villainId === "brotherhood_of_badoon"
-              ? ["16058", "16059", "16060"]
-              : s.villainId === "red_skull"
-                ? ["04125", "04126", "04127"]
-                : s.villainId === "zola"
-                  ? ["04109", "04110", "04111"]
-                  : s.villainId === "taskmaster"
-                    ? ["04093", "04094", "04095"]
-                    : s.villainId === "absorbing_man"
-                      ? ["04076", "04077", "04078"]
-                      : s.villainId === "crossbones"
-                        ? ["04058", "04059", "04060"]
-                        : s.villainId === "magneto"
-                          ? ["32138", "32139", "32140"]
-                          : [];
+      s.villainId === "ebony_maw"
+        ? ["21071", "21072", "21073"]
+        : s.villainId === "ronan"
+          ? ["16103", "16104", "16105"]
+          : s.villainId === "nebula"
+            ? ["16088", "16089", "16090"]
+            : s.villainId === "infiltrate_the_museum"
+              ? ["16070", "16071", "16072"]
+              : s.villainId === "brotherhood_of_badoon"
+                ? ["16058", "16059", "16060"]
+                : s.villainId === "red_skull"
+                  ? ["04125", "04126", "04127"]
+                  : s.villainId === "zola"
+                    ? ["04109", "04110", "04111"]
+                    : s.villainId === "taskmaster"
+                      ? ["04093", "04094", "04095"]
+                      : s.villainId === "absorbing_man"
+                        ? ["04076", "04077", "04078"]
+                        : s.villainId === "crossbones"
+                          ? ["04058", "04059", "04060"]
+                          : s.villainId === "magneto"
+                            ? ["32138", "32139", "32140"]
+                            : [];
     const characterFields = ["target", "targetId", "enemyId", "attacker"];
     if (
       [
@@ -25345,6 +25510,7 @@ function resolve(s: GameState, e: Effect) {
         "infiltrate_the_museum",
         "nebula",
         "ronan",
+        "ebony_maw",
       ].includes(s.villainId) &&
       [
         "enemyAttack",
@@ -25365,6 +25531,7 @@ function resolve(s: GameState, e: Effect) {
         "infiltrate_the_museum",
         "nebula",
         "ronan",
+        "ebony_maw",
       ].includes(s.villainId)
     ) {
       if (e.type === "ms:melee-second") characterFields.push("firstId");
@@ -25620,6 +25787,7 @@ function resolve(s: GameState, e: Effect) {
           escape.escapeReveal(state, piece) ??
           nebulaVillain.nebulaReveal(state, piece) ??
           ronan.ronanReveal(state, piece) ??
+          ebonyMaw.ebonyMawReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -25745,6 +25913,7 @@ function resolve(s: GameState, e: Effect) {
   if (nebulaVillain.resolveNebulaVillainEffect(s, e, nebulaVillainPorts))
     return;
   if (ronan.resolveRonanEffect(s, e, ronanPorts)) return;
+  if (ebonyMaw.resolveEbonyMawEffect(s, e, ebonyMawPorts)) return;
   if (taskmaster.resolveTaskmasterEffect(s, e, taskmasterPorts)) return;
   if (absorbingMan.resolveAbsorbingEffect(s, e, absorbingManPorts)) return;
   if (crossbones.resolveCrossbonesEffect(s, e, crossbonesPorts)) return;
@@ -29638,8 +29807,7 @@ function resolve(s: GameState, e: Effect) {
       } else if (e.target === "hero") readyIdentity(s);
       else {
         const p = find(s, e.target);
-        if (p && nova.novaCanReadyPiece(s, p, { isTextBlank }))
-          p.exhausted = false;
+        if (p && canReadyPiece(s, p)) p.exhausted = false;
       }
       break;
     case "discardHand":
@@ -34216,6 +34384,7 @@ function resolve(s: GameState, e: Effect) {
           "escape_the_museum",
           "nebula",
           "ronan",
+          "ebony_maw",
           "project_wideawake",
           "mansion_attack",
           "magneto",
@@ -34314,7 +34483,7 @@ function resolve(s: GameState, e: Effect) {
         break;
       antPack.antManPackPhaseEnded(s);
       for (const p of [...s.player.inPlay, ...controlledNPCs(s)]) {
-        if (nova.novaCanReadyPiece(s, p, { isTextBlank })) p.exhausted = false;
+        if (canReadyPiece(s, p)) p.exhausted = false;
         p.bonusAtk = 0;
         p.bonusThw = 0;
       }
@@ -34976,6 +35145,7 @@ function run(s: GameState) {
       e.type.startsWith("escape:") ||
       e.type.startsWith("nebula-villain:") ||
       e.type.startsWith("ronan:") ||
+      e.type.startsWith("ebony:") ||
       e.type.startsWith("red-skull:") ||
       e.type.startsWith("sabretooth:") ||
       e.type.startsWith("sabretooth-native:") ||
@@ -35353,6 +35523,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...badoon.badoonActions(s, p, badoonPorts),
               ...collector.collectorActions(s, p, collectorPorts),
               ...ronan.ronanActions(s, p, ronanPorts),
+              ...ebonyMaw.ebonyMawActions(s, p, ebonyMawPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),

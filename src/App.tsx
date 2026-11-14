@@ -229,6 +229,7 @@ import {
 import { seatView, upgradeSave } from "./game/team";
 import { grootGrowthCounters } from "./game/groot";
 import { warMachineAmmo } from "./game/war-machine";
+import { isEbonyMawSpell } from "./game/ebony-maw";
 import { effectTitle, pacingOf } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
 import type { PaymentSource } from "./game/payment";
@@ -2542,6 +2543,15 @@ export default function App() {
                       to cancel a revealed treachery. Power Stone and Ship
                       Command are always included; Kree Militants is the
                       recommended modular set.
+                    </p>
+                  )}
+                  {villain.id === "ebony_maw" && (
+                    <p className="setting-help">
+                      Every player starts with a Spell in their play area. Each
+                      time Ebony Maw activates against you, every Spell of yours
+                      loses an invocation counter, and a Spell without counters
+                      goes off. Black Order and Armies of Titan are the
+                      recommended modular sets.
                     </p>
                   )}
                   {villain.id === "nebula" && (
@@ -4876,6 +4886,14 @@ function TablePile({
     </div>
   );
 }
+/** The hero name of a seat, for cards placed in that player's play area. */
+function heroOf(s: GameState, playerId: string) {
+  return (
+    HEROES.find(
+      (h) => h.id === s.players.find((seat) => seat.id === playerId)?.heroId,
+    )?.name || "a hero"
+  );
+}
 function AttachedCards({
   game,
   host,
@@ -4982,6 +5000,7 @@ function AttachedCards({
                 "32096",
                 "32107",
                 "32150",
+                "21083",
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -5008,6 +5027,7 @@ function AttachedCards({
                     "04148",
                     "04149",
                     "29038",
+                    "21083",
                   ].includes(p.code)
                     ? a.label
                     : undefined
@@ -5030,6 +5050,7 @@ function AttachedCards({
                     "04148",
                     "04149",
                     "29038",
+                    "21083",
                   ].includes(p.code)
                     ? a.label
                     : undefined
@@ -5766,7 +5787,18 @@ function Tabletop({
                       <CardImage code={p.code} />
                     </button>
                     <div>
-                      <span className="small-label">ENVIRONMENT</span>
+                      <span
+                        className="small-label"
+                        aria-label={
+                          p.playAreaOf
+                            ? `Spell in ${heroOf(s, p.playAreaOf)}'s play area`
+                            : undefined
+                        }
+                      >
+                        {p.playAreaOf
+                          ? `SPELL · ${heroOf(s, p.playAreaOf).toUpperCase()}`
+                          : "ENVIRONMENT"}
+                      </span>
                       <strong>{card(p).name}</strong>
                       {p.code !== "29039" &&
                         p.code !== "31037" &&
@@ -5779,13 +5811,17 @@ function Tabletop({
                           <span className="environment-counter">
                             <PremiumToken kind="counter" />
                             {p.counters}{" "}
-                            {p.code === "02006a"
-                              ? "Infamy"
-                              : p.code === "16063"
-                                ? `Barrage · fires at 4`
-                                : p.code === "16093"
-                                  ? "Evasion"
-                                  : "Madness"}
+                            {isEbonyMawSpell(p)
+                              ? p.counters === 1
+                                ? "invocation counter"
+                                : "invocation counters"
+                              : p.code === "02006a"
+                                ? "Infamy"
+                                : p.code === "16063"
+                                  ? `Barrage · fires at 4`
+                                  : p.code === "16093"
+                                    ? "Evasion"
+                                    : "Madness"}
                           </span>
                         )}
                       {p.code === "16108" && (
@@ -6682,6 +6718,7 @@ function Tabletop({
                               game={s}
                               host={p}
                               inspect={inspect}
+                              send={canUseAction ? sendAction : undefined}
                             />
                             <span className="in-play-name">{card(p).name}</span>
                             {p.exhausted && (
@@ -7144,6 +7181,7 @@ function Tabletop({
                                   game={game}
                                   host={p}
                                   inspect={inspect}
+                                  send={canUseAction ? sendAction : undefined}
                                 />
                               </div>
                             ))}

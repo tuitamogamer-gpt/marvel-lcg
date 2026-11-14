@@ -1217,6 +1217,21 @@ export const VILLAINS = [
       "Keep the Power Stone out of Ronan's hands. He hits harder against whoever holds it, and once he claims it the final scheme cannot be slowed.",
     color: "#2f6d63",
   },
+  {
+    id: "ebony_maw",
+    name: "Ebony Maw",
+    codes: ["21071", "21072", "21073"],
+    schemes: ["21074b"],
+    module: "armies_of_titan",
+    moduleCount: 2,
+    defaultModules: ["armies_of_titan", "black_order"],
+    difficulty: 3,
+    title: "Attack on Knowhere",
+    location: "Knowhere",
+    description:
+      "Ebony Maw turns stolen sorcery against you. Every Spell in your play area is a ticking clock that runs down each time he activates against you.",
+    color: "#5b4a8b",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1263,6 +1278,8 @@ export const MODULES = [
   { id: "menagerie_medley", name: "Menagerie Medley", difficulty: 3 },
   { id: "space_pirates", name: "Space Pirates", difficulty: 2 },
   { id: "kree_militant", name: "Kree Militants", difficulty: 3 },
+  { id: "black_order", name: "Black Order", difficulty: 3 },
+  { id: "armies_of_titan", name: "Armies of Titan", difficulty: 2 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {

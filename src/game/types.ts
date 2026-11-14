@@ -122,6 +122,8 @@ export interface Piece {
   ownerId?: string;
   engagedWith?: string;
   dealtTo?: string;
+  /** Encounter card placed in this player's play area (Ebony Maw's Spells). */
+  playAreaOf?: string;
 }
 export interface Effect {
   type: string;
@@ -269,6 +271,7 @@ export interface GameState {
   escape?: import("./escape-museum.js").EscapeState;
   nebulaVillain?: import("./nebula-villain.js").NebulaVillainState;
   ronan?: import("./ronan.js").RonanState;
+  ebonyMaw?: import("./ebony-maw.js").EbonyMawState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */

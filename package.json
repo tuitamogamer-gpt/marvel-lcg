@@ -70,7 +70,8 @@
     "test:collector": "node scripts/collector-check.mjs",
     "test:escape": "node scripts/escape-check.mjs",
     "test:nebula-villain": "node scripts/nebula-villain-check.mjs",
-    "test:ronan": "node scripts/ronan-check.mjs"
+    "test:ronan": "node scripts/ronan-check.mjs",
+    "test:ebony-maw": "node scripts/ebony-maw-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",
