@@ -816,6 +816,11 @@ export function Collection({
   const [support, setSupport] = useState("all");
   const [page, setPage] = useState(0);
   const [index] = useState(indexedCards);
+  // Counted from the registry, so the note below never goes out of date.
+  const supportedCount = useMemo(
+    () => index.filter((entry) => entry.supported).length,
+    [index],
+  );
   const cards = useMemo(() => {
     const terms = searchTerms(query);
     return index
@@ -958,13 +963,11 @@ export function Collection({
       <div className="collection-catalog-note">
         <BookOpen size={17} />
         <span>
-          Rules supported means this card’s effects are implemented. Your hero,
-          aspect and deckbuilding rules still determine which cards you can use.
-          Catalog-only cards are available to read while their rules are being
-          added. Sabretooth and Project Wideawake are available for standalone
-          missions, with Brotherhood, Mystique, Zero Tolerance and Sentinels
-          modular sets. The remaining Mutant Genesis scenarios and campaign are
-          still catalog-only.
+          Rules supported means this card’s effects are implemented:{" "}
+          {supportedCount.toLocaleString()} of {index.length.toLocaleString()}{" "}
+          card faces so far. Your hero, aspect and deckbuilding rules still
+          determine which cards you can use. Catalog-only cards are available to
+          read while their rules are being added.
         </span>
       </div>
       {cards.length ? (

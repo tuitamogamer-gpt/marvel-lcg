@@ -800,32 +800,6 @@ option {
   background: var(--yellow);
   color: var(--ink);
 }
-.villain-tabs {
-  border-radius: var(--radius-control);
-  overflow: hidden;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  border: 1px solid #647187;
-  margin-bottom: 22px;
-  background: #0c1626;
-}
-.villain-tabs button {
-  border-radius: 0;
-  font-family: var(--display);
-  text-transform: uppercase;
-  font-size: 20px;
-  font-weight: 700;
-  padding: 9px 4px;
-  border-bottom: 3px solid transparent;
-}
-.villain-tabs button.active {
-  background: var(--red);
-  border-bottom-color: #ff7981;
-  color: white;
-}
-.villain-tabs button:hover:not(.active) {
-  background: #283a53;
-}
 .mission-preview {
   display: flex;
   align-items: center;
@@ -4039,13 +4013,6 @@ option {
   }
   .mission-panel .section-heading {
     margin-bottom: 23px;
-  }
-  .villain-tabs {
-    margin-bottom: 25px;
-  }
-  .villain-tabs button {
-    min-height: 45px;
-    font-size: 23px;
   }
   .mission-preview {
     margin-top: 0;

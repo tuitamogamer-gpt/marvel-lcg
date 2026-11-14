@@ -24,6 +24,7 @@ import "./defense-token.css";
 import "./compact-table.css";
 import "./lobby-layout.css";
 import "./onboarding.css";
+import "./premium-polish.css";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>

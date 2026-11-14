@@ -642,13 +642,104 @@ function Modal({
     document.body,
   );
 }
-function Difficulty({ level }: { level: number }) {
+function Difficulty({ level, max = 3 }: { level: number; max?: number }) {
   return (
-    <span className="difficulty">
-      {Array.from({ length: 3 }, (_, i) => (
+    <span className="difficulty" data-max={max}>
+      {Array.from({ length: max }, (_, i) => (
         <i key={i} className={i < level ? "on" : ""} />
       ))}
     </span>
+  );
+}
+/** Scenarios grouped by the product that contains them, in release order.
+ * Display only: the VILLAINS order itself stays untouched. */
+const SCENARIO_GROUPS = (() => {
+  const groups: {
+    code: string;
+    name: string;
+    released: string;
+    scenarios: (typeof VILLAINS)[number][];
+  }[] = [];
+  for (const scenario of VILLAINS) {
+    const product = productForCard(scenario.codes[0]);
+    const code = product?.code || "core";
+    let group = groups.find((entry) => entry.code === code);
+    if (!group) {
+      group = {
+        code,
+        name: product?.name || "Core Set",
+        released: product?.date_release || "",
+        scenarios: [],
+      };
+      groups.push(group);
+    }
+    group.scenarios.push(scenario);
+  }
+  return groups.sort((a, b) => a.released.localeCompare(b.released));
+})();
+const SCENARIO_LEVELS = [
+  "",
+  "A good first fight",
+  "A tactical challenge",
+  "An all-out war",
+  "A brutal showdown",
+];
+/** The lobby's scenario list: one row per scenario under its product. */
+function ScenarioPicker({
+  selected,
+  onSelect,
+}: {
+  selected: string;
+  onSelect: (scenario: (typeof VILLAINS)[number]) => void;
+}) {
+  const list = useRef<HTMLDivElement>(null);
+  // A scenario chosen elsewhere (a saved setup, a campaign) may sit outside
+  // the visible rows. Only the list scrolls to it, never the page.
+  useEffect(() => {
+    const box = list.current;
+    const active = box?.querySelector<HTMLElement>("button.active");
+    if (!box || !active) return;
+    const frame = box.getBoundingClientRect();
+    const row = active.getBoundingClientRect();
+    const label = 34;
+    if (row.top < frame.top + label)
+      box.scrollTop -= frame.top + label - row.top;
+    else if (row.bottom > frame.bottom - 14)
+      box.scrollTop += row.bottom - frame.bottom + 14;
+  }, [selected]);
+  return (
+    <div className="villain-tabs" role="group" aria-label="Scenario" ref={list}>
+      {SCENARIO_GROUPS.map((group) => (
+        <div className="villain-group" key={group.code}>
+          <span className="villain-group-label">
+            {group.name}
+            <small>{group.scenarios.length}</small>
+          </span>
+          <div className="villain-group-list">
+            {group.scenarios.map((v) => (
+              <button
+                key={v.id}
+                className={v.id === selected ? "active" : ""}
+                aria-pressed={v.id === selected}
+                title={`${v.title} · ${SCENARIO_LEVELS[v.difficulty] || ""}`}
+                onClick={() => onSelect(v)}
+              >
+                <span className="villain-thumb">
+                  <img
+                    src={imageFor(v.codes[0])}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </span>
+                <span className="villain-tab-name">{v.name}</span>
+                <Difficulty level={v.difficulty} max={4} />
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 function Status({
@@ -2264,23 +2355,15 @@ export default function App() {
                 </div>
               </div>
               <div className="mission-overview">
-                <div className="villain-tabs">
-                  {VILLAINS.map((v) => (
-                    <button
-                      key={v.id}
-                      className={v.id === villain.id ? "active" : ""}
-                      aria-pressed={v.id === villain.id}
-                      onClick={() => {
-                        setVillain(v);
-                        selectScenarioModules(v);
-                        setSenatorDamage("");
-                        setCaptureAllocation(["", "", ""]);
-                      }}
-                    >
-                      {v.name}
-                    </button>
-                  ))}
-                </div>
+                <ScenarioPicker
+                  selected={villain.id}
+                  onSelect={(v) => {
+                    setVillain(v);
+                    selectScenarioModules(v);
+                    setSenatorDamage("");
+                    setCaptureAllocation(["", "", ""]);
+                  }}
+                />
                 <div className="mission-preview">
                   <div className="mission-portrait">
                     <img
@@ -2307,15 +2390,8 @@ export default function App() {
                     </h3>
                     <span className="mission-subtitle">{villain.title}</span>
                     <div className="mission-level">
-                      <Difficulty level={villain.difficulty} />
-                      {
-                        [
-                          "",
-                          "A good first fight",
-                          "A tactical challenge",
-                          "An all-out war",
-                        ][villain.difficulty]
-                      }
+                      <Difficulty level={villain.difficulty} max={4} />
+                      {SCENARIO_LEVELS[villain.difficulty]}
                     </div>
                   </div>
                 </div>

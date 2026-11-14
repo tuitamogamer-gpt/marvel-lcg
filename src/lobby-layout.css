@@ -20,17 +20,6 @@
   min-width: 0;
 }
 
-/* Villain rows fill the panel instead of clipping long names. */
-.villain-tabs {
-  display: flex;
-  flex-wrap: wrap;
-}
-.villain-tabs button {
-  flex: 1 1 auto;
-  white-space: nowrap;
-  padding-inline: 12px;
-}
-
 /* Hero names scale with their tile so the longest word always fits. */
 .hero-tile {
   container-type: inline-size;
