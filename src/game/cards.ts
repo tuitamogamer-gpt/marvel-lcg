@@ -1245,6 +1245,22 @@ export const VILLAINS = [
       "Proxima Midnight and Corvus Glaive strike together, each with a scheme of their own. Only one of them activates each round, but both can be attacked, and they fall only together. Lose Avengers Tower and you lose the game.",
     color: "#8a4b3c",
   },
+  {
+    id: "thanos",
+    name: "Thanos",
+    codes: ["21111", "21112", "21113"],
+    schemes: ["21114b", "21115b"],
+    module: "black_order",
+    moduleCount: 2,
+    defaultModules: ["black_order", "children_of_thanos"],
+    fixedSets: ["infinity_gauntlet"],
+    difficulty: 4,
+    title: "The Infinity Stones",
+    location: "Sanctuary",
+    description:
+      "Thanos wields the Infinity Gauntlet. Every time he activates against you, each Infinity Stone in play unleashes its power, and while Sanctuary stands no player card can hurt him.",
+    color: "#6d4c8f",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1293,6 +1309,7 @@ export const MODULES = [
   { id: "kree_militant", name: "Kree Militants", difficulty: 3 },
   { id: "black_order", name: "Black Order", difficulty: 3 },
   { id: "armies_of_titan", name: "Armies of Titan", difficulty: 2 },
+  { id: "children_of_thanos", name: "Children of Thanos", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {

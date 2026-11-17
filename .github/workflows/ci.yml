@@ -119,6 +119,8 @@ jobs:
             scripts: test:ebony-maw
           - group: tower-defense
             scripts: test:tower-defense
+          - group: thanos
+            scripts: test:thanos
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

@@ -230,6 +230,7 @@ import { seatView, upgradeSave } from "./game/team";
 import { grootGrowthCounters } from "./game/groot";
 import { warMachineAmmo } from "./game/war-machine";
 import { isEbonyMawSpell } from "./game/ebony-maw";
+import { isInfinityStone } from "./game/thanos";
 import {
   AVENGERS_TOWER,
   DAMAGED_TOWER,
@@ -2562,6 +2563,18 @@ export default function App() {
                       loses an invocation counter, and a Spell without counters
                       goes off. Black Order and Armies of Titan are the
                       recommended modular sets.
+                    </p>
+                  )}
+                  {villain.id === "thanos" && (
+                    <p className="setting-help">
+                      Thanos wears the Infinity Gauntlet. Each time he activates
+                      against you, every Infinity Stone in play resolves its
+                      Special ability against you, or the next Stone enters play
+                      if none is there. While Sanctuary stands, player cards
+                      cannot damage him; defeat it and spend physical resources
+                      to hurt him. The Infinity Gauntlet set is always included;
+                      Black Order and Children of Thanos are the recommended
+                      modular sets.
                     </p>
                   )}
                   {villain.id === "tower_defense" && (
@@ -5796,6 +5809,15 @@ function Tabletop({
                         {s.mansionAttack.villainDeck.length} in the villain deck
                       </span>
                     )}
+                    {s.thanos && (
+                      <span
+                        className="stat-caption"
+                        aria-label={`Infinity Stone deck: ${s.thanos.stoneDeck.length} cards, ${s.thanos.stoneDiscard.length} discarded`}
+                      >
+                        Infinity Stones · {s.thanos.stoneDeck.length} in the
+                        deck · {s.thanos.stoneDiscard.length} discarded
+                      </span>
+                    )}
                     {projectWideawakeBombCount(s, s.villain.id) > 0 && (
                       <span
                         className="stat-caption"
@@ -6047,7 +6069,9 @@ function Tabletop({
                             ? "ENVIRONMENT · STRONGHOLD"
                             : p.code === DAMAGED_TOWER
                               ? "ENVIRONMENT · DAMAGED"
-                              : "ENVIRONMENT"}
+                              : isInfinityStone(p)
+                                ? "INFINITY STONE"
+                                : "ENVIRONMENT"}
                       </span>
                       <strong>{card(p).name}</strong>
                       {(p.code === AVENGERS_TOWER ||
@@ -6079,8 +6103,15 @@ function Tabletop({
                           </span>
                         </>
                       )}
+                      {isInfinityStone(p) && (
+                        <span className="stat-caption">
+                          Its Special resolves when Thanos next activates
+                          against a player
+                        </span>
+                      )}
                       {p.code !== AVENGERS_TOWER &&
                         p.code !== DAMAGED_TOWER &&
+                        !isInfinityStone(p) &&
                         p.code !== "29039" &&
                         p.code !== "31037" &&
                         p.code !== "32065b" &&

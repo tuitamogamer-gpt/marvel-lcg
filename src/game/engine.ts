@@ -7,6 +7,7 @@ import * as nebulaVillain from "./nebula-villain.js";
 import * as ronan from "./ronan.js";
 import * as ebonyMaw from "./ebony-maw.js";
 import * as towerDefense from "./tower-defense.js";
+import * as thanos from "./thanos.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -869,6 +870,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         name === "Piercing" &&
         (redSkull.redSkullKeyword(s, p, "Piercing") ||
           towerDefense.towerDefenseKeyword(s, p, "Piercing") > 0 ||
+          thanos.thanosKeyword(s, p, "Piercing") ||
           badoon.badoonKeyword(s, p, "Piercing") ||
           ronan.ronanKeyword(s, p, "Piercing") ||
           taskmaster.taskmasterKeyword(s, p, "Piercing") ||
@@ -929,6 +931,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           .retaliate +
           ironheart.ironheartEnemyKeywords(s, p, { isTextBlank }).retaliate +
           towerDefense.towerDefenseKeyword(s, p, "Retaliate") +
+          thanos.thanosRetaliate(s, p) +
           wideawakeKeywords.retaliate +
           moldKeywords.retaliate
       : 0,
@@ -2857,6 +2860,13 @@ function zeroToleranceNativePresent(s: GameState) {
     s.sideSchemes.some((p) => p.code === "32104")
   );
 }
+/** Damage from a player card: a hero or identity, or a card that belongs to
+ * a player, in play or resolving. */
+function nativePlayerCardSource(s: GameState, source: string) {
+  if (source === "hero" || source.startsWith("hero:")) return true;
+  const p = find(s, source) || s.resolving.find((q) => q.id === source);
+  return !!p && card(p).faction_code !== "encounter";
+}
 function damageProhibition(s: GameState, target: string, panther: boolean) {
   if (target === s.villain.id && redSkull.redSkullProtected(s))
     return "The Red House prevents damage to Red Skull.";
@@ -3063,7 +3073,14 @@ function dealDamage(
   // Keep the actual attack's aftermath even when its damage is prohibited.
   let replaced: DamageTakenResult | undefined;
   const prohibition =
-    dealt > 0 ? damageProhibition(s, target, panther) : undefined;
+    dealt > 0
+      ? (damageProhibition(s, target, panther) ??
+        thanos.thanosDamageProhibited(
+          s,
+          target,
+          nativePlayerCardSource(s, source),
+        ))
+      : undefined;
   if (prohibition) {
     log(s, prohibition);
     replaced = { actualDamage: 0, excessDamage: 0, damageDealt: 0 };
@@ -3128,6 +3145,12 @@ function dealDamage(
     );
     if (reduced < n)
       log(s, `Kree Combat Armor prevents ${n - reduced} damage.`);
+    n = reduced;
+  }
+  // Thanos's Armor reduces each amount of damage Thanos would take by 1.
+  if (!replaced && n > 0 && target === s.villain.id) {
+    const reduced = thanos.thanosReduceDamage(s, target, n);
+    if (reduced < n) log(s, `Thanos's Armor prevents ${n - reduced} damage.`);
     n = reduced;
   }
   // Abjuration prevents all damage to Ebony Maw. It is discarded after it
@@ -3315,6 +3338,7 @@ function dealDamage(
           redSkull.redSkullKeyword(s, retaliationTarget, "Retaliate") +
           taskmaster.taskmasterKeyword(s, retaliationTarget, "Retaliate") +
           towerDefense.towerDefenseKeyword(s, retaliationTarget, "Retaliate") +
+          thanos.thanosRetaliate(s, retaliationTarget) +
           nebulaVillain.nebulaVillainKeyword(
             s,
             retaliationTarget,
@@ -4281,32 +4305,35 @@ function advanceVillain(
       "ronan",
       "ebony_maw",
       "tower_defense",
+      "thanos",
     ].includes(s.villainId)
   ) {
     const next =
       s.villainId === "tower_defense"
         ? towerDefense.towerDefenseNextStage(s)
-        : (s.villainId === "ebony_maw"
-            ? s.ebonyMaw
-            : s.villainId === "ronan"
-              ? s.ronan
-              : s.villainId === "nebula"
-                ? s.nebulaVillain
-                : s.villainId === "infiltrate_the_museum"
-                  ? s.collector
-                  : s.villainId === "brotherhood_of_badoon"
-                    ? s.badoon
-                    : s.villainId === "red_skull"
-                      ? s.redSkull
-                      : s.villainId === "zola"
-                        ? s.zola
-                        : s.villainId === "taskmaster"
-                          ? s.taskmaster
-                          : s.villainId === "absorbing_man"
-                            ? s.absorbingMan
-                            : s.villainId === "crossbones"
-                              ? s.crossbones
-                              : s.magneto
+        : (s.villainId === "thanos"
+            ? s.thanos
+            : s.villainId === "ebony_maw"
+              ? s.ebonyMaw
+              : s.villainId === "ronan"
+                ? s.ronan
+                : s.villainId === "nebula"
+                  ? s.nebulaVillain
+                  : s.villainId === "infiltrate_the_museum"
+                    ? s.collector
+                    : s.villainId === "brotherhood_of_badoon"
+                      ? s.badoon
+                      : s.villainId === "red_skull"
+                        ? s.redSkull
+                        : s.villainId === "zola"
+                          ? s.zola
+                          : s.villainId === "taskmaster"
+                            ? s.taskmaster
+                            : s.villainId === "absorbing_man"
+                              ? s.absorbingMan
+                              : s.villainId === "crossbones"
+                                ? s.crossbones
+                                : s.magneto
           )?.villainDeck?.shift();
     if (!next && s.villainId === "tower_defense") {
       if (towerDefense.towerDefenseFinalDefeat(s))
@@ -4322,27 +4349,29 @@ function advanceVillain(
       endGame(
         s,
         true,
-        s.villainId === "ebony_maw"
-          ? "Ebony Maw is defeated. Knowhere holds."
-          : s.villainId === "ronan"
-            ? "Ronan the Accuser is defeated. The Power Stone is safe."
-            : s.villainId === "nebula"
-              ? "Nebula is defeated. The Power Stone stays out of her hands."
-              : s.villainId === "infiltrate_the_museum"
-                ? "The Collector is defeated. The museum's prisoners go free."
-                : s.villainId === "brotherhood_of_badoon"
-                  ? "Drang is defeated. The Badoon invasion is broken."
-                  : s.villainId === "red_skull"
-                    ? "Red Skull is defeated. His reign is over."
-                    : s.villainId === "zola"
-                      ? "Zola is defeated. His experiments are over."
-                      : s.villainId === "taskmaster"
-                        ? "Taskmaster is defeated. The captives are safe."
-                        : s.villainId === "absorbing_man"
-                          ? "Absorbing Man is defeated. The way is clear."
-                          : s.villainId === "crossbones"
-                            ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
-                            : "Magneto is defeated. Asteroid M is safe.",
+        s.villainId === "thanos"
+          ? "Thanos is defeated and the Infinity Gauntlet falls from his hand."
+          : s.villainId === "ebony_maw"
+            ? "Ebony Maw is defeated. Knowhere holds."
+            : s.villainId === "ronan"
+              ? "Ronan the Accuser is defeated. The Power Stone is safe."
+              : s.villainId === "nebula"
+                ? "Nebula is defeated. The Power Stone stays out of her hands."
+                : s.villainId === "infiltrate_the_museum"
+                  ? "The Collector is defeated. The museum's prisoners go free."
+                  : s.villainId === "brotherhood_of_badoon"
+                    ? "Drang is defeated. The Badoon invasion is broken."
+                    : s.villainId === "red_skull"
+                      ? "Red Skull is defeated. His reign is over."
+                      : s.villainId === "zola"
+                        ? "Zola is defeated. His experiments are over."
+                        : s.villainId === "taskmaster"
+                          ? "Taskmaster is defeated. The captives are safe."
+                          : s.villainId === "absorbing_man"
+                            ? "Absorbing Man is defeated. The way is clear."
+                            : s.villainId === "crossbones"
+                              ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
+                              : "Magneto is defeated. Asteroid M is safe.",
       );
       return;
     }
@@ -4369,6 +4398,7 @@ function advanceVillain(
         "ronan",
         "ebony_maw",
         "tower_defense",
+        "thanos",
       ].includes(s.villainId)
         ? { counters: old.counters }
         : {}),
@@ -4392,6 +4422,7 @@ function advanceVillain(
         "ronan",
         "ebony_maw",
         "tower_defense",
+        "thanos",
       ].includes(s.villainId)
     ) {
       s.villain.maxHp =
@@ -4470,6 +4501,7 @@ function villainSetup(s: GameState) {
     ...(collector.collectorReveal(s, s.villain) || []),
     ...(ronan.ronanReveal(s, s.villain) || []),
     ...(ebonyMaw.ebonyMawReveal(s, s.villain) || []),
+    ...(thanos.thanosReveal(s, s.villain) || []),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -4785,6 +4817,32 @@ function threat(
         );
         return;
       }
+      if (s.villainId === "thanos") {
+        if (s.pendingMainCompletion) return;
+        const next = s.thanos?.mainDeck.shift();
+        if (!next) {
+          endGame(
+            s,
+            false,
+            "Balance the Scales is complete. Thanos wipes out half of all life.",
+          );
+          return;
+        }
+        s.pendingMainCompletion = true;
+        discardMainAttachments(s);
+        s.removed.push(resetPiece(s.thanos!.currentMain));
+        s.thanos!.currentMain = next;
+        s.scheme.index++;
+        s.scheme.code = next.code;
+        s.scheme.threat = 0;
+        add(
+          s,
+          ...(thanos.thanosReveal(s, next) || []),
+          E("thanos:main-back"),
+          E("clearMainCompletion"),
+        );
+        return;
+      }
       if (s.villainId === "ronan") {
         if (s.pendingMainCompletion) return;
         const next = s.ronan?.mainDeck.shift();
@@ -5067,7 +5125,10 @@ function defeatScheme(
     ? ebonyMaw.ebonyMawSchemeDefeated(s, p, s.activePlayerId)
     : [];
   const towerDefeat = !isTextBlank(s, p)
-    ? towerDefense.towerDefenseSchemeDefeated(s, p, s.activePlayerId)
+    ? [
+        ...towerDefense.towerDefenseSchemeDefeated(s, p, s.activePlayerId),
+        ...thanos.thanosSchemeDefeated(s, p, s.activePlayerId),
+      ]
     : [];
   const nativeDefeat = sabretooth.sabretoothSideSchemeDefeated(
     s,
@@ -5114,6 +5175,7 @@ function defeatScheme(
       "32100",
       "32120",
       ...collector.COLLECTOR_VICTORY_SCHEMES,
+      ...thanos.THANOS_VICTORY_SCHEMES,
     ].includes(p.code) ||
       (isPlayerSideScheme(p) && playerSideSchemeHasVictory(p))) &&
     !isTextBlank(s, p);
@@ -7711,7 +7773,8 @@ export function newGame(config: {
                     c.set_code === "kree_militant"
                   ? "gmw"
                   : c.set_code === "black_order" ||
-                      c.set_code === "armies_of_titan"
+                      c.set_code === "armies_of_titan" ||
+                      c.set_code === "children_of_thanos"
                     ? "mts"
                     : c.set_code === "exodus"
                       ? "gambit"
@@ -7760,6 +7823,7 @@ export function newGame(config: {
           c.code !== nebulaVillain.POWER_STONE &&
           c.code !== ronan.UNIVERSAL_WEAPON &&
           c.code !== towerDefense.FOCUSED_DEFENSE &&
+          c.set_code !== "infinity_gauntlet" &&
           !(v.id === "magneto" && ["32144b", "32145b"].includes(c.code)) &&
           (c.type_code !== "environment" ||
             (v.id === "absorbing_man" &&
@@ -7891,6 +7955,43 @@ export function newGame(config: {
         ...(ebonyMaw.ebonyMawReveal(s, s.villain) || []),
         ...(ebonyMaw.ebonyMawReveal(s, s.ebonyMaw.currentMain) || []),
       ].map((e) => effectContext(s, { ...e, actorId: s.firstPlayerId })),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "thanos") {
+    s.thanos = {
+      currentMain: makePiece(s, thanos.THE_INFINITY_STONES),
+      mainDeck: [makePiece(s, thanos.BALANCE_THE_SCALES)],
+      villainDeck: [makePiece(s, v.codes[stage])],
+      // The six Infinity Stones are shuffled into their own deck.
+      stoneDeck: shuffle(
+        s,
+        thanos.INFINITY_STONES.map((code) => makePiece(s, code)),
+      ),
+      stoneDiscard: [],
+    };
+    s.scheme = {
+      code: thanos.THE_INFINITY_STONES,
+      threat:
+        (card(thanos.THE_INFINITY_STONES).base_threat || 0) * s.playerCount,
+      index: 0,
+    };
+    s.villain = Object.assign(makePiece(s, v.codes[stage - 1]), {
+      hp,
+      maxHp: hp,
+      stage,
+    });
+    // Permanent. Setup. The Infinity Gauntlet attaches to Thanos.
+    const gauntlet = makePiece(s, thanos.INFINITY_GAUNTLET);
+    gauntlet.attachedTo = s.villain.id;
+    s.attachments.push(gauntlet);
+    s.queue.push(
+      ...thanos
+        .thanosSetup(s)
+        .map((e) => effectContext(s, { ...e, actorId: s.firstPlayerId })),
       effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
     );
     const pacing = s.pacing;
@@ -14551,6 +14652,34 @@ const ebonyMawPorts: ebonyMaw.EbonyMawPorts = {
   },
   discardRandomHand: (s, count) => visionPorts.discardRandomHand(s, count),
   putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+};
+const thanosPorts: thanos.ThanosPorts = {
+  ...mutagenPorts,
+  revealHidden,
+  reveal: (s, p, playerId) => crossbonesPorts.reveal(s, p, playerId),
+  giveTough: (s, p) => giveCharacterStatus(s, p, "tough"),
+  healVillain: (s, amount) => {
+    heal(s, s.villain.id, amount, "encounter");
+  },
+  discardPlayerTop: (s, playerId, count) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    const pieces = mill(s, count);
+    activateSeat(s, previous);
+    return pieces;
+  },
+  discardRandomHand: (s, playerId) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    randomDiscard(s);
+    activateSeat(s, previous);
+  },
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  shuffle: (s, pieces) => shuffle(s, pieces),
+  resources: (_s, p) => resources(card(p)),
+  amplify: (s) => activationAmplify(s),
+  log: (s, text, kind) => log(s, text, kind),
   heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
 };
 const towerDefensePorts: towerDefense.TowerDefensePorts = {
@@ -22075,6 +22204,7 @@ function enemyAttack(
         id,
         s.attack.originalPlayerId!,
       ),
+      ...thanos.thanosActivationInitiated(s, id),
     );
   if (!friendlySource) {
     const strategist = redSkull.redSkullActivation(s, id);
@@ -22477,6 +22607,7 @@ function boostEffects(s: GameState, p: Piece) {
     ronan.ronanBoost(s, p) ??
     ebonyMaw.ebonyMawBoost(s, p) ??
     towerDefense.towerDefenseBoost(s, p) ??
+    thanos.thanosBoost(s, p) ??
     collector.collectorBoost(s, p) ??
     badoon.badoonBoost(s, p) ??
     redSkull.redSkullBoost(s, p) ??
@@ -22793,6 +22924,7 @@ function enemyScheme(
     ...nebulaVillain.nebulaActivationInitiated(s, id, s.activePlayerId),
     ...ronan.ronanActivationInitiated(s, id, s.activePlayerId),
     ...ebonyMaw.ebonyMawActivationInitiated(s, id, s.activePlayerId),
+    ...thanos.thanosActivationInitiated(s, id),
     ...masterMold.masterMoldBeforeScheme(s, moldReceipt, { isTextBlank }),
     E(pendingBoosts.length ? "revealSchemeBoost" : "finishScheme"),
   );
@@ -22918,6 +23050,16 @@ function finishScheme(s: GameState) {
       : []),
     ...absorbingMan.absorbingActivation(s, id, s.activePlayerId),
     ...badoon.badoonSchemed(s, id),
+    ...thanos
+      .thanosAfterActivation(s, {
+        token: (activation.id ||= `scheme${s.nextId++}`),
+        attackerId: id,
+        playerId: s.activePlayerId,
+        performed: true,
+        defeatedAlly: false,
+        boostCodes: [],
+      })
+      .flatMap((response) => response.effects),
     ...sabretooth.sabretoothAfterActivation(s, {
       token: (activation.id ||= `scheme${s.nextId++}`),
       enemyId: id,
@@ -23720,6 +23862,19 @@ function finishAttackAfterDamage(
               !find(s, target),
             boostCodes: a.boostCodes || [],
           }),
+          ...thanos.thanosAfterActivation(s, {
+            token: a.id!,
+            attackerId: a.attacker,
+            playerId: recipientId,
+            performed: !!a.completionRecorded,
+            defeatedAlly:
+              target !== "hero" &&
+              !target.startsWith("hero:") &&
+              before > 0 &&
+              a.gmwReturnedDefender !== target &&
+              !find(s, target),
+            boostCodes: a.boostCodes || [],
+          }),
           ...redSkullModules.redSkullAttackResponses(s, a, redSkullModulePorts),
           ...experimentalWeapons.experimentalWeaponsAttackResponses(
             s,
@@ -24370,6 +24525,8 @@ function reveal(
         (code) => code === p.code,
       ) &&
         c.type_code !== "attachment") ||
+      (thanos.THANOS_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -24554,6 +24711,7 @@ function reveal(
       ...ronan.RONAN_SCRIPT_CODES,
       ...ebonyMaw.EBONY_MAW_SCRIPT_CODES,
       ...towerDefense.TOWER_DEFENSE_SCRIPT_CODES,
+      ...thanos.THANOS_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -24588,6 +24746,7 @@ function reveal(
       ronan.ronanReveal(s, p) ??
       ebonyMaw.ebonyMawReveal(s, p) ??
       towerDefense.towerDefenseReveal(s, p) ??
+      thanos.thanosReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -24665,6 +24824,7 @@ function reveal(
     ronan.ronanReveal(s, p) ??
     ebonyMaw.ebonyMawReveal(s, p) ??
     towerDefense.towerDefenseReveal(s, p) ??
+    thanos.thanosReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -25687,34 +25847,37 @@ function resolve(s: GameState, e: Effect) {
       "nebula",
       "ronan",
       "ebony_maw",
+      "thanos",
     ].includes(s.villainId)
   ) {
     // Target references identify the continuing same-title character. Physical
     // card IDs, source IDs and snapshots retain their original stage identity.
     const retiredVillains =
-      s.villainId === "ebony_maw"
-        ? ["21071", "21072", "21073"]
-        : s.villainId === "ronan"
-          ? ["16103", "16104", "16105"]
-          : s.villainId === "nebula"
-            ? ["16088", "16089", "16090"]
-            : s.villainId === "infiltrate_the_museum"
-              ? ["16070", "16071", "16072"]
-              : s.villainId === "brotherhood_of_badoon"
-                ? ["16058", "16059", "16060"]
-                : s.villainId === "red_skull"
-                  ? ["04125", "04126", "04127"]
-                  : s.villainId === "zola"
-                    ? ["04109", "04110", "04111"]
-                    : s.villainId === "taskmaster"
-                      ? ["04093", "04094", "04095"]
-                      : s.villainId === "absorbing_man"
-                        ? ["04076", "04077", "04078"]
-                        : s.villainId === "crossbones"
-                          ? ["04058", "04059", "04060"]
-                          : s.villainId === "magneto"
-                            ? ["32138", "32139", "32140"]
-                            : [];
+      s.villainId === "thanos"
+        ? ["21111", "21112", "21113"]
+        : s.villainId === "ebony_maw"
+          ? ["21071", "21072", "21073"]
+          : s.villainId === "ronan"
+            ? ["16103", "16104", "16105"]
+            : s.villainId === "nebula"
+              ? ["16088", "16089", "16090"]
+              : s.villainId === "infiltrate_the_museum"
+                ? ["16070", "16071", "16072"]
+                : s.villainId === "brotherhood_of_badoon"
+                  ? ["16058", "16059", "16060"]
+                  : s.villainId === "red_skull"
+                    ? ["04125", "04126", "04127"]
+                    : s.villainId === "zola"
+                      ? ["04109", "04110", "04111"]
+                      : s.villainId === "taskmaster"
+                        ? ["04093", "04094", "04095"]
+                        : s.villainId === "absorbing_man"
+                          ? ["04076", "04077", "04078"]
+                          : s.villainId === "crossbones"
+                            ? ["04058", "04059", "04060"]
+                            : s.villainId === "magneto"
+                              ? ["32138", "32139", "32140"]
+                              : [];
     const characterFields = ["target", "targetId", "enemyId", "attacker"];
     if (
       [
@@ -25728,6 +25891,7 @@ function resolve(s: GameState, e: Effect) {
         "nebula",
         "ronan",
         "ebony_maw",
+        "thanos",
       ].includes(s.villainId) &&
       [
         "enemyAttack",
@@ -25749,6 +25913,7 @@ function resolve(s: GameState, e: Effect) {
         "nebula",
         "ronan",
         "ebony_maw",
+        "thanos",
       ].includes(s.villainId)
     ) {
       if (e.type === "ms:melee-second") characterFields.push("firstId");
@@ -26027,6 +26192,7 @@ function resolve(s: GameState, e: Effect) {
           ronan.ronanReveal(state, piece) ??
           ebonyMaw.ebonyMawReveal(state, piece) ??
           towerDefense.towerDefenseReveal(state, piece) ??
+          thanos.thanosReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -26154,6 +26320,7 @@ function resolve(s: GameState, e: Effect) {
   if (ronan.resolveRonanEffect(s, e, ronanPorts)) return;
   if (ebonyMaw.resolveEbonyMawEffect(s, e, ebonyMawPorts)) return;
   if (towerDefense.resolveTowerDefenseEffect(s, e, towerDefensePorts)) return;
+  if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (taskmaster.resolveTaskmasterEffect(s, e, taskmasterPorts)) return;
   if (absorbingMan.resolveAbsorbingEffect(s, e, absorbingManPorts)) return;
   if (crossbones.resolveCrossbonesEffect(s, e, crossbonesPorts)) return;
@@ -28020,6 +28187,9 @@ function resolve(s: GameState, e: Effect) {
           actorId: s.activePlayerId,
         }).map((x) => ({ ...x, mandatory: false })),
         ...(e.draxBasicAttack ? drax.draxAfterBasicAttack(s, draxPorts) : []),
+        ...(e.draxBasicAttack
+          ? thanos.thanosAfterBasicAttack(s, e.target, thanosPorts)
+          : []),
         ...(e.draxBasicAttack
           ? [
               E("magneto-native:basic-response", {
@@ -35389,6 +35559,7 @@ function run(s: GameState) {
       e.type.startsWith("ronan:") ||
       e.type.startsWith("ebony:") ||
       e.type.startsWith("tower:") ||
+      e.type.startsWith("thanos:") ||
       e.type.startsWith("red-skull:") ||
       e.type.startsWith("sabretooth:") ||
       e.type.startsWith("sabretooth-native:") ||

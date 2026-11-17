@@ -275,6 +275,8 @@ export interface GameState {
   /** Proxima Midnight and Corvus Glaive: the pair out of focus and both
    * villains' remaining stages. */
   towerDefense?: import("./tower-defense.js").TowerDefenseState;
+  /** Original Thanos stages and main schemes, and the Infinity Stone deck. */
+  thanos?: import("./thanos.js").ThanosState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */

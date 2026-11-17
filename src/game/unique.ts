@@ -107,6 +107,8 @@ export function uniqueConflict(
     return true;
   return [
     s.villain,
+    // Tower Defense: the villain out of focus is in play as well.
+    ...(s.towerDefense ? [s.towerDefense.other.villain] : []),
     ...s.minions,
     ...s.sideSchemes,
     ...s.attachments.filter((p) => !isElectroResource(s, p)),

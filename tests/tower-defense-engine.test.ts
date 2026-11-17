@@ -616,3 +616,32 @@ describe("Tower Defense encounter cards", () => {
     exact(s);
   });
 });
+
+describe("Tower Defense with Children of Thanos", () => {
+  it("keeps the Proxima Midnight and Corvus Glaive minions out while both villains are in play", () => {
+    let s = settle(
+      newGame({
+        heroId: "spider_man",
+        aspect: "justice",
+        villainId: "tower_defense",
+        difficulty: "standard",
+        seed: 21092,
+        pacing: "expert",
+        modules: ["children_of_thanos"],
+        heroes: players3.slice(0, 1),
+      }),
+    );
+    s = settle(command(s, { type: "MULLIGAN", ids: [] }));
+    for (const code of ["21125", "21126"]) {
+      const p = s.encounter.deck.find((q) => q.code === code)!;
+      s.encounter.deck = s.encounter.deck.filter((q) => q.id !== p.id);
+      s = settle(
+        native(s, { type: "reveal", piece: p, actorId: s.activePlayerId }),
+      );
+      expect(
+        s.minions.some((q) => q.id === p.id),
+        code,
+      ).toBe(false);
+    }
+  });
+});
