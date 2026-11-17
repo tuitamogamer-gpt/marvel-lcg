@@ -230,6 +230,16 @@ import { seatView, upgradeSave } from "./game/team";
 import { grootGrowthCounters } from "./game/groot";
 import { warMachineAmmo } from "./game/war-machine";
 import { isEbonyMawSpell } from "./game/ebony-maw";
+import {
+  AVENGERS_TOWER,
+  DAMAGED_TOWER,
+  FOCUSED_DEFENSE,
+  towerDefenseSchemeLimit,
+  towerDefenseTowerLimit,
+  towerScheme,
+  towerVillain,
+  type TowerKey,
+} from "./game/tower-defense";
 import { effectTitle, pacingOf } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
 import type { PaymentSource } from "./game/payment";
@@ -2552,6 +2562,18 @@ export default function App() {
                       loses an invocation counter, and a Spell without counters
                       goes off. Black Order and Armies of Titan are the
                       recommended modular sets.
+                    </p>
+                  )}
+                  {villain.id === "tower_defense" && (
+                    <p className="setting-help">
+                      Proxima Midnight and Corvus Glaive each have their own
+                      main scheme. Only the villain whose scheme holds Focused
+                      Defense activates, and Focused Defense moves after every
+                      player phase. Attack and thwart either side: the villains
+                      fall only together. A completed main scheme damages
+                      Avengers Tower or deals you encounter cards, and you lose
+                      when the damaged Tower falls. Armies of Titan is the
+                      recommended modular set.
                     </p>
                   )}
                   {villain.id === "nebula" && (
@@ -4894,6 +4916,203 @@ function heroOf(s: GameState, playerId: string) {
     )?.name || "a hero"
   );
 }
+/** Tower Defense: Proxima Midnight and Corvus Glaive side by side, each
+ * with its attachments, and the active villain marked. */
+function TowerVillains({
+  game: s,
+  inspect,
+  send,
+}: {
+  game: GameState;
+  inspect: (c: Inspect) => void;
+  send?: (c: Command) => void;
+}) {
+  const td = s.towerDefense!;
+  return (
+    <div
+      className="villain-area tower-villains"
+      role="group"
+      aria-label="Villains"
+    >
+      {(["proxima", "corvus"] as TowerKey[]).map((key) => {
+        const v = towerVillain(s, key)!;
+        const partner = towerVillain(
+          s,
+          key === "proxima" ? "corvus" : "proxima",
+        )!;
+        const active = td.active === key;
+        const name = card(v).name;
+        const stats = enemyStats(s, v);
+        return (
+          <div
+            className={`tower-villain${active ? " active" : ""}`}
+            key={key}
+            data-piece-id={v.id}
+            role="group"
+            aria-label={active ? `${name}, the active villain` : name}
+          >
+            <div className="host-card-stack">
+              <button
+                className="table-card villain-card"
+                onClick={() => inspect({ code: v.code })}
+                aria-label={`Inspect ${name}`}
+              >
+                <CardImage code={v.code} />
+                <span className="inspect-hint">
+                  <Eye size={13} /> Inspect
+                </span>
+              </button>
+              <AttachedCards game={s} host={v} inspect={inspect} send={send} />
+            </div>
+            <div className="villain-info">
+              <span className="small-label">
+                {active ? "ACTIVE VILLAIN" : "VILLAIN"} · STAGE{" "}
+                {["", "I", "II", "III"][v.stage]}
+              </span>
+              <h2 className="villain-name-long">{name.toUpperCase()}</h2>
+              <HealthDial
+                value={v.hp}
+                max={v.maxHp}
+                label={`${name} HP`}
+                villain
+              />
+              <div className="enemy-stats stat-row">
+                <StatToken
+                  kind="attack"
+                  value={stats.attack}
+                  label="ATK"
+                  compact
+                />
+                <StatToken
+                  kind="threat"
+                  value={stats.scheme}
+                  label="SCH"
+                  compact
+                />
+              </div>
+              <Status piece={v} />
+              {v.hp === 0 && (
+                <span className="stat-caption" role="status">
+                  Cannot be defeated while {card(partner).name} has hit points
+                  remaining
+                </span>
+              )}
+              {active && s.phase === "villain" && (
+                <span className="stat-caption">
+                  Activates this villain phase
+                </span>
+              )}
+              {!active && s.phase !== "villain" && (
+                <span className="stat-caption">
+                  Activates in the next villain phase
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+/** Tower Defense: both main schemes, Focused Defense on the active one. */
+function TowerMainSchemes({
+  game: s,
+  inspect,
+}: {
+  game: GameState;
+  inspect: (c: Inspect) => void;
+}) {
+  const td = s.towerDefense!;
+  const acceleration =
+    s.encounter.acceleration +
+    s.sideSchemes.reduce(
+      (n, p) =>
+        n + (card(p).scheme_acceleration || 0) + (p.accelerationTokens || 0),
+      0,
+    );
+  return (
+    <>
+      {(["proxima", "corvus"] as TowerKey[]).map((key) => {
+        const scheme = towerScheme(s, key)!;
+        const c = card(scheme.code);
+        const limit = towerDefenseSchemeLimit(s, scheme.code);
+        const focused = td.active === key;
+        const escalation =
+          (c.escalation_threat || 0) *
+          (c.escalation_threat_fixed ? 1 : s.playerCount);
+        return (
+          <div
+            className={`main-scheme tower-main${focused ? " focused" : ""}${scheme.threat >= limit - 2 ? " critical" : ""}`}
+            key={key}
+            role="group"
+            aria-label={`${c.name}, ${key === "proxima" ? "Proxima Midnight" : "Corvus Glaive"}'s scheme`}
+          >
+            <div className="scheme-heading">
+              <span className="small-label">
+                {key === "proxima" ? "PROXIMA" : "CORVUS"}
+              </span>
+              {focused ? (
+                <button
+                  className="scheme-stage tower-focus-chip"
+                  onClick={() => inspect({ code: FOCUSED_DEFENSE })}
+                  aria-label={`Focused Defense is attached to ${c.name}. Inspect Focused Defense`}
+                >
+                  FOCUSED · {key === "proxima" ? "1B" : "2B"}
+                </button>
+              ) : (
+                <span className="scheme-stage">
+                  {key === "proxima" ? "1B" : "2B"}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => inspect({ code: scheme.code })}
+              className="scheme-card"
+              aria-label={`Inspect ${c.name}`}
+            >
+              <CardImage code={scheme.code} />
+            </button>
+            {s.attachments.some(
+              (a) =>
+                a.attachedTo === `main:${scheme.code}` &&
+                a.code !== FOCUSED_DEFENSE,
+            ) && (
+              <AttachedCards
+                game={s}
+                host={{
+                  ...s.villain,
+                  id: `main:${scheme.code}`,
+                  code: scheme.code,
+                }}
+                inspect={inspect}
+              />
+            )}
+            <StatToken
+              kind="threat"
+              value={scheme.threat}
+              max={limit}
+              label={`${c.name} threat`}
+            />
+            <div className="threat-track">
+              {Array.from({ length: limit }, (_, i) => (
+                <i className={i < scheme.threat ? "filled" : ""} key={i} />
+              ))}
+            </div>
+            <p
+              title={
+                key === "proxima"
+                  ? `When Under Siege would be completed, its threat is removed and Avengers Tower takes ${6 * s.playerCount} damage.`
+                  : "When The Armies of Thanos would be completed, its threat is removed and each player is dealt a facedown encounter card."
+              }
+            >
+              +{escalation + acceleration} threat each villain phase
+            </p>
+          </div>
+        );
+      })}
+    </>
+  );
+}
 function AttachedCards({
   game,
   host,
@@ -5001,6 +5220,8 @@ function AttachedCards({
                 "32107",
                 "32150",
                 "21083",
+                "21103",
+                "21104",
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -5028,6 +5249,8 @@ function AttachedCards({
                     "04149",
                     "29038",
                     "21083",
+                    "21103",
+                    "21104",
                   ].includes(p.code)
                     ? a.label
                     : undefined
@@ -5051,6 +5274,8 @@ function AttachedCards({
                     "04149",
                     "29038",
                     "21083",
+                    "21103",
+                    "21104",
                   ].includes(p.code)
                     ? a.label
                     : undefined
@@ -5076,6 +5301,8 @@ function AttachedCards({
                   "04148",
                   "04149",
                   "29038",
+                  "21103",
+                  "21104",
                 ].includes(p.code)
                   ? "Remove"
                   : a.label}
@@ -5468,114 +5695,122 @@ function Tabletop({
               </span>
             </div>
             <section className="opposition">
-              <div className="villain-area">
-                <div className="host-card-stack">
-                  <button
-                    className="table-card villain-card"
-                    onClick={() => inspect({ code: s.villain.code })}
-                  >
-                    <CardImage code={s.villain.code} />
-                    <span className="inspect-hint">
-                      <Eye size={13} /> Inspect
-                    </span>
-                  </button>
-                  <AttachedCards
-                    game={s}
-                    host={s.villain}
-                    inspect={inspect}
-                    send={canUseAction ? sendAction : undefined}
-                  />
-                </div>
-                <div className="villain-info">
-                  <span className="small-label">
-                    {s.villainId === "mansion_attack"
-                      ? `VILLAIN · SIDE ${s.difficulty === "expert" ? "B" : "A"}`
-                      : s.escape
-                        ? `VILLAIN · ${s.difficulty === "expert" ? "B1" : "A1"}${escapeWounded(s) ? " · WOUNDED" : ""}`
-                        : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
-                  </span>
-                  <h2
-                    className={
-                      Math.max(
-                        ...card(s.villain)
-                          .name.split(/\s+/)
-                          .map((word) => word.length),
-                      ) >= 9 || card(s.villain).name.length >= 15
-                        ? "villain-name-long"
-                        : undefined
-                    }
-                  >
-                    {card(s.villain).name.toUpperCase()}
-                  </h2>
-                  <HealthDial
-                    value={s.villain.hp}
-                    max={s.villain.maxHp}
-                    label="Villain HP"
-                    villain
-                  />
-                  <div className="enemy-stats stat-row">
-                    <StatToken
-                      kind="attack"
-                      value={enemyStats(s, s.villain).attack}
-                      label="ATK"
-                      compact
-                    />
-                    <StatToken
-                      kind="threat"
-                      value={enemyStats(s, s.villain).scheme}
-                      label="SCH"
-                      compact
+              {s.towerDefense ? (
+                <TowerVillains
+                  game={s}
+                  inspect={inspect}
+                  send={canUseAction ? sendAction : undefined}
+                />
+              ) : (
+                <div className="villain-area">
+                  <div className="host-card-stack">
+                    <button
+                      className="table-card villain-card"
+                      onClick={() => inspect({ code: s.villain.code })}
+                    >
+                      <CardImage code={s.villain.code} />
+                      <span className="inspect-hint">
+                        <Eye size={13} /> Inspect
+                      </span>
+                    </button>
+                    <AttachedCards
+                      game={s}
+                      host={s.villain}
+                      inspect={inspect}
+                      send={canUseAction ? sendAction : undefined}
                     />
                   </div>
-                  <span className="stat-caption">
-                    Before boosts & triggered abilities
-                  </span>
-                  <Status piece={s.villain} />
-                  {redSkullProtected(s) && (
-                    <span className="stat-caption" role="status">
-                      Protected by the Red House · cannot take damage
+                  <div className="villain-info">
+                    <span className="small-label">
+                      {s.villainId === "mansion_attack"
+                        ? `VILLAIN · SIDE ${s.difficulty === "expert" ? "B" : "A"}`
+                        : s.escape
+                          ? `VILLAIN · ${s.difficulty === "expert" ? "B1" : "A1"}${escapeWounded(s) ? " · WOUNDED" : ""}`
+                          : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
-                  )}
-                  {escapeWounded(s) && (
-                    <span className="stat-caption" role="status">
-                      Wounded · cannot be defeated until the round ends
+                    <h2
+                      className={
+                        Math.max(
+                          ...card(s.villain)
+                            .name.split(/\s+/)
+                            .map((word) => word.length),
+                        ) >= 9 || card(s.villain).name.length >= 15
+                          ? "villain-name-long"
+                          : undefined
+                      }
+                    >
+                      {card(s.villain).name.toUpperCase()}
+                    </h2>
+                    <HealthDial
+                      value={s.villain.hp}
+                      max={s.villain.maxHp}
+                      label="Villain HP"
+                      villain
+                    />
+                    <div className="enemy-stats stat-row">
+                      <StatToken
+                        kind="attack"
+                        value={enemyStats(s, s.villain).attack}
+                        label="ATK"
+                        compact
+                      />
+                      <StatToken
+                        kind="threat"
+                        value={enemyStats(s, s.villain).scheme}
+                        label="SCH"
+                        compact
+                      />
+                    </div>
+                    <span className="stat-caption">
+                      Before boosts & triggered abilities
                     </span>
-                  )}
-                  {s.magneto &&
-                    magnetoDamageCap(s, { isTextBlank }) !== undefined && (
-                      <span
-                        className="stat-caption"
-                        aria-label={`Magneto damage limit: ${magnetoDamageCap(s, { isTextBlank })}`}
-                      >
-                        Can sustain up to {magnetoDamageCap(s, { isTextBlank })}{" "}
-                        damage
+                    <Status piece={s.villain} />
+                    {redSkullProtected(s) && (
+                      <span className="stat-caption" role="status">
+                        Protected by the Red House · cannot take damage
                       </span>
                     )}
-                  {s.mansionAttack && (
-                    <span className="stat-caption">
-                      {
-                        (s.victoryDisplay || []).filter(
-                          (p) => card(p).type_code === "villain",
-                        ).length
-                      }
-                      /{s.mansionAttack.winTarget} villains defeated ·{" "}
-                      {s.mansionAttack.villainDeck.length} in the villain deck
-                    </span>
-                  )}
-                  {projectWideawakeBombCount(s, s.villain.id) > 0 && (
-                    <span
-                      className="stat-caption"
-                      aria-label={`Bomb counters on ${card(s.villain).name}: ${projectWideawakeBombCount(s, s.villain.id)}`}
-                    >
-                      {projectWideawakeBombCount(s, s.villain.id)} bomb{" "}
-                      {projectWideawakeBombCount(s, s.villain.id) === 1
-                        ? "counter"
-                        : "counters"}{" "}
-                      · 2 damage each at the end of the player phase
-                    </span>
-                  )}
+                    {escapeWounded(s) && (
+                      <span className="stat-caption" role="status">
+                        Wounded · cannot be defeated until the round ends
+                      </span>
+                    )}
+                    {s.magneto &&
+                      magnetoDamageCap(s, { isTextBlank }) !== undefined && (
+                        <span
+                          className="stat-caption"
+                          aria-label={`Magneto damage limit: ${magnetoDamageCap(s, { isTextBlank })}`}
+                        >
+                          Can sustain up to{" "}
+                          {magnetoDamageCap(s, { isTextBlank })} damage
+                        </span>
+                      )}
+                    {s.mansionAttack && (
+                      <span className="stat-caption">
+                        {
+                          (s.victoryDisplay || []).filter(
+                            (p) => card(p).type_code === "villain",
+                          ).length
+                        }
+                        /{s.mansionAttack.winTarget} villains defeated ·{" "}
+                        {s.mansionAttack.villainDeck.length} in the villain deck
+                      </span>
+                    )}
+                    {projectWideawakeBombCount(s, s.villain.id) > 0 && (
+                      <span
+                        className="stat-caption"
+                        aria-label={`Bomb counters on ${card(s.villain).name}: ${projectWideawakeBombCount(s, s.villain.id)}`}
+                      >
+                        {projectWideawakeBombCount(s, s.villain.id)} bomb{" "}
+                        {projectWideawakeBombCount(s, s.villain.id) === 1
+                          ? "counter"
+                          : "counters"}{" "}
+                        · 2 damage each at the end of the player phase
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
               <div
                 className="scheme-area"
                 style={
@@ -5584,127 +5819,151 @@ function Tabletop({
                     : undefined
                 }
               >
-                <div
-                  className={`main-scheme ${threatCritical ? "critical" : ""}`}
-                  style={
-                    {
-                      "--scheme-actions": mainActionPiece
-                        ? abilityOptions(s, mainActionPiece).length
-                        : 0,
-                    } as CSSProperties
-                  }
-                >
-                  <div className="scheme-heading">
-                    <span className="small-label">MAIN SCHEME</span>
-                    <span className="scheme-stage">
-                      {s.villainId === "mansion_attack" &&
-                      s.scheme.code !== "32125b"
-                        ? "2B"
-                        : `${s.scheme.index + 1}B`}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => inspect({ code: s.scheme.code })}
-                    className="scheme-card"
+                {s.towerDefense ? (
+                  <TowerMainSchemes game={s} inspect={inspect} />
+                ) : (
+                  <div
+                    className={`main-scheme ${threatCritical ? "critical" : ""}`}
+                    style={
+                      {
+                        "--scheme-actions": mainActionPiece
+                          ? abilityOptions(s, mainActionPiece).length
+                          : 0,
+                      } as CSSProperties
+                    }
                   >
-                    <CardImage code={s.scheme.code} />
-                  </button>
-                  <AttachedCards
-                    game={s}
-                    host={{
-                      ...s.villain,
-                      id: `main:${s.scheme.code}`,
-                      code: s.scheme.code,
-                    }}
-                    inspect={inspect}
-                  />
-                  <StatToken
-                    kind="threat"
-                    value={s.scheme.threat}
-                    max={hasThreatLimit ? threatLimit : undefined}
-                    label="Main scheme threat"
-                  />
-                  {s.magneto && (
-                    <p
-                      className="stat-caption"
-                      aria-label={`Magnet counters: ${s.magneto.magnetCounters}`}
-                    >
-                      <strong>{s.magneto.magnetCounters}</strong> magnet{" "}
-                      {s.magneto.magnetCounters === 1 ? "counter" : "counters"}{" "}
-                      · 3 trigger a Magnetic card
-                    </p>
-                  )}
-                  {hasThreatLimit ? (
-                    <div className="threat-track">
-                      {Array.from({ length: threatLimit }, (_, i) => (
-                        <i
-                          className={i < s.scheme.threat ? "filled" : ""}
-                          key={i}
-                        />
-                      ))}
+                    <div className="scheme-heading">
+                      <span className="small-label">MAIN SCHEME</span>
+                      <span className="scheme-stage">
+                        {s.villainId === "mansion_attack" &&
+                        s.scheme.code !== "32125b"
+                          ? "2B"
+                          : `${s.scheme.index + 1}B`}
+                      </span>
                     </div>
-                  ) : (
-                    <span className="small-label">NO LIMIT</span>
-                  )}
-                  <p>
-                    +
-                    {escalation(s) +
-                      s.encounter.acceleration +
-                      s.sideSchemes.reduce(
-                        (n, p) =>
-                          n +
-                          (card(p).scheme_acceleration || 0) +
-                          (p.accelerationTokens || 0),
-                        0,
-                      )}{" "}
-                    threat each villain phase
-                  </p>
-                  {mainActionPiece &&
-                    abilityOptions(s, mainActionPiece).length > 0 && (
-                      <div className="in-play-actions">
-                        {abilityOptions(s, mainActionPiece).map((a) => (
-                          <button
-                            key={a.id}
-                            disabled={!canUseAction || !!a.disabled}
-                            title={a.disabled || a.label}
-                            onClick={() =>
-                              sendAction({
-                                type: "ABILITY",
-                                id: mainActionPiece.id,
-                                action: a.id,
-                              })
-                            }
-                          >
-                            {a.id === "milano-minion"
-                              ? "Milano · 3 damage to a minion"
-                              : a.id === "release-exhaust"
-                                ? "Exhaust · free 1 collected card"
-                                : a.id === "release-pay"
-                                  ? "Pay 2 · free 1 collected card"
-                                  : "Milano · remove 3 threat"}
-                          </button>
+                    <button
+                      onClick={() => inspect({ code: s.scheme.code })}
+                      className="scheme-card"
+                    >
+                      <CardImage code={s.scheme.code} />
+                    </button>
+                    <AttachedCards
+                      game={s}
+                      host={{
+                        ...s.villain,
+                        id: `main:${s.scheme.code}`,
+                        code: s.scheme.code,
+                      }}
+                      inspect={inspect}
+                    />
+                    <StatToken
+                      kind="threat"
+                      value={s.scheme.threat}
+                      max={hasThreatLimit ? threatLimit : undefined}
+                      label="Main scheme threat"
+                    />
+                    {s.magneto && (
+                      <p
+                        className="stat-caption"
+                        aria-label={`Magnet counters: ${s.magneto.magnetCounters}`}
+                      >
+                        <strong>{s.magneto.magnetCounters}</strong> magnet{" "}
+                        {s.magneto.magnetCounters === 1
+                          ? "counter"
+                          : "counters"}{" "}
+                        · 3 trigger a Magnetic card
+                      </p>
+                    )}
+                    {hasThreatLimit ? (
+                      <div className="threat-track">
+                        {Array.from({ length: threatLimit }, (_, i) => (
+                          <i
+                            className={i < s.scheme.threat ? "filled" : ""}
+                            key={i}
+                          />
                         ))}
                       </div>
+                    ) : (
+                      <span className="small-label">NO LIMIT</span>
                     )}
-                  {s.mansionAttack && (
-                    <>
-                      <p className="stat-caption">
-                        {
-                          (s.victoryDisplay || []).filter(
-                            (p) =>
-                              card(p).type_code === "main_scheme" &&
-                              p.code !== "32125b",
-                          ).length
-                        }
-                        /2 rooms completed ·{" "}
-                        {plural(s.mansionAttack.mainDeck.length, "room")} in the
-                        main scheme deck
-                      </p>
+                    <p>
+                      +
+                      {escalation(s) +
+                        s.encounter.acceleration +
+                        s.sideSchemes.reduce(
+                          (n, p) =>
+                            n +
+                            (card(p).scheme_acceleration || 0) +
+                            (p.accelerationTokens || 0),
+                          0,
+                        )}{" "}
+                      threat each villain phase
+                    </p>
+                    {mainActionPiece &&
+                      abilityOptions(s, mainActionPiece).length > 0 && (
+                        <div className="in-play-actions">
+                          {abilityOptions(s, mainActionPiece).map((a) => (
+                            <button
+                              key={a.id}
+                              disabled={!canUseAction || !!a.disabled}
+                              title={a.disabled || a.label}
+                              onClick={() =>
+                                sendAction({
+                                  type: "ABILITY",
+                                  id: mainActionPiece.id,
+                                  action: a.id,
+                                })
+                              }
+                            >
+                              {a.id === "milano-minion"
+                                ? "Milano · 3 damage to a minion"
+                                : a.id === "release-exhaust"
+                                  ? "Exhaust · free 1 collected card"
+                                  : a.id === "release-pay"
+                                    ? "Pay 2 · free 1 collected card"
+                                    : "Milano · remove 3 threat"}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    {s.mansionAttack && (
+                      <>
+                        <p className="stat-caption">
+                          {
+                            (s.victoryDisplay || []).filter(
+                              (p) =>
+                                card(p).type_code === "main_scheme" &&
+                                p.code !== "32125b",
+                            ).length
+                          }
+                          /2 rooms completed ·{" "}
+                          {plural(s.mansionAttack.mainDeck.length, "room")} in
+                          the main scheme deck
+                        </p>
+                        <details>
+                          <summary>
+                            Victory display ({(s.victoryDisplay || []).length})
+                          </summary>
+                          {(s.victoryDisplay || []).map((p) => (
+                            <button
+                              className="text-button"
+                              key={p.id}
+                              onClick={() =>
+                                inspect({ code: p.code, piece: p })
+                              }
+                            >
+                              {card(p).name}
+                            </button>
+                          ))}
+                        </details>
+                      </>
+                    )}
+                    {!s.mansionAttack && !!s.victoryDisplay?.length && (
                       <details>
                         <summary>
-                          Victory display ({(s.victoryDisplay || []).length})
+                          Victory display ({s.victoryDisplay.length})
                         </summary>
-                        {(s.victoryDisplay || []).map((p) => (
+                        {s.victoryDisplay.map((p) => (
                           <button
                             className="text-button"
                             key={p.id}
@@ -5714,30 +5973,14 @@ function Tabletop({
                           </button>
                         ))}
                       </details>
-                    </>
-                  )}
-                  {!s.mansionAttack && !!s.victoryDisplay?.length && (
-                    <details>
-                      <summary>
-                        Victory display ({s.victoryDisplay.length})
-                      </summary>
-                      {s.victoryDisplay.map((p) => (
-                        <button
-                          className="text-button"
-                          key={p.id}
-                          onClick={() => inspect({ code: p.code, piece: p })}
-                        >
-                          {card(p).name}
-                        </button>
-                      ))}
-                    </details>
-                  )}
-                  {threatCritical && (
-                    <span className="threat-warning">
-                      <Warning size={15} weight="fill" /> Threat is critical
-                    </span>
-                  )}
-                </div>
+                    )}
+                    {threatCritical && (
+                      <span className="threat-warning">
+                        <Warning size={15} weight="fill" /> Threat is critical
+                      </span>
+                    )}
+                  </div>
+                )}
                 {s.sabretooth?.kelly && (
                   <div
                     className="scenario-environment"
@@ -5778,7 +6021,10 @@ function Tabletop({
                   </div>
                 )}
                 {(s.environments || []).map((p) => (
-                  <div className="scenario-environment" key={p.id}>
+                  <div
+                    className={`scenario-environment${p.code === AVENGERS_TOWER || p.code === DAMAGED_TOWER ? " tower-strip" : ""}`}
+                    key={p.id}
+                  >
                     <button
                       className="environment-card"
                       onClick={() => inspect({ code: p.code, piece: p })}
@@ -5797,10 +6043,45 @@ function Tabletop({
                       >
                         {p.playAreaOf
                           ? `SPELL · ${heroOf(s, p.playAreaOf).toUpperCase()}`
-                          : "ENVIRONMENT"}
+                          : p.code === AVENGERS_TOWER
+                            ? "ENVIRONMENT · STRONGHOLD"
+                            : p.code === DAMAGED_TOWER
+                              ? "ENVIRONMENT · DAMAGED"
+                              : "ENVIRONMENT"}
                       </span>
                       <strong>{card(p).name}</strong>
-                      {p.code !== "29039" &&
+                      {(p.code === AVENGERS_TOWER ||
+                        p.code === DAMAGED_TOWER) && (
+                        <>
+                          <span
+                            className="environment-counter tower-damage"
+                            aria-label={`Avengers Tower damage: ${p.damage} of ${towerDefenseTowerLimit(s)}`}
+                          >
+                            <PremiumToken kind="health" />
+                            {p.damage} / {towerDefenseTowerLimit(s)} damage
+                          </span>
+                          <span className="tower-meter" aria-hidden="true">
+                            <i
+                              style={{
+                                width: `${Math.min(100, (100 * p.damage) / towerDefenseTowerLimit(s))}%`,
+                              }}
+                            />
+                          </span>
+                          <span
+                            className="stat-caption"
+                            role={
+                              p.code === DAMAGED_TOWER ? "status" : undefined
+                            }
+                          >
+                            {p.code === AVENGERS_TOWER
+                              ? `Flips to its Damaged side at ${towerDefenseTowerLimit(s)} damage`
+                              : `The players lose at ${towerDefenseTowerLimit(s)} damage`}
+                          </span>
+                        </>
+                      )}
+                      {p.code !== AVENGERS_TOWER &&
+                        p.code !== DAMAGED_TOWER &&
+                        p.code !== "29039" &&
                         p.code !== "31037" &&
                         p.code !== "32065b" &&
                         p.code !== "32130" &&

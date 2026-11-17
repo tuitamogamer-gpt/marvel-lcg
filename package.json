@@ -71,7 +71,8 @@
     "test:escape": "node scripts/escape-check.mjs",
     "test:nebula-villain": "node scripts/nebula-villain-check.mjs",
     "test:ronan": "node scripts/ronan-check.mjs",
-    "test:ebony-maw": "node scripts/ebony-maw-check.mjs"
+    "test:ebony-maw": "node scripts/ebony-maw-check.mjs",
+    "test:tower-defense": "node scripts/tower-defense-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

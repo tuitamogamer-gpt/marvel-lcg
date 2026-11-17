@@ -7,6 +7,7 @@ import { ESCAPE_SCRIPT_CODES } from "../src/game/escape-museum";
 import { NEBULA_VILLAIN_SCRIPT_CODES } from "../src/game/nebula-villain";
 import { RONAN_SCRIPT_CODES } from "../src/game/ronan";
 import { EBONY_MAW_SCRIPT_CODES } from "../src/game/ebony-maw";
+import { TOWER_DEFENSE_SCRIPT_CODES } from "../src/game/tower-defense";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -28,6 +29,7 @@ const badoonCodes = new Set<string>([
   ...NEBULA_VILLAIN_SCRIPT_CODES,
   ...RONAN_SCRIPT_CODES,
   ...EBONY_MAW_SCRIPT_CODES,
+  ...TOWER_DEFENSE_SCRIPT_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -326,16 +328,18 @@ describe("complete expansion rules inventory", () => {
     const mts = coverage.products.find(
       (pack: { code: string }) => pack.code === "mts",
     );
-    // Ebony Maw, Black Order and Armies of Titan add 23 faces; the other
-    // four scenarios, their modular sets and the campaign remain pending.
+    // Ebony Maw, Black Order and Armies of Titan add 23 faces and Tower
+    // Defense 22; the other three scenarios, their modular sets and the
+    // campaign remain pending.
     expect(mts).toMatchObject({
       faceCount: 213,
-      executableFaces: 96,
+      executableFaces: 118,
       installedCardClosure: false,
     });
-    expect(mts.unsupportedFaceCodes).toHaveLength(117);
+    expect(mts.unsupportedFaceCodes).toHaveLength(95);
     expect(mts.unsupportedFaceCodes).not.toContain("21071");
-    expect(mts.unsupportedFaceCodes).toContain("21092");
+    expect(mts.unsupportedFaceCodes).not.toContain("21092");
+    expect(mts.unsupportedFaceCodes).toContain("21111");
     const mtsHeroFaces = cards.filter(
       (entry: { pack_code: string; position: number }) =>
         entry.pack_code === "mts" && entry.position <= 70,
@@ -407,9 +411,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2504);
-    expect(coverage.unsupportedFaces).toBe(2047);
-    expect(coverage.dedicatedFaces).toBe(2065);
+    expect(coverage.executableFaces).toBe(2526);
+    expect(coverage.unsupportedFaces).toBe(2025);
+    expect(coverage.dedicatedFaces).toBe(2087);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -587,6 +591,8 @@ describe("complete expansion rules inventory", () => {
         20 -
         // Ebony Maw, Black Order and Armies of Titan.
         23 -
+        // Tower Defense.
+        22 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -898,7 +904,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(21);
+    ).toHaveLength(22);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "crossbones",
@@ -1040,7 +1046,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(139);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(140);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

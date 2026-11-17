@@ -98,3 +98,13 @@ Two saved tables were measured before and after with the same script: a crowded 
 - **Browser checks against the production build:** Crossbones passes 84 checks, 120 accessibility audits and 120 layout checks at 1280, 768, 390 and 320px, switching scenario through the picker four times per run. Magneto, a difficulty-4 scenario near the end of the list, passes 104 checks, 260 accessibility audits and 260 layout checks.
 
 Not run locally: the remaining production-build checks (Sabretooth, Project Wideawake, Master Mold, Mansion Attack and the other import groups), the other hero checks and the 70,200-configuration source matrix. They run in CI. The phone and tablet table was inspected by screenshot at 390 and 820px wide; dedicated mobile design remains out of scope.
+
+## Two villains on one table — Tower Defense, 2026-11-17
+
+Tower Defense is the first scenario with two villains and two main schemes in play at once, and its villain play area stays close to the height of a one-villain scenario so the hero's area stays in view: 241px at 1280 × 900, or 292px when one villain carries two attachments, against about 180px for Ebony Maw.
+
+- **Villains.** Proxima Midnight and Corvus Glaive are two compact rows in the villain column, always in that order: a 64px card, attachments stacked in a narrow column beside it, then the stage label, name, hit-point dial, ATK and SCH. The active villain's row is lit in gold and labelled "Active villain"; during the player phase the other row says it activates in the next villain phase. A villain held at 0 hit points says it cannot be defeated while the other has hit points remaining.
+- **Main schemes.** Both main schemes sit side by side in a two-column grid, Under Siege (1B) then The Armies of Thanos (2B), each with its threat token and per-phase threat. Focused Defense is a gold "Focused · 1B/2B" chip in the active scheme's heading, which inspects the card; the scheme also gets a gold outline. Each scheme's completion effect is in the title of its threat line.
+- **Avengers Tower** is a full-width strip under the two schemes: a small card, its side ("Stronghold" or "Damaged"), a damage count against the per-player limit with a meter, and what happens at the limit.
+- On phones the rows, the two schemes and the Tower strip stack in the single opposition column; nothing scrolls sideways at 320px. The Tower Defense browser check audits the table at 1280, 768, 390 and 320px.
+

@@ -1232,6 +1232,19 @@ export const VILLAINS = [
       "Ebony Maw turns stolen sorcery against you. Every Spell in your play area is a ticking clock that runs down each time he activates against you.",
     color: "#5b4a8b",
   },
+  {
+    id: "tower_defense",
+    name: "Tower Defense",
+    codes: ["21092", "21093", "21094"],
+    schemes: ["21098b", "21099b"],
+    module: "armies_of_titan",
+    difficulty: 4,
+    title: "Under Siege",
+    location: "Avengers Tower",
+    description:
+      "Proxima Midnight and Corvus Glaive strike together, each with a scheme of their own. Only one of them activates each round, but both can be attacked, and they fall only together. Lose Avengers Tower and you lose the game.",
+    color: "#8a4b3c",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },

@@ -2,6 +2,7 @@ import { magikTopPlayable } from "./magik.js";
 import { icemanSchemeIcon } from "./iceman.js";
 import { valkyrieCannotBasicAttack } from "./valkyrie.js";
 import { visionCanAttack } from "./vision.js";
+import { TOWER_OTHER_MAIN, towerDefenseSchemeLimit } from "./tower-defense.js";
 import {
   doctorStrangeAbilityOptions,
   doctorStrangeTopInvocation,
@@ -567,7 +568,7 @@ export function advisePrompt(s: GameState): Advice | null {
   if (ids.length && ids.every((id) => enemyIds.has(id))) {
     const damage = heroStats(s).attack;
     const minion = best(
-      p.options.filter((o) => o.id !== s.villain.id),
+      p.options.filter((o) => s.minions.some((x) => x.id === o.id)),
       (o) => {
         const m = s.minions.find((x) => x.id === o.id);
         if (!m) return -99;
@@ -592,8 +593,14 @@ export function advisePrompt(s: GameState): Advice | null {
           reason: "Removing a minion stops its attacks and schemes.",
         };
     }
+    // Tower Defense: both villains fall together, so press the one with more
+    // hit points remaining.
+    const other = s.towerDefense?.other.villain;
     const villain =
-      p.options.find((o) => o.id === s.villain.id) || p.options[0];
+      best(
+        p.options.filter((o) => o.id === s.villain.id || o.id === other?.id),
+        (o) => (o.id === s.villain.id ? s.villain.hp : other!.hp),
+      ) || p.options[0];
     return {
       command: { type: "CHOOSE", id: villain.id },
       title: villain.label,
@@ -603,7 +610,22 @@ export function advisePrompt(s: GameState): Advice | null {
   const schemeIds = new Set(targets(s, "scheme").map((t) => t.id));
   if (ids.length && ids.every((id) => schemeIds.has(id))) {
     const pick = best(p.options, (o) => {
-      if (o.id === "main") return pressure(s).pressed ? 8 : 2;
+      // Tower Defense: of two main schemes, the one closer to completion.
+      if (o.id === TOWER_OTHER_MAIN && s.towerDefense) {
+        const other = s.towerDefense.other.scheme;
+        return (
+          (pressure(s).pressed ? 8 : 2) +
+          other.threat / Math.max(1, towerDefenseSchemeLimit(s, other.code))
+        );
+      }
+      if (o.id === "main")
+        return (
+          (pressure(s).pressed ? 8 : 2) +
+          (s.towerDefense
+            ? s.scheme.threat /
+              Math.max(1, towerDefenseSchemeLimit(s, s.scheme.code))
+            : 0)
+        );
       const side = s.sideSchemes.find((x) => x.id === o.id);
       if (!side) return 0;
       const c = card(side);
@@ -619,7 +641,7 @@ export function advisePrompt(s: GameState): Advice | null {
       command: { type: "CHOOSE", id: pick.id },
       title: pick.label,
       reason:
-        pick.id === "main"
+        pick.id === "main" || pick.id === TOWER_OTHER_MAIN
           ? "The main scheme decides the game."
           : "Side schemes make every villain phase worse.",
     };

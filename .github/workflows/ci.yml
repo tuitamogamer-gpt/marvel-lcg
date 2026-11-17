@@ -117,6 +117,8 @@ jobs:
             scripts: test:ronan
           - group: ebony-maw
             scripts: test:ebony-maw
+          - group: tower-defense
+            scripts: test:tower-defense
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

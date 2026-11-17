@@ -1117,6 +1117,7 @@ export async function generateAudit(
     "src/game/nebula-villain.ts",
     "src/game/ronan.ts",
     "src/game/ebony-maw.ts",
+    "src/game/tower-defense.ts",
     "src/game/reveal-window.ts",
     "src/game/black-widow.ts",
     "src/game/doctor-strange.ts",

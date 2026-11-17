@@ -539,3 +539,170 @@ h3 {
 .collection .collection-card:hover {
   box-shadow: var(--shadow-lift);
 }
+
+/* Tower Defense: Proxima Midnight and Corvus Glaive in two compact rows, the
+   pair whose main scheme holds Focused Defense lit. Both main schemes sit side
+   by side with Avengers Tower as a damage strip beneath them, so the villain
+   play area keeps about the height of a one-villain scenario. */
+.app .physical-table .villain-area.tower-villains {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+  min-width: 0;
+}
+.app .physical-table .tower-villain {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+.app .physical-table .tower-villain.active {
+  border-color: #e9b65b8c;
+  background: #e9b65b14;
+}
+.app .physical-table .tower-villain > .host-card-stack {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  align-items: flex-start;
+  width: auto;
+}
+/* A villain's attachments stack in a narrow column beside its card. */
+.app .physical-table .tower-villain .host-card-stack > .attached-cards {
+  flex: none;
+  margin: 0;
+  padding: 2px 0 0 5px;
+}
+.app .physical-table .tower-villain .attached-card-list {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow: visible;
+  padding-bottom: 0;
+}
+.app .physical-table .tower-villain .attached-piece {
+  flex: none;
+  width: 40px;
+}
+.app .physical-table .tower-villain .attachment-connection {
+  margin-bottom: 3px;
+  font-size: 6px;
+  letter-spacing: 0;
+}
+.app .physical-table .tower-villain .attached-card > span {
+  margin-top: 2px;
+  font-size: 7px;
+  line-height: 1.15;
+}
+.app .physical-table .tower-villain .villain-card {
+  flex: 0 0 64px;
+  width: 64px;
+}
+.app .physical-table .tower-villain .inspect-hint {
+  display: none;
+}
+.app .physical-table .tower-villain > .villain-info {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.app .physical-table .tower-villain > .villain-info h2 {
+  margin: 1px 0 3px;
+  font-size: 14px;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.app .physical-table .tower-villain .health-dial {
+  zoom: 0.62;
+}
+.app .physical-table .tower-villain .enemy-stats {
+  margin-top: 2px;
+}
+.app .physical-table .tower-villain .stat-caption {
+  margin-top: 2px;
+  font-size: 9px;
+  line-height: 1.25;
+}
+.app .physical-table .scheme-area:has(> .tower-main) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 140px));
+  gap: 8px 12px;
+  align-content: start;
+  overflow-x: visible;
+}
+.app .physical-table .scheme-area > .tower-main {
+  flex: none;
+  width: auto;
+  min-width: 0;
+}
+.app .physical-table .scheme-area > .tower-main.focused {
+  border-radius: 7px;
+  outline: 1px solid #e9b65b8c;
+  outline-offset: 3px;
+}
+.app .physical-table .tower-focus-chip {
+  padding: 0 4px;
+  border: 1px solid #e9b65b;
+  border-radius: 4px;
+  background: #e9b65b26;
+  color: #ffe2a3;
+  font: inherit;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+}
+.app .physical-table .scheme-area > .scenario-environment.tower-strip {
+  display: flex;
+  flex-direction: row;
+  grid-column: 1 / -1;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-start;
+  text-align: left;
+  width: auto;
+  min-width: 0;
+  padding: 5px 8px;
+}
+.app .physical-table .tower-strip > .environment-card {
+  flex: 0 0 34px;
+  width: 34px;
+}
+.app .physical-table .tower-strip > div {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+}
+.app .physical-table .tower-meter {
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #ffffff1f;
+}
+.app .physical-table .tower-meter > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #e9b65b, #d9473c);
+}
+@media (min-width: 681px) {
+  .app .physical-table .opposition:has(> .tower-villains) {
+    grid-template-columns: minmax(200px, 250px) minmax(292px, 1fr) auto;
+  }
+}
+@media (min-width: 1000px) {
+  .app
+    .physical-table
+    .opposition:has(> .tower-villains):has(> .encounter-field) {
+    grid-template-columns:
+      minmax(200px, 250px) minmax(292px, 1fr) minmax(140px, 0.9fr)
+      auto;
+  }
+}

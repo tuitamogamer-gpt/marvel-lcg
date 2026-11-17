@@ -91,6 +91,16 @@ export function uniqueConflict(
 ): boolean {
   c = printedCardMetadata(c);
   if (!c.is_unique || c.type_code === "villain") return false;
+  // Tower Defense: while Avengers Tower's Stronghold side is in play the
+  // unique rule does not apply to Avengers Tower; its Damaged side reinforces
+  // the unique rule (scenario rules).
+  if (normalize(c.name) === "avengers tower") {
+    const tower = (s.environments || []).find(
+      (p) => p.code === "21100a" || p.code === "21100b",
+    );
+    if (tower?.code === "21100a") return false;
+    if (tower?.code === "21100b") return true;
+  }
   if (
     s.players.some((seat) => !seat.eliminated && identityMatch(seat.heroId, c))
   )

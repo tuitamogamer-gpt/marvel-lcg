@@ -272,6 +272,9 @@ export interface GameState {
   nebulaVillain?: import("./nebula-villain.js").NebulaVillainState;
   ronan?: import("./ronan.js").RonanState;
   ebonyMaw?: import("./ebony-maw.js").EbonyMawState;
+  /** Proxima Midnight and Corvus Glaive: the pair out of focus and both
+   * villains' remaining stages. */
+  towerDefense?: import("./tower-defense.js").TowerDefenseState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */

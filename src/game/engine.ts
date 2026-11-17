@@ -6,6 +6,7 @@ import * as escape from "./escape-museum.js";
 import * as nebulaVillain from "./nebula-villain.js";
 import * as ronan from "./ronan.js";
 import * as ebonyMaw from "./ebony-maw.js";
+import * as towerDefense from "./tower-defense.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -867,6 +868,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
       !!(
         name === "Piercing" &&
         (redSkull.redSkullKeyword(s, p, "Piercing") ||
+          towerDefense.towerDefenseKeyword(s, p, "Piercing") > 0 ||
           badoon.badoonKeyword(s, p, "Piercing") ||
           ronan.ronanKeyword(s, p, "Piercing") ||
           taskmaster.taskmasterKeyword(s, p, "Piercing") ||
@@ -896,6 +898,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
       !!(
         name === "Ranged" &&
         (redSkull.redSkullKeyword(s, p, "Ranged") ||
+          towerDefense.towerDefenseKeyword(s, p, "Ranged") > 0 ||
           badoon.badoonKeyword(s, p, "Ranged") ||
           taskmaster.taskmasterKeyword(s, p, "Ranged") ||
           granted.ranged ||
@@ -916,6 +919,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           badoon.badoonKeyword(s, p, "Overkill") ||
           ronan.ronanKeyword(s, p, "Overkill") ||
           ebonyMaw.ebonyMawKeyword(s, p, "Overkill") ||
+          towerDefense.towerDefenseKeyword(s, p, "Overkill") > 0 ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
             .overkill)
       ),
@@ -924,6 +928,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
       ? niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
           .retaliate +
           ironheart.ironheartEnemyKeywords(s, p, { isTextBlank }).retaliate +
+          towerDefense.towerDefenseKeyword(s, p, "Retaliate") +
           wideawakeKeywords.retaliate +
           moldKeywords.retaliate
       : 0,
@@ -1163,6 +1168,7 @@ function select(
 }
 const allPieces = (s: GameState) => [
   ...(!s.mansionAttack?.activeVillainRetired ? [s.villain] : []),
+  ...(s.towerDefense ? [s.towerDefense.other.villain] : []),
   ...s.minions,
   ...s.sideSchemes,
   ...allInPlay(s),
@@ -2682,6 +2688,12 @@ function heal(
     !sabretooth.sabretoothKellyCanHeal(s, origin)
   )
     return 0;
+  if (s.towerDefense && target === s.towerDefense.other.villain.id)
+    return towerDefense.withTowerFocus(
+      s,
+      towerDefense.otherTowerKey(s.towerDefense.focus),
+      () => heal(s, target, n, origin),
+    );
   if (target?.startsWith("hero:"))
     return heal(seatView(s, target.slice(5)), "hero", n, origin);
   if (target === "hero") {
@@ -2970,6 +2982,13 @@ function dealDamage(
   panther = false,
   traits: DamageTraits = {},
 ): DamageResult {
+  // Tower Defense: damage to the villain out of focus resolves in focus.
+  if (s.towerDefense && target === s.towerDefense.other.villain.id)
+    return towerDefense.withTowerFocus(
+      s,
+      towerDefense.otherTowerKey(s.towerDefense.focus),
+      () => dealDamage(s, target, n, source, attack, overkill, panther, traits),
+    );
   const raySource = source === "hero" ? `hero:${s.activePlayerId}` : source;
   const ray =
     attack &&
@@ -3295,6 +3314,7 @@ function dealDamage(
           zola.zolaKeyword(s, retaliationTarget, "Retaliate") +
           redSkull.redSkullKeyword(s, retaliationTarget, "Retaliate") +
           taskmaster.taskmasterKeyword(s, retaliationTarget, "Retaliate") +
+          towerDefense.towerDefenseKeyword(s, retaliationTarget, "Retaliate") +
           nebulaVillain.nebulaVillainKeyword(
             s,
             retaliationTarget,
@@ -4154,6 +4174,19 @@ function advanceVillain(
   attack = false,
   captured?: valkyrie.ValkyrieDefeatReceipt[],
 ) {
+  // Tower Defense: each villain cannot be defeated while the other has hit
+  // points remaining; once both reach 0 they are defeated together.
+  const towerDefeat = towerDefense.towerDefenseDefeatCheck(s);
+  if (towerDefeat === "immune") {
+    if (s.villain.hp < 0) s.villain.hp = 0;
+    log(
+      s,
+      `${card(s.villain).name} cannot be defeated while ${card(s.towerDefense!.other.villain).name} has hit points remaining.`,
+    );
+    return;
+  }
+  if (towerDefeat === "both")
+    add(s, ...towerDefense.towerDefenseDefeatOther(s));
   // Escape the Museum: Collector flips instead of being defeated, and his
   // wounded side cannot be defeated until the round ends.
   const escaped = escape.escapeVillainWouldBeDefeated(s);
@@ -4247,31 +4280,44 @@ function advanceVillain(
       "nebula",
       "ronan",
       "ebony_maw",
+      "tower_defense",
     ].includes(s.villainId)
   ) {
-    const next = (
-      s.villainId === "ebony_maw"
-        ? s.ebonyMaw
-        : s.villainId === "ronan"
-          ? s.ronan
-          : s.villainId === "nebula"
-            ? s.nebulaVillain
-            : s.villainId === "infiltrate_the_museum"
-              ? s.collector
-              : s.villainId === "brotherhood_of_badoon"
-                ? s.badoon
-                : s.villainId === "red_skull"
-                  ? s.redSkull
-                  : s.villainId === "zola"
-                    ? s.zola
-                    : s.villainId === "taskmaster"
-                      ? s.taskmaster
-                      : s.villainId === "absorbing_man"
-                        ? s.absorbingMan
-                        : s.villainId === "crossbones"
-                          ? s.crossbones
-                          : s.magneto
-    )?.villainDeck?.shift();
+    const next =
+      s.villainId === "tower_defense"
+        ? towerDefense.towerDefenseNextStage(s)
+        : (s.villainId === "ebony_maw"
+            ? s.ebonyMaw
+            : s.villainId === "ronan"
+              ? s.ronan
+              : s.villainId === "nebula"
+                ? s.nebulaVillain
+                : s.villainId === "infiltrate_the_museum"
+                  ? s.collector
+                  : s.villainId === "brotherhood_of_badoon"
+                    ? s.badoon
+                    : s.villainId === "red_skull"
+                      ? s.redSkull
+                      : s.villainId === "zola"
+                        ? s.zola
+                        : s.villainId === "taskmaster"
+                          ? s.taskmaster
+                          : s.villainId === "absorbing_man"
+                            ? s.absorbingMan
+                            : s.villainId === "crossbones"
+                              ? s.crossbones
+                              : s.magneto
+          )?.villainDeck?.shift();
+    if (!next && s.villainId === "tower_defense") {
+      if (towerDefense.towerDefenseFinalDefeat(s))
+        endGame(
+          s,
+          true,
+          "Proxima Midnight and Corvus Glaive are defeated. Avengers Tower stands.",
+        );
+      else s.villain.hp = 0;
+      return;
+    }
     if (!next) {
       endGame(
         s,
@@ -4322,6 +4368,7 @@ function advanceVillain(
         "nebula",
         "ronan",
         "ebony_maw",
+        "tower_defense",
       ].includes(s.villainId)
         ? { counters: old.counters }
         : {}),
@@ -4344,6 +4391,7 @@ function advanceVillain(
         "nebula",
         "ronan",
         "ebony_maw",
+        "tower_defense",
       ].includes(s.villainId)
     ) {
       s.villain.maxHp =
@@ -4452,6 +4500,14 @@ function threat(
   skipInterrupt = false,
 ) {
   if (n <= 0) return;
+  if (s.towerDefense && target === towerDefense.TOWER_OTHER_MAIN) {
+    towerDefense.withTowerFocus(
+      s,
+      towerDefense.otherTowerKey(s.towerDefense.focus),
+      () => threat(s, "main", n, skipInterrupt),
+    );
+    return;
+  }
   if (!skipInterrupt) {
     const opts: Option[] = [];
     for (const seat of playerOrder(s)) {
@@ -4547,6 +4603,15 @@ function threat(
             E("clearMainCompletion"),
           );
         }
+        return;
+      }
+      if (s.villainId === "tower_defense") {
+        log(
+          s,
+          `${card(s.scheme.code).name} would be completed: all of its threat is removed instead.`,
+          "bad",
+        );
+        add(s, ...towerDefense.towerDefenseMainCompleted(s));
         return;
       }
       if (s.villainId === "magneto") {
@@ -4829,7 +4894,13 @@ function thwart(
   n: number,
   ignoreCrisis = false,
   source = "hero",
-) {
+): number {
+  if (s.towerDefense && target === towerDefense.TOWER_OTHER_MAIN)
+    return towerDefense.withTowerFocus(
+      s,
+      towerDefense.otherTowerKey(s.towerDefense.focus),
+      () => thwart(s, "main", n, ignoreCrisis, source),
+    );
   if (
     !magik.magikCanRemoveThreat(s, target) ||
     !cable.cableCanRemoveThreat(s, target, source) ||
@@ -4995,6 +5066,9 @@ function defeatScheme(
   const ebonyDefeat = !isTextBlank(s, p)
     ? ebonyMaw.ebonyMawSchemeDefeated(s, p, s.activePlayerId)
     : [];
+  const towerDefeat = !isTextBlank(s, p)
+    ? towerDefense.towerDefenseSchemeDefeated(s, p, s.activePlayerId)
+    : [];
   const nativeDefeat = sabretooth.sabretoothSideSchemeDefeated(
     s,
     p,
@@ -5116,6 +5190,15 @@ function defeatScheme(
           },
         ]
       : []),
+    ...(towerDefeat.length
+      ? [
+          {
+            id: `${p.id}:tower-defeated`,
+            title: card(p).name,
+            effects: towerDefeat,
+          },
+        ]
+      : []),
     ...(magikDefeat.length
       ? [{ id: `${p.id}:magik`, title: card(p).name, effects: magikDefeat }]
       : []),
@@ -5212,6 +5295,7 @@ export function targets(
                 label: card(s.villain).name,
                 code: s.villain.code,
               },
+              ...towerDefense.towerDefenseEnemyTarget(s),
             ]
           : []),
         ...s.minions.map((p) => ({
@@ -5251,14 +5335,18 @@ export function targets(
           !shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts) &&
           engaged(s).some((p) => keyword(p, "Patrol", s))
         ) &&
-        rulesCode(s.scheme) !== "01139b" &&
-        s.scheme.threat > 0
+        rulesCode(s.scheme) !== "01139b"
           ? [
-              {
-                id: "main",
-                label: card(s.scheme.code).name,
-                code: s.scheme.code,
-              },
+              ...(s.scheme.threat > 0
+                ? [
+                    {
+                      id: "main",
+                      label: card(s.scheme.code).name,
+                      code: s.scheme.code,
+                    },
+                  ]
+                : []),
+              ...towerDefense.towerDefenseSchemeTarget(s),
             ]
           : []),
         ...s.sideSchemes
@@ -5372,7 +5460,9 @@ function scriptContext(
       if (node.op === "thwart")
         return id === "main"
           ? s.scheme.threat > 0
-          : !!target && (target as Piece).counters > 0;
+          : id === towerDefense.TOWER_OTHER_MAIN
+            ? towerDefense.towerDefenseOtherThreat(s) > 0
+            : !!target && (target as Piece).counters > 0;
       if (node.op === "status") {
         if (!target) return false;
         const definition = id?.startsWith("hero")
@@ -7669,6 +7759,7 @@ export function newGame(config: {
           !(v.id === "escape_the_museum" && c.set_code === "ship_command") &&
           c.code !== nebulaVillain.POWER_STONE &&
           c.code !== ronan.UNIVERSAL_WEAPON &&
+          c.code !== towerDefense.FOCUSED_DEFENSE &&
           !(v.id === "magneto" && ["32144b", "32145b"].includes(c.code)) &&
           (c.type_code !== "environment" ||
             (v.id === "absorbing_man" &&
@@ -7800,6 +7891,61 @@ export function newGame(config: {
         ...(ebonyMaw.ebonyMawReveal(s, s.villain) || []),
         ...(ebonyMaw.ebonyMawReveal(s, s.ebonyMaw.currentMain) || []),
       ].map((e) => effectContext(s, { ...e, actorId: s.firstPlayerId })),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "tower_defense") {
+    const villain = (code: string) =>
+      Object.assign(makePiece(s, code), {
+        hp: card(code).health! * s.playerCount,
+        maxHp: card(code).health! * s.playerCount,
+        stage,
+      });
+    const base = (code: string) =>
+      (card(code).base_threat || 0) *
+      (card(code).base_threat_fixed ? 1 : s.playerCount);
+    const proxima = villain(towerDefense.PROXIMA_MIDNIGHT[stage - 1]);
+    // Focused Defense begins attached to stage 2B, Corvus Glaive's scheme.
+    s.villain = villain(towerDefense.CORVUS_GLAIVE[stage - 1]);
+    s.scheme = {
+      code: towerDefense.ARMIES_OF_THANOS,
+      threat: base(towerDefense.ARMIES_OF_THANOS),
+      index: 1,
+    };
+    s.towerDefense = {
+      active: "corvus",
+      focus: "corvus",
+      other: {
+        villain: proxima,
+        scheme: {
+          code: towerDefense.UNDER_SIEGE,
+          threat: base(towerDefense.UNDER_SIEGE),
+          index: 0,
+        },
+      },
+      mains: {
+        proxima: makePiece(s, towerDefense.UNDER_SIEGE),
+        corvus: makePiece(s, towerDefense.ARMIES_OF_THANOS),
+      },
+      villainDecks: {
+        proxima: [makePiece(s, towerDefense.PROXIMA_MIDNIGHT[stage])],
+        corvus: [makePiece(s, towerDefense.CORVUS_GLAIVE[stage])],
+      },
+    };
+    // Under Siege (1A) reveals The Armies of Thanos (2A): Avengers Tower
+    // enters play Stronghold side faceup, Focused Defense attaches to stage 2
+    // and each player puts a Black Order Besieger into play engaged with them.
+    visionPorts.putEnvironment(s, makePiece(s, towerDefense.AVENGERS_TOWER));
+    const focused = makePiece(s, towerDefense.FOCUSED_DEFENSE);
+    focused.attachedTo = `main:${towerDefense.ARMIES_OF_THANOS}`;
+    s.attachments.push(focused);
+    s.queue.push(
+      ...towerDefense
+        .towerDefenseSetup(s)
+        .map((e) => effectContext(s, { ...e, actorId: s.firstPlayerId })),
       effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
     );
     const pacing = s.pacing;
@@ -10232,6 +10378,7 @@ export function abilityOptions(
     ...nebulaVillain.nebulaActions(s, p, nebulaVillainPorts),
     ...ronan.ronanActions(s, p, ronanPorts),
     ...ebonyMaw.ebonyMawActions(s, p, ebonyMawPorts),
+    ...towerDefense.towerDefenseActions(s, p, towerDefensePorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -12281,10 +12428,19 @@ const swPorts: SpiderWomanPorts = {
     const receipts: spiderHamPack.SpiderHamPackThwartReceipt[] = [];
     for (const packet of packets) {
       const piece = s.sideSchemes.find((p) => p.id === packet.target);
+      const otherMain =
+        packet.target === towerDefense.TOWER_OTHER_MAIN
+          ? s.towerDefense?.other.scheme
+          : undefined;
       const available =
-        packet.target === "main" ? s.scheme.threat : piece?.counters || 0;
+        packet.target === "main"
+          ? s.scheme.threat
+          : otherMain
+            ? otherMain.threat
+            : piece?.counters || 0;
       const removed = Math.min(packet.amount, available);
       if (packet.target === "main") s.scheme.threat -= removed;
+      else if (otherMain) otherMain.threat -= removed;
       else if (piece) {
         piece.counters -= removed;
         if (!piece.counters) defeated.push(piece);
@@ -12302,7 +12458,7 @@ const swPorts: SpiderWomanPorts = {
         });
       log(
         s,
-        `Remove ${removed} threat from ${packet.target === "main" ? "the main scheme" : card(piece!).name}.`,
+        `Remove ${removed} threat from ${packet.target === "main" ? "the main scheme" : otherMain ? card(otherMain.code).name : card(piece!).name}.`,
         "good",
       );
     }
@@ -12497,7 +12653,9 @@ const waspPorts: wasp.WaspPorts = {
       threat:
         p.target === "main"
           ? s.scheme.threat
-          : s.sideSchemes.find((x) => x.id === p.target)?.counters || 0,
+          : p.target === towerDefense.TOWER_OTHER_MAIN
+            ? towerDefense.towerDefenseOtherThreat(s)
+            : s.sideSchemes.find((x) => x.id === p.target)?.counters || 0,
     }));
     const queuedBefore = s.queue.length;
     swPorts.thwartDistribution(s, packets);
@@ -12507,7 +12665,10 @@ const waspPorts: wasp.WaspPorts = {
         p.threat > 0 &&
         (p.target === "main"
           ? s.scheme.threat
-          : s.sideSchemes.find((x) => x.id === p.target)?.counters || 0) === 0,
+          : p.target === towerDefense.TOWER_OTHER_MAIN
+            ? towerDefense.towerDefenseOtherThreat(s)
+            : s.sideSchemes.find((x) => x.id === p.target)?.counters || 0) ===
+          0,
     );
     add(
       s,
@@ -14392,6 +14553,22 @@ const ebonyMawPorts: ebonyMaw.EbonyMawPorts = {
   putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
   heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
 };
+const towerDefensePorts: towerDefense.TowerDefensePorts = {
+  ...mutagenPorts,
+  revealHidden,
+  giveTough: (s, p) => giveCharacterStatus(s, p, "tough"),
+  villainStat: (s, p, kind, playerId) =>
+    kind === "attack" ? enemyATK(s, p, playerId) : enemySCH(s, p, playerId),
+  advanceVillain: (s) => advanceVillain(s),
+  endGame,
+  log: (s, text, kind) => log(s, text, kind),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+  avengersTowerSupports: (s) =>
+    allInPlay(s).filter(
+      (p) =>
+        card(p).type_code === "support" && card(p).name === "Avengers Tower",
+    ),
+};
 const nebulaVillainPorts: nebulaVillain.NebulaVillainPorts = {
   ...mutagenPorts,
   revealHidden,
@@ -14882,11 +15059,20 @@ const phoenixPorts: phoenix.PhoenixPorts = {
   },
   moveThreat: (s, from, to, n) => {
     const source = s.sideSchemes.find((p) => p.id === from);
+    const otherMain =
+      from === towerDefense.TOWER_OTHER_MAIN
+        ? s.towerDefense?.other.scheme
+        : undefined;
     const amount = Math.min(
       n,
-      from === "main" ? s.scheme.threat : source?.counters || 0,
+      from === "main"
+        ? s.scheme.threat
+        : otherMain
+          ? otherMain.threat
+          : source?.counters || 0,
     );
     if (from === "main") s.scheme.threat -= amount;
+    else if (otherMain) otherMain.threat -= amount;
     else if (source) source.counters -= amount;
     threat(s, to, amount);
     if (source && !source.counters && !isPermanent(card(source)))
@@ -17180,6 +17366,7 @@ function minionEntered(s: GameState, p: Piece) {
   );
   add(s, ...zola.zolaMinionEntered(s, p));
   add(s, ...badoon.badoonMinionEngaged(s, p));
+  add(s, ...towerDefense.towerDefenseMinionEngaged(s, p));
 }
 function minionResponses(s: GameState, p: Piece) {
   add(s, ...waspPack.waspPackMinionEngaged(s, p));
@@ -21883,6 +22070,11 @@ function enemyAttack(
         id,
         s.attack.originalPlayerId!,
       ),
+      ...towerDefense.towerDefenseAttackInitiated(
+        s,
+        id,
+        s.attack.originalPlayerId!,
+      ),
     );
   if (!friendlySource) {
     const strategist = redSkull.redSkullActivation(s, id);
@@ -22284,6 +22476,7 @@ function boostEffects(s: GameState, p: Piece) {
     nebulaVillain.nebulaBoost(s, p) ??
     ronan.ronanBoost(s, p) ??
     ebonyMaw.ebonyMawBoost(s, p) ??
+    towerDefense.towerDefenseBoost(s, p) ??
     collector.collectorBoost(s, p) ??
     badoon.badoonBoost(s, p) ??
     redSkull.redSkullBoost(s, p) ??
@@ -23510,6 +23703,23 @@ function finishAttackAfterDamage(
             textBlank: !p || isTextBlank(s, p),
             playerId: recipientId,
           }),
+          ...towerDefense.towerDefenseAttackResponses(s, {
+            token: a.id!,
+            attackerId: a.attacker,
+            attackerCode: a.attackerSnapshot?.code || p?.code || "",
+            playerId: recipientId,
+            performed: !!a.completionRecorded,
+            textBlank: !p || isTextBlank(s, p),
+            undefended:
+              (!a.defender || a.defender === "none") && !a.eventDefense,
+            defeatedAlly:
+              target !== "hero" &&
+              !target.startsWith("hero:") &&
+              before > 0 &&
+              a.gmwReturnedDefender !== target &&
+              !find(s, target),
+            boostCodes: a.boostCodes || [],
+          }),
           ...redSkullModules.redSkullAttackResponses(s, a, redSkullModulePorts),
           ...experimentalWeapons.experimentalWeaponsAttackResponses(
             s,
@@ -24156,6 +24366,10 @@ function reveal(
         c.type_code !== "attachment") ||
       (ebonyMaw.EBONY_MAW_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (towerDefense.TOWER_DEFENSE_SCRIPT_CODES.some(
+        (code) => code === p.code,
+      ) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -24339,6 +24553,7 @@ function reveal(
       ...nebulaVillain.NEBULA_VILLAIN_SCRIPT_CODES,
       ...ronan.RONAN_SCRIPT_CODES,
       ...ebonyMaw.EBONY_MAW_SCRIPT_CODES,
+      ...towerDefense.TOWER_DEFENSE_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -24372,6 +24587,7 @@ function reveal(
       nebulaVillain.nebulaReveal(s, p) ??
       ronan.ronanReveal(s, p) ??
       ebonyMaw.ebonyMawReveal(s, p) ??
+      towerDefense.towerDefenseReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -24448,6 +24664,7 @@ function reveal(
     nebulaVillain.nebulaReveal(s, p) ??
     ronan.ronanReveal(s, p) ??
     ebonyMaw.ebonyMawReveal(s, p) ??
+    towerDefense.towerDefenseReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -25548,6 +25765,27 @@ function resolve(s: GameState, e: Effect) {
       )
         e[key] = s.villain.id;
   }
+  if (s.towerDefense) {
+    towerDefense.towerDefenseCanonicalTargets(s, e);
+    const towerWindow = towerDefense.towerDefenseFocusWrap(s, e);
+    if (towerWindow) {
+      // Focus now, so synchronous callers such as payment commits keep their
+      // order. Return to the previous focus at once if nothing is pending;
+      // otherwise right after everything the effect queued or prompted.
+      const [into, inner, back] = towerWindow;
+      const before = new Set(s.queue);
+      const prompt = s.prompt;
+      towerDefense.towerDefenseFocus(s, into.key);
+      resolve(s, inner);
+      const fresh = s.queue.some((q) => !before.has(q));
+      const index = s.queue.findIndex((q) => before.has(q));
+      if (!fresh && s.prompt === prompt)
+        towerDefense.towerDefenseFocus(s, back.key);
+      else if (index < 0) s.queue.push(back);
+      else s.queue.splice(index, 0, back);
+      return;
+    }
+  }
   if (e.type === "acolytes-native:order") {
     choose(
       s,
@@ -25788,6 +26026,7 @@ function resolve(s: GameState, e: Effect) {
           nebulaVillain.nebulaReveal(state, piece) ??
           ronan.ronanReveal(state, piece) ??
           ebonyMaw.ebonyMawReveal(state, piece) ??
+          towerDefense.towerDefenseReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -25914,6 +26153,7 @@ function resolve(s: GameState, e: Effect) {
     return;
   if (ronan.resolveRonanEffect(s, e, ronanPorts)) return;
   if (ebonyMaw.resolveEbonyMawEffect(s, e, ebonyMawPorts)) return;
+  if (towerDefense.resolveTowerDefenseEffect(s, e, towerDefensePorts)) return;
   if (taskmaster.resolveTaskmasterEffect(s, e, taskmasterPorts)) return;
   if (absorbingMan.resolveAbsorbingEffect(s, e, absorbingManPorts)) return;
   if (crossbones.resolveCrossbonesEffect(s, e, crossbonesPorts)) return;
@@ -34544,6 +34784,7 @@ function resolve(s: GameState, e: Effect) {
       log(s, "Villain phase · threat, activations, then encounters.", "phase");
       add(
         s,
+        ...towerDefense.towerDefensePlayerPhaseEnded(s),
         E("villainPhaseForcedInterrupts", {
           remaining: [
             ...inheritors.inheritorsVillainPhaseInterrupts(s),
@@ -34637,6 +34878,7 @@ function resolve(s: GameState, e: Effect) {
         ...zola.zolaStepOne(s),
         ...redSkull.redSkullStepOne(s),
         ...badoon.badoonStepOne(s),
+        ...(e.towerSecond ? [] : towerDefense.towerDefenseStepOne(s)),
       );
       break;
     case "villainActivate": {
@@ -35146,6 +35388,7 @@ function run(s: GameState) {
       e.type.startsWith("nebula-villain:") ||
       e.type.startsWith("ronan:") ||
       e.type.startsWith("ebony:") ||
+      e.type.startsWith("tower:") ||
       e.type.startsWith("red-skull:") ||
       e.type.startsWith("sabretooth:") ||
       e.type.startsWith("sabretooth-native:") ||
@@ -35524,6 +35767,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...collector.collectorActions(s, p, collectorPorts),
               ...ronan.ronanActions(s, p, ronanPorts),
               ...ebonyMaw.ebonyMawActions(s, p, ebonyMawPorts),
+              ...towerDefense.towerDefenseActions(s, p, towerDefensePorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
