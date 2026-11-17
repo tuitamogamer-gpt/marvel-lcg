@@ -392,6 +392,17 @@ h3 {
     flex: 1 1 100%;
   }
 }
+/* On a phone a teammate's identity and its attached cards fill the row, so
+   their cards in play start a row of their own instead of being squeezed
+   into a sliver that scrolls. */
+@media (max-width: 600px) {
+  .app .physical-table .teammate-tableau {
+    flex-wrap: wrap;
+  }
+  .app .physical-table .teammate-cards {
+    flex: 1 1 100%;
+  }
+}
 
 /* ───────────────────────── Large displays ─────────────────────────
    The single-screen table was drawn for a 1440 × 900 window and kept that
