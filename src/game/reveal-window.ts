@@ -77,7 +77,7 @@ export function beginRevealWindow(
       (hinderDeclaration.perPlayer ? s.playerCount : 1)
     : 0;
   if (
-    /<b>When Revealed(?:\s*\([^)]*\))?\s*(?::\s*<\/b>|<\/b>\s*:)/i.test(
+    /<b>\s*When Revealed(?:\s*\([^)]*\))?\s*(?::\s*<\/b>|<\/b>\s*:)/i.test(
       card.text || "",
     ) ||
     /(?:^|\n)When Revealed(?:\s*\([^)]*\))?\s*:/i.test(card.text || "")

@@ -9,6 +9,7 @@ import { RONAN_SCRIPT_CODES } from "../src/game/ronan";
 import { EBONY_MAW_SCRIPT_CODES } from "../src/game/ebony-maw";
 import { TOWER_DEFENSE_SCRIPT_CODES } from "../src/game/tower-defense";
 import { THANOS_SCRIPT_CODES } from "../src/game/thanos";
+import { HELA_SCRIPT_CODES } from "../src/game/hela";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -32,6 +33,7 @@ const badoonCodes = new Set<string>([
   ...EBONY_MAW_SCRIPT_CODES,
   ...TOWER_DEFENSE_SCRIPT_CODES,
   ...THANOS_SCRIPT_CODES,
+  ...HELA_SCRIPT_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -67,6 +69,8 @@ describe("complete expansion rules inventory", () => {
       "19027",
       "19028",
       "19029",
+      "21141",
+      "21142",
       "22030",
       "29001a",
       "32048",
@@ -74,6 +78,10 @@ describe("complete expansion rules inventory", () => {
       "32088a",
       "32092",
       "32106",
+      "32126a",
+      "32127a",
+      "32128a",
+      "32129a",
       "32153",
       "34028",
       "34031",
@@ -98,6 +106,18 @@ describe("complete expansion rules inventory", () => {
         runtime: boost,
       });
     }
+    // Gjallerbru and Hall of Nastrond were transcribed under each other's
+    // printed numbers.
+    for (const [code, name] of [
+      ["21141", "Gjallerbru"],
+      ["21142", "Hall of Nastrond"],
+    ] as const)
+      expect(
+        corrections.find((entry: { code: string }) => entry.code === code)
+          .changes,
+      ).toContainEqual(
+        expect.objectContaining({ field: "name", runtime: name }),
+      );
     expect(
       corrections.find((entry: { code: string }) => entry.code === "04061b"),
     ).toMatchObject({
@@ -331,18 +351,21 @@ describe("complete expansion rules inventory", () => {
       (pack: { code: string }) => pack.code === "mts",
     );
     // Ebony Maw, Black Order and Armies of Titan add 23 faces, Tower Defense
-    // 22 and Thanos with the Infinity Gauntlet and Children of Thanos 27; Hela,
-    // Loki, their modular sets and the campaign remain pending.
+    // 22, Thanos with the Infinity Gauntlet and Children of Thanos 27, and Hela
+    // with Legions of Hel and Frost Giants 27; Loki, the Enchantress set,
+    // Odin's campaign King side and the campaign remain pending.
     expect(mts).toMatchObject({
       faceCount: 213,
-      executableFaces: 145,
+      executableFaces: 172,
       installedCardClosure: false,
     });
-    expect(mts.unsupportedFaceCodes).toHaveLength(68);
+    expect(mts.unsupportedFaceCodes).toHaveLength(41);
     expect(mts.unsupportedFaceCodes).not.toContain("21071");
     expect(mts.unsupportedFaceCodes).not.toContain("21092");
     expect(mts.unsupportedFaceCodes).not.toContain("21111");
-    expect(mts.unsupportedFaceCodes).toContain("21136a");
+    expect(mts.unsupportedFaceCodes).not.toContain("21136a");
+    expect(mts.unsupportedFaceCodes).toContain("21139b");
+    expect(mts.unsupportedFaceCodes).toContain("21160");
     const mtsHeroFaces = cards.filter(
       (entry: { pack_code: string; position: number }) =>
         entry.pack_code === "mts" && entry.position <= 70,
@@ -391,11 +414,14 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(37);
+    expect(MODULES).toHaveLength(39);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "black_order",
         "armies_of_titan",
+        "children_of_thanos",
+        "legions_of_hel",
+        "frost_giants",
         "deathstrike",
         "shadow_king",
         "exodus",
@@ -414,9 +440,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2553);
-    expect(coverage.unsupportedFaces).toBe(1998);
-    expect(coverage.dedicatedFaces).toBe(2114);
+    expect(coverage.executableFaces).toBe(2580);
+    expect(coverage.unsupportedFaces).toBe(1971);
+    expect(coverage.dedicatedFaces).toBe(2141);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -598,6 +624,8 @@ describe("complete expansion rules inventory", () => {
         22 -
         // Thanos, the Infinity Gauntlet and Children of Thanos.
         27 -
+        // Hela, Legions of Hel and Frost Giants.
+        27 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -725,7 +753,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(37);
+    expect(coverage.registeredModules).toHaveLength(39);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -909,7 +937,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(23);
+    ).toHaveLength(24);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "crossbones",
@@ -1051,7 +1079,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(141);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(142);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

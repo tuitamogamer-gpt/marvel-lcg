@@ -896,19 +896,23 @@ export async function generateAudit(
     const corrected = printedCardMetadata(imported);
     if (corrected === imported) return [];
     const changes = [
+      "name",
       "attack",
       "boost",
       "health",
       "is_unique",
       "subname",
       "text",
+      "base_threat",
+      "scheme_hazard",
+      "scheme_amplify",
     ].flatMap((field) =>
       corrected[field] !== imported[field]
         ? [
             {
               field,
               imported: imported[field] ?? null,
-              runtime: corrected[field],
+              runtime: corrected[field] ?? null,
             },
           ]
         : [],
@@ -1119,6 +1123,7 @@ export async function generateAudit(
     "src/game/ebony-maw.ts",
     "src/game/tower-defense.ts",
     "src/game/thanos.ts",
+    "src/game/hela.ts",
     "src/game/reveal-window.ts",
     "src/game/black-widow.ts",
     "src/game/doctor-strange.ts",

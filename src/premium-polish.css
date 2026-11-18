@@ -706,3 +706,81 @@ h3 {
       auto;
   }
 }
+/* Hela: the Journey Through Hel, a compact track in the villain column. */
+.app .physical-table .villain-info > .hela-journey {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+  margin-top: 4px;
+}
+.app .physical-table .hela-journey > .small-label {
+  color: #9ff0cf;
+  font-size: 8px;
+  letter-spacing: 0.4px;
+}
+.app .physical-table .hela-journey ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  align-items: stretch;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.app .physical-table .hela-journey li {
+  display: grid;
+  flex: 0 0 18px;
+  place-items: center;
+  height: 18px;
+  border: 1px solid #ffffff2e;
+  border-radius: 4px;
+  background: #ffffff0f;
+  color: #c9dfd7;
+  font-size: 9px;
+  font-weight: 800;
+}
+.app .physical-table .hela-journey li i {
+  font-style: normal;
+}
+.app .physical-table .hela-journey li.active {
+  border-color: #e9b65b;
+  color: #ffe2a3;
+}
+.app .physical-table .hela-journey li.cleared {
+  border-color: #3fae8a;
+  background: #3fae8a40;
+  color: #b4f5da;
+}
+.app .physical-table .hela-journey li.locked {
+  border-color: #d9473c;
+  background: #d9473c33;
+  color: #ffc4bb;
+}
+.app .physical-table .hela-journey li.odin {
+  flex: 1 0 auto;
+  min-width: 0;
+  padding: 0 5px;
+  overflow: hidden;
+  font-size: 8px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+.app .physical-table .hela-journey li.odin.free {
+  border-color: #e9b65b;
+  background: #e9b65b2e;
+  color: #ffe2a3;
+}
+.app .physical-table .side-scheme-counter:has(> .scheme-lock) {
+  flex-wrap: wrap;
+  row-gap: 3px;
+}
+.app .physical-table .side-scheme-counter > .scheme-lock {
+  flex: 1 0 100%;
+  color: #ffc4bb;
+  font-weight: 800;
+}
+.app .health-dial.infinite strong {
+  font-size: 1.15em;
+}

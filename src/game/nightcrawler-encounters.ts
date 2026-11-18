@@ -538,6 +538,13 @@ export function resolveNightcrawlerEncounter(
         !s.sideSchemes.some((p) => p.code === "48033" && !isTextBlank(s, p))
       )
         break;
+      // A player card treated as a minion (Fallen Warrior, Beguiled and the
+      // like) cannot become a facedown encounter card: it goes to its owner's
+      // discard pile instead (Rules Reference, Ownership and Control).
+      if (minion.treatedAsMinion) {
+        ports.discard(s, minion.id);
+        break;
+      }
       const order = playerOrder(s);
       const current = order.findIndex((seat) => seat.id === e.playerId);
       const recipient =

@@ -4,7 +4,16 @@ type PrintedMetadata = Readonly<
   Partial<
     Pick<
       Card,
-      "name" | "attack" | "boost" | "health" | "is_unique" | "subname" | "text"
+      | "name"
+      | "attack"
+      | "boost"
+      | "health"
+      | "is_unique"
+      | "subname"
+      | "text"
+      | "base_threat"
+      | "scheme_hazard"
+      | "scheme_amplify"
     >
   >
 >;
@@ -74,6 +83,26 @@ const printedMetadata: Readonly<Record<string, PrintedMetadata>> = {
   "32127a": { name: "Attack on Xavier's" },
   "32128a": { name: "Attack on Xavier's" },
   "32129a": { name: "Attack on Xavier's" },
+  // The two Hela side schemes were transcribed under each other's numbers.
+  // Original scans public/cards/catalog/21141.webp (GJALLERBRU, Hela 7/19,
+  // base threat 3, three boost icons, amplify) and 21142.webp (HALL OF
+  // NASTROND, Hela 6/19, base threat 4, four boost icons, hazard).
+  "21141": {
+    name: "Gjallerbru",
+    text: "Hinder 1[per_hero]. Victory 3.\n<b> When Defeated: </b> The first player reveals Hall of Nastrond and Nidhogg, and puts them into play. Deal each other player 1 facedown encounter card.",
+    boost: 3,
+    base_threat: 3,
+    scheme_hazard: undefined,
+    scheme_amplify: 1,
+  },
+  "21142": {
+    name: "Hall of Nastrond",
+    text: "Hinder 1[per_hero]. Victory 4.\n<b> When Defeated: </b> The first player detaches Odin from the main scheme and takes control of him. Deal each player 1 facedown encounter card.",
+    boost: 4,
+    base_threat: 4,
+    scheme_hazard: 1,
+    scheme_amplify: undefined,
+  },
 };
 
 /** Return a playable face with verified printing fields, without mutating its

@@ -70,6 +70,8 @@ export interface MissionStats {
 export interface Piece {
   deadpoolSpaces?: number[];
   deadpoolMinion?: boolean;
+  /** Fallen Warrior: this ally is an Undead minion. */
+  helaUndead?: boolean;
   deadpoolController?: string;
   /** Original controller of the physical ally transformed by Lost Child. */
   jubileeLostController?: string;
@@ -277,6 +279,9 @@ export interface GameState {
   towerDefense?: import("./tower-defense.js").TowerDefenseState;
   /** Original Thanos stages and main schemes, and the Infinity Stone deck. */
   thanos?: import("./thanos.js").ThanosState;
+  /** Hela: Odin, the set-aside Journey Through Hel cards and the Victory
+   * bonus counted in Mystic Hela's hit points. */
+  hela?: import("./hela.js").HelaState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */

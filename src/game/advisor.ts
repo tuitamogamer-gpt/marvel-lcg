@@ -3,6 +3,7 @@ import { icemanSchemeIcon } from "./iceman.js";
 import { valkyrieCannotBasicAttack } from "./valkyrie.js";
 import { visionCanAttack } from "./vision.js";
 import { TOWER_OTHER_MAIN, towerDefenseSchemeLimit } from "./tower-defense.js";
+import { HELA_VICTORY_SCHEMES, helaSchemeLocked, helaWounded } from "./hela.js";
 import {
   doctorStrangeAbilityOptions,
   doctorStrangeTopInvocation,
@@ -383,7 +384,10 @@ export function adviseAction(s: GameState): Advice | null {
   if (ally) return ally;
   if (!s.player.exhausted) {
     const schemes = targets(s, "scheme");
-    const enemies = targets(s, "enemy", true);
+    // Wounded Hela cannot be defeated: attack only her minions.
+    const enemies = targets(s, "enemy", true).filter(
+      (t) => !helaWounded(s) || t.id !== s.villain.id,
+    );
     if (pressed && (schemes.length || s.player.confused))
       return {
         command: { type: "BASIC", action: "thwart" },
@@ -490,6 +494,29 @@ export function advisePrompt(s: GameState): Advice | null {
     };
   }
   const ids = p.options.map((o) => o.id);
+  // Organizational Support during a payment that cannot be cancelled:
+  // finishing with nothing would leave that payment unpayable, so exhaust a
+  // matching card for each resource it still costs. Cancellable payments keep
+  // the earlier choice of generating nothing.
+  if (p.title === "Organizational Support") {
+    const save = p.options
+      .find((o) => o.id === "done")
+      ?.effects.find((e) => e.payment);
+    const payment = save?.payment as { cancelable?: boolean; cost?: number };
+    const chosen = ((save?.ids as string[]) || []).length;
+    const pick = p.options.find((o) => o.id !== "done");
+    if (
+      payment?.cancelable === false &&
+      pick &&
+      chosen < Math.max(1, payment.cost || 0)
+    )
+      return {
+        command: { type: "CHOOSE", id: pick.id },
+        title: pick.label,
+        reason:
+          "This payment cannot be cancelled; exhaust a matching card to generate its resources.",
+      };
+  }
   // Defense: keep the hero ready to attack next turn; block only when the hit
   // would leave the hero in real danger. Allies absorb a hit up to their hit points.
   if (ids.includes("take") && /attacks$/.test(p.title)) {
@@ -585,7 +612,8 @@ export function advisePrompt(s: GameState): Advice | null {
       if (
         pieceHP(s, m) - m.damage <= damage ||
         !ids.includes(s.villain.id) ||
-        pressure(s).pressed
+        pressure(s).pressed ||
+        helaWounded(s)
       )
         return {
           command: { type: "CHOOSE", id: minion.id },
@@ -629,7 +657,13 @@ export function advisePrompt(s: GameState): Advice | null {
       const side = s.sideSchemes.find((x) => x.id === o.id);
       if (!side) return 0;
       const c = card(side);
+      // Hela: Garm, Skurge and Nidhogg lock their side schemes; the Journey
+      // Through Hel frees Odin.
+      if (helaSchemeLocked(s, side.id)) return -20;
       return (
+        ((HELA_VICTORY_SCHEMES as readonly string[]).includes(side.code)
+          ? 4
+          : 0) +
         (c.scheme_crisis ? 9 : 0) +
         (c.scheme_hazard ? 5 : 0) +
         (c.scheme_acceleration ? 6 : 0) +

@@ -1261,6 +1261,21 @@ export const VILLAINS = [
       "Thanos wields the Infinity Gauntlet. Every time he activates against you, each Infinity Stone in play unleashes its power, and while Sanctuary stands no player card can hurt him.",
     color: "#6d4c8f",
   },
+  {
+    id: "hela",
+    name: "Hela",
+    codes: ["21136a", "21137a"],
+    schemes: ["21138b"],
+    module: "legions_of_hel",
+    moduleCount: 2,
+    defaultModules: ["legions_of_hel", "frost_giants"],
+    difficulty: 4,
+    title: "Odin's Torment",
+    location: "Hel",
+    description:
+      "Hela holds Odin captive in Hel. Fight through Gnipahellir, Gjallerbru and the Hall of Nastrond to free the All-Father: until he is free, the goddess of death only falls wounded and rises again.",
+    color: "#2f6b5a",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1310,6 +1325,8 @@ export const MODULES = [
   { id: "black_order", name: "Black Order", difficulty: 3 },
   { id: "armies_of_titan", name: "Armies of Titan", difficulty: 2 },
   { id: "children_of_thanos", name: "Children of Thanos", difficulty: 3 },
+  { id: "legions_of_hel", name: "Legions of Hel", difficulty: 2 },
+  { id: "frost_giants", name: "Frost Giants", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {

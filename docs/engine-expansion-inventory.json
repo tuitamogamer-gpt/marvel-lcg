@@ -46985,28 +46985,9 @@
       ],
       "baseline": "imported_requires_implementation",
       "note": "Encounter-set grouping is not a playable-scenario definition. Rulebook setup, mandatory modular sets, special assets, alternate modes and stage transitions require separate authored metadata.",
-      "registered": false,
+      "registered": true,
       "installedUnsupportedSetFaces": [
-        "21136a",
-        "21136b",
-        "21137a",
-        "21137b",
-        "21138a",
-        "21138b",
-        "21139a",
-        "21139b",
-        "21140",
-        "21141",
-        "21142",
-        "21143",
-        "21144",
-        "21145",
-        "21146",
-        "21147",
-        "21148",
-        "21149",
-        "21150",
-        "21151"
+        "21139b"
       ],
       "installedSetCardClosure": false,
       "automationCertification": "requires_full_scenario_dependency_graph_and_native_mission_evidence"
@@ -101953,8 +101934,8 @@
       },
       "installedRegistry": {
         "code": "21136a",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -101989,8 +101970,8 @@
       },
       "installedRegistry": {
         "code": "21136b",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102030,8 +102011,8 @@
       },
       "installedRegistry": {
         "code": "21137a",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102066,8 +102047,8 @@
       },
       "installedRegistry": {
         "code": "21137b",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102106,8 +102087,8 @@
       },
       "installedRegistry": {
         "code": "21138a",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102145,8 +102126,8 @@
       },
       "installedRegistry": {
         "code": "21138b",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102180,8 +102161,8 @@
       },
       "installedRegistry": {
         "code": "21139a",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102263,8 +102244,8 @@
       },
       "installedRegistry": {
         "code": "21140",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102307,8 +102288,8 @@
       },
       "installedRegistry": {
         "code": "21141",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102351,8 +102332,8 @@
       },
       "installedRegistry": {
         "code": "21142",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102390,8 +102371,8 @@
       },
       "installedRegistry": {
         "code": "21143",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102434,8 +102415,8 @@
       },
       "installedRegistry": {
         "code": "21144",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102478,8 +102459,8 @@
       },
       "installedRegistry": {
         "code": "21145",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102517,8 +102498,8 @@
       },
       "installedRegistry": {
         "code": "21146",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102554,8 +102535,8 @@
       },
       "installedRegistry": {
         "code": "21147",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102591,8 +102572,8 @@
       },
       "installedRegistry": {
         "code": "21148",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102634,8 +102615,8 @@
       },
       "installedRegistry": {
         "code": "21149",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102671,8 +102652,8 @@
       },
       "installedRegistry": {
         "code": "21150",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102712,8 +102693,8 @@
       },
       "installedRegistry": {
         "code": "21151",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102753,8 +102734,8 @@
       },
       "installedRegistry": {
         "code": "21152",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102792,8 +102773,8 @@
       },
       "installedRegistry": {
         "code": "21153",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102831,8 +102812,8 @@
       },
       "installedRegistry": {
         "code": "21154",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102871,8 +102852,8 @@
       },
       "installedRegistry": {
         "code": "21155",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102911,8 +102892,8 @@
       },
       "installedRegistry": {
         "code": "21156",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102950,8 +102931,8 @@
       },
       "installedRegistry": {
         "code": "21157",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -102988,8 +102969,8 @@
       },
       "installedRegistry": {
         "code": "21158",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -103025,8 +103006,8 @@
       },
       "installedRegistry": {
         "code": "21159",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -264216,19 +264197,19 @@
     "src/data/catalog-decks.json": "6d75a9c883223b59a9b9d950696de7b6876f8921ffe025d40e352495c1a2b886",
     "src/data/core-player.json": "451c26f5ca50fd7b9c4bfc167675a23031b411c291bc546ad011c608603bbfa2",
     "src/data/core-encounter.json": "db9ec82bf2b9aa6b00bc813bc6b64aac3d0237996e3393f47d8dbd3645ddd2da",
-    "src/game/engine.ts": "89b96ea29f6697ec5e1e5af0491e9dba90c0345eace7204458ff549032cd3a7e",
+    "src/game/engine.ts": "d6c0acf5ecabc326e6ca88a81933abd2a978f1f4220b91c4eb45fb1ed8a9db20",
     "src/data/catalog-provenance.json": "8dddd4de54508b44039d4cf196a98550503486efdaf2ac9771de55992a77b7e4",
     "src/game/scripts/compiler.ts": "33feb608b78cc98fa23bfca85926b8213dd82b4a056d419fa459e6bef5363e87",
     "src/game/scripts/runtime.ts": "60ed7040b44d97589d6eb3e0583e6153680757c1de50fe8788c5dd48d1c355ac",
     "src/game/scripts/types.ts": "7c911c5060b6d6945391256137de71ac00a4adb75b5765040b7a6f0a71dbe2fc",
     "src/game/script-registry.ts": "6914c40870648556608434bd91e7ba4570f9f7c522037b97b082cd9bac33aeb3",
     "src/game/keywords.ts": "23c0b1b3ec10b57906f5412b8f5dc29039600a03c15d14c538a9246dfac2c4dc",
-    "src/game/engine-support.ts": "3bbe7312d6cdd2eb6d4f32a4e1dfff2c739a8e43d15968b905d89ae86ff14d40",
-    "src/game/cards.ts": "06b26c3f6282571777368827baac21ab92f793f8cd88a77165244cc211199fbd",
+    "src/game/engine-support.ts": "cfb64d1cbf38779bb8bf3e75920593d83737fc3dc61aec6bf3544502d0f2ab50",
+    "src/game/cards.ts": "547698771ba4a316d4057ceaded70338437f0461010829722dfde39cd3876c53",
     "src/game/catalog.ts": "ba1475c5bcebc37b7da34da94ff272044c5a1b27e5b3646ca1ef8ab314318012",
     "src/game/combat.ts": "bb9c574ac2821ce2a7e0f111c03351d6557eed8e6e73b640a5a9e2b6227ad3e0",
     "src/game/presentation.ts": "a5eb46d7c758350a8c5f63139425d4d4a31dfd7370b1ad9cadb781b3892bc721",
-    "src/game/card-definitions.ts": "01c326421bb0b84237a89a7b893cbca8bdb68b211a41eae69fdb338e99746c46",
+    "src/game/card-definitions.ts": "a0c83aeb7f4d044e76f8bad62235e4f492c1a3e2c4811f35d7bcd30955576b2f",
     "src/game/captain-america.ts": "c3b874a2da02b623810ada6bd630c3e4d52239e8870293c7f130fa6276bf431e",
     "src/game/captain-pack.ts": "d963251d348c2cf43b8b327d3bb34a4be8919bdfe8d8331981a7f0c4f82bc750",
     "src/game/hulk.ts": "229579dcbf0c2d4cf74ae58d3d741a84779634a62a696a3be84a2807a419fdea",
@@ -264256,7 +264237,8 @@
     "src/game/ebony-maw.ts": "50198c7a0b040cb77b7b66491b372a0601343b042d0cdb6da3762fa228d4c32b",
     "src/game/tower-defense.ts": "63f167b27b4e04199105f832b89c17ef07ec0b8313941ad974c46358b03c976c",
     "src/game/thanos.ts": "fc5a1cc071cb1df11b40be34a906ae6bc061358ab05dc47c18384b8f0cf33112",
-    "src/game/reveal-window.ts": "18ed415f67db4f3071a2729a180d8137f5279b5cc3951496bf51a033b3849dfc",
+    "src/game/hela.ts": "850125ae44133886188f6c3cebca2208384e77ee80528839d1bbbf099848771a",
+    "src/game/reveal-window.ts": "33941f948c63a1e17da531bfe8e2c291426a513556324d28f301455892ef7026",
     "src/game/black-widow.ts": "96238d58d465e37f13bb0c970ca96fc436f2bfc8aa52f1c379f2ea00c8570295",
     "src/game/doctor-strange.ts": "323002bc0b91de7acb91a9968b5db35512fa8a2e5cdf882896aca960edf94e68",
     "src/game/hawkeye.ts": "c527e22b4e1701a24878bc9eefc8db9ced875103b047117213f62935fa8e38a8",
@@ -264321,7 +264303,7 @@
     "src/game/iceman.ts": "b6b23a2c7eb5b34ca8a0360949e3c8a66fbd7f97b43f543aecb178f93ed32a64",
     "src/game/jubilee.ts": "50808c031991a0416e19804aab225bb9d50072930bf46035b8d568ae88400f50",
     "src/game/nightcrawler.ts": "db6ac1b6a09fde742ba1aa79e38d91908f98e205fc6b3a52ed7d458e20fe5736",
-    "src/game/nightcrawler-encounters.ts": "016863c4c8e75ff0989b8a9f33cfbe230b114df19dc2ab26be4fe5dc203263e1",
+    "src/game/nightcrawler-encounters.ts": "e5861e44a800f0c045a8e2be99337ebc472564164c2c0277f7845ffbcd4372b8",
     "src/game/magneto-hero.ts": "01e346331f6d567d9d4b6c2df40d76c0f6770460bd9a9cf66f68110aa550ddfa",
     "src/game/maria-hill.ts": "7bb804078eefd7af794c0009d9bd6d47fc165dcddeb8e294aa6d849399f12153",
     "src/game/nick-fury.ts": "e7e868a86fb56c1c62f3d1b0f64e569f3d8539438888dea78935aa5333660702",
@@ -264337,15 +264319,15 @@
     "src/game/sentinels.ts": "2a924b5102d95733ebc3855884e6da3f84bd196e9bed1376c103aad976e405e8",
     "src/game/acolytes.ts": "45c5db6fe1fe52653bd01554f2fccc238ffff79bccc95ee1783f112e8cb1323f",
     "src/game/magneto.ts": "323e95d4175844913104cef8465ca23057a5da115c5c9243c242d16e818fe143",
-    "src/game/printed-card-metadata.ts": "64c6bc00bd5c1d79b41a8354ac2c1bce98ce783d494452de47e05249ae2f5fa4",
+    "src/game/printed-card-metadata.ts": "5ca2478b0f8c06199eaa9491c945c1d254b460f4d3906b9706ffc37479abbf33",
     "src/game/card-text.ts": "50040fe624cf7fa17dba4af2d644cd43a13ca7cdff9dce5ff3b99395ff4e82bf",
     "src/game/expansion-errata.ts": "d124735cd27d82fd1419ffd4ba3ff47e131f4783bc77a2c01ffe799db2109c80",
-    "src/game/types.ts": "3dd17224fff01477fd10f1471ad011f15d16b38945c37125539f56e8c65cacb3",
+    "src/game/types.ts": "a9391b61db3cf1a650bfc9ad4d92309b71ffb73efac04c974b14283ab7ce972e",
     "src/game/payment.ts": "de4824200f5c8ef04566c6a2ae2ed4babcfce5d609db949cb2572ccb34734686",
     "src/game/team.ts": "0c59275123824358d5e1e922841c67f2afa5a3d63c940048791dadab8126fd7f",
     "src/game/review.ts": "0c131b5afe780a9cd3db05199c7ffc46653cfb39abcb29c147cdc15d1acfca28",
     "src/game/lookahead.ts": "db23bd1684e8c75986231c071c752efc5669542f577f9f5f47ff3df257f52123",
-    "src/game/advisor.ts": "5b7d58cee8f5878821c1dcb4a504870b6b1d45373ab6caf6105bc12d1546d52e",
+    "src/game/advisor.ts": "68cf86a64a99ac7af6a7549bb8d941ae547019bd7686f6cc3fe76de31e99e61d",
     "src/game/decks.ts": "a0692def1537ae1899c1561ef6fcefbf85e5b8fcb65d02167bb5dcb85f2a3bf0",
     "src/game/hero-runtime.ts": "ce9f4ee6ae54b1d6631713d43f79022527ea34dc8fb7f61248daa7f6d5d51f48",
     "src/game/rules-code.ts": "cc08173e3732fe58467f09cd69ebe3918282cd1f1ecf0c0fd37244565c9e6307",
@@ -264415,6 +264397,20 @@
       "runtimeText": "Guard. Forced Interrupt: When Beetle is defeated, the defeating player chooses to either spend a [physical] resource or shuffle Beetle into the encounter deck. (Wasp's nemesis minion.)",
       "reference": "FFG Rules Reference 1.8, p. 66",
       "url": "https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf#page=66"
+    },
+    {
+      "code": "21141",
+      "importedText": "Hinder 1[per_hero]. Victory 4. When Defeated: The first player detaches Odin from the main scheme and takes control of him. Deal each player 1 facedown encounter card.",
+      "runtimeText": "Hinder 1[per_hero]. Victory 3. When Defeated: The first player reveals Hall of Nastrond and Nidhogg, and puts them into play. Deal each other player 1 facedown encounter card.",
+      "reference": "Original English card scan",
+      "url": "https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/21141.jpg"
+    },
+    {
+      "code": "21142",
+      "importedText": "Hinder 1[per_hero]. Victory 3. When Defeated: The first player reveals Hall of Nastrond and Nidhogg, and puts them into play. Deal each other player 1 facedown encounter card.",
+      "runtimeText": "Hinder 1[per_hero]. Victory 4. When Defeated: The first player detaches Odin from the main scheme and takes control of him. Deal each player 1 facedown encounter card.",
+      "reference": "Original English card scan",
+      "url": "https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/21142.jpg"
     },
     {
       "code": "22011",
@@ -264658,6 +264654,80 @@
       ]
     },
     {
+      "code": "21141",
+      "source": "Original English card scan",
+      "url": "https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/21141.jpg",
+      "changes": [
+        {
+          "field": "name",
+          "imported": "Hall of Nastrond",
+          "runtime": "Gjallerbru"
+        },
+        {
+          "field": "boost",
+          "imported": 4,
+          "runtime": 3
+        },
+        {
+          "field": "text",
+          "imported": "Hinder 1[per_hero]. Victory 4.\n<b> When Defeated: </b> The first player detaches Odin from the main scheme and takes control of him. Deal each player 1 facedown encounter card.",
+          "runtime": "Hinder 1[per_hero]. Victory 3.\n<b> When Defeated: </b> The first player reveals Hall of Nastrond and Nidhogg, and puts them into play. Deal each other player 1 facedown encounter card."
+        },
+        {
+          "field": "base_threat",
+          "imported": 4,
+          "runtime": 3
+        },
+        {
+          "field": "scheme_hazard",
+          "imported": 1,
+          "runtime": null
+        },
+        {
+          "field": "scheme_amplify",
+          "imported": null,
+          "runtime": 1
+        }
+      ]
+    },
+    {
+      "code": "21142",
+      "source": "Original English card scan",
+      "url": "https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/21142.jpg",
+      "changes": [
+        {
+          "field": "name",
+          "imported": "Gjallerbru",
+          "runtime": "Hall of Nastrond"
+        },
+        {
+          "field": "boost",
+          "imported": 3,
+          "runtime": 4
+        },
+        {
+          "field": "text",
+          "imported": "Hinder 1[per_hero]. Victory 3.\n<b> When Defeated: </b> The first player reveals Hall of Nastrond and Nidhogg, and puts them into play. Deal each other player 1 facedown encounter card.",
+          "runtime": "Hinder 1[per_hero]. Victory 4.\n<b> When Defeated: </b> The first player detaches Odin from the main scheme and takes control of him. Deal each player 1 facedown encounter card."
+        },
+        {
+          "field": "base_threat",
+          "imported": 3,
+          "runtime": 4
+        },
+        {
+          "field": "scheme_hazard",
+          "imported": null,
+          "runtime": 1
+        },
+        {
+          "field": "scheme_amplify",
+          "imported": 1,
+          "runtime": null
+        }
+      ]
+    },
+    {
       "code": "22030",
       "source": "Original English card scan",
       "url": "https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/22030.jpg",
@@ -264738,6 +264808,54 @@
           "field": "health",
           "imported": 6,
           "runtime": 5
+        }
+      ]
+    },
+    {
+      "code": "32126a",
+      "source": "Original English card scan",
+      "url": "https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/32126a.jpg",
+      "changes": [
+        {
+          "field": "name",
+          "imported": "The Atrium",
+          "runtime": "Attack on Xavier's"
+        }
+      ]
+    },
+    {
+      "code": "32127a",
+      "source": "Original English card scan",
+      "url": "https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/32127a.jpg",
+      "changes": [
+        {
+          "field": "name",
+          "imported": "The Cafeteria",
+          "runtime": "Attack on Xavier's"
+        }
+      ]
+    },
+    {
+      "code": "32128a",
+      "source": "Original English card scan",
+      "url": "https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/32128a.jpg",
+      "changes": [
+        {
+          "field": "name",
+          "imported": "The Basketball Court",
+          "runtime": "Attack on Xavier's"
+        }
+      ]
+    },
+    {
+      "code": "32129a",
+      "source": "Original English card scan",
+      "url": "https://cerebrodatastorage.blob.core.windows.net/cerebro-cards/official/32129a.jpg",
+      "changes": [
+        {
+          "field": "name",
+          "imported": "The Courtyard",
+          "runtime": "Attack on Xavier's"
         }
       ]
     },
@@ -288806,9 +288924,9 @@
   },
   "installedRegistryCoverage": {
     "total": 4551,
-    "executableFaces": 2553,
-    "unsupportedFaces": 1998,
-    "dedicatedFaces": 2114,
+    "executableFaces": 2580,
+    "unsupportedFaces": 1971,
+    "dedicatedFaces": 2141,
     "dedicatedCodes": [
       "02001a",
       "02001b",
@@ -289696,6 +289814,33 @@
       "21133",
       "21134",
       "21135",
+      "21136a",
+      "21136b",
+      "21137a",
+      "21137b",
+      "21138a",
+      "21138b",
+      "21139a",
+      "21140",
+      "21141",
+      "21142",
+      "21143",
+      "21144",
+      "21145",
+      "21146",
+      "21147",
+      "21148",
+      "21149",
+      "21150",
+      "21151",
+      "21152",
+      "21153",
+      "21154",
+      "21155",
+      "21156",
+      "21157",
+      "21158",
+      "21159",
       "22001a",
       "22001b",
       "22002",
@@ -290990,6 +291135,7 @@
       "crossbones",
       "ebony_maw",
       "escape_the_museum",
+      "hela",
       "infiltrate_the_museum",
       "klaw",
       "magneto",
@@ -291024,6 +291170,7 @@
       "deathstrike",
       "exodus",
       "exper_weapon",
+      "frost_giants",
       "goblin_gimmicks",
       "hellfire",
       "hydra_assault",
@@ -291031,6 +291178,7 @@
       "inheritors",
       "ironspider_sinister",
       "kree_militant",
+      "legions_of_hel",
       "legions_of_hydra",
       "masters_of_evil",
       "menagerie_medley",
@@ -291583,6 +291731,34 @@
           "21126",
           "21127",
           "21128"
+        ],
+        "faceCount": 4,
+        "unsupportedFaceCodes": [],
+        "installedCardClosure": true,
+        "automationCertification": "registration_closure_only_requires_rules_and_native_integration_evidence"
+      },
+      {
+        "id": "legions_of_hel",
+        "name": "Legions of Hel",
+        "faceCodes": [
+          "21152",
+          "21153",
+          "21154",
+          "21155"
+        ],
+        "faceCount": 4,
+        "unsupportedFaceCodes": [],
+        "installedCardClosure": true,
+        "automationCertification": "registration_closure_only_requires_rules_and_native_integration_evidence"
+      },
+      {
+        "id": "frost_giants",
+        "name": "Frost Giants",
+        "faceCodes": [
+          "21156",
+          "21157",
+          "21158",
+          "21159"
         ],
         "faceCount": 4,
         "unsupportedFaceCodes": [],
@@ -292342,6 +292518,24 @@
           "infinity_gauntlet"
         ],
         "reservedSets": []
+      },
+      {
+        "id": "hela",
+        "codes": [
+          "21136a",
+          "21137a"
+        ],
+        "schemes": [
+          "21138b"
+        ],
+        "defaultModule": "legions_of_hel",
+        "moduleCount": 2,
+        "defaultModules": [
+          "legions_of_hel",
+          "frost_giants"
+        ],
+        "fixedSets": [],
+        "reservedSets": []
       }
     ],
     "campaignSupport": [],
@@ -292726,36 +292920,9 @@
         "code": "mts",
         "name": "The Mad Titan's Shadow",
         "faceCount": 213,
-        "executableFaces": 145,
+        "executableFaces": 172,
         "unsupportedFaceCodes": [
-          "21136a",
-          "21136b",
-          "21137a",
-          "21137b",
-          "21138a",
-          "21138b",
-          "21139a",
           "21139b",
-          "21140",
-          "21141",
-          "21142",
-          "21143",
-          "21144",
-          "21145",
-          "21146",
-          "21147",
-          "21148",
-          "21149",
-          "21150",
-          "21151",
-          "21152",
-          "21153",
-          "21154",
-          "21155",
-          "21156",
-          "21157",
-          "21158",
-          "21159",
           "21160",
           "21161",
           "21162",
@@ -303293,44 +303460,44 @@
       },
       {
         "code": "21136a",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21136b",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21137a",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21137b",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21138a",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21138b",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21139a",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
@@ -303341,122 +303508,122 @@
       },
       {
         "code": "21140",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21141",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21142",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21143",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21144",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21145",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21146",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21147",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21148",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21149",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21150",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21151",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21152",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21153",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21154",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21155",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21156",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21157",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21158",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "21159",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {

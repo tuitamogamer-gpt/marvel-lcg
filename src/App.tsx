@@ -232,6 +232,15 @@ import { warMachineAmmo } from "./game/war-machine";
 import { isEbonyMawSpell } from "./game/ebony-maw";
 import { isInfinityStone } from "./game/thanos";
 import {
+  HELA_JOURNEY,
+  ODIN,
+  helaMystic,
+  helaOdin,
+  helaOdinCaptive,
+  helaSchemeLocked,
+  helaWounded,
+} from "./game/hela";
+import {
   AVENGERS_TOWER,
   DAMAGED_TOWER,
   FOCUSED_DEFENSE,
@@ -2565,6 +2574,18 @@ export default function App() {
                       recommended modular sets.
                     </p>
                   )}
+                  {villain.id === "hela" && (
+                    <p className="setting-help">
+                      Odin starts as Hela's captive on the main scheme. While he
+                      is captive, defeating Hela only flips her to her Wounded
+                      side, which cannot be defeated until a side scheme falls.
+                      Fight through Gnipahellir, Gjallerbru and the Hall of
+                      Nastrond, each guarded by a minion, to free Odin, then
+                      defeat her Mystic side. If Odin leaves play, you lose.
+                      Legions of Hel and Frost Giants are the recommended
+                      modular sets.
+                    </p>
+                  )}
                   {villain.id === "thanos" && (
                     <p className="setting-help">
                       Thanos wears the Infinity Gauntlet. Each time he activates
@@ -4847,12 +4868,29 @@ function HealthDial({
   max,
   label,
   villain = false,
+  infinite = false,
 }: {
   value: number;
   max: number;
   label: string;
   villain?: boolean;
+  infinite?: boolean;
 }) {
+  if (infinite)
+    return (
+      <div
+        className={`health-dial ${villain ? "villain-dial" : "hero-dial"} infinite`}
+        role="img"
+        aria-label={`${label}: infinite`}
+      >
+        <PremiumToken kind="health" />
+        <strong>∞</strong>
+        <span>
+          <b>HP</b>
+          <small>/ ∞</small>
+        </span>
+      </div>
+    );
   return (
     <div
       className={`health-dial ${villain ? "villain-dial" : "hero-dial"} ${value <= max * 0.25 ? "low" : ""}`}
@@ -4931,6 +4969,75 @@ function heroOf(s: GameState, playerId: string) {
 }
 /** Tower Defense: Proxima Midnight and Corvus Glaive side by side, each
  * with its attachments, and the active villain marked. */
+/** The Journey Through Hel: a compact track of the three side schemes, each
+ * locked by its minion, then Odin. */
+function HelaJourney({ game }: { game: GameState }) {
+  const odin = helaOdin(game);
+  const free = !!odin && !helaOdinCaptive(game);
+  const holder = free
+    ? game.players.find((seat) =>
+        seatView(game, seat).player.inPlay.some((p) => p.id === odin.id),
+      )
+    : undefined;
+  const hero = HEROES.find((h) => h.id === holder?.heroId)?.name;
+  const steps = HELA_JOURNEY.map(({ scheme, minion }, index) => {
+    const inPlay = game.sideSchemes.find((p) => p.code === scheme);
+    const cleared = (game.victoryDisplay || []).some((p) => p.code === scheme);
+    const locked = !!inPlay && helaSchemeLocked(game, inPlay.id);
+    const state = cleared
+      ? "cleared"
+      : locked
+        ? "locked"
+        : inPlay
+          ? "active"
+          : "ahead";
+    return {
+      scheme,
+      index,
+      state,
+      description: `${card(scheme).name}: ${
+        state === "locked"
+          ? `locked by ${card(minion).name}`
+          : state === "active"
+            ? `in play, ${inPlay!.counters} threat`
+            : state === "cleared"
+              ? "cleared"
+              : `set aside with ${card(minion).name}`
+      }`,
+    };
+  });
+  const odinLabel = !odin
+    ? "Odin: lost"
+    : free
+      ? `Odin: free, controlled by ${hero || "the first player"}`
+      : "Odin: captive";
+  return (
+    <div className="hela-journey">
+      <span className="small-label">JOURNEY THROUGH HEL</span>
+      <ol aria-label="Journey Through Hel">
+        {steps.map((step) => (
+          <li
+            className={step.state}
+            key={step.scheme}
+            aria-label={step.description}
+            title={step.description}
+          >
+            <i aria-hidden="true">{step.index + 1}</i>
+          </li>
+        ))}
+        <li
+          className={`odin ${free ? "free" : ""}`}
+          aria-label={odinLabel}
+          title={odinLabel}
+        >
+          <span aria-hidden="true">
+            ODIN · {!odin ? "LOST" : free ? "FREE" : "CAPTIVE"}
+          </span>
+        </li>
+      </ol>
+    </div>
+  );
+}
 function TowerVillains({
   game: s,
   inspect,
@@ -5158,6 +5265,9 @@ function AttachedCards({
               <CardImage code={p.code} />
               <span>{card(p).name}</span>
             </button>
+            {p.code === ODIN && (p.attachedTo || "").startsWith("main") && (
+              <small>Captive</small>
+            )}
             {p.code === "32149" && (
               <small aria-label={`Magnetic Bubble damage: ${p.damage} of 8`}>
                 {p.damage}/8 damage
@@ -5235,6 +5345,7 @@ function AttachedCards({
                 "21083",
                 "21103",
                 "21104",
+                "21158",
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -5264,6 +5375,7 @@ function AttachedCards({
                     "21083",
                     "21103",
                     "21104",
+                    "21158",
                   ].includes(p.code)
                     ? a.label
                     : undefined
@@ -5289,6 +5401,7 @@ function AttachedCards({
                     "21083",
                     "21103",
                     "21104",
+                    "21158",
                   ].includes(p.code)
                     ? a.label
                     : undefined
@@ -5561,7 +5674,11 @@ function Tabletop({
               <b>
                 {s.escape
                   ? `Clear all threat · stage ${escapeStage(s)} of 3`
-                  : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                  : s.hela
+                    ? helaOdinCaptive(s)
+                      ? "Free Odin, then defeat Hela"
+                      : "Defeat Hela's Mystic side"
+                    : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
             <span className={threatCritical ? "danger" : ""}>
@@ -5739,7 +5856,9 @@ function Tabletop({
                         ? `VILLAIN · SIDE ${s.difficulty === "expert" ? "B" : "A"}`
                         : s.escape
                           ? `VILLAIN · ${s.difficulty === "expert" ? "B1" : "A1"}${escapeWounded(s) ? " · WOUNDED" : ""}`
-                          : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
+                          : s.hela
+                            ? `VILLAIN · ${s.difficulty === "expert" ? "B" : "A"} · ${helaWounded(s) ? "WOUNDED" : "MYSTIC"}`
+                            : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
                     <h2
                       className={
@@ -5759,6 +5878,7 @@ function Tabletop({
                       max={s.villain.maxHp}
                       label="Villain HP"
                       villain
+                      infinite={helaWounded(s)}
                     />
                     <div className="enemy-stats stat-row">
                       <StatToken
@@ -5788,6 +5908,20 @@ function Tabletop({
                         Wounded · cannot be defeated until the round ends
                       </span>
                     )}
+                    {helaWounded(s) && (
+                      <span className="stat-caption" role="status">
+                        Wounded · cannot be defeated · flips back when a side
+                        scheme is defeated
+                      </span>
+                    )}
+                    {helaMystic(s) && (
+                      <span className="stat-caption" role="status">
+                        {helaOdinCaptive(s)
+                          ? "Odin is captive · defeat flips her to her Wounded side"
+                          : "Odin is free · defeat her to win"}
+                      </span>
+                    )}
+                    {s.hela && <HelaJourney game={s} />}
                     {s.magneto &&
                       magnetoDamageCap(s, { isTextBlank }) !== undefined && (
                         <span
@@ -6218,6 +6352,18 @@ function Tabletop({
                       </span>
                       {(p.accelerationTokens || 0) > 0 && (
                         <span>Acceleration tokens: {p.accelerationTokens}</span>
+                      )}
+                      {s.hela && helaSchemeLocked(s, p.id) && (
+                        <span className="scheme-lock">
+                          Locked by{" "}
+                          {
+                            card(
+                              HELA_JOURNEY.find(
+                                (step) => step.scheme === p.code,
+                              )?.minion || p.code,
+                            ).name
+                          }
+                        </span>
                       )}
                       {p.code === "04122" && (
                         <span

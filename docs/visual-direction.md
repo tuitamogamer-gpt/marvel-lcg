@@ -108,3 +108,12 @@ Tower Defense is the first scenario with two villains and two main schemes in pl
 - **Avengers Tower** is a full-width strip under the two schemes: a small card, its side ("Stronghold" or "Damaged"), a damage count against the per-player limit with a meter, and what happens at the limit.
 - On phones the rows, the two schemes and the Tower strip stack in the single opposition column; nothing scrolls sideways at 320px. The Tower Defense browser check audits the table at 1280, 768, 390 and 320px.
 
+
+## Hela's two sides and the Journey Through Hel, 2026-11-18
+
+Hela's information lives in the columns the table already has, so her villain play area stays the height of a one-villain scenario and the side schemes keep their place in the scheme lane.
+
+- **Hela's side.** The villain label reads "Villain · A · Mystic" or "Villain · A · Wounded" (B in Expert). On the Wounded side the hit-point dial shows ∞ instead of 0/0 and is announced as infinite; a caption says she cannot be defeated and flips back when a side scheme is defeated. On the Mystic side a caption says whether Odin is still captive (defeat only flips her) or free (defeat her to win). The mission objective in the header follows the same state.
+- **Journey Through Hel.** A compact track under Hela's captions: three numbered chips for Gnipahellir, Gjallerbru and Hall of Nastrond (green when cleared, red while their minion locks them, gold when in play, dim while set aside) and an Odin chip ("Odin · Captive" or "Odin · Free"). Each chip is a list item whose name spells out the state, for example "Gjallerbru: locked by Skurge".
+- **Locks and Odin.** A locked Journey side scheme says "Locked by Garm" (or Skurge, Nidhogg) under its threat. Odin, attached to the main scheme, is captioned "Captive"; once free he is an ordinary ally card in the first player's area.
+- A first version put the Journey list in the scheme lane and then under the main scheme; both pushed the side schemes or the hero's area out of view at 1280 × 900, so the track moved to the villain column. The Hela browser check audits the table at 1280, 768, 390 and 320px.

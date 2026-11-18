@@ -8,6 +8,7 @@ import * as ronan from "./ronan.js";
 import * as ebonyMaw from "./ebony-maw.js";
 import * as towerDefense from "./tower-defense.js";
 import * as thanos from "./thanos.js";
+import * as hela from "./hela.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -611,7 +612,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     sabretooth.sabretoothModifiers(s, piece.id).stalwart ||
     badoon.badoonKeyword(s, piece, "Stalwart") ||
     nebulaVillain.nebulaVillainKeyword(s, piece, "Stalwart") ||
-    ronan.ronanKeyword(s, piece, "Stalwart")
+    ronan.ronanKeyword(s, piece, "Stalwart") ||
+    hela.helaKeyword(s, piece, "Stalwart")
       ? { stalwart: true }
       : {}),
     ...(piece.code === "50060" && !isTextBlank(s, piece)
@@ -732,6 +734,7 @@ function syncNebulaIdentityStatuses(s: GameState) {
       badoon.badoonKeyword(s, p, "Stalwart") ||
       nebulaVillain.nebulaVillainKeyword(s, p, "Stalwart") ||
       ronan.ronanKeyword(s, p, "Stalwart") ||
+      hela.helaKeyword(s, p, "Stalwart") ||
       s.villainId === "mansion_attack"
     ) {
       const modifiers = nativeStatusModifiers(s, p);
@@ -749,14 +752,16 @@ function canReadyIdentity(s: GameState) {
   return (
     !goblinIdentityLocked(s) &&
     quicksilver.quicksilverCanReady(s) &&
-    !ebonyMaw.ebonyMawRestrained(s, `hero:${s.activePlayerId}`)
+    !ebonyMaw.ebonyMawRestrained(s, `hero:${s.activePlayerId}`) &&
+    hela.helaCanReadyIdentity(s, s.activePlayerId)
   );
 }
 /** Every in-play card readiness check: Nova's locks and Restrained. */
 function canReadyPiece(s: GameState, p: Piece) {
   return (
     nova.novaCanReadyPiece(s, p, { isTextBlank }) &&
-    !ebonyMaw.ebonyMawRestrained(s, p.id)
+    !ebonyMaw.ebonyMawRestrained(s, p.id) &&
+    hela.helaCanReadyPiece(s, p)
   );
 }
 function readyIdentity(s: GameState) {
@@ -856,7 +861,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           sabretooth.sabretoothModifiers(s, p.id).stalwart ||
           badoon.badoonKeyword(s, p, "Stalwart") ||
           nebulaVillain.nebulaVillainKeyword(s, p, "Stalwart") ||
-          ronan.ronanKeyword(s, p, "Stalwart")),
+          ronan.ronanKeyword(s, p, "Stalwart") ||
+          hela.helaKeyword(s, p, "Stalwart")),
     ),
     Number(
       name === "Quickstrike" &&
@@ -871,6 +877,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         (redSkull.redSkullKeyword(s, p, "Piercing") ||
           towerDefense.towerDefenseKeyword(s, p, "Piercing") > 0 ||
           thanos.thanosKeyword(s, p, "Piercing") ||
+          hela.helaKeyword(s, p, "Piercing") ||
           badoon.badoonKeyword(s, p, "Piercing") ||
           ronan.ronanKeyword(s, p, "Piercing") ||
           taskmaster.taskmasterKeyword(s, p, "Piercing") ||
@@ -921,6 +928,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           badoon.badoonKeyword(s, p, "Overkill") ||
           ronan.ronanKeyword(s, p, "Overkill") ||
           ebonyMaw.ebonyMawKeyword(s, p, "Overkill") ||
+          hela.helaKeyword(s, p, "Overkill") ||
           towerDefense.towerDefenseKeyword(s, p, "Overkill") > 0 ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
             .overkill)
@@ -1194,6 +1202,9 @@ const friends = (s: GameState) =>
 export function allyCount(s: GameState) {
   return friends(s).filter(
     (p) =>
+      // An ally already leaving play through an interrupt is not counted
+      // again, so its own leave interrupt can finish.
+      !p.pendingDefeat &&
       !antPack.antManPackAllyExcluded(s, p) &&
       !magnetoHero.magnetoHeroNewModifiers(s, p, captainPackHasTrait)
         .excluded &&
@@ -1204,7 +1215,8 @@ export function allyCount(s: GameState) {
         isTextBlank,
       }) &&
       (p.id !== sabretooth.sabretoothKelly(s)?.id ||
-        sabretooth.sabretoothKellyCountsAgainstAllyLimit(s)),
+        sabretooth.sabretoothKellyCountsAgainstAllyLimit(s)) &&
+      hela.helaOdinCountsAgainstAllyLimit(s, p),
   ).length;
 }
 export function allyLimit(s: GameState) {
@@ -1257,6 +1269,7 @@ function attachPackUpgrade(s: GameState, upgradeId: string, target: string) {
       sabretooth.sabretoothKellyCanAttach(s, card(p)),
     "Robert Kelly cannot have player cards or upgrades attached.",
   );
+  need(hela.helaCanAttach(s, target), "Odin cannot have cards attached.");
   need(
     p &&
       source &&
@@ -2053,6 +2066,23 @@ function nativeIdentityDamageSource(s: GameState, source: string) {
 function syncValkyrieConvertedCards(s: GameState) {
   phoenix.phoenixSyncControlled(s);
   for (const p of [...s.minions]) {
+    if (p.helaUndead) {
+      // Fallen Warrior: the ally is an Undead minion while it is attached.
+      if (hela.helaFallenAttached(s, p)) {
+        p.treatedAsMinion = true;
+        continue;
+      }
+      delete p.helaUndead;
+      delete p.treatedAsMinion;
+      delete p.engagedWith;
+      s.minions.splice(s.minions.indexOf(p), 1);
+      const owner = s.players.find(
+        (seat) => seat.id === p.ownerId && !seat.eliminated,
+      );
+      if (owner) seatView(s, owner).player.inPlay.push(p);
+      else s.removed.push(p);
+      continue;
+    }
     const lost = phoenix.phoenixLatestControl(s, p)?.code === "47027";
     if (lost) {
       p.treatedAsMinion = true;
@@ -2285,6 +2315,7 @@ function syncValkyrieConvertedCards(s: GameState) {
     ]) {
       delete p.treatedAsMinion;
       delete p.stormControlled;
+      delete p.helaUndead;
     }
 }
 type ImmortalKlawScheme = Piece & { immortalKlawHealthActive?: boolean };
@@ -2355,6 +2386,18 @@ function check(s: GameState) {
   wideawake.projectWideawakeFirstPlayerChanged(s, wideawakePorts);
   masterMold.masterMoldFirstPlayerChanged(s, masterMoldPorts);
   badoonFirstPlayerChanged(s);
+  hela.helaFirstPlayerChanged(s, helaPorts);
+  hela.helaSyncEngagement(s);
+  if (
+    hela.helaSyncHitPoints(s) &&
+    s.villain.hp <= 0 &&
+    !["won", "lost"].includes(s.phase)
+  )
+    advanceVillain(s);
+  if (hela.helaOdinLost(s)) {
+    endGame(s, false, "Odin has left play. The All-Father is lost to Hel.");
+    return;
+  }
   if (collector.collectorLost(s) && !["won", "lost"].includes(s.phase)) {
     endGame(
       s,
@@ -2548,6 +2591,7 @@ function check(s: GameState) {
       wideawake.projectWideawakeFirstPlayerChanged(s, wideawakePorts);
       masterMold.masterMoldFirstPlayerChanged(s, masterMoldPorts);
       badoonFirstPlayerChanged(s);
+      hela.helaFirstPlayerChanged(s, helaPorts);
     }
     const remainingNPC = sabretooth.sabretoothKelly(s);
     if (remainingNPC && controller(s, remainingNPC.id)?.id === seat.id) {
@@ -2736,6 +2780,7 @@ function playerAttachmentTarget(s: GameState, source: Piece, target: string) {
     !iceman.icemanCanAttachUpgrade(s, target)
   )
     return false;
+  if (!hela.helaCanAttach(s, target)) return false;
   return (
     target !== sabretooth.sabretoothKelly(s)?.id ||
     sabretooth.sabretoothKellyCanAttach(s, card(source))
@@ -3622,12 +3667,13 @@ function applyDamage(
       // redirects it; only prevention invokes the specific p31 exception.
       return traits.overkillDamage ? { ...none, damageDealt: n } : none;
     }
-    const excess = Math.max(0, n - s.villain.hp);
+    const infinite = hela.helaInfiniteHp(s);
+    const excess = infinite ? 0 : Math.max(0, n - s.villain.hp);
     const result = {
       actualDamage: n,
       excessDamage: excess > 0 ? excess + Number(traits.excessBonus || 0) : 0,
     };
-    s.villain.hp -= n;
+    if (!infinite) s.villain.hp -= n;
     track(s, "damageDealt", n);
     log(s, `${card(s.villain).name} takes ${n} damage.`, "good");
     if (s.villain.hp <= 0) {
@@ -4055,6 +4101,8 @@ function defeatCharacter(
     )
   )
     movePieceFromPlay(s, m.id, true);
+  else if (minion && hela.helaVictoryMinion(m) && !textWasBlank)
+    movePieceFromPlay(s, m.id, false, undefined, true);
   else discardPiece(s, m.id);
   if (!textWasBlank)
     add(s, ...deadpool.deadpoolDefeated(s, m, source, allyController));
@@ -4198,6 +4246,18 @@ function advanceVillain(
   attack = false,
   captured?: valkyrie.ValkyrieDefeatReceipt[],
 ) {
+  // Hela: Odin's Torment flips her to her Wounded side instead of being
+  // defeated while Odin is its Captive; the Wounded side cannot be defeated.
+  const helaDefeat = hela.helaVillainWouldBeDefeated(s, helaPorts);
+  if (helaDefeat === "wound" || helaDefeat === "immune") return;
+  if (helaDefeat === "defeated") {
+    endGame(
+      s,
+      true,
+      "Hela is defeated. Odin is free and Hel releases the All-Father.",
+    );
+    return;
+  }
   // Tower Defense: each villain cannot be defeated while the other has hit
   // points remaining; once both reach 0 they are defeated together.
   const towerDefeat = towerDefense.towerDefenseDefeatCheck(s);
@@ -4914,6 +4974,14 @@ function threat(
         }
         return;
       }
+      if (s.villainId === "hela") {
+        endGame(
+          s,
+          false,
+          "Odin's Torment is complete. The All-Father is lost to Hel.",
+        );
+        return;
+      }
       const v = VILLAINS.find((v) => v.id === s.villainId)!;
       if (s.scheme.index >= v.schemes.length - 1) {
         endGame(
@@ -4980,6 +5048,7 @@ function thwart(
     hulkThreatLocked(s, target) ||
     ronan.ronanMainLocked(s, target) ||
     ebonyMaw.ebonyMawSchemeLocked(s, target) ||
+    hela.helaSchemeLocked(s, target) ||
     !gamora.gamoraCanRemoveThreat(s, target) ||
     venom.venomSchemeLocked(s, target) ||
     warlock.warlockSchemeLocked(s, target)
@@ -5128,8 +5197,10 @@ function defeatScheme(
     ? [
         ...towerDefense.towerDefenseSchemeDefeated(s, p, s.activePlayerId),
         ...thanos.thanosSchemeDefeated(s, p, s.activePlayerId),
+        ...hela.helaSchemeDefeated(s, p, s.activePlayerId),
       ]
     : [];
+  const helaFlip = hela.helaSideSchemeDefeated(s);
   const nativeDefeat = sabretooth.sabretoothSideSchemeDefeated(
     s,
     p,
@@ -5176,6 +5247,7 @@ function defeatScheme(
       "32120",
       ...collector.COLLECTOR_VICTORY_SCHEMES,
       ...thanos.THANOS_VICTORY_SCHEMES,
+      ...hela.HELA_VICTORY_SCHEMES,
     ].includes(p.code) ||
       (isPlayerSideScheme(p) && playerSideSchemeHasVictory(p))) &&
     !isTextBlank(s, p);
@@ -5261,6 +5333,16 @@ function defeatScheme(
           },
         ]
       : []),
+    ...(helaFlip.length
+      ? [
+          {
+            id: `${p.id}:hela-mystic`,
+            sourceId: s.villain.id,
+            title: "Hela",
+            effects: helaFlip,
+          },
+        ]
+      : []),
     ...(magikDefeat.length
       ? [{ id: `${p.id}:magik`, title: card(p).name, effects: magikDefeat }]
       : []),
@@ -5320,7 +5402,9 @@ function defeatScheme(
               ? "Victory 0"
               : p.code === "32100"
                 ? "Victory 2"
-                : "Victory 1",
+                : hela.HELA_VICTORY[p.code]
+                  ? `Victory ${hela.HELA_VICTORY[p.code]}`
+                  : "Victory 1",
             effects: [E("encounterVictory", { id: p.id })],
           },
         ]
@@ -7774,7 +7858,9 @@ export function newGame(config: {
                   ? "gmw"
                   : c.set_code === "black_order" ||
                       c.set_code === "armies_of_titan" ||
-                      c.set_code === "children_of_thanos"
+                      c.set_code === "children_of_thanos" ||
+                      c.set_code === "legions_of_hel" ||
+                      c.set_code === "frost_giants"
                     ? "mts"
                     : c.set_code === "exodus"
                       ? "gambit"
@@ -7824,6 +7910,7 @@ export function newGame(config: {
           c.code !== ronan.UNIVERSAL_WEAPON &&
           c.code !== towerDefense.FOCUSED_DEFENSE &&
           c.set_code !== "infinity_gauntlet" &&
+          c.code !== hela.ODIN_KING_SIDE &&
           !(v.id === "magneto" && ["32144b", "32145b"].includes(c.code)) &&
           (c.type_code !== "environment" ||
             (v.id === "absorbing_man" &&
@@ -7955,6 +8042,52 @@ export function newGame(config: {
         ...(ebonyMaw.ebonyMawReveal(s, s.villain) || []),
         ...(ebonyMaw.ebonyMawReveal(s, s.ebonyMaw.currentMain) || []),
       ].map((e) => effectContext(s, { ...e, actorId: s.firstPlayerId })),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "hela") {
+    // Odin's Torment (1A) setup: Odin attaches to the main scheme, Captive
+    // side faceup. Gnipahellir and Garm are revealed; Gjallerbru, Skurge,
+    // Hall of Nastrond and Nidhogg are set aside, out of play.
+    const take = (code: string) => {
+      const i = s.encounter.deck.findIndex((p) => p.code === code);
+      need(i >= 0, `Hela requires the original ${card(code).name}.`);
+      return s.encounter.deck.splice(i, 1)[0];
+    };
+    const odin = take(hela.ODIN);
+    const gnipahellir = take(hela.GNIPAHELLIR);
+    const garm = take(hela.GARM);
+    s.hela = {
+      odinId: odin.id,
+      setAside: [
+        hela.GJALLERBRU,
+        hela.SKURGE,
+        hela.HALL_OF_NASTROND,
+        hela.NIDHOGG,
+      ].map(take),
+      counted: 0,
+    };
+    s.scheme = {
+      code: hela.ODINS_TORMENT,
+      threat: (card(hela.ODINS_TORMENT).base_threat || 0) * s.playerCount,
+      index: 0,
+    };
+    s.villain = Object.assign(makePiece(s, v.codes[stage - 1]), {
+      hp,
+      maxHp: hp,
+      stage,
+    });
+    delete odin.ownerId;
+    odin.attachedTo = `main:${hela.ODINS_TORMENT}`;
+    s.attachments.push(odin);
+    s.encounter.deck = shuffle(s, s.encounter.deck);
+    s.queue.push(
+      ...hela
+        .helaSetup(s, gnipahellir, garm)
+        .map((e) => effectContext(s, { ...e, actorId: s.firstPlayerId })),
       effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
     );
     const pacing = s.pacing;
@@ -10479,6 +10612,7 @@ export function abilityOptions(
     ...nebulaVillain.nebulaActions(s, p, nebulaVillainPorts),
     ...ronan.ronanActions(s, p, ronanPorts),
     ...ebonyMaw.ebonyMawActions(s, p, ebonyMawPorts),
+    ...hela.helaActions(s, p, helaPorts),
     ...towerDefense.towerDefenseActions(s, p, towerDefensePorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
@@ -14682,6 +14816,65 @@ const thanosPorts: thanos.ThanosPorts = {
   log: (s, text, kind) => log(s, text, kind),
   heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
 };
+const helaPorts: hela.HelaPorts = {
+  ...mutagenPorts,
+  revealHidden,
+  reveal: (s, p, playerId) => crossbonesPorts.reveal(s, p, playerId),
+  indirect: (s, playerId, amount, source) =>
+    crossbonesPorts.indirect(s, playerId, amount, source),
+  discardUntilAlly: (s, playerId) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    let found: Piece | undefined;
+    // Stop at the first exhaustion of the deck, like other native searches.
+    for (let guard = 0; guard < 500 && s.player.deck.length; guard++) {
+      const last = s.player.deck.length === 1;
+      const [p] = mill(s, 1);
+      if (!p) break;
+      if (card(p).type_code === "ally") {
+        found = p;
+        break;
+      }
+      if (last) break;
+    }
+    if (found)
+      for (const zone of [s.player.discard, s.player.deck]) {
+        const i = zone.findIndex((q) => q.id === found!.id);
+        if (i >= 0) {
+          zone.splice(i, 1);
+          break;
+        }
+      }
+    activateSeat(s, previous);
+    return found;
+  },
+  putFallen: (s, ally, fallen, playerId) => {
+    Object.assign(ally, resetPiece(ally, true));
+    ally.treatedAsMinion = true;
+    ally.helaUndead = true;
+    mutagenPorts.attach(s, fallen, ally.id);
+    mutagenPorts.putMinion(s, ally, playerId);
+  },
+  putOdin: (s, p, playerId) => masterMoldPorts.putMagneto(s, p, playerId),
+  transferControl: (s, id, playerId) =>
+    hulkPackPorts.transferControl(s, id, playerId),
+  allies: (s) =>
+    playerOrder(s)
+      .flatMap((seat) => [
+        ...seatView(s, seat).player.inPlay,
+        ...controlledNPCs(s, seat.id),
+      ])
+      .filter((p) => card(p).type_code === "ally"),
+  villainHpModifiers: (s) =>
+    wideawake.projectWideawakeModifiers(s, s.villain, { isTextBlank }).health +
+    wasp.waspEnemyHP(s, s.villain) +
+    s.sideSchemes.filter((p) => rulesCode(p) === "01127" && !isTextBlank(s, p))
+      .length *
+      10,
+  isPermanent: (p) => isPermanent(card(p)),
+  log: (s, text, kind) => log(s, text, kind),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+};
 const towerDefensePorts: towerDefense.TowerDefensePorts = {
   ...mutagenPorts,
   revealHidden,
@@ -15334,7 +15527,8 @@ const spdrPackPorts: spdrPack.SpdrPackPorts = {
     const p = find(s, id);
     need(p && p.damage >= amount, "The actual damage cannot be moved.");
     p!.damage -= amount;
-    if (target === s.villain.id) s.villain.hp -= amount;
+    if (target === s.villain.id)
+      s.villain.hp -= hela.helaInfiniteHp(s) ? 0 : amount;
     else {
       const enemy = find(s, target);
       if (enemy) enemy.damage += amount;
@@ -22239,6 +22433,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     zzzax.zzzaxEnemyStats(s, p).attack +
     inheritors.inheritorsModifiers(s, p).attack +
     escape.escapeVillainStat(s, p) +
+    hela.helaVillainStat(s, p) +
     nebulaVillain.nebulaEnemyAttack(s, p) +
     mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).attack;
   const attachments = enemyAttachmentModifier(s, p.id, "attack");
@@ -22608,6 +22803,7 @@ function boostEffects(s: GameState, p: Piece) {
     ebonyMaw.ebonyMawBoost(s, p) ??
     towerDefense.towerDefenseBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
+    hela.helaBoost(s, p) ??
     collector.collectorBoost(s, p) ??
     badoon.badoonBoost(s, p) ??
     redSkull.redSkullBoost(s, p) ??
@@ -22942,7 +23138,8 @@ function enemySCH(s: GameState, p: Piece, playerId: string): number {
     ironheart.ironheartEnemyStats(s, p, { isTextBlank }).scheme +
     enemyAttachmentModifier(s, p.id, "scheme") +
     iceman.icemanEnemyModifier(s, p.id) +
-    escape.escapeVillainStat(s, p)
+    escape.escapeVillainStat(s, p) +
+    hela.helaVillainStat(s, p)
   );
 }
 export function enemyStats(
@@ -23050,6 +23247,7 @@ function finishScheme(s: GameState) {
       : []),
     ...absorbingMan.absorbingActivation(s, id, s.activePlayerId),
     ...badoon.badoonSchemed(s, id),
+    ...hela.helaSchemed(s, id),
     ...thanos
       .thanosAfterActivation(s, {
         token: (activation.id ||= `scheme${s.nextId++}`),
@@ -23875,6 +24073,21 @@ function finishAttackAfterDamage(
               !find(s, target),
             boostCodes: a.boostCodes || [],
           }),
+          ...hela.helaAfterAttack(s, {
+            token: a.id!,
+            attackerId: a.attacker,
+            attackerCode: a.attackerSnapshot?.code || p?.code || "",
+            targetId: target === "hero" ? `hero:${recipientId}` : target,
+            damageTaken: a.damage || 0,
+            textBlank: !p || isTextBlank(s, p),
+            defeatedAlly:
+              target !== "hero" &&
+              !target.startsWith("hero:") &&
+              before > 0 &&
+              a.gmwReturnedDefender !== target &&
+              !find(s, target),
+            boostCodes: a.boostCodes || [],
+          }),
           ...redSkullModules.redSkullAttackResponses(s, a, redSkullModulePorts),
           ...experimentalWeapons.experimentalWeaponsAttackResponses(
             s,
@@ -24527,6 +24740,8 @@ function reveal(
         c.type_code !== "attachment") ||
       (thanos.THANOS_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (hela.HELA_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -24613,7 +24828,10 @@ function reveal(
   if (
     !repeat &&
     ["treachery", "attachment"].includes(c.type_code) &&
-    /<b>When Revealed(?:\s*\([^)]*\))?<\/b>\s*:/i.test(c.text || "") &&
+    (/<b>When Revealed(?:\s*\([^)]*\))?<\/b>\s*:/i.test(c.text || "") ||
+      // The Queen of Hel prints its colon inside the bold marker.
+      (hela.HELA_SCRIPT_CODES.some((code) => code === p.code) &&
+        /<b>\s*When Revealed/i.test(c.text || ""))) &&
     ([
       ...GOBLIN_MODULE_SCRIPT_CODES,
       ...armadillo.ARMADILLO_SCRIPT_CODES,
@@ -24712,6 +24930,7 @@ function reveal(
       ...ebonyMaw.EBONY_MAW_SCRIPT_CODES,
       ...towerDefense.TOWER_DEFENSE_SCRIPT_CODES,
       ...thanos.THANOS_SCRIPT_CODES,
+      ...hela.HELA_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -24747,6 +24966,7 @@ function reveal(
       ebonyMaw.ebonyMawReveal(s, p) ??
       towerDefense.towerDefenseReveal(s, p) ??
       thanos.thanosReveal(s, p) ??
+      hela.helaReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -24825,6 +25045,7 @@ function reveal(
     ebonyMaw.ebonyMawReveal(s, p) ??
     towerDefense.towerDefenseReveal(s, p) ??
     thanos.thanosReveal(s, p) ??
+    hela.helaReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -26193,6 +26414,7 @@ function resolve(s: GameState, e: Effect) {
           ebonyMaw.ebonyMawReveal(state, piece) ??
           towerDefense.towerDefenseReveal(state, piece) ??
           thanos.thanosReveal(state, piece) ??
+          hela.helaReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -26321,6 +26543,7 @@ function resolve(s: GameState, e: Effect) {
   if (ebonyMaw.resolveEbonyMawEffect(s, e, ebonyMawPorts)) return;
   if (towerDefense.resolveTowerDefenseEffect(s, e, towerDefensePorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
+  if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (taskmaster.resolveTaskmasterEffect(s, e, taskmasterPorts)) return;
   if (absorbingMan.resolveAbsorbingEffect(s, e, absorbingManPorts)) return;
   if (crossbones.resolveCrossbonesEffect(s, e, crossbonesPorts)) return;
@@ -28986,15 +29209,17 @@ function resolve(s: GameState, e: Effect) {
           s,
           "Ally limit",
           "Choose an ally to discard to make room.",
-          friends(s).map((p) =>
-            option(
-              p.id,
-              card(p).name,
-              [E("discardForLimit", { id: p.id })],
-              undefined,
-              p.code,
+          friends(s)
+            .filter((p) => !p.pendingDefeat)
+            .map((p) =>
+              option(
+                p.id,
+                card(p).name,
+                [E("discardForLimit", { id: p.id })],
+                undefined,
+                p.code,
+              ),
             ),
-          ),
         );
       break;
     case "discardForLimit":
@@ -34892,12 +35117,15 @@ function resolve(s: GameState, e: Effect) {
       )
         break;
       antPack.antManPackPhaseEnded(s);
+      // The ready step is a game rule, not a player card effect.
+      s.flags.helaReadyStep = true;
       for (const p of [...s.player.inPlay, ...controlledNPCs(s)]) {
         if (canReadyPiece(s, p)) p.exhausted = false;
         p.bonusAtk = 0;
         p.bonusThw = 0;
       }
       readyIdentity(s);
+      delete s.flags.helaReadyStep;
       s.flags.lead = 0;
       s.flags.aerial = false;
       s.flags.discount = 0;
@@ -35334,6 +35562,7 @@ function resolve(s: GameState, e: Effect) {
       sabretooth.sabretoothFirstPlayerChanged(s);
       wideawake.projectWideawakeFirstPlayerChanged(s, wideawakePorts);
       badoonFirstPlayerChanged(s);
+      hela.helaFirstPlayerChanged(s, helaPorts);
       s.round++;
       s.phase = "player";
       s.villainStep = "newRound";
@@ -35560,6 +35789,7 @@ function run(s: GameState) {
       e.type.startsWith("ebony:") ||
       e.type.startsWith("tower:") ||
       e.type.startsWith("thanos:") ||
+      e.type.startsWith("hela:") ||
       e.type.startsWith("red-skull:") ||
       e.type.startsWith("sabretooth:") ||
       e.type.startsWith("sabretooth-native:") ||
@@ -35938,6 +36168,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...collector.collectorActions(s, p, collectorPorts),
               ...ronan.ronanActions(s, p, ronanPorts),
               ...ebonyMaw.ebonyMawActions(s, p, ebonyMawPorts),
+              ...hela.helaActions(s, p, helaPorts),
               ...towerDefense.towerDefenseActions(s, p, towerDefensePorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
