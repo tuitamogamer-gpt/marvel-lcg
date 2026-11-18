@@ -151,12 +151,24 @@ function onIdentity(s: GameState, p: Piece, id = s.activePlayerId) {
     (p.attachedTo === "hero" && id === s.activePlayerId)
   );
 }
+/** The Enchantress modular set of The Mad Titan's Shadow reprints three of
+ * these nemesis cards with identical rules: Enchantress, Beguiled and
+ * Seduced. Each printing keeps its own code. */
+const ENCHANTRESS_PRINTINGS = ["25029", "21177"];
+const BEGUILED_PRINTINGS = ["25031", "21178"];
+const SEDUCED_PRINTINGS = ["25032", "21179"];
+export const isEnchantressCard = (code: string) =>
+  ENCHANTRESS_PRINTINGS.includes(code);
+export const isBeguiledCard = (code: string) =>
+  BEGUILED_PRINTINGS.includes(code);
+export const isSeducedCard = (code: string) => SEDUCED_PRINTINGS.includes(code);
 export function valkyrieCannotBasicAttack(
   s: GameState,
   ports: TextPorts = textPorts,
 ): boolean {
   return s.attachments.some(
-    (p) => p.code === "25032" && onIdentity(s, p) && !ports.isTextBlank(s, p),
+    (p) =>
+      isSeducedCard(p.code) && onIdentity(s, p) && !ports.isTextBlank(s, p),
   );
 }
 export function valkyrieCanAttackTarget(
@@ -376,7 +388,7 @@ export function valkyrieAttachmentActions(
   p: Piece,
   ports: ValkyriePorts,
 ): Option[] {
-  return p.code === "25032" &&
+  return isSeducedCard(p.code) &&
     onIdentity(s, p) &&
     s.player.form === "alter" &&
     !ports.isTextBlank(s, p) &&
@@ -530,7 +542,8 @@ export function valkyrieBeguiledEnemy(s: GameState, p: Piece): boolean {
   return (
     definition(p)?.type_code === "ally" &&
     s.attachments.some(
-      (a) => a.code === "25031" && a.attachedTo === p.id && !isTextBlank(s, a),
+      (a) =>
+        isBeguiledCard(a.code) && a.attachedTo === p.id && !isTextBlank(s, a),
     )
   );
 }
@@ -554,7 +567,7 @@ export function valkyrieAttachmentDiscarded(
   s: GameState,
   attachment: Piece,
 ): Effect[] {
-  return attachment.code === "25031" && attachment.attachedTo
+  return isBeguiledCard(attachment.code) && attachment.attachedTo
     ? [
         V("restore-ally", {
           id: attachment.attachedTo,
@@ -571,14 +584,21 @@ export function valkyrieEncounterReveal(
     const owner = playerOrder(s).find((seat) => active(seatView(s, seat)));
     return owner ? [V("obligation", { id: p.id, actorId: owner.id })] : [];
   }
-  if (p.code === "25029") return [V("enchantress")];
+  if (isEnchantressCard(p.code)) return [V("enchantress")];
   if (p.code === "25030") return [];
-  if (p.code === "25031") return [V("beguiled", { id: p.id })];
-  if (p.code === "25032") return [V("seduced", { id: p.id })];
+  if (isBeguiledCard(p.code))
+    return [V("beguiled", { id: p.id, code: p.code })];
+  if (isSeducedCard(p.code)) return [V("seduced", { id: p.id })];
   return null;
 }
 export function valkyrieBoost(_s: GameState, p: Piece): Effect[] | null {
-  return ["25028", "25029", "25030", "25031", "25032"].includes(p.code)
+  return [
+    "25028",
+    "25030",
+    ...ENCHANTRESS_PRINTINGS,
+    ...BEGUILED_PRINTINGS,
+    ...SEDUCED_PRINTINGS,
+  ].includes(p.code)
     ? []
     : null;
 }
@@ -1062,13 +1082,14 @@ export function resolveValkyrieEffect(
         e.code === "25028"
           ? own(s, e.id, e.code)
           : s.attachments.find(
-              (p) => p.id === e.id && p.code === "25032" && onIdentity(s, p),
+              (p) => p.id === e.id && isSeducedCard(p.code) && onIdentity(s, p),
             );
       need(
         p &&
           s.player.form === "alter" &&
           !ports.isTextBlank(s, p) &&
-          (p.code !== "25032" || valkyrieCanDiscardAttachment(s, p, ports)) &&
+          (!isSeducedCard(p.code) ||
+            valkyrieCanDiscardAttachment(s, p, ports)) &&
           ports.canPay(s, 2, ["energy", "mental"], undefined, p.code),
         "This alter-ego attachment action cannot be paid.",
       );
@@ -1093,7 +1114,7 @@ export function resolveValkyrieEffect(
         if (p) s.removed.push(p);
       } else {
         const p = s.attachments.find(
-          (p) => p.id === e.id && p.code === "25032",
+          (p) => p.id === e.id && isSeducedCard(p.code),
         );
         if (p && valkyrieCanDiscardAttachment(s, p, ports))
           ports.discardPiece(s, p.id);
@@ -1102,7 +1123,9 @@ export function resolveValkyrieEffect(
       break;
     }
     case "valkyrie:seduced": {
-      const p = s.attachments.find((p) => p.id === e.id && p.code === "25032");
+      const p = s.attachments.find(
+        (p) => p.id === e.id && isSeducedCard(p.code),
+      );
       if (p) p.attachedTo = `hero:${s.activePlayerId}`;
       break;
     }
@@ -1115,7 +1138,7 @@ export function resolveValkyrieEffect(
             (seat) => seatView(s, seat).player.setAside || [],
           ),
         ],
-        p = zones.flat().find((p) => p.code === "25032");
+        p = zones.flat().find((p) => isSeducedCard(p.code));
       if (p) {
         const actual = takeActual(zones, p.id)!;
         actual.attachedTo = `hero:${s.activePlayerId}`;
@@ -1127,7 +1150,7 @@ export function resolveValkyrieEffect(
     case "valkyrie:beguiled": {
       const existing = new Set(
           s.attachments
-            .filter((p) => p.code === "25031" && p.attachedTo)
+            .filter((p) => isBeguiledCard(p.code) && p.attachedTo)
             .map((p) => p.attachedTo),
         ),
         available = allies(s).filter(({ p }) => !existing.has(p.id));
@@ -1152,11 +1175,13 @@ export function resolveValkyrieEffect(
             ),
           ),
         );
-      else ports.queue(s, E("surge", { sourceCode: "25031" }));
+      else ports.queue(s, E("surge", { sourceCode: e.code || "25031" }));
       break;
     }
     case "valkyrie:beguiled-ally": {
-      const a = s.attachments.find((p) => p.id === e.id && p.code === "25031"),
+      const a = s.attachments.find(
+          (p) => p.id === e.id && isBeguiledCard(p.code),
+        ),
         seat = s.players.find((p) => p.id === e.playerId),
         view = seat && seatView(s, seat),
         p =
@@ -1168,7 +1193,7 @@ export function resolveValkyrieEffect(
         a &&
           p &&
           !s.attachments.some(
-            (a) => a.code === "25031" && a.attachedTo === p.id,
+            (a) => isBeguiledCard(a.code) && a.attachedTo === p.id,
           ),
         "Beguiled needs the actual selected ally.",
       );

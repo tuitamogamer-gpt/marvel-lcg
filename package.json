@@ -74,7 +74,8 @@
     "test:ebony-maw": "node scripts/ebony-maw-check.mjs",
     "test:tower-defense": "node scripts/tower-defense-check.mjs",
     "test:thanos": "node scripts/thanos-check.mjs",
-    "test:hela": "node scripts/hela-check.mjs"
+    "test:hela": "node scripts/hela-check.mjs",
+    "test:loki": "node scripts/loki-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

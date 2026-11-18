@@ -240,6 +240,7 @@ import {
   helaSchemeLocked,
   helaWounded,
 } from "./game/hela";
+import { lokiDamageProhibited, lokiVictories } from "./game/loki";
 import {
   AVENGERS_TOWER,
   DAMAGED_TOWER,
@@ -2572,6 +2573,18 @@ export default function App() {
                       loses an invocation counter, and a Spell without counters
                       goes off. Black Order and Armies of Titan are the
                       recommended modular sets.
+                    </p>
+                  )}
+                  {villain.id === "loki" && (
+                    <p className="setting-help">
+                      Loki has five different villain cards: one is in play, the
+                      rest wait set aside, and they trade places at random.
+                      Defeat two Lokis in Standard, three in Expert or four in
+                      Heroic before All Hail King Loki is complete. Loki wears
+                      the Infinity Gauntlet, so each time he activates against
+                      you every Infinity Stone in play resolves against you. The
+                      Infinity Gauntlet set is always included; Enchantress and
+                      Frost Giants are the recommended modular sets.
                     </p>
                   )}
                   {villain.id === "hela" && (
@@ -5333,6 +5346,7 @@ function AttachedCards({
                 "04148",
                 "04149",
                 "25032",
+                "21179",
                 "29038",
                 "32059",
                 "32067",
@@ -5678,7 +5692,9 @@ function Tabletop({
                     ? helaOdinCaptive(s)
                       ? "Free Odin, then defeat Hela"
                       : "Defeat Hela's Mystic side"
-                    : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                    : s.loki
+                      ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
+                      : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
             <span className={threatCritical ? "danger" : ""}>
@@ -5922,6 +5938,21 @@ function Tabletop({
                       </span>
                     )}
                     {s.hela && <HelaJourney game={s} />}
+                    {s.loki && (
+                      <span
+                        className="stat-caption"
+                        aria-label={`Lokis in the victory display: ${lokiVictories(s)} of ${s.loki.victoryCondition}; ${s.loki.setAside.length} set aside`}
+                      >
+                        Lokis defeated · {lokiVictories(s)} of{" "}
+                        {s.loki.victoryCondition} · {s.loki.setAside.length} set
+                        aside
+                      </span>
+                    )}
+                    {s.loki && lokiDamageProhibited(s, s.villain.id) && (
+                      <span className="stat-caption" role="status">
+                        Cannot take damage while a side scheme is in play
+                      </span>
+                    )}
                     {s.magneto &&
                       magnetoDamageCap(s, { isTextBlank }) !== undefined && (
                         <span
@@ -5943,13 +5974,14 @@ function Tabletop({
                         {s.mansionAttack.villainDeck.length} in the villain deck
                       </span>
                     )}
-                    {s.thanos && (
+                    {(s.thanos ?? s.loki) && (
                       <span
                         className="stat-caption"
-                        aria-label={`Infinity Stone deck: ${s.thanos.stoneDeck.length} cards, ${s.thanos.stoneDiscard.length} discarded`}
+                        aria-label={`Infinity Stone deck: ${(s.thanos ?? s.loki)!.stoneDeck.length} cards, ${(s.thanos ?? s.loki)!.stoneDiscard.length} discarded`}
                       >
-                        Infinity Stones · {s.thanos.stoneDeck.length} in the
-                        deck · {s.thanos.stoneDiscard.length} discarded
+                        Infinity Stones ·{" "}
+                        {(s.thanos ?? s.loki)!.stoneDeck.length} in the deck ·{" "}
+                        {(s.thanos ?? s.loki)!.stoneDiscard.length} discarded
                       </span>
                     )}
                     {projectWideawakeBombCount(s, s.villain.id) > 0 && (
@@ -6239,8 +6271,8 @@ function Tabletop({
                       )}
                       {isInfinityStone(p) && (
                         <span className="stat-caption">
-                          Its Special resolves when Thanos next activates
-                          against a player
+                          Its Special resolves when {s.loki ? "Loki" : "Thanos"}{" "}
+                          next activates against a player
                         </span>
                       )}
                       {p.code !== AVENGERS_TOWER &&

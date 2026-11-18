@@ -192,7 +192,7 @@ export function stormLatestControl(s: GameState, p: Piece): string | undefined {
   return [...allInPlay(s), ...s.attachments, ...s.minions]
     .filter(
       (a) =>
-        ["34009", "36038", "25031", "38011"].includes(a.code) &&
+        ["34009", "36038", "25031", "21178", "38011"].includes(a.code) &&
         (a.attachedTo === p.id || a.controlTargetId === p.id) &&
         (a.code === "38011" || !isTextBlank(s, a)),
     )

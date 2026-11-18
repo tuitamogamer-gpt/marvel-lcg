@@ -1276,6 +1276,22 @@ export const VILLAINS = [
       "Hela holds Odin captive in Hel. Fight through Gnipahellir, Gjallerbru and the Hall of Nastrond to free the All-Father: until he is free, the goddess of death only falls wounded and rises again.",
     color: "#2f6b5a",
   },
+  {
+    id: "loki",
+    name: "Loki",
+    codes: ["21160", "21161", "21162", "21163", "21164"],
+    schemes: ["21165b"],
+    module: "enchantress",
+    moduleCount: 2,
+    defaultModules: ["enchantress", "frost_giants"],
+    fixedSets: ["infinity_gauntlet"],
+    difficulty: 4,
+    title: "All Hail King Loki",
+    location: "Asgard",
+    description:
+      "Loki sits on the throne of Asgard with the Infinity Gauntlet. Five different Lokis trade places at random; defeat enough of them before his reign is complete.",
+    color: "#3f6f3a",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1327,6 +1343,7 @@ export const MODULES = [
   { id: "children_of_thanos", name: "Children of Thanos", difficulty: 3 },
   { id: "legions_of_hel", name: "Legions of Hel", difficulty: 2 },
   { id: "frost_giants", name: "Frost Giants", difficulty: 3 },
+  { id: "enchantress", name: "Enchantress", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {

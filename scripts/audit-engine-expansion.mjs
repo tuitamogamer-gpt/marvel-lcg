@@ -1124,6 +1124,7 @@ export async function generateAudit(
     "src/game/tower-defense.ts",
     "src/game/thanos.ts",
     "src/game/hela.ts",
+    "src/game/loki.ts",
     "src/game/reveal-window.ts",
     "src/game/black-widow.ts",
     "src/game/doctor-strange.ts",

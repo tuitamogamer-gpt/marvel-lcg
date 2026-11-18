@@ -4,6 +4,7 @@ import { valkyrieCannotBasicAttack } from "./valkyrie.js";
 import { visionCanAttack } from "./vision.js";
 import { TOWER_OTHER_MAIN, towerDefenseSchemeLimit } from "./tower-defense.js";
 import { HELA_VICTORY_SCHEMES, helaSchemeLocked, helaWounded } from "./hela.js";
+import { lokiDamageProhibited } from "./loki.js";
 import {
   doctorStrangeAbilityOptions,
   doctorStrangeTopInvocation,
@@ -384,9 +385,10 @@ export function adviseAction(s: GameState): Advice | null {
   if (ally) return ally;
   if (!s.player.exhausted) {
     const schemes = targets(s, "scheme");
-    // Wounded Hela cannot be defeated: attack only her minions.
+    // Wounded Hela cannot be defeated, and one Loki cannot take damage while
+    // a side scheme is in play: attack only their minions.
     const enemies = targets(s, "enemy", true).filter(
-      (t) => !helaWounded(s) || t.id !== s.villain.id,
+      (t) => !untouchableVillain(s) || t.id !== s.villain.id,
     );
     if (pressed && (schemes.length || s.player.confused))
       return {
@@ -446,6 +448,10 @@ function best<T>(list: T[], score: (x: T) => number) {
   return pick;
 }
 /** Answers the pending prompt. */
+/** Damage cannot defeat or reach the villain right now. */
+function untouchableVillain(s: GameState) {
+  return helaWounded(s) || !!lokiDamageProhibited(s, s.villain.id);
+}
 export function advisePrompt(s: GameState): Advice | null {
   const p = s.prompt;
   if (!p) return null;
@@ -613,7 +619,7 @@ export function advisePrompt(s: GameState): Advice | null {
         pieceHP(s, m) - m.damage <= damage ||
         !ids.includes(s.villain.id) ||
         pressure(s).pressed ||
-        helaWounded(s)
+        untouchableVillain(s)
       )
         return {
           command: { type: "CHOOSE", id: minion.id },

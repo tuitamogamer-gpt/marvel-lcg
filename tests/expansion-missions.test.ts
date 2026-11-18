@@ -240,6 +240,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       "tower_defense",
       "thanos",
       "hela",
+      "loki",
     ].includes(s.villainId)
   )
     return [];
@@ -299,6 +300,10 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
     ...(m?.activeVillainRetired ? [] : [s.villain]),
     // Hela: the set-aside Journey Through Hel cards.
     ...(s.hela?.setAside || []),
+    // Loki: the set-aside Lokis and the Infinity Stone deck.
+    ...(s.loki
+      ? [...s.loki.setAside, ...s.loki.stoneDeck, ...s.loki.stoneDiscard]
+      : []),
     // Thanos: his stages, main schemes and the Infinity Stone deck.
     ...(s.thanos
       ? [
@@ -544,7 +549,9 @@ function runMission(config: (typeof missions)[number]) {
                                   ? "thanos"
                                   : s.villainId === "hela"
                                     ? "hela"
-                                    : undefined;
+                                    : s.villainId === "loki"
+                                      ? "loki"
+                                      : undefined;
   const scenarioSources = scenarioSet
     ? scenarioPhysicalPieces(s).filter((p) => card(p).set_code === scenarioSet)
     : [];
@@ -584,7 +591,9 @@ function runMission(config: (typeof missions)[number]) {
                                   ? 18
                                   : scenarioSet === "hela"
                                     ? 17
-                                    : 29;
+                                    : scenarioSet === "loki"
+                                      ? 20
+                                      : 29;
     expect(
       scenarioSources,
       "All selected original scenario cards begin in physical zones",
@@ -825,10 +834,10 @@ describe("published expansion starters across every supported mission setting", 
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(24);
-    expect(MODULES).toHaveLength(39);
+    expect(VILLAINS).toHaveLength(25);
+    expect(MODULES).toHaveLength(40);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(96824);
+    expect(missions).toHaveLength(103480);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -839,11 +848,26 @@ describe("published expansion starters across every supported mission setting", 
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
-    // Hela and the Legions of Hel and Frost Giants modular sets extend the
-    // grid. Every earlier name and seed stays in place: the 87,984
-    // configurations before this import hash identically to the complete grid
-    // of f5fed09.
-    const thanosGrid = missions.filter(
+    // Loki and the Enchantress modular set extend the grid. Every earlier name
+    // and seed stays in place: the 96,824 configurations before this import
+    // hash identically to the complete grid of 37147cd.
+    const helaGrid = missions.filter(
+      (m) => m.villainId !== "loki" && m.module !== "enchantress",
+    );
+    expect(helaGrid).toHaveLength(96824);
+    expect(
+      createHash("sha256").update(manifest(helaGrid).join("\n")).digest("hex"),
+    ).toBe("4e157440ea9add58490a34a901f3244224eca3e271392dfdfad01711af777822");
+    expect(missions.filter((m) => m.villainId === "loki")).toHaveLength(4160);
+    expect(
+      missions.filter(
+        (m) => m.module === "enchantress" && m.villainId !== "loki",
+      ),
+    ).toHaveLength(2496);
+    // Hela and the Legions of Hel and Frost Giants modular sets extended the
+    // grid before that: the 87,984 configurations before that import hash
+    // identically to the complete grid of f5fed09.
+    const thanosGrid = helaGrid.filter(
       (m) =>
         m.villainId !== "hela" &&
         !["legions_of_hel", "frost_giants"].includes(m.module),
@@ -854,9 +878,9 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(thanosGrid).join("\n"))
         .digest("hex"),
     ).toBe("44caed50d87a9125e8420025ddd2ff39a1f031297460faabd34c6cb72b9d0c56");
-    expect(missions.filter((m) => m.villainId === "hela")).toHaveLength(4056);
+    expect(helaGrid.filter((m) => m.villainId === "hela")).toHaveLength(4056);
     expect(
-      missions.filter(
+      helaGrid.filter(
         (m) =>
           ["legions_of_hel", "frost_giants"].includes(m.module) &&
           m.villainId !== "hela",
@@ -1198,7 +1222,7 @@ describe("published expansion starters across every supported mission setting", 
           partition.filter((mission) => mission.villainId === "crossbones")
             .length,
       ),
-    ).toEqual([494, 494, 494, 494, 494, 494, 494, 494]);
+    ).toEqual([507, 507, 507, 507, 507, 507, 507, 507]);
     expect(
       partitions.map(
         (partition) =>
@@ -1206,7 +1230,7 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "brotherhood_of_badoon",
           ).length,
       ),
-    ).toEqual([507, 507, 507, 507, 507, 507, 507, 507]);
+    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
     expect(
       partitions.map(
         (partition) =>
@@ -1214,7 +1238,7 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "infiltrate_the_museum",
           ).length,
       ),
-    ).toEqual([507, 507, 507, 507, 507, 507, 507, 507]);
+    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
     expect(
       partitions.map(
         (partition) =>
@@ -1222,50 +1246,56 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "escape_the_museum",
           ).length,
       ),
-    ).toEqual([507, 507, 507, 507, 507, 507, 507, 507]);
+    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "nebula").length,
       ),
-    ).toEqual([507, 507, 507, 507, 507, 507, 507, 507]);
+    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "ronan").length,
       ),
-    ).toEqual([507, 507, 507, 507, 507, 507, 507, 507]);
+    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "ebony_maw")
             .length,
       ),
-    ).toEqual([507, 507, 507, 507, 507, 507, 507, 507]);
+    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "tower_defense")
             .length,
       ),
-    ).toEqual([507, 507, 507, 507, 507, 507, 507, 507]);
+    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "thanos").length,
       ),
-    ).toEqual([507, 507, 507, 507, 507, 507, 507, 507]);
+    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "hela").length,
       ),
-    ).toEqual([507, 507, 507, 507, 507, 507, 507, 507]);
-    expect(new Set(missions.map(key)).size).toBe(96824);
-    expect(new Set(combined.map(key)).size).toBe(96824);
+    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter((mission) => mission.villainId === "loki").length,
+      ),
+    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
+    expect(new Set(missions.map(key)).size).toBe(103480);
+    expect(new Set(combined.map(key)).size).toBe(103480);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(12103);
+      expect(partition).toHaveLength(12935);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -1273,11 +1303,11 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(232);
-      expect(Math.max(...perShard)).toBe(233);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(1862);
+      expect(Math.min(...perShard)).toBe(248);
+      expect(Math.max(...perShard)).toBe(249);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(1990);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 12103 : 96824);
+    expect(selectedMissions).toHaveLength(isSharded ? 12935 : 103480);
   });
   for (const mission of selectedMissions)
     it(

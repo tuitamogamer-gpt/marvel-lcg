@@ -10,6 +10,7 @@ import { EBONY_MAW_SCRIPT_CODES } from "../src/game/ebony-maw";
 import { TOWER_DEFENSE_SCRIPT_CODES } from "../src/game/tower-defense";
 import { THANOS_SCRIPT_CODES } from "../src/game/thanos";
 import { HELA_SCRIPT_CODES } from "../src/game/hela";
+import { LOKI_SCRIPT_CODES } from "../src/game/loki";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -34,6 +35,7 @@ const badoonCodes = new Set<string>([
   ...TOWER_DEFENSE_SCRIPT_CODES,
   ...THANOS_SCRIPT_CODES,
   ...HELA_SCRIPT_CODES,
+  ...LOKI_SCRIPT_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -351,21 +353,22 @@ describe("complete expansion rules inventory", () => {
       (pack: { code: string }) => pack.code === "mts",
     );
     // Ebony Maw, Black Order and Armies of Titan add 23 faces, Tower Defense
-    // 22, Thanos with the Infinity Gauntlet and Children of Thanos 27, and Hela
-    // with Legions of Hel and Frost Giants 27; Loki, the Enchantress set,
+    // 22, Thanos with the Infinity Gauntlet and Children of Thanos 27, Hela
+    // with Legions of Hel and Frost Giants 27, and Loki with Enchantress 21;
     // Odin's campaign King side and the campaign remain pending.
     expect(mts).toMatchObject({
       faceCount: 213,
-      executableFaces: 172,
+      executableFaces: 193,
       installedCardClosure: false,
     });
-    expect(mts.unsupportedFaceCodes).toHaveLength(41);
+    expect(mts.unsupportedFaceCodes).toHaveLength(20);
     expect(mts.unsupportedFaceCodes).not.toContain("21071");
     expect(mts.unsupportedFaceCodes).not.toContain("21092");
     expect(mts.unsupportedFaceCodes).not.toContain("21111");
     expect(mts.unsupportedFaceCodes).not.toContain("21136a");
     expect(mts.unsupportedFaceCodes).toContain("21139b");
-    expect(mts.unsupportedFaceCodes).toContain("21160");
+    expect(mts.unsupportedFaceCodes).not.toContain("21160");
+    expect(mts.unsupportedFaceCodes).toContain("21180a");
     const mtsHeroFaces = cards.filter(
       (entry: { pack_code: string; position: number }) =>
         entry.pack_code === "mts" && entry.position <= 70,
@@ -414,7 +417,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(39);
+    expect(MODULES).toHaveLength(40);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "black_order",
@@ -422,6 +425,7 @@ describe("complete expansion rules inventory", () => {
         "children_of_thanos",
         "legions_of_hel",
         "frost_giants",
+        "enchantress",
         "deathstrike",
         "shadow_king",
         "exodus",
@@ -440,9 +444,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2580);
-    expect(coverage.unsupportedFaces).toBe(1971);
-    expect(coverage.dedicatedFaces).toBe(2141);
+    expect(coverage.executableFaces).toBe(2601);
+    expect(coverage.unsupportedFaces).toBe(1950);
+    expect(coverage.dedicatedFaces).toBe(2162);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -626,6 +630,8 @@ describe("complete expansion rules inventory", () => {
         27 -
         // Hela, Legions of Hel and Frost Giants.
         27 -
+        // Loki and Enchantress.
+        21 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -753,7 +759,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(39);
+    expect(coverage.registeredModules).toHaveLength(40);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -937,7 +943,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(24);
+    ).toHaveLength(25);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "crossbones",
@@ -1079,7 +1085,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(142);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(143);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

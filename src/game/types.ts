@@ -282,6 +282,9 @@ export interface GameState {
   /** Hela: Odin, the set-aside Journey Through Hel cards and the Victory
    * bonus counted in Mystic Hela's hit points. */
   hela?: import("./hela.js").HelaState;
+  /** Loki: the set-aside Lokis, the victory condition and the Infinity
+   * Stone deck. */
+  loki?: import("./loki.js").LokiState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */

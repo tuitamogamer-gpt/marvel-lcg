@@ -134,6 +134,13 @@ const attached = (s: GameState, code: string, hostId = s.villain.id) =>
     (a) => a.code === code && a.attachedTo === hostId && !isTextBlank(s, a),
   );
 
+/** The Infinity Stone deck and its discard pile: Thanos's, or Loki's, who
+ * also uses the Infinity Gauntlet set. */
+function stoneDecks(
+  s: GameState,
+): { stoneDeck: Piece[]; stoneDiscard: Piece[] } | undefined {
+  return s.thanos ?? s.loki;
+}
 /** The Infinity Stones in play, in the order they entered. */
 export function thanosStonesInPlay(s: GameState): Piece[] {
   return (s.environments || []).filter(isInfinityStone);
@@ -143,7 +150,7 @@ export function thanosStonesInPlay(s: GameState): Piece[] {
  * whenever the deck runs out, Thanos's Forced Response gives him a facedown
  * boost card. */
 function takeStone(s: GameState, ports: ThanosPorts): Piece | undefined {
-  const th = s.thanos;
+  const th = stoneDecks(s);
   if (!th) return undefined;
   if (!th.stoneDeck.length && th.stoneDiscard.length)
     th.stoneDeck = ports.shuffle(s, th.stoneDiscard.splice(0));
@@ -165,7 +172,7 @@ function stoneIntoPlay(s: GameState, ports: ThanosPorts) {
   ports.log(s, `${name(p)} enters play.`, "bad");
 }
 function discardStone(s: GameState, ports: ThanosPorts, id: string) {
-  const th = s.thanos;
+  const th = stoneDecks(s);
   const p = (s.environments || []).find((q) => q.id === id);
   if (!th || !p) return;
   s.environments = (s.environments || []).filter((q) => q.id !== id);
@@ -229,7 +236,7 @@ export function thanosAfterActivation(
   s: GameState,
   receipt: ThanosActivationReceipt,
 ): MutagenForcedResponse[] {
-  if (!s.thanos || receipt.attackerId !== s.villain.id) return [];
+  if (!stoneDecks(s) || receipt.attackerId !== s.villain.id) return [];
   const responses: MutagenForcedResponse[] = [];
   const masters = s.attachments.filter(
     (a) => a.code === MASTER && a.attachedTo === receipt.attackerId,
@@ -632,8 +639,9 @@ export function resolveThanosEffect(
       // boost card for this activation.
       const activation = s.attack || s.scheming;
       const p = takeStone(s, ports);
-      if (!p || !th) break;
-      th.stoneDiscard.push(p);
+      const decks = stoneDecks(s);
+      if (!p || !decks) break;
+      decks.stoneDiscard.push(p);
       const icons = (definitions.get(p.code)?.boost || 0) + ports.amplify(s);
       ports.log(
         s,

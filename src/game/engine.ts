@@ -9,6 +9,7 @@ import * as ebonyMaw from "./ebony-maw.js";
 import * as towerDefense from "./tower-defense.js";
 import * as thanos from "./thanos.js";
 import * as hela from "./hela.js";
+import * as loki from "./loki.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -878,6 +879,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           towerDefense.towerDefenseKeyword(s, p, "Piercing") > 0 ||
           thanos.thanosKeyword(s, p, "Piercing") ||
           hela.helaKeyword(s, p, "Piercing") ||
+          loki.lokiKeyword(s, p, "Piercing") ||
           badoon.badoonKeyword(s, p, "Piercing") ||
           ronan.ronanKeyword(s, p, "Piercing") ||
           taskmaster.taskmasterKeyword(s, p, "Piercing") ||
@@ -2141,11 +2143,12 @@ function syncValkyrieConvertedCards(s: GameState) {
       delete p.treatedAsMinion;
       const remainingControl = storm.stormLatestControl(s, p);
       if (
-        remainingControl === "25031" ||
+        valkyrie.isBeguiledCard(remainingControl || "") ||
         (card(p.code).type_code === "minion" &&
           !["34009", "38011"].includes(remainingControl || ""))
       ) {
-        if (remainingControl === "25031") p.treatedAsMinion = true;
+        if (valkyrie.isBeguiledCard(remainingControl || ""))
+          p.treatedAsMinion = true;
         for (const seat of s.players)
           delete seatView(s, seat).flags[`stormController:${p.id}`];
         continue;
@@ -2186,7 +2189,7 @@ function syncValkyrieConvertedCards(s: GameState) {
     }
     const savedController = valkyrie.valkyrieBeguiledController(s, p.id);
     const attachment = s.attachments.some(
-      (a) => a.code === "25031" && a.attachedTo === p.id,
+      (a) => valkyrie.isBeguiledCard(a.code) && a.attachedTo === p.id,
     );
     if (!savedController && !attachment) continue;
     const seat = s.players.find(
@@ -3124,7 +3127,8 @@ function dealDamage(
           s,
           target,
           nativePlayerCardSource(s, source),
-        ))
+        ) ??
+        loki.lokiDamageProhibited(s, target))
       : undefined;
   if (prohibition) {
     log(s, prohibition);
@@ -3214,6 +3218,18 @@ function dealDamage(
       n = abjuration.amount;
       if (abjuration.discardId) discardPiece(s, abjuration.discardId);
     }
+  }
+  // Master of Illusions may prevent all damage from an attack against Loki.
+  if (!replaced && n > 0 && target === s.villain.id && damageFromAttack) {
+    const illusion = loki.lokiPreventAttackDamage(
+      s,
+      target,
+      n,
+      s.currentAttackProgramId || s.attack?.id || `attack${s.nextId}`,
+      lokiPorts,
+    );
+    n = illusion.amount;
+    if (illusion.discardId) discardPiece(s, illusion.discardId);
   }
   if (
     !replaced &&
@@ -4351,6 +4367,59 @@ function advanceVillain(
     );
     return;
   }
+  // Loki: the defeated Loki goes to the victory display (Victory 1). With
+  // enough Lokis there the players win; otherwise All Hail King Loki's
+  // Forced Interrupt advances to a random set-aside Loki, who carries the
+  // previous Loki's attachments, status cards and counters.
+  if (s.villainId === "loki" && s.loki && loki.isLoki(s)) {
+    const old = s.villain;
+    const textBlank = isTextBlank(s, old);
+    if (loki.lokiVictories(s) + 1 >= s.loki.victoryCondition) {
+      endGame(
+        s,
+        true,
+        `Loki is defeated for the ${s.loki.victoryCondition === 2 ? "second" : s.loki.victoryCondition === 3 ? "third" : s.loki.victoryCondition === 4 ? "fourth" : "last"} time. Asgard is free.`,
+      );
+      return;
+    }
+    const next = loki.lokiNextVillain(s, lokiPorts);
+    if (!next) {
+      endGame(s, true, "Every Loki is defeated. Asgard is free.");
+      return;
+    }
+    Object.assign(next, {
+      stage: old.stage,
+      stunned: old.stunned,
+      confused: old.confused,
+      tough: old.tough,
+      stunCards: old.stunCards,
+      confuseCards: old.confuseCards,
+      toughCards: old.toughCards,
+      counters: old.counters,
+    });
+    s.villain = next as GameState["villain"];
+    if (s.attack?.attacker === old.id) s.attack.attacker = next.id;
+    if (s.scheming?.attacker === old.id) s.scheming.attacker = next.id;
+    for (const p of [...s.attachments, ...allInPlay(s)])
+      if (p.attachedTo === old.id) p.attachedTo = next.id;
+    (s.victoryDisplay ||= []).push(resetPiece(old));
+    s.villain.maxHp =
+      card(s.villain).health! * s.playerCount +
+      wideawake.projectWideawakeModifiers(s, s.villain, { isTextBlank })
+        .health +
+      wasp.waspEnemyHP(s, s.villain);
+    s.villain.hp = s.villain.maxHp;
+    s.villain.damage = 0;
+    loki.lokiAdvanced(s);
+    log(
+      s,
+      `Loki is defeated (${loki.lokiVictories(s)} of ${s.loki.victoryCondition}). Another Loki takes his place.`,
+      "good",
+    );
+    add(s, ...loki.lokiDefeatedEffects(s, old, textBlank));
+    villainSetup(s);
+    return;
+  }
   if (
     [
       "magneto",
@@ -4974,6 +5043,14 @@ function threat(
         }
         return;
       }
+      if (s.villainId === "loki") {
+        endGame(
+          s,
+          false,
+          "All Hail King Loki is complete. Loki rules Asgard with the Infinity Gauntlet.",
+        );
+        return;
+      }
       if (s.villainId === "hela") {
         endGame(
           s,
@@ -5198,6 +5275,7 @@ function defeatScheme(
         ...towerDefense.towerDefenseSchemeDefeated(s, p, s.activePlayerId),
         ...thanos.thanosSchemeDefeated(s, p, s.activePlayerId),
         ...hela.helaSchemeDefeated(s, p, s.activePlayerId),
+        ...loki.lokiSchemeDefeated(s, p),
       ]
     : [];
   const helaFlip = hela.helaSideSchemeDefeated(s);
@@ -7860,7 +7938,8 @@ export function newGame(config: {
                       c.set_code === "armies_of_titan" ||
                       c.set_code === "children_of_thanos" ||
                       c.set_code === "legions_of_hel" ||
-                      c.set_code === "frost_giants"
+                      c.set_code === "frost_giants" ||
+                      c.set_code === "enchantress"
                     ? "mts"
                     : c.set_code === "exodus"
                       ? "gambit"
@@ -8042,6 +8121,52 @@ export function newGame(config: {
         ...(ebonyMaw.ebonyMawReveal(s, s.villain) || []),
         ...(ebonyMaw.ebonyMawReveal(s, s.ebonyMaw.currentMain) || []),
       ].map((e) => effectContext(s, { ...e, actorId: s.firstPlayerId })),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "loki") {
+    // All Hail King Loki (1A) setup: every Loki is set aside and one is
+    // revealed at random; War in Asgard is put into play; the top Infinity
+    // Stone is revealed. The Infinity Gauntlet attaches to Loki.
+    const lokis = shuffle(
+      s,
+      v.codes.map((code) => makePiece(s, code)),
+    );
+    const first = lokis.shift()!;
+    s.loki = {
+      setAside: lokis,
+      victoryCondition: loki.lokiVictoryCondition(difficulty, s.heroic || 0),
+      stoneDeck: shuffle(
+        s,
+        thanos.INFINITY_STONES.map((code) => makePiece(s, code)),
+      ),
+      stoneDiscard: [],
+    };
+    s.scheme = {
+      code: loki.ALL_HAIL_KING_LOKI,
+      threat: (card(loki.ALL_HAIL_KING_LOKI).base_threat || 0) * s.playerCount,
+      index: 0,
+    };
+    const lokiHp = card(first).health! * s.playerCount;
+    s.villain = Object.assign(first, {
+      hp: lokiHp,
+      maxHp: lokiHp,
+      stage: 1,
+    });
+    const gauntlet = makePiece(s, thanos.INFINITY_GAUNTLET);
+    gauntlet.attachedTo = s.villain.id;
+    s.attachments.push(gauntlet);
+    const war = s.encounter.deck.find((p) => p.code === loki.WAR_IN_ASGARD);
+    need(war, "Loki requires the original War in Asgard side scheme.");
+    mutagenPorts.putSideScheme(s, war!);
+    s.encounter.deck = shuffle(s, s.encounter.deck);
+    s.queue.push(
+      ...loki
+        .lokiSetup(s)
+        .map((e) => effectContext(s, { ...e, actorId: s.firstPlayerId })),
       effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
     );
     const pacing = s.pacing;
@@ -14813,6 +14938,22 @@ const thanosPorts: thanos.ThanosPorts = {
   shuffle: (s, pieces) => shuffle(s, pieces),
   resources: (_s, p) => resources(card(p)),
   amplify: (s) => activationAmplify(s),
+  log: (s, text, kind) => log(s, text, kind),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+};
+const lokiPorts: loki.LokiPorts = {
+  ...mutagenPorts,
+  reveal: (s, p, playerId) => crossbonesPorts.reveal(s, p, playerId),
+  giveTough: (s, p) => giveCharacterStatus(s, p, "tough"),
+  shuffle: (s, pieces) => shuffle(s, pieces),
+  replaceVillain: (s, old, next) => {
+    s.villain = next as GameState["villain"];
+    if (s.attack?.attacker === old.id) s.attack.attacker = next.id;
+    if (s.scheming?.attacker === old.id) s.scheming.attacker = next.id;
+    for (const p of [...s.attachments, ...allInPlay(s)])
+      if (p.attachedTo === old.id) p.attachedTo = next.id;
+  },
+  resetPiece: (p) => resetPiece(p),
   log: (s, text, kind) => log(s, text, kind),
   heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
 };
@@ -22804,6 +22945,7 @@ function boostEffects(s: GameState, p: Piece) {
     towerDefense.towerDefenseBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
+    loki.lokiBoost(s, p) ??
     collector.collectorBoost(s, p) ??
     badoon.badoonBoost(s, p) ??
     redSkull.redSkullBoost(s, p) ??
@@ -24742,6 +24884,8 @@ function reveal(
         c.type_code !== "attachment") ||
       (hela.HELA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (loki.LOKI_SCENARIO_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -24885,6 +25029,7 @@ function reveal(
       ...jubilee.JUBILEE_SCRIPT_CODES,
       ...nickFury.NICK_FURY_SCRIPT_CODES,
       ...colossus.COLOSSUS_SCRIPT_CODES,
+      ...loki.ENCHANTRESS_CODES,
     ].some((code) => code === p.code) ||
       CARDS.some(
         (core) => core.code === rulesCode(p) && core.type_code === "treachery",
@@ -24892,7 +25037,7 @@ function reveal(
   ) {
     if (
       c.type_code === "attachment" &&
-      ["25031", "25032", "47027"].includes(p.code)
+      ["25031", "25032", "21178", "21179", "47027"].includes(p.code)
     ) {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       if (!s.attachments.some((x) => x.id === p.id)) s.attachments.push(p);
@@ -24931,6 +25076,7 @@ function reveal(
       ...towerDefense.TOWER_DEFENSE_SCRIPT_CODES,
       ...thanos.THANOS_SCRIPT_CODES,
       ...hela.HELA_SCRIPT_CODES,
+      ...loki.LOKI_SCENARIO_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -24967,6 +25113,7 @@ function reveal(
       towerDefense.towerDefenseReveal(s, p) ??
       thanos.thanosReveal(s, p) ??
       hela.helaReveal(s, p) ??
+      loki.lokiReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -25046,6 +25193,7 @@ function reveal(
     towerDefense.towerDefenseReveal(s, p) ??
     thanos.thanosReveal(s, p) ??
     hela.helaReveal(s, p) ??
+    loki.lokiReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -26151,6 +26299,7 @@ function resolve(s: GameState, e: Effect) {
       )
         e[key] = s.villain.id;
   }
+  if (s.loki) loki.lokiCanonicalTargets(s, e);
   if (s.towerDefense) {
     towerDefense.towerDefenseCanonicalTargets(s, e);
     const towerWindow = towerDefense.towerDefenseFocusWrap(s, e);
@@ -26415,6 +26564,7 @@ function resolve(s: GameState, e: Effect) {
           towerDefense.towerDefenseReveal(state, piece) ??
           thanos.thanosReveal(state, piece) ??
           hela.helaReveal(state, piece) ??
+          loki.lokiReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -26499,7 +26649,7 @@ function resolve(s: GameState, e: Effect) {
                 }),
               ]
             : []),
-          ...(["25031", "25032"].includes(piece.code)
+          ...(["25031", "25032", "21178", "21179"].includes(piece.code)
             ? [E("valkyrieFinishReveal", { id: piece.id })]
             : []),
           E("finishResolution", { id: piece.id }),
@@ -26544,6 +26694,7 @@ function resolve(s: GameState, e: Effect) {
   if (towerDefense.resolveTowerDefenseEffect(s, e, towerDefensePorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
+  if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
   if (taskmaster.resolveTaskmasterEffect(s, e, taskmasterPorts)) return;
   if (absorbingMan.resolveAbsorbingEffect(s, e, absorbingManPorts)) return;
   if (crossbones.resolveCrossbonesEffect(s, e, crossbonesPorts)) return;
@@ -28412,6 +28563,9 @@ function resolve(s: GameState, e: Effect) {
         ...(e.draxBasicAttack ? drax.draxAfterBasicAttack(s, draxPorts) : []),
         ...(e.draxBasicAttack
           ? thanos.thanosAfterBasicAttack(s, e.target, thanosPorts)
+          : []),
+        ...(e.draxBasicAttack
+          ? loki.lokiAfterBasicAttack(s, e.target, lokiPorts)
           : []),
         ...(e.draxBasicAttack
           ? [
@@ -35790,6 +35944,7 @@ function run(s: GameState) {
       e.type.startsWith("tower:") ||
       e.type.startsWith("thanos:") ||
       e.type.startsWith("hela:") ||
+      e.type.startsWith("loki:") ||
       e.type.startsWith("red-skull:") ||
       e.type.startsWith("sabretooth:") ||
       e.type.startsWith("sabretooth-native:") ||
