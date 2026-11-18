@@ -906,6 +906,7 @@ export async function generateAudit(
       "base_threat",
       "scheme_hazard",
       "scheme_amplify",
+      "traits",
     ].flatMap((field) =>
       corrected[field] !== imported[field]
         ? [
@@ -1007,8 +1008,8 @@ export async function generateAudit(
         codes,
         schemes,
         defaultModule: module,
-        moduleCount: moduleCount || 1,
-        defaultModules: defaultModules || [module],
+        moduleCount: moduleCount ?? 1,
+        defaultModules: defaultModules || (module ? [module] : []),
         fixedSets: fixedSets || [],
         reservedSets: reservedSets || [],
       }),
@@ -1125,6 +1126,7 @@ export async function generateAudit(
     "src/game/thanos.ts",
     "src/game/hela.ts",
     "src/game/loki.ts",
+    "src/game/wrecking-crew.ts",
     "src/game/reveal-window.ts",
     "src/game/black-widow.ts",
     "src/game/doctor-strange.ts",

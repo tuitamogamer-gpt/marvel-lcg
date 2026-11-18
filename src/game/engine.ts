@@ -10,6 +10,7 @@ import * as towerDefense from "./tower-defense.js";
 import * as thanos from "./thanos.js";
 import * as hela from "./hela.js";
 import * as loki from "./loki.js";
+import * as wreckingCrew from "./wrecking-crew.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -932,6 +933,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           ebonyMaw.ebonyMawKeyword(s, p, "Overkill") ||
           hela.helaKeyword(s, p, "Overkill") ||
           towerDefense.towerDefenseKeyword(s, p, "Overkill") > 0 ||
+          wreckingCrew.wreckingCrewKeyword(s, p, "Overkill") > 0 ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
             .overkill)
       ),
@@ -1182,6 +1184,7 @@ function select(
 const allPieces = (s: GameState) => [
   ...(!s.mansionAttack?.activeVillainRetired ? [s.villain] : []),
   ...(s.towerDefense ? [s.towerDefense.other.villain] : []),
+  ...wreckingCrew.crewBench(s),
   ...s.minions,
   ...s.sideSchemes,
   ...allInPlay(s),
@@ -1543,6 +1546,7 @@ function mill(s: GameState, n: number) {
 }
 function recycleEncounter(s: GameState) {
   redSkull.redSkullSync(s, shuffle);
+  wreckingCrew.wreckingCrewSyncDiscards(s);
   if (!s.encounter.deck.length && s.encounter.discard.length) {
     delete s.encounter.knownTop;
     s.encounter.deck = shuffle(s, s.encounter.discard.splice(0));
@@ -1664,7 +1668,8 @@ function movePieceFromPlay(
     !removedSource ||
       ((!isPermanent(card(removedSource)) ||
         removedByPlayerElimination(s, removedSource)) &&
-        !zeroTolerance.zeroToleranceIsPermanent(s, removedSource)),
+        !zeroTolerance.zeroToleranceIsPermanent(s, removedSource) &&
+        !wreckingCrew.wreckingCrewSchemeLocked(s, removedSource)),
     "Permanent cards cannot leave play.",
   );
   if (removedSource && removedSource.id === sabretooth.sabretoothKelly(s)?.id) {
@@ -2401,6 +2406,10 @@ function check(s: GameState) {
     endGame(s, false, "Odin has left play. The All-Father is lost to Hel.");
     return;
   }
+  if (s.wreckingCrew) {
+    add(s, ...wreckingCrew.wreckingCrewCheck(s, wreckingCrewPorts));
+    if (["won", "lost"].includes(s.phase)) return;
+  }
   if (collector.collectorLost(s) && !["won", "lost"].includes(s.phase)) {
     endGame(
       s,
@@ -2744,6 +2753,11 @@ function heal(
       towerDefense.otherTowerKey(s.towerDefense.focus),
       () => heal(s, target, n, origin),
     );
+  const crewHealKey = wreckingCrew.crewBenchKey(s, target);
+  if (crewHealKey)
+    return wreckingCrew.withCrewFocus(s, crewHealKey, () =>
+      heal(s, target, n, origin),
+    );
   if (target?.startsWith("hero:"))
     return heal(seatView(s, target.slice(5)), "hero", n, origin);
   if (target === "hero") {
@@ -3046,6 +3060,12 @@ function dealDamage(
       s,
       towerDefense.otherTowerKey(s.towerDefense.focus),
       () => dealDamage(s, target, n, source, attack, overkill, panther, traits),
+    );
+  // The Wrecking Crew: damage to a villain out of focus resolves in focus.
+  const crewDamageKey = wreckingCrew.crewBenchKey(s, target);
+  if (crewDamageKey)
+    return wreckingCrew.withCrewFocus(s, crewDamageKey, () =>
+      dealDamage(s, target, n, source, attack, overkill, panther, traits),
     );
   const raySource = source === "hero" ? `hero:${s.activePlayerId}` : source;
   const ray =
@@ -4311,7 +4331,12 @@ function advanceVillain(
       add(
         s,
         ...effects,
-        E("cyclops-native:advance", { source, attack, captured }),
+        E("cyclops-native:advance", {
+          source,
+          attack,
+          captured,
+          ...(s.wreckingCrew ? { crewVillainId: s.villain.id } : {}),
+        }),
       );
       return;
     }
@@ -4326,7 +4351,12 @@ function advanceVillain(
     add(
       s,
       ...receipts.flatMap((r) => valkyrie.valkyrieEnemyDefeatInterrupt(s, r)),
-      E("valkyrieAdvanceVillain", { source, attack, receipts }),
+      E("valkyrieAdvanceVillain", {
+        source,
+        attack,
+        receipts,
+        ...(s.wreckingCrew ? { crewVillainId: s.villain.id } : {}),
+      }),
     );
     return;
   }
@@ -4365,6 +4395,12 @@ function advanceVillain(
         { isTextBlank },
       ),
     );
+    return;
+  }
+  // The Wrecking Crew: a defeated villain and its side scheme are removed
+  // from the game; the players win when all four are defeated.
+  if (s.wreckingCrew) {
+    wreckingCrew.wreckingCrewVillainDefeated(s, wreckingCrewPorts);
     return;
   }
   // Loki: the defeated Loki goes to the victory display (Victory 1). With
@@ -5043,6 +5079,14 @@ function threat(
         }
         return;
       }
+      if (s.villainId === "the_wrecking_crew") {
+        endGame(
+          s,
+          false,
+          "Breakout is complete. The Wrecking Crew escapes Ryker's Island.",
+        );
+        return;
+      }
       if (s.villainId === "loki") {
         endGame(
           s,
@@ -5126,6 +5170,7 @@ function thwart(
     ronan.ronanMainLocked(s, target) ||
     ebonyMaw.ebonyMawSchemeLocked(s, target) ||
     hela.helaSchemeLocked(s, target) ||
+    wreckingCrew.wreckingCrewThwartLocked(s, target) ||
     !gamora.gamoraCanRemoveThreat(s, target) ||
     venom.venomSchemeLocked(s, target) ||
     warlock.warlockSchemeLocked(s, target)
@@ -5163,7 +5208,8 @@ function thwart(
     if (
       !p.counters &&
       !isPermanent(card(p)) &&
-      !zeroTolerance.zeroToleranceIsPermanent(s, p)
+      !zeroTolerance.zeroToleranceIsPermanent(s, p) &&
+      !wreckingCrew.wreckingCrewSchemeLocked(s, p)
     ) {
       add(
         s,
@@ -5189,7 +5235,11 @@ function defeatScheme(
     return;
   if (p.counters || !s.sideSchemes.some((x) => x.id === p.id)) return;
   if (redSkull.redSkullLocked(s, p)) return;
-  if (isPermanent(card(p)) || zeroTolerance.zeroToleranceIsPermanent(s, p))
+  if (
+    isPermanent(card(p)) ||
+    zeroTolerance.zeroToleranceIsPermanent(s, p) ||
+    wreckingCrew.wreckingCrewSchemeLocked(s, p)
+  )
     return;
   const twistedKey = `redSkullTwisted:${p.id}`;
   if (!s.flags[twistedKey]) {
@@ -5520,6 +5570,11 @@ export function targets(
                 code: s.villain.code,
               },
               ...towerDefense.towerDefenseEnemyTarget(s),
+              ...wreckingCrew.crewBench(s).map((v) => ({
+                id: v.id,
+                label: card(v).name,
+                code: v.code,
+              })),
             ]
           : []),
         ...s.minions.map((p) => ({
@@ -5533,6 +5588,7 @@ export function targets(
           (!attack ||
             (globalMagnetoHeroAttackAllowed(s, t.id) &&
               valkyrie.valkyrieCanAttackTarget(s, t.id) &&
+              !wreckingCrew.wreckingCrewAttackForbidden(s, t.id) &&
               (t.id !== s.villain.id ||
                 !mystique.mystiqueVillainAttackProhibited(s, mystiquePorts)))),
       );
@@ -5592,6 +5648,7 @@ export function targets(
               gamora.gamoraCanRemoveThreat(s, p.id) &&
               !venom.venomSchemeLocked(s, p.id) &&
               !warlock.warlockSchemeLocked(s, p.id) &&
+              (!thwarting || !wreckingCrew.wreckingCrewThwartLocked(s, p.id)) &&
               (!thwarting ||
                 sentinels.sentinelsCanThwart(
                   s,
@@ -7743,7 +7800,7 @@ export function newGame(config: {
     "This scenario’s complete rules are not implemented yet.",
   );
   const v = foundScenario!;
-  const moduleCount = v.moduleCount || 1;
+  const moduleCount = v.moduleCount ?? 1;
   const primary = config.module || v.module;
   const selectedModules = config.modules
     ? [...config.modules]
@@ -7808,7 +7865,7 @@ export function newGame(config: {
     aspect: team[0].aspect,
     villainId: v.id,
     difficulty,
-    module: selectedModules[0],
+    module: selectedModules[0] || "",
     modules: selectedModules,
     phase: "mulligan",
     round: 1,
@@ -7911,6 +7968,7 @@ export function newGame(config: {
     s,
     CATALOG_CARDS.filter(
       (c) =>
+        v.id !== "the_wrecking_crew" &&
         c.faction_code === "encounter" &&
         ((((selectedModules.includes(c.set_code || "") &&
           c.pack_code ===
@@ -8121,6 +8179,64 @@ export function newGame(config: {
         ...(ebonyMaw.ebonyMawReveal(s, s.villain) || []),
         ...(ebonyMaw.ebonyMawReveal(s, s.ebonyMaw.currentMain) || []),
       ].map((e) => effectContext(s, { ...e, actorId: s.firstPlayerId })),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "the_wrecking_crew") {
+    // Breakout (1A) setup: the four villains (version A in Standard and
+    // version B in Expert), their signature side schemes and their own
+    // encounter decks of 15 cards. Wrecker has the active counter.
+    const version = stage - 1;
+    const crewVillain = (key: wreckingCrew.CrewKey) => {
+      const code = wreckingCrew.CREW_VILLAINS[key][version];
+      return Object.assign(makePiece(s, code), {
+        hp: card(code).health! * s.playerCount,
+        maxHp: card(code).health! * s.playerCount,
+        stage: 1,
+      }) as GameState["villain"];
+    };
+    s.villain = crewVillain("wrecker");
+    const bench: wreckingCrew.WreckingCrewState["bench"] = {};
+    for (const key of wreckingCrew.CREW_KEYS.slice(1))
+      bench[key] = crewVillain(key);
+    for (const key of wreckingCrew.CREW_KEYS) {
+      const p = makePiece(s, wreckingCrew.CREW_SCHEMES[key]);
+      p.counters =
+        (card(p).base_threat || 0) *
+        (card(p).base_threat_fixed ? 1 : s.playerCount);
+      s.sideSchemes.push(p);
+    }
+    const decks: wreckingCrew.WreckingCrewState["decks"] = {};
+    for (const key of wreckingCrew.CREW_KEYS)
+      decks[key] = {
+        deck: shuffle(
+          s,
+          CATALOG_CARDS.filter(
+            (c) => wreckingCrew.crewDeckOwner(c.code) === key,
+          ).flatMap((c) =>
+            Array.from({ length: c.quantity }, () => makePiece(s, c.code)),
+          ),
+        ),
+        discard: [],
+      };
+    // Cards a hero shuffles into the encounter deck join the active
+    // villain's deck.
+    s.encounter.deck = s.encounter.deck.length
+      ? shuffle(s, [...decks.wrecker!.deck, ...s.encounter.deck])
+      : decks.wrecker!.deck;
+    delete decks.wrecker;
+    s.wreckingCrew = {
+      active: "wrecker",
+      focus: "wrecker",
+      bench,
+      deckOwner: "wrecker",
+      decks,
+      defeated: [],
+    };
+    s.queue.push(
       effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
     );
     const pacing = s.pacing;
@@ -10739,6 +10855,7 @@ export function abilityOptions(
     ...ebonyMaw.ebonyMawActions(s, p, ebonyMawPorts),
     ...hela.helaActions(s, p, helaPorts),
     ...towerDefense.towerDefenseActions(s, p, towerDefensePorts),
+    ...wreckingCrew.wreckingCrewActions(s, p, wreckingCrewPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -14940,6 +15057,53 @@ const thanosPorts: thanos.ThanosPorts = {
   amplify: (s) => activationAmplify(s),
   log: (s, text, kind) => log(s, text, kind),
   heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+};
+const wreckingCrewPorts: wreckingCrew.WreckingCrewPorts = {
+  ...mutagenPorts,
+  revealHidden,
+  reveal: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    // A separate reveal opens its own window, not the revealing card's.
+    add(s, {
+      ...E("reveal", { piece: p, actorId: playerId }),
+      revealWindowId: undefined,
+    });
+  },
+  shuffle: (s, pieces) => shuffle(s, pieces),
+  villainStat: (s, p, kind, playerId) =>
+    kind === "attack" ? enemyATK(s, p, playerId) : enemySCH(s, p, playerId),
+  defeatVillain: (s) => advanceVillain(s),
+  removeFromGame: (s, id) => movePieceFromPlay(s, id, true),
+  attachmentsOn: (s, id) =>
+    [...s.attachments, ...allInPlay(s)].filter((p) => p.attachedTo === id),
+  resetPiece: (p) => resetPiece(p),
+  endGame,
+  log: (s, text, kind) => log(s, text, kind),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+  mill: (s, playerId, amount) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    const cards = mill(s, amount);
+    activateSeat(s, previous);
+    return cards;
+  },
+  randomDiscard: (s, playerId) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    const p = randomDiscard(s);
+    activateSeat(s, previous);
+    return p;
+  },
+  allies: (s, playerId) => friends(seatView(s, playerId)),
+  remaining: (s, target) => {
+    if (target.startsWith("hero:"))
+      return seatView(s, target.slice(5)).player.hp;
+    const p = find(s, target);
+    return p ? pieceHP(s, p) - p.damage : 0;
+  },
+  inPlay: (s, id) => !!find(s, id),
+  cost: (p) => Math.max(0, Number(card(p).cost) || 0),
+  canDiscard: (_s, p) => !isPermanent(card(p)),
 };
 const lokiPorts: loki.LokiPorts = {
   ...mutagenPorts,
@@ -20243,7 +20407,9 @@ const angelPorts: angel.AngelPorts = {
     isTextBlank(s, { code: heroCard(s).code, id: `hero:${s.activePlayerId}` }),
   maxHP,
   permanent: (s, p) =>
-    isPermanent(card(p)) || zeroTolerance.zeroToleranceIsPermanent(s, p),
+    isPermanent(card(p)) ||
+    zeroTolerance.zeroToleranceIsPermanent(s, p) ||
+    wreckingCrew.wreckingCrewSchemeLocked(s, p),
   friendly: (s) => targets(s, "friendly"),
   controlled: (s) => targets(s, "controlled"),
   enemies: (s, attack) => targets(s, "enemy", attack),
@@ -22575,6 +22741,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     inheritors.inheritorsModifiers(s, p).attack +
     escape.escapeVillainStat(s, p) +
     hela.helaVillainStat(s, p) +
+    wreckingCrew.wreckingCrewAttackBonus(s, p) +
     nebulaVillain.nebulaEnemyAttack(s, p) +
     mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).attack;
   const attachments = enemyAttachmentModifier(s, p.id, "attack");
@@ -22790,10 +22957,24 @@ function declareDefense(s: GameState) {
         ),
       );
   }
-  const allowed =
+  const printedAllowed =
     rulesCode(p) === "01132" && friends(s).some((p) => !p.exhausted)
       ? opts.filter((o) => o.id !== "take" && !o.id.startsWith("hero"))
       : opts;
+  const rammingAllies = wreckingCrew.wreckingCrewMustDefendWithAlly(
+    s,
+    a.attacker,
+  )
+    ? new Set(
+        friends(seatView(s, a.originalPlayerId || s.activePlayerId))
+          .filter((q) => !q.exhausted)
+          .map((q) => q.id),
+      )
+    : undefined;
+  const rammed = rammingAllies
+    ? printedAllowed.filter((o) => rammingAllies.has(o.id))
+    : [];
+  const allowed = rammed.length ? rammed : printedAllowed;
   // Hawkeye's optional window must resolve before declaring a defender.
   add(
     s,
@@ -22943,6 +23124,7 @@ function boostEffects(s: GameState, p: Piece) {
     ronan.ronanBoost(s, p) ??
     ebonyMaw.ebonyMawBoost(s, p) ??
     towerDefense.towerDefenseBoost(s, p) ??
+    wreckingCrew.wreckingCrewBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -23370,7 +23552,8 @@ function finishScheme(s: GameState) {
           !isTextBlank(s, p) &&
           s.sideSchemes.some((q) => q.code === "44034")
             ? s.sideSchemes.find((q) => q.code === "44034")!.id
-            : phoenix.phoenixSchemeTarget(s, p),
+            : (wreckingCrew.wreckingCrewSchemeTarget(s, p) ??
+              phoenix.phoenixSchemeTarget(s, p)),
         amount:
           amount +
           Number(s.flags[`phoenixManipulationBonus:${activation.id}`] || 0),
@@ -23390,6 +23573,7 @@ function finishScheme(s: GameState) {
     ...absorbingMan.absorbingActivation(s, id, s.activePlayerId),
     ...badoon.badoonSchemed(s, id),
     ...hela.helaSchemed(s, id),
+    ...wreckingCrew.wreckingCrewSchemed(s, id),
     ...thanos
       .thanosAfterActivation(s, {
         token: (activation.id ||= `scheme${s.nextId++}`),
@@ -24230,6 +24414,23 @@ function finishAttackAfterDamage(
               !find(s, target),
             boostCodes: a.boostCodes || [],
           }),
+          ...wreckingCrew.wreckingCrewAttackResponses(
+            s,
+            {
+              token: a.id!,
+              attackerId: a.attacker,
+              attackerCode: a.attackerSnapshot?.code || p?.code || "",
+              playerId: recipientId,
+              performed: !!a.completionRecorded,
+              textBlank: !p || isTextBlank(s, p),
+              undefended:
+                (!a.defender || a.defender === "none") && !a.eventDefense,
+              damagePlaced: a.damagePlaced || 0,
+              excess: Math.max(0, (a.damage || 0) - Math.max(0, before)),
+              marker: a.activationAfter?.type,
+            },
+            wreckingCrewPorts,
+          ),
           ...redSkullModules.redSkullAttackResponses(s, a, redSkullModulePorts),
           ...experimentalWeapons.experimentalWeaponsAttackResponses(
             s,
@@ -24886,6 +25087,10 @@ function reveal(
         c.type_code !== "attachment") ||
       (loki.LOKI_SCENARIO_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (wreckingCrew.WRECKING_CREW_SCRIPT_CODES.some(
+        (code) => code === p.code,
+      ) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -25077,6 +25282,7 @@ function reveal(
       ...thanos.THANOS_SCRIPT_CODES,
       ...hela.HELA_SCRIPT_CODES,
       ...loki.LOKI_SCENARIO_CODES,
+      ...wreckingCrew.WRECKING_CREW_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -25114,6 +25320,7 @@ function reveal(
       thanos.thanosReveal(s, p) ??
       hela.helaReveal(s, p) ??
       loki.lokiReveal(s, p) ??
+      wreckingCrew.wreckingCrewReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -25194,6 +25401,7 @@ function reveal(
     thanos.thanosReveal(s, p) ??
     hela.helaReveal(s, p) ??
     loki.lokiReveal(s, p) ??
+    wreckingCrew.wreckingCrewReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -26321,6 +26529,29 @@ function resolve(s: GameState, e: Effect) {
       return;
     }
   }
+  if (s.wreckingCrew) {
+    const crewKey = wreckingCrew.wreckingCrewWindowKey(s, e);
+    if (crewKey) {
+      // Focus now, so synchronous callers keep their order. Return at once
+      // if nothing is pending, otherwise after everything the effect queued.
+      const before = new Set(s.queue);
+      const prompt = s.prompt;
+      const previous = wreckingCrew.wreckingCrewOpenWindow(s, crewKey);
+      resolve(s, { ...e, responseGroup: undefined });
+      const fresh = s.queue.some((q) => !before.has(q));
+      const index = s.queue.findIndex((q) => before.has(q));
+      const back = E("crew:focus-back", {
+        key: previous,
+        mandatory: true,
+        responseGroup: undefined,
+      });
+      if (!fresh && s.prompt === prompt)
+        wreckingCrew.wreckingCrewCloseWindow(s, previous);
+      else if (index < 0) s.queue.push(back);
+      else s.queue.splice(index, 0, back);
+      return;
+    }
+  }
   if (e.type === "acolytes-native:order") {
     choose(
       s,
@@ -26565,6 +26796,7 @@ function resolve(s: GameState, e: Effect) {
           thanos.thanosReveal(state, piece) ??
           hela.helaReveal(state, piece) ??
           loki.lokiReveal(state, piece) ??
+          wreckingCrew.wreckingCrewReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -26692,6 +26924,7 @@ function resolve(s: GameState, e: Effect) {
   if (ronan.resolveRonanEffect(s, e, ronanPorts)) return;
   if (ebonyMaw.resolveEbonyMawEffect(s, e, ebonyMawPorts)) return;
   if (towerDefense.resolveTowerDefenseEffect(s, e, towerDefensePorts)) return;
+  if (wreckingCrew.resolveWreckingCrewEffect(s, e, wreckingCrewPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -28567,6 +28800,11 @@ function resolve(s: GameState, e: Effect) {
         ...(e.draxBasicAttack
           ? loki.lokiAfterBasicAttack(s, e.target, lokiPorts)
           : []),
+        ...wreckingCrew.wreckingCrewAfterHeroAttack(
+          s,
+          e.target,
+          wreckingCrewPorts,
+        ),
         ...(e.draxBasicAttack
           ? [
               E("magneto-native:basic-response", {
@@ -29064,7 +29302,12 @@ function resolve(s: GameState, e: Effect) {
     }
     case "defeatScheme": {
       const p = s.sideSchemes.find((x) => x.id === e.id);
-      if (p && zeroTolerance.zeroToleranceIsPermanent(s, p)) break;
+      if (
+        p &&
+        (zeroTolerance.zeroToleranceIsPermanent(s, p) ||
+          wreckingCrew.wreckingCrewSchemeLocked(s, p))
+      )
+        break;
       const interrupts =
         p && !e.visionPackChanceChecked
           ? visionPack.visionPackSchemeDefeating(s, p, visionPackPorts)
@@ -35431,6 +35674,7 @@ function resolve(s: GameState, e: Effect) {
         ...redSkull.redSkullStepOne(s),
         ...badoon.badoonStepOne(s),
         ...(e.towerSecond ? [] : towerDefense.towerDefenseStepOne(s)),
+        ...wreckingCrew.wreckingCrewStepOne(s),
       );
       break;
     case "villainActivate": {
@@ -35942,6 +36186,7 @@ function run(s: GameState) {
       e.type.startsWith("ronan:") ||
       e.type.startsWith("ebony:") ||
       e.type.startsWith("tower:") ||
+      e.type.startsWith("crew:") ||
       e.type.startsWith("thanos:") ||
       e.type.startsWith("hela:") ||
       e.type.startsWith("loki:") ||
@@ -36325,6 +36570,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...ebonyMaw.ebonyMawActions(s, p, ebonyMawPorts),
               ...hela.helaActions(s, p, helaPorts),
               ...towerDefense.towerDefenseActions(s, p, towerDefensePorts),
+              ...wreckingCrew.wreckingCrewActions(s, p, wreckingCrewPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),

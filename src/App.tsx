@@ -242,6 +242,14 @@ import {
 } from "./game/hela";
 import { lokiDamageProhibited, lokiVictories } from "./game/loki";
 import {
+  CREW_KEYS,
+  CREW_VILLAINS,
+  crewDeckCounts,
+  crewSchemeKey,
+  crewScheme,
+  crewVillain,
+} from "./game/wrecking-crew";
+import {
   AVENGERS_TOWER,
   DAMAGED_TOWER,
   FOCUSED_DEFENSE,
@@ -1011,8 +1019,9 @@ export default function App() {
   );
   const [module, setModule] = useState("bomb_scare");
   const [additionalModules, setAdditionalModules] = useState<string[]>([]);
-  const selectedModules = [module, ...additionalModules];
-  const moduleCount = villain.moduleCount || 1;
+  // The Wrecking Crew uses no modular encounter sets.
+  const moduleCount = villain.moduleCount ?? 1;
+  const selectedModules = moduleCount ? [module, ...additionalModules] : [];
   const [senatorDamage, setSenatorDamage] = useState("");
   const [captureAllocation, setCaptureAllocation] = useState(["", "", ""]);
   function selectScenarioModules(
@@ -1028,8 +1037,8 @@ export default function App() {
       ]),
     ]
       .filter((id) => legal.includes(id))
-      .slice(0, scenario.moduleCount || 1);
-    setModule(chosen[0]);
+      .slice(0, scenario.moduleCount ?? 1);
+    setModule(chosen[0] ?? "");
     setAdditionalModules(chosen.slice(1));
   }
   function selectModule(id: string, index = 0) {
@@ -1311,8 +1320,8 @@ export default function App() {
       list.map((p, i) => (i === setupSeat ? { heroId: h.id, aspect: a } : p)),
     );
     setVillain(v);
-    const primary = pick(scenarioModules(v.id)).id;
-    selectScenarioModules(v, [primary]);
+    const modules = scenarioModules(v.id);
+    selectScenarioModules(v, modules.length ? [pick(modules).id] : []);
     setSenatorDamage("");
     setCaptureAllocation(["", "", ""]);
   }
@@ -1326,8 +1335,10 @@ export default function App() {
     setSetupSeat(0);
     setVillain(v);
     const choices = scenarioModules(v.id);
-    const primary = choices[(n >>> 8) % choices.length].id;
-    selectScenarioModules(v, [primary]);
+    selectScenarioModules(
+      v,
+      choices.length ? [choices[(n >>> 8) % choices.length].id] : [],
+    );
     setSenatorDamage("");
     setCaptureAllocation(["", "", ""]);
     setDifficulty("standard");
@@ -2546,6 +2557,16 @@ export default function App() {
                       </select>
                     </label>
                   ))}
+                  {villain.id === "the_wrecking_crew" && (
+                    <p className="setting-help">
+                      No modular sets: Wrecker, Thunderball, Piledriver and
+                      Bulldozer each bring their own encounter deck and side
+                      scheme. Standard uses their A sides, Expert their B sides.
+                      Only the villain with the active counter activates and
+                      deals encounter cards, but you can attack or thwart any of
+                      them. Defeat all four to win.
+                    </p>
+                  )}
                   {villain.id === "infiltrate_the_museum" && (
                     <p className="setting-help">
                       Every card discarded from play goes into The Collection
@@ -2927,7 +2948,10 @@ export default function App() {
                         setHeroic(r.heroic);
                         setSeedText(r.seed ? String(r.seed) : "");
                         setToast(
-                          r.module && r.heroes.every((seat) => seat.deckCards)
+                          (r.module ||
+                            VILLAINS.find((v) => v.id === r.villainId)
+                              ?.moduleCount === 0) &&
+                            r.heroes.every((seat) => seat.deckCards)
                             ? "Original team, decks, modular encounters and seed loaded. Start the mission to replay it."
                             : "This older result did not record full setup details. Starter decks and the recommended modular set are loaded with its original seed.",
                         );
@@ -5147,6 +5171,122 @@ function TowerVillains({
     </div>
   );
 }
+/** The Wrecking Crew: four villains, the active one lit, each with his
+ * side scheme's threat and his own encounter deck. */
+function CrewVillains({
+  game: s,
+  inspect,
+  send,
+}: {
+  game: GameState;
+  inspect: (c: Inspect) => void;
+  send?: (c: Command) => void;
+}) {
+  const wc = s.wreckingCrew!;
+  return (
+    <div
+      className="villain-area tower-villains crew-villains"
+      role="group"
+      aria-label="Villains"
+    >
+      <p className="crew-objective" role="status">
+        Defeat all four villains · {wc.defeated.length} of 4 defeated
+      </p>
+      {CREW_KEYS.map((key) => {
+        const v = crewVillain(s, key);
+        const name = card(CREW_VILLAINS[key][0]).name;
+        if (!v)
+          return (
+            <div
+              className="tower-villain crew-defeated"
+              key={key}
+              role="group"
+              aria-label={`${name}, defeated`}
+            >
+              <span className="small-label">DEFEATED</span>
+              <h2 className="villain-name-long">{name.toUpperCase()}</h2>
+            </div>
+          );
+        const active = wc.active === key;
+        const stats = enemyStats(s, v);
+        const scheme = crewScheme(s, key);
+        const deck = crewDeckCounts(s, key);
+        return (
+          <div
+            className={`tower-villain${active ? " active" : ""}`}
+            key={key}
+            data-piece-id={v.id}
+            role="group"
+            aria-label={active ? `${name}, the active villain` : name}
+          >
+            <div className="host-card-stack">
+              <button
+                className="table-card villain-card"
+                onClick={() => inspect({ code: v.code })}
+                aria-label={`Inspect ${name}`}
+              >
+                <CardImage code={v.code} />
+                <span className="inspect-hint">
+                  <Eye size={13} /> Inspect
+                </span>
+              </button>
+              <AttachedCards game={s} host={v} inspect={inspect} send={send} />
+            </div>
+            <div className="villain-info">
+              <span className="small-label">
+                {active ? "ACTIVE VILLAIN" : "VILLAIN"} ·{" "}
+                {s.difficulty === "expert" ? "B" : "A"}
+              </span>
+              <h2 className="villain-name-long">{name.toUpperCase()}</h2>
+              <HealthDial
+                value={v.hp}
+                max={v.maxHp}
+                label={`${name} HP`}
+                villain
+              />
+              <div className="enemy-stats stat-row">
+                <StatToken
+                  kind="attack"
+                  value={stats.attack}
+                  label="ATK"
+                  compact
+                />
+                <StatToken
+                  kind="threat"
+                  value={stats.scheme}
+                  label="SCH"
+                  compact
+                />
+              </div>
+              <Status piece={v} />
+              {scheme && (
+                <span
+                  className="stat-caption"
+                  aria-label={`${card(scheme).name}: ${scheme.counters} threat of 10`}
+                >
+                  {card(scheme).name} · {scheme.counters}/10 threat
+                </span>
+              )}
+              <span
+                className="stat-caption"
+                aria-label={`${name}'s encounter deck: ${deck.deck} cards, ${deck.discard} in the discard pile`}
+              >
+                Deck {deck.deck} · discard {deck.discard}
+              </span>
+              {active && (
+                <span className="stat-caption">
+                  {s.phase === "villain"
+                    ? "Activates and deals encounter cards this villain phase"
+                    : "Has the active counter"}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 /** Tower Defense: both main schemes, Focused Defense on the active one. */
 function TowerMainSchemes({
   game: s,
@@ -5360,6 +5500,16 @@ function AttachedCards({
                 "21103",
                 "21104",
                 "21158",
+                // The Wrecking Crew: Held Hostage, Magic Crowbar, Wrecker's
+                // Command, Ball and Chain and Bulldozer's Helmet.
+                "07005",
+                "07006",
+                "07007",
+                "07020",
+                "07021",
+                "07036",
+                "07049",
+                "07050",
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -5648,10 +5798,16 @@ function Tabletop({
           </span>
         </div>
         <span className="table-game-meta">
-          {s.difficulty} <span>·</span>{" "}
-          {(s.modules || [s.module])
-            .map((id) => MODULES.find((m) => m.id === id)?.name)
-            .join(" + ")}
+          {s.difficulty}
+          {(s.modules || [s.module]).filter(Boolean).length ? (
+            <>
+              {" "}
+              <span>·</span>{" "}
+              {(s.modules || [s.module])
+                .map((id) => MODULES.find((m) => m.id === id)?.name)
+                .join(" + ")}
+            </>
+          ) : null}
           {s.heroic ? (
             <>
               {" "}
@@ -5694,7 +5850,9 @@ function Tabletop({
                       : "Defeat Hela's Mystic side"
                     : s.loki
                       ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
-                      : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                      : s.wreckingCrew
+                        ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
+                        : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
             <span className={threatCritical ? "danger" : ""}>
@@ -5843,6 +6001,12 @@ function Tabletop({
             <section className="opposition">
               {s.towerDefense ? (
                 <TowerVillains
+                  game={s}
+                  inspect={inspect}
+                  send={canUseAction ? sendAction : undefined}
+                />
+              ) : s.wreckingCrew ? (
+                <CrewVillains
                   game={s}
                   inspect={inspect}
                   send={canUseAction ? sendAction : undefined}
@@ -6358,7 +6522,9 @@ function Tabletop({
                     <span className="table-group-label">
                       {card(p).type_code === "player_side_scheme"
                         ? "PLAYER SIDE SCHEME"
-                        : "SIDE SCHEME"}
+                        : s.wreckingCrew && crewSchemeKey(p.code)
+                          ? `${card(crewVillain(s, crewSchemeKey(p.code)!)?.code || p.code).name.toUpperCase()}'S SIDE SCHEME`
+                          : "SIDE SCHEME"}
                     </span>
                     <button
                       className="scheme-card"
@@ -6367,7 +6533,12 @@ function Tabletop({
                     >
                       <CardImage code={p.code} />
                     </button>
-                    <AttachedCards game={s} host={p} inspect={inspect} />
+                    <AttachedCards
+                      game={s}
+                      host={p}
+                      inspect={inspect}
+                      send={canUseAction ? sendAction : undefined}
+                    />
                     <div className="side-scheme-counter">
                       <span className="threat-chip">
                         <PremiumToken kind="threat" />
@@ -6384,6 +6555,14 @@ function Tabletop({
                       </span>
                       {(p.accelerationTokens || 0) > 0 && (
                         <span>Acceleration tokens: {p.accelerationTokens}</span>
+                      )}
+                      {s.wreckingCrew && crewSchemeKey(p.code) && (
+                        <span
+                          className={`crew-threshold${p.counters >= 7 ? " near" : ""}`}
+                          aria-label={`${card(p).name}: Forced Response at 10 threat, ${Math.max(0, 10 - p.counters)} to go`}
+                        >
+                          Forced Response at 10 · stays in play
+                        </span>
                       )}
                       {s.hela && helaSchemeLocked(s, p.id) && (
                         <span className="scheme-lock">
@@ -6442,7 +6621,12 @@ function Tabletop({
                 ))}
               </div>
               <div className="encounter-zone">
-                <span className="table-group-label">ENCOUNTER DECK</span>
+                <span className="table-group-label">
+                  ENCOUNTER DECK
+                  {s.wreckingCrew
+                    ? ` · ${card(crewVillain(s, s.wreckingCrew.active)?.code || s.villain.code).name.toUpperCase()}`
+                    : ""}
+                </span>
                 <div className="table-piles">
                   <TablePile
                     kind="encounter"

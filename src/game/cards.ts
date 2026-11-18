@@ -1292,6 +1292,20 @@ export const VILLAINS = [
       "Loki sits on the throne of Asgard with the Infinity Gauntlet. Five different Lokis trade places at random; defeat enough of them before his reign is complete.",
     color: "#3f6f3a",
   },
+  {
+    id: "the_wrecking_crew",
+    name: "The Wrecking Crew",
+    codes: ["07002", "07003"],
+    schemes: ["07001b"],
+    module: "",
+    moduleCount: 0,
+    difficulty: 3,
+    title: "Breakout",
+    location: "Ryker's Island",
+    description:
+      "Wrecker, Thunderball, Piledriver and Bulldozer break out of Ryker's Island together. Only the villain with the active counter activates and deals the encounter cards, from his own deck; defeat all four before the breakout is complete.",
+    color: "#6b5a3a",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1348,6 +1362,8 @@ export const MODULES = [
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
   const scenario = VILLAINS.find((v) => v.id === villainId);
+  // The Wrecking Crew uses no other encounter sets.
+  if (scenario?.moduleCount === 0) return [];
   const fixed = [
     ...(scenario?.fixedSets || []),
     ...(scenario?.reservedSets || []),

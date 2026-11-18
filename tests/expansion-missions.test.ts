@@ -45,6 +45,7 @@ import {
 } from "../src/game/hero-runtime";
 import { deckSizeFor } from "../src/game/decks";
 import { seatView } from "../src/game/team";
+import { crewBench, crewStoredPieces } from "../src/game/wrecking-crew";
 import type { Aspect, Command, GameState, Piece } from "../src/game/types";
 
 const ended = (s: GameState) => ["won", "lost"].includes(s.phase);
@@ -118,7 +119,11 @@ const heroIds = [
 const missions = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
     (["standard", "expert"] as const).flatMap((difficulty, di) =>
-      scenarioModules(scenario.id).map((module, mi) => ({
+      // The Wrecking Crew uses no modular sets: one configuration.
+      (scenario.moduleCount === 0
+        ? [{ id: "none" }]
+        : scenarioModules(scenario.id)
+      ).map((module, mi) => ({
         heroId,
         villainId: scenario.id,
         difficulty,
@@ -187,6 +192,8 @@ function ownedPieces(s: GameState, originalIds?: Set<string>): Piece[] {
     ...(s.redSkull?.sleeper ? [s.redSkull.sleeper] : []),
     ...(s.collector?.collection || []),
     ...(s.escape?.setAside || []),
+    // The Wrecking Crew: the encounter decks of the villains not active.
+    ...crewStoredPieces(s),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
     ...(s.attack?.pendingBoosts || []),
@@ -241,6 +248,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       "thanos",
       "hela",
       "loki",
+      "the_wrecking_crew",
     ].includes(s.villainId)
   )
     return [];
@@ -300,6 +308,9 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
     ...(m?.activeVillainRetired ? [] : [s.villain]),
     // Hela: the set-aside Journey Through Hel cards.
     ...(s.hela?.setAside || []),
+    // The Wrecking Crew: the villains out of focus and the encounter decks
+    // of the villains who are not active.
+    ...(s.wreckingCrew ? [...crewBench(s), ...crewStoredPieces(s)] : []),
     // Loki: the set-aside Lokis and the Infinity Stone deck.
     ...(s.loki
       ? [...s.loki.setAside, ...s.loki.stoneDeck, ...s.loki.stoneDiscard]
@@ -551,9 +562,16 @@ function runMission(config: (typeof missions)[number]) {
                                     ? "hela"
                                     : s.villainId === "loki"
                                       ? "loki"
-                                      : undefined;
+                                      : s.villainId === "the_wrecking_crew"
+                                        ? "the_wrecking_crew"
+                                        : undefined;
+  // The Wrecking Crew's cards span five sets: every card of its pack.
   const scenarioSources = scenarioSet
-    ? scenarioPhysicalPieces(s).filter((p) => card(p).set_code === scenarioSet)
+    ? scenarioPhysicalPieces(s).filter((p) =>
+        scenarioSet === "the_wrecking_crew"
+          ? card(p).pack_code === "twc"
+          : card(p).set_code === scenarioSet,
+      )
     : [];
   const scenarioIds = scenarioSources.map((p) => p.id).sort();
   const scenarioCodeFamily = new Map(
@@ -593,7 +611,9 @@ function runMission(config: (typeof missions)[number]) {
                                     ? 17
                                     : scenarioSet === "loki"
                                       ? 20
-                                      : 29;
+                                      : scenarioSet === "the_wrecking_crew"
+                                        ? 68
+                                        : 29;
     expect(
       scenarioSources,
       "All selected original scenario cards begin in physical zones",
@@ -648,8 +668,10 @@ function runMission(config: (typeof missions)[number]) {
     // ownedPieces admits only original IDs. Equal total and distinct counts
     // therefore prove every original instance occurs exactly once.
     if (scenarioSet) {
-      const actual = scenarioPhysicalPieces(s).filter(
-        (p) => card(p).set_code === scenarioSet,
+      const actual = scenarioPhysicalPieces(s).filter((p) =>
+        scenarioSet === "the_wrecking_crew"
+          ? card(p).pack_code === "twc"
+          : card(p).set_code === scenarioSet,
       );
       expect(
         actual.map((p) => p.id).sort(),
@@ -830,14 +852,18 @@ describe("published expansion starters across every supported mission setting", 
       heroIds.length *
         2 *
         VILLAINS.reduce(
-          (n, scenario) => n + scenarioModules(scenario.id).length,
+          (n, scenario) =>
+            n +
+            (scenario.moduleCount === 0
+              ? 1
+              : scenarioModules(scenario.id).length),
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(25);
+    expect(VILLAINS).toHaveLength(26);
     expect(MODULES).toHaveLength(40);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(103480);
+    expect(missions).toHaveLength(103584);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -848,10 +874,28 @@ describe("published expansion starters across every supported mission setting", 
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
-    // Loki and the Enchantress modular set extend the grid. Every earlier name
-    // and seed stays in place: the 96,824 configurations before this import
-    // hash identically to the complete grid of 37147cd.
-    const helaGrid = missions.filter(
+    // The Wrecking Crew extends the grid without a modular set. Every earlier
+    // name and seed stays in place: the 103,480 configurations before this
+    // import hash identically to the complete grid of e629ea5.
+    const lokiGrid = missions.filter(
+      (m) => m.villainId !== "the_wrecking_crew",
+    );
+    expect(lokiGrid).toHaveLength(103480);
+    expect(
+      createHash("sha256").update(manifest(lokiGrid).join("\n")).digest("hex"),
+    ).toBe("f5056c423f3a2507660763a872f07deadb77d998b7a16b10903488eee3da1c38");
+    expect(
+      missions.filter((m) => m.villainId === "the_wrecking_crew"),
+    ).toHaveLength(104);
+    expect(
+      missions
+        .filter((m) => m.villainId === "the_wrecking_crew")
+        .every((m) => m.module === "none"),
+    ).toBe(true);
+    // Loki and the Enchantress modular set extended the grid before that: the
+    // 96,824 configurations before that import hash identically to the
+    // complete grid of 37147cd.
+    const helaGrid = lokiGrid.filter(
       (m) => m.villainId !== "loki" && m.module !== "enchantress",
     );
     expect(helaGrid).toHaveLength(96824);
@@ -1222,7 +1266,9 @@ describe("published expansion starters across every supported mission setting", 
           partition.filter((mission) => mission.villainId === "crossbones")
             .length,
       ),
-    ).toEqual([507, 507, 507, 507, 507, 507, 507, 507]);
+      // Each hero's block of 1,992 configurations now starts on the same
+      // shard, so Crossbones's 78 configurations per hero fall unevenly.
+    ).toEqual([468, 468, 520, 520, 520, 520, 520, 520]);
     expect(
       partitions.map(
         (partition) =>
@@ -1291,11 +1337,19 @@ describe("published expansion starters across every supported mission setting", 
           partition.filter((mission) => mission.villainId === "loki").length,
       ),
     ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
-    expect(new Set(missions.map(key)).size).toBe(103480);
-    expect(new Set(combined.map(key)).size).toBe(103480);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter(
+            (mission) => mission.villainId === "the_wrecking_crew",
+          ).length,
+      ),
+    ).toEqual([0, 0, 0, 0, 0, 0, 52, 52]);
+    expect(new Set(missions.map(key)).size).toBe(103584);
+    expect(new Set(combined.map(key)).size).toBe(103584);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(12935);
+      expect(partition).toHaveLength(12948);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -1303,11 +1357,11 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(248);
+      expect(Math.min(...perShard)).toBe(249);
       expect(Math.max(...perShard)).toBe(249);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(1990);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(1992);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 12935 : 103480);
+    expect(selectedMissions).toHaveLength(isSharded ? 12948 : 103584);
   });
   for (const mission of selectedMissions)
     it(

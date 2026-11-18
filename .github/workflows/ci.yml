@@ -125,6 +125,8 @@ jobs:
             scripts: test:hela
           - group: loki
             scripts: test:loki
+          - group: wrecking-crew
+            scripts: test:wrecking-crew
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

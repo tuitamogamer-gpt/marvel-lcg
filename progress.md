@@ -593,3 +593,9 @@ Original prompt: I want to create fully playable and scripted Marvel Champions L
 - The source matrix grows to 103,480 configurations (4,160 Loki and 2,496 Enchantress cases elsewhere) in eight shards of 12,935; all 96,824 previous names and seeds are retained by manifest hash. The inventory records 2,601 executable, 2,162 dedicated and 1,950 unsupported faces, twenty-five scenarios and forty modular sets, and pins 143 source files. The Mad Titan's Shadow has 193 of 213 faces registered; only Odin's King side and the campaign remain.
 - Verified locally: 11,289 tests across 297 files with one intentional skip; 16,064 source configurations (all 6,656 new ones plus every Thanos, Valkyrie, Storm and Phoenix configuration); the new browser check against the development server and the production build; retained Thanos and Hela browser checks; TypeScript, formatting, the production build and the native API entry.
 
+## The Wrecking Crew — 2026-11-18
+
+- Imported The Wrecking Crew scenario pack natively: Breakout, Wrecker, Thunderball, Piledriver and Bulldozer in versions A and B, their four signature side schemes and their four 15-card encounter decks. All 60 faces are registered. See [the integration contract](docs/wrecking-crew-integration.md).
+- Four villains are in play at once; the one with the active counter activates and deals encounter cards from his own deck. Focus windows generalize Tower Defense's pair to four villains, and the active villain's deck is always the native encounter deck. Each side scheme stays in play until its villain is defeated and punishes the team at 10 threat.
+- The scenario uses no modular set, Standard or Expert set, obligations or nemeses, so the setup screen hides the modular choice and the source matrix adds one configuration per hero and difficulty.
+- Restored two printed fields from the original scans: Magic Crowbar's WEAPON trait and Pile It On!'s Piledriver.

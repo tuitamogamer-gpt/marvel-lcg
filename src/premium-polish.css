@@ -706,6 +706,42 @@ h3 {
       auto;
   }
 }
+/* The Wrecking Crew: four compact villain rows, two per row when there is
+   room, the active one lit; defeated villains stay as a slim marker. */
+.app .physical-table .villain-area.crew-villains {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 6px;
+  align-items: start;
+}
+.app .physical-table .crew-villains > .crew-objective {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #ffe2a3;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+.app .physical-table .tower-villain.crew-defeated {
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0.55;
+  border-style: dashed;
+  border-color: #ffffff2e;
+}
+.app .physical-table .crew-defeated h2 {
+  margin: 0;
+  font-size: 12px;
+}
+.app .physical-table .crew-threshold.near {
+  color: #ffc4bb;
+  font-weight: 800;
+}
+@media (min-width: 681px) {
+  .app .physical-table .opposition:has(> .crew-villains) {
+    grid-template-columns: minmax(220px, 470px) minmax(292px, 1fr) auto;
+  }
+}
 /* Hela: the Journey Through Hel, a compact track in the villain column. */
 .app .physical-table .villain-info > .hela-journey {
   display: flex;

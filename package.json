@@ -75,7 +75,8 @@
     "test:tower-defense": "node scripts/tower-defense-check.mjs",
     "test:thanos": "node scripts/thanos-check.mjs",
     "test:hela": "node scripts/hela-check.mjs",
-    "test:loki": "node scripts/loki-check.mjs"
+    "test:loki": "node scripts/loki-check.mjs",
+    "test:wrecking-crew": "node scripts/wrecking-crew-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

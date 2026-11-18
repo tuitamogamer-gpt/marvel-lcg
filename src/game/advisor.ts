@@ -5,6 +5,7 @@ import { visionCanAttack } from "./vision.js";
 import { TOWER_OTHER_MAIN, towerDefenseSchemeLimit } from "./tower-defense.js";
 import { HELA_VICTORY_SCHEMES, helaSchemeLocked, helaWounded } from "./hela.js";
 import { lokiDamageProhibited } from "./loki.js";
+import { crewSchemeKey, crewVillains } from "./wrecking-crew.js";
 import {
   doctorStrangeAbilityOptions,
   doctorStrangeTopInvocation,
@@ -628,13 +629,21 @@ export function advisePrompt(s: GameState): Advice | null {
         };
     }
     // Tower Defense: both villains fall together, so press the one with more
-    // hit points remaining.
+    // hit points remaining. The Wrecking Crew: finish the weakest villain.
     const other = s.towerDefense?.other.villain;
+    const crew = s.wreckingCrew ? crewVillains(s) : [];
     const villain =
-      best(
-        p.options.filter((o) => o.id === s.villain.id || o.id === other?.id),
-        (o) => (o.id === s.villain.id ? s.villain.hp : other!.hp),
-      ) || p.options[0];
+      (crew.length
+        ? best(
+            p.options.filter((o) => crew.some((v) => v.id === o.id)),
+            (o) => -crew.find((v) => v.id === o.id)!.hp,
+          )
+        : best(
+            p.options.filter(
+              (o) => o.id === s.villain.id || o.id === other?.id,
+            ),
+            (o) => (o.id === s.villain.id ? s.villain.hp : other!.hp),
+          )) || p.options[0];
     return {
       command: { type: "CHOOSE", id: villain.id },
       title: villain.label,
@@ -666,6 +675,9 @@ export function advisePrompt(s: GameState): Advice | null {
       // Hela: Garm, Skurge and Nidhogg lock their side schemes; the Journey
       // Through Hel frees Odin.
       if (helaSchemeLocked(s, side.id)) return -20;
+      // The Wrecking Crew: a signature side scheme punishes everyone at 10
+      // threat, so keep the fullest one down.
+      if (s.wreckingCrew && crewSchemeKey(side.code)) return 3 + side.counters;
       return (
         ((HELA_VICTORY_SCHEMES as readonly string[]).includes(side.code)
           ? 4

@@ -14,6 +14,7 @@ type PrintedMetadata = Readonly<
       | "base_threat"
       | "scheme_hazard"
       | "scheme_amplify"
+      | "traits"
     >
   >
 >;
@@ -94,6 +95,14 @@ const printedMetadata: Readonly<Record<string, PrintedMetadata>> = {
     base_threat: 3,
     scheme_hazard: undefined,
     scheme_amplify: 1,
+  },
+  // public/cards/catalog/07006.webp: Magic Crowbar is printed with the
+  // WEAPON trait.
+  "07006": { traits: "Weapon." },
+  // public/cards/catalog/07034.webp: Pile It On! names Piledriver, as the
+  // rules insert's Signature Side Schemes section also states.
+  "07034": {
+    text: "<b>Piledriver's Side Scheme.</b>\nThis card cannot leave play while Piledriver is in play.\nPile Drive — <b>Forced Response</b>: After threat is placed here, if there is 10 or more threat here, each player discards the upgrade or support they control with the highest cost. Remove all but 3 threat from this scheme.",
   },
   "21142": {
     name: "Hall of Nastrond",
