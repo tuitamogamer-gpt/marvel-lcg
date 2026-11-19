@@ -19,6 +19,7 @@ import * as venomVillain from "./venom-villain.js";
 import * as mysterio from "./mysterio.js";
 import * as sinisterSix from "./sinister-six.js";
 import * as venomGoblin from "./venom-goblin.js";
+import * as sinisterModulars from "./sinister-modulars.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -794,6 +795,14 @@ function readyIdentity(s: GameState) {
   add(s, ...quicksilver.quicksilverReadied(s));
   return true;
 }
+/** No character can defend against this enemy's attacks: Armadillo with
+ * Armadillo's Shell, or Tracking Display attached. */
+function defenseBlocked(s: GameState, enemyId: string) {
+  return (
+    armadillo.armadilloDefenseBlocked(s, enemyId) ||
+    sinisterModulars.sinisterModularCannotDefend(s, enemyId)
+  );
+}
 function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
   if (
     name === "Piercing" &&
@@ -907,6 +916,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           kang.kangKeyword(s, p, "Piercing") > 0 ||
           sandman.sandmanKeyword(s, p, "Piercing") > 0 ||
           venomVillain.venomKeyword(s, p, "Piercing") > 0 ||
+          sinisterModulars.sinisterModularKeyword(s, p, "Piercing") > 0 ||
           badoon.badoonKeyword(s, p, "Piercing") ||
           ronan.ronanKeyword(s, p, "Piercing") ||
           taskmaster.taskmasterKeyword(s, p, "Piercing") ||
@@ -965,6 +975,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           hoodModular.hoodModularKeyword(s, p, "Overkill") > 0 ||
           sandman.sandmanKeyword(s, p, "Overkill") > 0 ||
           venomVillain.venomKeyword(s, p, "Overkill") > 0 ||
+          sinisterModulars.sinisterModularKeyword(s, p, "Overkill") > 0 ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
             .overkill)
       ),
@@ -995,7 +1006,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         nebulaVillain.nebulaVillainKeyword(s, p, "Retaliate") +
         mansionKeywords.retaliate +
         hoodModular.hoodModularKeyword(s, p, "Retaliate") +
-        hoodModular.hoodModularGlobal(s).retaliate
+        hoodModular.hoodModularGlobal(s).retaliate +
+        sinisterModulars.sinisterModularKeyword(s, p, "Retaliate")
     : Math.max(intrinsic, grantedValue);
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
@@ -1176,7 +1188,7 @@ function choose(
               shadowcatPorts,
             ))) &&
         (!/\([^)]*\bdefense\b/i.test(c?.text || "") ||
-          !armadillo.armadilloDefenseBlocked(s, s.attack!.attacker))
+          !defenseBlocked(s, s.attack!.attacker))
       );
     });
   if (!options.length) {
@@ -3245,6 +3257,12 @@ function dealDamage(
   // The Bell Tower (Ringing): increase all damage Venom takes by 1.
   if (!traits.noDamageInstance)
     n = venomVillain.venomIncreaseDamage(s, target, n);
+  // Neocarbon Scales: 1 less damage from each attack.
+  if (attack && !traits.noDamageInstance)
+    n = Math.max(
+      0,
+      n - sinisterModulars.sinisterModularAttackReduction(s, target),
+    );
 
   const code = original?.code;
   const originalStage = target === s.villain.id ? s.villain.stage : undefined;
@@ -3673,6 +3691,11 @@ function dealDamage(
           magneto.magnetoModifiers(s, retaliationTarget, { isTextBlank })
             .retaliate +
           x23.x23EnemyRetaliate(s) +
+          sinisterModulars.sinisterModularKeyword(
+            s,
+            retaliationTarget,
+            "Retaliate",
+          ) +
           (retaliationTarget.id === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -6942,7 +6965,7 @@ function requestPayment(
 
   need(
     !s.attack ||
-      !armadillo.armadilloDefenseBlocked(s, s.attack.attacker) ||
+      !defenseBlocked(s, s.attack.attacker) ||
       !/\([^)]*\bdefense\b/i.test(
         paymentTarget ? card(paymentTarget).text || "" : "",
       ),
@@ -8412,6 +8435,7 @@ export function newGame(config: {
                             ...mysterio.MYSTERIO_MODULAR_SETS,
                             ...sinisterSix.SINISTER_SIX_MODULAR_SETS,
                             ...venomGoblin.VENOM_GOBLIN_MODULAR_SETS,
+                            ...sinisterModulars.SINISTER_MODULAR_SETS,
                           ].some((set) => set === c.set_code)
                         ? "sm"
                         : ["temporal", "anachronauts", "mot"].includes(
@@ -9446,7 +9470,7 @@ export function playable(s: GameState, p: Piece): string | null {
   if (
     s.attack &&
     /\([^)]*\bdefense\b/i.test(c.text || "") &&
-    armadillo.armadilloDefenseBlocked(s, s.attack.attacker)
+    defenseBlocked(s, s.attack.attacker)
   )
     return "Rollin’, Rollin’ prevents characters from defending this attack.";
   if (c.type_code === "event" && ghostSpider.ghostSpiderCannotPlayEvents(s))
@@ -11414,6 +11438,7 @@ export function abilityOptions(
     ...venomVillain.venomActions(s, p),
     ...mysterio.mysterioActions(s, p),
     ...venomGoblin.venomGoblinActions(s, p),
+    ...sinisterModulars.sinisterModularActions(s, p),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -14016,7 +14041,7 @@ const gamoraPorts: gamora.GamoraPorts = {
     )
       return;
     need(
-      !armadillo.armadilloDefenseBlocked(s, a.attacker),
+      !defenseBlocked(s, a.attacker),
       "Rollin’, Rollin’ prevents characters from defending this attack.",
     );
     if (!a.defender || a.defender === "none") {
@@ -15926,6 +15951,37 @@ const venomGoblinPorts: venomGoblin.VenomGoblinPorts = {
   cost: (p) => Number(card(p).cost || 0),
   payResources: (s, title, resources, after) =>
     hoodPorts.payResources(s, title, resources, after),
+};
+const sinisterModularPorts: sinisterModulars.SinisterModularPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  randomDiscard: (s, playerId) => hoodModularPorts.randomDiscard(s, playerId),
+  millOne: (s, playerId) => mysterioPorts.millPlayer(s, playerId, 1)[0],
+  // Permanent cards cannot be discarded.
+  controlled: (s, playerId) =>
+    seatView(s, playerId).player.inPlay.filter((p) => !isPermanent(card(p))),
+  characters: (s, playerId) => [
+    `hero:${playerId}`,
+    ...friends(seatView(s, playerId)).map((p) => p.id),
+  ],
+  exhaust: (s, id) => {
+    if (id.startsWith("hero:")) {
+      seatView(s, id.slice(5)).player.exhausted = true;
+      return;
+    }
+    const p = find(s, id);
+    if (p) p.exhausted = true;
+  },
+  cost: (p) => Number(card(p).cost || 0),
+  payResources: (s, title, resources, after) =>
+    hoodPorts.payResources(s, title, resources, after),
+  stunned: (s, target, playerId) =>
+    target === "hero"
+      ? !!seatView(s, playerId).player.stunned
+      : !!find(s, target)?.stunned,
+  heroHp: (s, playerId) => seatView(s, playerId).player.hp,
 };
 const mysterioPorts: mysterio.MysterioPorts = {
   ...mutagenPorts,
@@ -18908,6 +18964,7 @@ function minionEntered(s: GameState, p: Piece) {
   add(s, ...zola.zolaMinionEntered(s, p));
   add(s, ...badoon.badoonMinionEngaged(s, p));
   add(s, ...towerDefense.towerDefenseMinionEngaged(s, p));
+  add(s, ...sinisterModulars.sinisterModularEngaged(s, p, s.activePlayerId));
 }
 function minionResponses(s: GameState, p: Piece) {
   add(s, ...waspPack.waspPackMinionEngaged(s, p));
@@ -20337,7 +20394,7 @@ const valkyriePorts: valkyrie.ValkyriePorts = {
       !!seat &&
       seatView(s, seat).player.form === "hero" &&
       !attackTargetsEnemy(s, s.attack) &&
-      !armadillo.armadilloDefenseBlocked(s, s.attack.attacker) &&
+      !defenseBlocked(s, s.attack.attacker) &&
       !(
         rulesCode(find(s, s.attack.attacker) || s.attack.attackerSnapshot!) ===
           "01132" && friends(seatView(s, seat)).some((p) => !p.exhausted)
@@ -21498,7 +21555,7 @@ const nightcrawlerPorts: nightcrawler.NightcrawlerPorts = {
     s.player.form === "hero" &&
     vision.visionCanDefend(s) &&
     shadowcat.shadowcatCanDefend(s) &&
-    !armadillo.armadilloDefenseBlocked(s, s.attack.attacker) &&
+    !defenseBlocked(s, s.attack.attacker) &&
     !magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank }),
   bamfDefend: (s, after) => {
     need(
@@ -21914,7 +21971,7 @@ const magikPorts: magik.MagikPorts = {
         : Number(find(s, id)?.damage || 0) > 0,
   canDefend: (s) =>
     !!s.attack &&
-    !armadillo.armadilloDefenseBlocked(s, s.attack.attacker) &&
+    !defenseBlocked(s, s.attack.attacker) &&
     !ghostSpider.ghostSpiderCannotPlayEvents(s),
   cost: (s, p) => cardCost(s, card(p), p),
   canPay: (s, cost, exclude, code) => canPay(s, cost, [], exclude, code, false),
@@ -22761,7 +22818,7 @@ const shadowcatPorts: shadowcat.ShadowcatPorts = {
       shadowcat.shadowcatCanDefend(s) &&
       vision.visionCanDefend(s) &&
       !attackTargetsEnemy(s, a) &&
-      !armadillo.armadilloDefenseBlocked(s, a.attacker) &&
+      !defenseBlocked(s, a.attacker) &&
       !(
         rulesCode(find(s, a.attacker) || a.attackerSnapshot!) === "01132" &&
         friends(s).some((p) => !p.exhausted)
@@ -22936,7 +22993,7 @@ const mutantGenesisPackPorts: mgPack.MutantGenesisPlayerPackPorts = {
       !p.exhausted &&
       card(p).type_code === "ally" &&
       (p.code !== "50022" || isTextBlank(s, p)) &&
-      !armadillo.armadilloDefenseBlocked(s, r.attackerId)
+      !defenseBlocked(s, r.attackerId)
     );
   },
   declareAllyDefender: (s, r, id) => {
@@ -23084,7 +23141,7 @@ const mutantGenesisPackPorts: mgPack.MutantGenesisPlayerPackPorts = {
   claimDefense: (s, r) => {
     need(
       mutantGenesisPackPorts.attackAvailable(s, r) &&
-        !armadillo.armadilloDefenseBlocked(s, r.attackerId),
+        !defenseBlocked(s, r.attackerId),
       "This pending attack cannot be defended.",
     );
     const a = s.attack!;
@@ -23901,7 +23958,7 @@ function declareDefense(s: GameState) {
     ),
   ];
   for (const seat of playerOrder(s)) {
-    if (armadillo.armadilloDefenseBlocked(s, a.attacker)) break;
+    if (defenseBlocked(s, a.attacker)) break;
     if (!kang.kangSameArea(s, a.originalPlayerId || s.activePlayerId, seat.id))
       continue;
     const view = seatView(s, seat);
@@ -24120,6 +24177,7 @@ function boostEffects(s: GameState, p: Piece) {
     mysterio.mysterioBoost(s, p) ??
     sinisterSix.sixBoost(s, p) ??
     venomGoblin.venomGoblinBoost(s, p) ??
+    sinisterModulars.sinisterModularBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -24631,6 +24689,11 @@ function finishScheme(s: GameState) {
     ...venomGoblin.venomGoblinActivated(s, id, s.activePlayerId),
     ...venomGoblin.goblinGearEffects(s, {
       attackerId: id,
+      playerId: s.activePlayerId,
+      attack: false,
+    }),
+    ...sinisterModulars.sinisterModularActivated(s, {
+      enemyId: id,
       playerId: s.activePlayerId,
       attack: false,
     }),
@@ -25266,6 +25329,14 @@ function finishAttackAfterDamage(
       attackerId: a.attacker,
       playerId: recipientId,
       attack: true,
+    }),
+    ...sinisterModulars.sinisterModularActivated(s, {
+      enemyId: a.attacker,
+      playerId: recipientId,
+      attack: true,
+      damagedTarget: a.damage > 0 ? target : undefined,
+      identityDamaged:
+        (target === "hero" ? a.damage : a.identityDamage || 0) > 0,
     }),
     ...(a.afterActivation || []),
     ...(a.visionAfterAttack || []),
@@ -26223,6 +26294,10 @@ function reveal(
         c.type_code !== "attachment") ||
       (venomGoblin.VENOM_GOBLIN_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (sinisterModulars.SINISTER_MODULAR_SCRIPT_CODES.some(
+        (code) => code === p.code,
+      ) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -26430,6 +26505,7 @@ function reveal(
       ...mysterio.MYSTERIO_SCRIPT_CODES,
       ...sinisterSix.SINISTER_SIX_SCRIPT_CODES,
       ...venomGoblin.VENOM_GOBLIN_SCRIPT_CODES,
+      ...sinisterModulars.SINISTER_MODULAR_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -26478,6 +26554,7 @@ function reveal(
       mysterio.mysterioReveal(s, p) ??
       sinisterSix.sixReveal(s, p) ??
       venomGoblin.venomGoblinReveal(s, p) ??
+      sinisterModulars.sinisterModularReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -26569,6 +26646,7 @@ function reveal(
     mysterio.mysterioReveal(s, p) ??
     sinisterSix.sixReveal(s, p) ??
     venomGoblin.venomGoblinReveal(s, p) ??
+    sinisterModulars.sinisterModularReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -27999,6 +28077,7 @@ function resolve(s: GameState, e: Effect) {
           mysterio.mysterioReveal(state, piece) ??
           sinisterSix.sixReveal(state, piece) ??
           venomGoblin.venomGoblinReveal(state, piece) ??
+          sinisterModulars.sinisterModularReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -28145,6 +28224,8 @@ function resolve(s: GameState, e: Effect) {
   if (mysterio.resolveMysterioEffect(s, e, mysterioPorts)) return;
   if (sinisterSix.resolveSinisterSixEffect(s, e, sinisterSixPorts)) return;
   if (venomGoblin.resolveVenomGoblinEffect(s, e, venomGoblinPorts)) return;
+  if (sinisterModulars.resolveSinisterModularEffect(s, e, sinisterModularPorts))
+    return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -34227,6 +34308,11 @@ function resolve(s: GameState, e: Effect) {
           playerId: a.targetPlayerId || s.activePlayerId,
           attack: true,
         }),
+        ...sinisterModulars.sinisterModularActivated(s, {
+          enemyId: a.attacker,
+          playerId: a.targetPlayerId || s.activePlayerId,
+          attack: true,
+        }),
         ...(a.completionRecorded && a.attackerSnapshot
           ? spectrum.spectrumEnemyActivated(
               s,
@@ -35876,7 +35962,7 @@ function resolve(s: GameState, e: Effect) {
         s.attack.prevented += e.amount;
         if (
           (!s.attack.defender || s.attack.defender === "none") &&
-          !armadillo.armadilloDefenseBlocked(s, s.attack.attacker)
+          !defenseBlocked(s, s.attack.attacker)
         ) {
           s.attack.defender = "hero";
           add(s, E("quicksilverLateDefense"));
@@ -37537,6 +37623,7 @@ function run(s: GameState) {
       e.type.startsWith("mysterio:") ||
       e.type.startsWith("six:") ||
       e.type.startsWith("vgob:") ||
+      e.type.startsWith("smod:") ||
       e.type.startsWith("thanos:") ||
       e.type.startsWith("hela:") ||
       e.type.startsWith("loki:") ||
@@ -37926,6 +38013,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...venomVillain.venomActions(s, p),
               ...mysterio.mysterioActions(s, p),
               ...venomGoblin.venomGoblinActions(s, p),
+              ...sinisterModulars.sinisterModularActions(s, p),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),

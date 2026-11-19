@@ -83,7 +83,8 @@
     "test:venom-villain": "node scripts/venom-villain-check.mjs",
     "test:mysterio": "node scripts/mysterio-check.mjs",
     "test:sinister-six": "node scripts/sinister-six-check.mjs",
-    "test:venom-goblin": "node scripts/venom-goblin-check.mjs"
+    "test:venom-goblin": "node scripts/venom-goblin-check.mjs",
+    "test:sinister-modulars": "node scripts/sinister-modulars-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

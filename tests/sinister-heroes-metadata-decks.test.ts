@@ -289,15 +289,18 @@ describe("Sinister shared registration, printings and identity limits", () => {
     }
     expect(rulesCode("27013")).toBe("27013");
     expect(rulesCode("27050")).toBe("27050");
-    // The box's five scenarios are registered by their own modules: Sandman,
-    // Venom, Mysterio, the Sinister Six and Venom Goblin, while the Osborn
-    // Tech modular set stays outside.
+    // The box's five scenarios and all of its modular sets are registered by
+    // their own modules: Sandman, Venom, Mysterio, the Sinister Six, Venom
+    // Goblin, Osborn Tech and Sinister Assault, while the campaign's Bad
+    // Publicity set stays outside.
     expect(EXPLICIT_CARD_SCRIPTS.has("27061")).toBe(true);
     expect(EXPLICIT_CARD_SCRIPTS.has("27073")).toBe(true);
     expect(EXPLICIT_CARD_SCRIPTS.has("27084")).toBe(true);
     expect(EXPLICIT_CARD_SCRIPTS.has("27094")).toBe(true);
     expect(EXPLICIT_CARD_SCRIPTS.has("27113")).toBe(true);
-    expect(EXPLICIT_CARD_SCRIPTS.has("27147")).toBe(false);
+    expect(EXPLICIT_CARD_SCRIPTS.has("27147")).toBe(true);
+    expect(EXPLICIT_CARD_SCRIPTS.has("27158")).toBe(true);
+    expect(EXPLICIT_CARD_SCRIPTS.has("27174a")).toBe(false);
   });
   it("matches all sixteen printed fields across seven supplementary Core pairs and Web-Shooter", () => {
     const fields: (keyof Card)[] = [

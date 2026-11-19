@@ -1135,6 +1135,7 @@ export async function generateAudit(
     "src/game/mysterio.ts",
     "src/game/sinister-six.ts",
     "src/game/venom-goblin.ts",
+    "src/game/sinister-modulars.ts",
     "src/game/reveal-window.ts",
     "src/game/black-widow.ts",
     "src/game/doctor-strange.ts",

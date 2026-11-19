@@ -19,6 +19,7 @@ import { VENOM_VILLAIN_SCRIPT_CODES } from "./venom-villain.js";
 import { MYSTERIO_SCRIPT_CODES } from "./mysterio.js";
 import { SINISTER_SIX_SCRIPT_CODES } from "./sinister-six.js";
 import { VENOM_GOBLIN_SCRIPT_CODES } from "./venom-goblin.js";
+import { SINISTER_MODULAR_SCRIPT_CODES } from "./sinister-modulars.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -285,6 +286,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...MYSTERIO_SCRIPT_CODES,
   ...SINISTER_SIX_SCRIPT_CODES,
   ...VENOM_GOBLIN_SCRIPT_CODES,
+  ...SINISTER_MODULAR_SCRIPT_CODES,
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

@@ -5959,6 +5959,13 @@ function AttachedCards({
                 // Venom Goblin: We Are One; Goblin Gear: Advanced Glider.
                 "27120",
                 "27136",
+                // Osborn Tech: all six attachments.
+                "27147",
+                "27148",
+                "27149",
+                "27150",
+                "27151",
+                "27152",
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),

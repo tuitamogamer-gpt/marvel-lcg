@@ -1491,6 +1491,8 @@ export const MODULES = [
   { id: "whispers_of_paranoia", name: "Whispers of Paranoia", difficulty: 2 },
   { id: "guerrilla_tactics", name: "Guerrilla Tactics", difficulty: 2 },
   { id: "goblin_gear", name: "Goblin Gear", difficulty: 3 },
+  { id: "osborn_tech", name: "Osborn Tech", difficulty: 3 },
+  { id: "sinister_assault", name: "Sinister Assault", difficulty: 4 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
