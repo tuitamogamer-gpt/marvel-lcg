@@ -137,6 +137,9 @@ export function isTextBlank(
     )
   )
     return true;
+  // Pestilence: the identity's text box is blank until the next villain
+  // phase begins.
+  if (collarSeat && s.horsemen?.blank?.includes(collarSeat.id)) return true;
   const dpIdentity = definitions.get(printedCode);
   const dpSeat = ["hero", "alter_ego"].includes(dpIdentity?.type_code || "")
     ? s.players.find((seat) => seat.heroId === dpIdentity?.set_code)

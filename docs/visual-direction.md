@@ -215,3 +215,7 @@ Stryfe's numbers change with the active player's hand, so the villain label show
 ## Unus and Gene Pool, 2026-11-19
 
 Unus grows with the threat on Gene Pool, so the villain label carries that threat beside his stage and the caption lists what it gives him and the next threshold. Gene Pool is an ordinary side scheme; its one-line caption marks it permanent and names the next threshold. Each Infinite Soldier's engagement line lists the keywords and hit points Gene Pool gives it, and the main scheme's note recalls the threat added after step one.
+
+## The Four Horsemen's row, 2026-11-19
+
+The four Horsemen share the villain row used for The Sinister Six and The Wrecking Crew. The active one is outlined and says he holds the active counter, and each Horseman at 0 hit points says he falls once all four are at 0. The objective counts the Horsemen at 0, and the main scheme's one-line note names the active Horseman.

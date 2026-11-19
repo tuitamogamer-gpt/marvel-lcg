@@ -56,6 +56,10 @@ import {
   INFINITES_CODES,
   UNUS_SCRIPT_CODES,
 } from "../src/game/unus";
+import {
+  FOUR_HORSEMEN_SCRIPT_CODES,
+  HOUNDS_CODES,
+} from "../src/game/four-horsemen";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -116,6 +120,8 @@ const badoonCodes = new Set<string>([
   ...UNUS_SCRIPT_CODES,
   ...INFINITES_CODES,
   ...DYSTOPIAN_NIGHTMARE_CODES,
+  ...FOUR_HORSEMEN_SCRIPT_CODES,
+  ...HOUNDS_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -499,7 +505,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(77);
+    expect(MODULES).toHaveLength(78);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "temporal",
@@ -529,9 +535,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(3162);
-    expect(coverage.unsupportedFaces).toBe(1389);
-    expect(coverage.dedicatedFaces).toBe(2724);
+    expect(coverage.executableFaces).toBe(3187);
+    expect(coverage.unsupportedFaces).toBe(1364);
+    expect(coverage.dedicatedFaces).toBe(2749);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -597,14 +603,14 @@ describe("complete expansion rules inventory", () => {
       ).registered,
     ).toBe(true);
   });
-  it("closes the Age of Apocalypse hero slice, Unus and both complete retail Hero Packs", () => {
+  it("closes the Age of Apocalypse hero slice, Unus, Four Horsemen and both complete retail Hero Packs", () => {
     const products = inventory.installedRegistryCoverage.products;
     const apocalypse = products.find(
       (pack: { code: string }) => pack.code === "aoa",
     );
     expect(apocalypse).toMatchObject({
       faceCount: 220,
-      executableFaces: 77,
+      executableFaces: 102,
       installedCardClosure: false,
     });
     // Unus with the Infinites and Dystopian Nightmare sets fills positions
@@ -626,18 +632,38 @@ describe("complete expansion rules inventory", () => {
         .map((entry: { code: string }) => entry.code)
         .sort(),
     ).toEqual([...unusFaces].sort());
+    // Four Horsemen with the Hounds set fills positions 81 to 100.
+    const horsemenFaces = new Set<string>([
+      ...FOUR_HORSEMEN_SCRIPT_CODES,
+      ...HOUNDS_CODES,
+    ]);
+    expect(horsemenFaces.size).toBe(25);
+    expect(
+      cards
+        .filter(
+          (entry: { pack_code: string; position: number }) =>
+            entry.pack_code === "aoa" &&
+            entry.position > 80 &&
+            entry.position <= 100,
+        )
+        .map((entry: { code: string }) => entry.code)
+        .sort(),
+    ).toEqual([...horsemenFaces].sort());
     expect(apocalypse.unsupportedFaceCodes).toEqual(
       cards
         .filter(
           (entry: { pack_code: string; position: number }) =>
-            entry.pack_code === "aoa" && entry.position > 74,
+            entry.pack_code === "aoa" &&
+            entry.position > 74 &&
+            !(entry.position > 80 && entry.position <= 100),
         )
         .map((entry: { code: string }) => entry.code)
         .sort(),
     );
     expect(apocalypse.unsupportedFaceCodes).toEqual(
-      expect.arrayContaining(["45075a", "45081a", "45101a"]),
+      expect.arrayContaining(["45075a", "45101a"]),
     );
+    expect(apocalypse.unsupportedFaceCodes).not.toContain("45081a");
     for (const [code, count] of [
       ["iceman", 33],
       ["jubilee", 41],
@@ -783,6 +809,8 @@ describe("complete expansion rules inventory", () => {
         30 -
         // Age of Apocalypse: Unus, Infinites and Dystopian Nightmare.
         17 -
+        // Age of Apocalypse: Four Horsemen and Hounds.
+        25 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -955,7 +983,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(77);
+    expect(coverage.registeredModules).toHaveLength(78);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -1139,7 +1167,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(42);
+    ).toHaveLength(43);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "venom_goblin",
@@ -1386,7 +1414,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(164);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(165);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

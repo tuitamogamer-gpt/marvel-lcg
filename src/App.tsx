@@ -365,6 +365,12 @@ import {
   unusCaption,
 } from "./game/unus";
 import {
+  HORSEMEN_OF_APOCALYPSE,
+  horsemanStanding,
+  horsemanVillain,
+  horsemenVillains,
+} from "./game/four-horsemen";
+import {
   AERIAL_BOMBARDMENT,
   IMPERVIOUS,
   OUT_OF_REACH,
@@ -2798,6 +2804,17 @@ export default function App() {
                       becomes the Living Bomb, and Stryfe cannot be defeated
                       until it is gone. Extreme Measures and Mutant Insurrection
                       are preselected.
+                    </p>
+                  )}
+                  {villain.id === "four_horsemen" && (
+                    <p className="setting-help">
+                      War, Famine, Pestilence and Death enter play in a random
+                      row. Only the Horseman with the active counter activates,
+                      and the counter moves to the next one after each villain
+                      activation. Each Horseman resolves his Forced Response
+                      after attacking you while he has hit points, and none of
+                      them is defeated while another still has any. Dystopian
+                      Nightmare and Hounds are preselected.
                     </p>
                   )}
                   {villain.id === "unus" && (
@@ -5741,6 +5758,95 @@ function SixVillains({
     </div>
   );
 }
+function HorsemenVillains({
+  game: s,
+  inspect,
+  send,
+}: {
+  game: GameState;
+  inspect: (c: Inspect) => void;
+  send?: (c: Command) => void;
+}) {
+  const st = s.horsemen!;
+  return (
+    <div
+      className="villain-area tower-villains crew-villains"
+      role="group"
+      aria-label="Villains"
+    >
+      <p className="crew-objective" role="status">
+        None falls while another has hit points
+      </p>
+      {st.row.map((key) => {
+        const v = horsemanVillain(s, key)!;
+        const name = card(v).name;
+        const active = st.active === key;
+        const stats = enemyStats(s, v);
+        return (
+          <div
+            className={`tower-villain${active ? " active" : ""}`}
+            key={key}
+            data-piece-id={v.id}
+            role="group"
+            aria-label={active ? `${name}, the active villain` : name}
+          >
+            <div className="host-card-stack">
+              <button
+                className="table-card villain-card"
+                onClick={() => inspect({ code: v.code })}
+                aria-label={`Inspect ${name}`}
+              >
+                <CardImage code={v.code} />
+                <span className="inspect-hint">
+                  <Eye size={13} /> Inspect
+                </span>
+              </button>
+              <AttachedCards game={s} host={v} inspect={inspect} send={send} />
+            </div>
+            <div className="villain-info">
+              <span className="small-label">
+                {active ? "ACTIVE VILLAIN" : "VILLAIN"} · SIDE{" "}
+                {v.code.endsWith("b") ? "B" : "A"}
+              </span>
+              <VillainName className="villain-name-long" name={name} />
+              <HealthDial
+                value={v.hp}
+                max={v.maxHp}
+                label={`${name} HP`}
+                villain
+              />
+              <div className="enemy-stats stat-row">
+                <StatToken
+                  kind="attack"
+                  value={stats.attack}
+                  label="ATK"
+                  compact
+                />
+                <StatToken
+                  kind="threat"
+                  value={stats.scheme}
+                  label="SCH"
+                  compact
+                />
+              </div>
+              <Status piece={v} />
+              {active && (
+                <span className="stat-caption">
+                  Has the active counter · passes it on after activating
+                </span>
+              )}
+              {!horsemanStanding(s, v) && (
+                <span className="stat-caption">
+                  At 0 · falls once all four are at 0
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 function CrewVillains({
   game: s,
   inspect,
@@ -6655,21 +6761,23 @@ function Tabletop({
                       : "Defeat Hela's Mystic side"
                     : s.loki
                       ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
-                      : s.sinisterSix
-                        ? "Escape: clear the Light at the End"
-                        : s.wreckingCrew
-                          ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
-                          : s.kang
-                            ? kangObjective(s)
-                            : magogScenario(s)
-                              ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
-                              : s.spiral
-                                ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
-                                : s.morlockSiege
-                                  ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
-                                  : onTheRun(s)
-                                    ? `Defeat ${card(s.villain).name} twice · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? 0 : 1} of 2`
-                                    : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                      : s.horsemen
+                        ? `Bring all four Horsemen to 0 · ${horsemenVillains(s).filter((v) => !horsemanStanding(s, v)).length} of 4 at 0`
+                        : s.sinisterSix
+                          ? "Escape: clear the Light at the End"
+                          : s.wreckingCrew
+                            ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
+                            : s.kang
+                              ? kangObjective(s)
+                              : magogScenario(s)
+                                ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
+                                : s.spiral
+                                  ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
+                                  : s.morlockSiege
+                                    ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
+                                    : onTheRun(s)
+                                      ? `Defeat ${card(s.villain).name} twice · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? 0 : 1} of 2`
+                                      : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
             <span
@@ -6852,6 +6960,12 @@ function Tabletop({
                 />
               ) : s.sinisterSix ? (
                 <SixVillains
+                  game={s}
+                  inspect={inspect}
+                  send={canUseAction ? sendAction : undefined}
+                />
+              ) : s.horsemen ? (
+                <HorsemenVillains
                   game={s}
                   inspect={inspect}
                   send={canUseAction ? sendAction : undefined}
@@ -7134,7 +7248,7 @@ function Tabletop({
                   <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
-                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) ? " magog-scheme" : ""}`}
+                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen ? " magog-scheme" : ""}`}
                     style={
                       {
                         "--scheme-actions": mainActionPiece
@@ -7250,6 +7364,13 @@ function Tabletop({
                     {stryfe(s) && s.scheme.code === LEFT_TO_YOUR_FATE && (
                       <p className="magog-scheme-note">
                         +2 hand size · cards cost 1 more
+                      </p>
+                    )}
+                    {s.horsemen && s.scheme.code === HORSEMEN_OF_APOCALYPSE && (
+                      <p className="magog-scheme-note">
+                        Active:{" "}
+                        {card(horsemanVillain(s, s.horsemen.active)!).name} ·
+                        moves on after each activation
                       </p>
                     )}
                     {unus(s) && s.scheme.code === HUNTING_GENE_TRAITORS && (

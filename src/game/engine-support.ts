@@ -52,6 +52,7 @@ import {
   INFINITES_CODES,
   UNUS_SCRIPT_CODES,
 } from "./unus.js";
+import { FOUR_HORSEMEN_SCRIPT_CODES, HOUNDS_CODES } from "./four-horsemen.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -343,6 +344,8 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...UNUS_SCRIPT_CODES,
   ...INFINITES_CODES,
   ...DYSTOPIAN_NIGHTMARE_CODES,
+  ...FOUR_HORSEMEN_SCRIPT_CODES,
+  ...HOUNDS_CODES,
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

@@ -1600,6 +1600,23 @@ export const VILLAINS = [
       "Unus and his Infinites grow stronger with the threat on Gene Pool, and every ally you lose feeds it.",
     color: "#3f6b3a",
   },
+  {
+    id: "four_horsemen",
+    name: "Four Horsemen",
+    // War, Famine, Pestilence and Death in a random row: side A in
+    // Standard, side B in Expert.
+    codes: ["45081a", "45081b"],
+    schemes: ["45085b"],
+    module: "dystopian_nightmare",
+    moduleCount: 2,
+    defaultModules: ["dystopian_nightmare", "hounds"],
+    difficulty: 4,
+    title: "The Horsemen of Apocalypse",
+    location: "Magneto's secret headquarters",
+    description:
+      "War, Famine, Pestilence and Death ride together. Only the Horseman with the active counter activates, and none of them falls while another still has hit points.",
+    color: "#6b3a3a",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1691,6 +1708,7 @@ export const MODULES = [
   { id: "mutant_insurrection", name: "Mutant Insurrection", difficulty: 3 },
   { id: "infinites", name: "Infinites", difficulty: 3 },
   { id: "dystopian_nightmare", name: "Dystopian Nightmare", difficulty: 2 },
+  { id: "hounds", name: "Hounds", difficulty: 3 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(

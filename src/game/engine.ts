@@ -31,6 +31,7 @@ import * as jug from "./juggernaut.js";
 import * as sin from "./mister-sinister.js";
 import * as sty from "./stryfe.js";
 import * as unus from "./unus.js";
+import * as horsemen from "./four-horsemen.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -622,6 +623,11 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
     !!(
       s &&
       typeof p !== "string" &&
+      horsemen.horsemenKeyword(s, p, name) > 0
+    ) ||
+    !!(
+      s &&
+      typeof p !== "string" &&
       name === "Toughness" &&
       s.minions.some((m) => m.id === p.id) &&
       sty.stryfeMinionToughness(s)
@@ -1107,7 +1113,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         morlock.morlockKeyword(s, p, "Retaliate") +
         jug.jugKeyword(s, p, "Retaliate") +
         sin.sinisterKeyword(s, p, "Retaliate") +
-        unus.unusKeyword(s, p, "Retaliate")
+        unus.unusKeyword(s, p, "Retaliate") +
+        horsemen.horsemenKeyword(s, p, "Retaliate")
     : Math.max(intrinsic, grantedValue);
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
@@ -1331,6 +1338,7 @@ const allPieces = (s: GameState) => [
   ...(!s.mansionAttack?.activeVillainRetired ? [s.villain] : []),
   ...(s.towerDefense ? [s.towerDefense.other.villain] : []),
   ...wreckingCrew.crewBench(s),
+  ...horsemen.horsemenBench(s),
   ...s.minions,
   ...s.sideSchemes,
   ...allInPlay(s),
@@ -3008,6 +3016,11 @@ function heal(
     return wreckingCrew.withCrewFocus(s, crewHealKey, () =>
       heal(s, target, n, origin),
     );
+  const horsemanHealKey = horsemen.horsemenBenchKey(s, target);
+  if (horsemanHealKey)
+    return horsemen.withHorsemenFocus(s, horsemanHealKey, () =>
+      heal(s, target, n, origin),
+    );
   if (
     target === s.villain.id &&
     (kang.kangVillainAbsent(s) || sinisterSix.sixVillainAbsent(s))
@@ -3339,6 +3352,12 @@ function dealDamage(
   const crewDamageKey = wreckingCrew.crewBenchKey(s, target);
   if (crewDamageKey)
     return wreckingCrew.withCrewFocus(s, crewDamageKey, () =>
+      dealDamage(s, target, n, source, attack, overkill, panther, traits),
+    );
+  // Four Horsemen: damage to a Horseman out of focus resolves in focus.
+  const horsemanDamageKey = horsemen.horsemenBenchKey(s, target);
+  if (horsemanDamageKey)
+    return horsemen.withHorsemenFocus(s, horsemanDamageKey, () =>
       dealDamage(s, target, n, source, attack, overkill, panther, traits),
     );
   const raySource = source === "hero" ? `hero:${s.activePlayerId}` : source;
@@ -3883,6 +3902,7 @@ function dealDamage(
           jug.jugKeyword(s, retaliationTarget, "Retaliate") +
           sin.sinisterKeyword(s, retaliationTarget, "Retaliate") +
           unus.unusKeyword(s, retaliationTarget, "Retaliate") +
+          horsemen.horsemenKeyword(s, retaliationTarget, "Retaliate") +
           (retaliationTarget.id === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -4884,6 +4904,25 @@ function advanceVillain(
       s,
       true,
       "Hela is defeated. Odin is free and Hel releases the All-Father.",
+    );
+    return;
+  }
+  // Four Horsemen: no Horseman is defeated while another villain has at
+  // least 1 hit point; the players win once none has.
+  const horsemenDefeat = horsemen.horsemenDefeatCheck(s);
+  if (horsemenDefeat === "immune") {
+    if (s.villain.hp < 0) s.villain.hp = 0;
+    log(
+      s,
+      `${card(s.villain).name} cannot be defeated while another villain has hit points.`,
+    );
+    return;
+  }
+  if (horsemenDefeat === "won") {
+    endGame(
+      s,
+      true,
+      "The Four Horsemen are defeated. Apocalypse has lost his riders.",
     );
     return;
   }
@@ -6132,6 +6171,13 @@ function defeatScheme(
             ? source.slice(5)
             : controller(s, source)?.id || s.activePlayerId,
         ),
+        ...horsemen.horsemenSchemeDefeated(
+          s,
+          p,
+          source.startsWith("hero:")
+            ? source.slice(5)
+            : controller(s, source)?.id || s.activePlayerId,
+        ),
       ]
     : [];
   const helaFlip = hela.helaSideSchemeDefeated(s);
@@ -6394,6 +6440,11 @@ export function targets(
                 code: v.code,
               })),
               ...wreckingCrew.crewBench(s).map((v) => ({
+                id: v.id,
+                label: card(v).name,
+                code: v.code,
+              })),
+              ...horsemen.horsemenBench(s).map((v) => ({
                 id: v.id,
                 label: card(v).name,
                 code: v.code,
@@ -6717,6 +6768,7 @@ function captainPackHasTrait(
   )
     return true;
   if (mariaHill.mariaHillTrait(s, target, trait)) return true;
+  if (trait === "Aerial" && horsemen.horsemenAerial(s, target)) return true;
   if (jubilee.jubileeEnemyTrait(s, target, trait)) return true;
   if (
     (target === "hero" || target === `hero:${s.activePlayerId}`) &&
@@ -8901,9 +8953,10 @@ export function newGame(config: {
                                   (set) => set === c.set_code,
                                 )
                               ? "next_evol"
-                              : unus.AOA_MODULAR_SETS.some(
-                                    (set) => set === c.set_code,
-                                  )
+                              : [
+                                    ...unus.AOA_MODULAR_SETS,
+                                    ...horsemen.HORSEMEN_MODULAR_SETS,
+                                  ].some((set) => set === c.set_code)
                                 ? "aoa"
                                 : ["temporal", "anachronauts", "mot"].includes(
                                       c.set_code || "",
@@ -9197,6 +9250,18 @@ export function newGame(config: {
     s.sideSchemes.push(light);
     s.scheme.threat =
       (card(sinisterSix.SYNCHRONIZATION).base_threat || 0) * s.playerCount;
+    s.queue.push(
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "four_horsemen") {
+    // The Horsemen of Apocalypse (1A) setup: the four Horsemen in a random
+    // row, side A in Standard and side B in Expert; the leftmost has the
+    // active counter.
+    horsemen.horsemenSetup(s, horsemenPorts);
     s.queue.push(
       effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
     );
@@ -9922,6 +9987,7 @@ function initialSetup(s: GameState) {
   setup.push(...sin.sinisterSetupEffects(s));
   setup.push(...sty.stryfeSetupEffects(s, makePiece));
   setup.push(...unus.unusSetupEffects(s));
+  setup.push(...horsemen.horsemenSetupEffects(s));
   // Queue stage setup after scenario setup and before the first turn.
   add(
     s,
@@ -16830,7 +16896,10 @@ function characterAerial(s: GameState, target: string): boolean {
   if (target === "hero") return aerial(s);
   if (target.startsWith("hero:")) return aerial(seatView(s, target.slice(5)));
   const p = find(s, target);
-  return !!p && (card(p).traits || "").split(/\.\s*/).includes("Aerial");
+  return (
+    (!!p && (card(p).traits || "").split(/\.\s*/).includes("Aerial")) ||
+    horsemen.horsemenAerial(s, target)
+  );
 }
 function attackTargetAerial(s: GameState): boolean {
   const a = s.attack;
@@ -16863,6 +16932,39 @@ function damageSourceTiny(s: GameState, source: string | undefined) {
   const c = damageSourceCard(s, source);
   return !!c && (c.traits || "").split(/\.\s*/).includes("Tiny");
 }
+const horsemenPorts: horsemen.HorsemenPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  makeVillain: (s, code) =>
+    Object.assign(makePiece(s, code), {
+      hp: card(code).health! * s.playerCount,
+      maxHp: card(code).health! * s.playerCount,
+      stage: 1,
+    }) as GameState["villain"],
+  pick: (s, n) => Math.floor(random(s) * n),
+  ownCards: (s, playerId) =>
+    seatView(s, playerId).player.inPlay.filter(
+      (p) =>
+        ["upgrade", "support"].includes(card(p).type_code) &&
+        !isPermanent(card(p)),
+    ),
+  mill: (s, playerId, n) => {
+    mysterioPorts.millPlayer(s, playerId, n);
+  },
+  characters: (s, playerId) => [
+    `hero:${playerId}`,
+    ...friends(seatView(s, playerId)).map((p) => p.id),
+  ],
+  reveal: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    wreckingCrewPorts.reveal(s, p, playerId);
+  },
+  dealFacedown: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    p.dealtTo = playerId;
+    s.encounter.dealt.push(p);
+  },
+};
 const unusPorts: unus.UnusPorts = {
   ...mutagenPorts,
   log: (s, text, kind) => log(s, text, kind),
@@ -24835,6 +24937,7 @@ function enemyAttack(
       ...morlock.morlockAttackInitiated(s, id, s.attack.originalPlayerId!),
       ...otr.otrAttackInitiated(s, id, s.attack.originalPlayerId!),
       ...sty.stryfeAttackInitiated(s, id, s.attack.originalPlayerId!),
+      ...horsemen.horsemenAttackInitiated(s, id),
     );
   if (!friendlySource)
     add(
@@ -25330,6 +25433,7 @@ function boostEffects(s: GameState, p: Piece) {
     sin.sinisterBoost(s, p) ??
     sty.stryfeBoost(s, p) ??
     unus.unusBoost(s, p) ??
+    horsemen.horsemenBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -25806,6 +25910,7 @@ function finishScheme(s: GameState) {
     ...wreckingCrew.wreckingCrewSchemed(s, id),
     ...jug.jugSchemed(s, id),
     ...unus.unusSchemed(s, id),
+    ...horsemen.horsemenActivated(s, id),
     ...hood
       .hoodAfterActivation(s, {
         token: (activation.id ||= `scheme${s.nextId++}`),
@@ -26530,6 +26635,9 @@ function finishAttackAfterDamage(
     ),
     ...sin.sinisterAttacked(s, a.attacker),
     ...sty.stryfeAttacked(s, a.attacker, recipientId),
+    ...horsemen.horsemenAttacked(s, a.attacker, recipientId),
+    ...horsemen.horsemenAttackEnded(s, a.attacker),
+    ...horsemen.horsemenActivated(s, a.attacker),
     ...sty.stryfeActivated(s, a.attacker, recipientId),
     ...sinisterModulars.sinisterModularActivated(s, {
       enemyId: a.attacker,
@@ -27319,13 +27427,20 @@ function reveal(
   );
   // Gained keywords: Making Green's surge for Creeping Willow, Cyttorak's
   // Exemplar's expert incite and Infinite Soldier's surge from Gene Pool.
-  const revealCard = unus.unusRevealCard(
+  if (!repeat) horsemen.horsemenHoundRevealed(s, p);
+  const revealCard = horsemen.horsemenRevealCard(
     s,
     p,
-    jug.jugRevealCard(
+    unus.unusRevealCard(
       s,
       p,
-      knifeSurge || moduleSurge ? { ...c, text: `Surge.\n${c.text || ""}` } : c,
+      jug.jugRevealCard(
+        s,
+        p,
+        knifeSurge || moduleSurge
+          ? { ...c, text: `Surge.\n${c.text || ""}` }
+          : c,
+      ),
     ),
   );
   if (!repeat && s.flags[`ghostCancelReveal:${p.id}`]) {
@@ -27541,6 +27656,8 @@ function reveal(
         ...unus.UNUS_SCRIPT_CODES,
         ...unus.INFINITES_CODES,
         ...unus.DYSTOPIAN_NIGHTMARE_CODES,
+        ...horsemen.FOUR_HORSEMEN_SCRIPT_CODES,
+        ...horsemen.HOUNDS_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -27783,6 +27900,8 @@ function reveal(
       ...unus.UNUS_SCRIPT_CODES,
       ...unus.INFINITES_CODES,
       ...unus.DYSTOPIAN_NIGHTMARE_CODES,
+      ...horsemen.FOUR_HORSEMEN_SCRIPT_CODES,
+      ...horsemen.HOUNDS_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -27851,6 +27970,7 @@ function reveal(
       sin.sinisterReveal(s, p) ??
       sty.stryfeReveal(s, p) ??
       unus.unusReveal(s, p) ??
+      horsemen.horsemenReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -27954,6 +28074,7 @@ function reveal(
     sin.sinisterReveal(s, p) ??
     sty.stryfeReveal(s, p) ??
     unus.unusReveal(s, p) ??
+    horsemen.horsemenReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -29108,6 +29229,27 @@ function resolve(s: GameState, e: Effect) {
       return;
     }
   }
+  if (s.horsemen) {
+    const horsemanKey = horsemen.horsemenWindowKey(s, e);
+    if (horsemanKey) {
+      const before = new Set(s.queue);
+      const prompt = s.prompt;
+      const previous = horsemen.horsemenOpenWindow(s, horsemanKey);
+      resolve(s, { ...e, responseGroup: undefined });
+      const fresh = s.queue.some((q) => !before.has(q));
+      const index = s.queue.findIndex((q) => before.has(q));
+      const back = E("horsemen:focus-back", {
+        key: previous,
+        mandatory: true,
+        responseGroup: undefined,
+      });
+      if (!fresh && s.prompt === prompt)
+        horsemen.horsemenCloseWindow(s, previous);
+      else if (index < 0) s.queue.push(back);
+      else s.queue.splice(index, 0, back);
+      return;
+    }
+  }
   if (s.wreckingCrew) {
     const crewKey = wreckingCrew.wreckingCrewWindowKey(s, e);
     if (crewKey) {
@@ -29396,6 +29538,7 @@ function resolve(s: GameState, e: Effect) {
           sin.sinisterReveal(state, piece) ??
           sty.stryfeReveal(state, piece) ??
           unus.unusReveal(state, piece) ??
+          horsemen.horsemenReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -29555,6 +29698,7 @@ function resolve(s: GameState, e: Effect) {
   if (sin.resolveSinisterEffect(s, e, sinPorts)) return;
   if (sty.resolveStryfeEffect(s, e, stryfePorts)) return;
   if (unus.resolveUnusEffect(s, e, unusPorts)) return;
+  if (horsemen.resolveHorsemenEffect(s, e, horsemenPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -31454,6 +31598,7 @@ function resolve(s: GameState, e: Effect) {
         ...(e.draxBasicAttack
           ? loki.lokiAfterBasicAttack(s, e.target, lokiPorts)
           : []),
+        ...horsemen.horsemenAfterHeroAttack(s, e.target),
         ...wreckingCrew.wreckingCrewAfterHeroAttack(
           s,
           e.target,
@@ -38336,6 +38481,8 @@ function resolve(s: GameState, e: Effect) {
       antMan.antManPhaseEnded(s);
       s.phase = "villain";
       s.villainStep = "threat";
+      // Pestilence's blank text boxes end as the villain phase begins.
+      horsemen.horsemenVillainPhaseBegins(s);
       log(s, "Villain phase · threat, activations, then encounters.", "phase");
       add(
         s,
@@ -38457,6 +38604,7 @@ function resolve(s: GameState, e: Effect) {
     case "villainActivate": {
       s.villainStep = "activation";
       if (s.sinisterSix) sinisterSix.sixBeforeActivation(s, sinisterSixPorts);
+      if (s.horsemen) horsemen.horsemenBeforeActivation(s);
       if (kang.kangVillainAbsent(s)) {
         add(s, E("minionActivations"));
         break;
@@ -38776,6 +38924,7 @@ function resolve(s: GameState, e: Effect) {
       hela.helaFirstPlayerChanged(s, helaPorts);
       s.round++;
       s.phase = "player";
+      horsemen.horsemenPhaseBegins(s);
       s.villainStep = "newRound";
       s.attack = null;
       activateSeat(s, s.firstPlayerId);

@@ -165,6 +165,8 @@ jobs:
             scripts: test:stryfe
           - group: unus
             scripts: test:unus
+          - group: four-horsemen
+            scripts: test:four-horsemen
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

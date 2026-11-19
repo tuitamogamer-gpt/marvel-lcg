@@ -46,6 +46,7 @@ import {
 import { deckSizeFor } from "../src/game/decks";
 import { seatView } from "../src/game/team";
 import { crewBench, crewStoredPieces } from "../src/game/wrecking-crew";
+import { horsemenBench } from "../src/game/four-horsemen";
 import { kangStoredPieces } from "../src/game/kang";
 import { venomStoredPieces } from "../src/game/venom-villain";
 import type { Aspect, Command, GameState, Piece } from "../src/game/types";
@@ -358,6 +359,8 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
     // The Wrecking Crew: the villains out of focus and the encounter decks
     // of the villains who are not active.
     ...(s.wreckingCrew ? [...crewBench(s), ...crewStoredPieces(s)] : []),
+    // Four Horsemen: the Horsemen out of focus.
+    ...horsemenBench(s),
     // Kang: the main schemes, the set-aside villains and Kang's Dominions,
     // and the game areas out of focus.
     ...kangStoredPieces(s),
@@ -941,10 +944,10 @@ describe("published expansion starters across every supported mission setting", 
         2 *
         VILLAINS.filter((scenario) => scenario.moduleCount !== 0).length,
     );
-    expect(VILLAINS).toHaveLength(42);
-    expect(MODULES).toHaveLength(77);
+    expect(VILLAINS).toHaveLength(43);
+    expect(MODULES).toHaveLength(78);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(323544);
+    expect(missions).toHaveLength(335920);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -956,27 +959,50 @@ describe("published expansion starters across every supported mission setting", 
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
-    // Age of Apocalypse's Unus joins as the forty-second scenario, with every
-    // modular set but its required Infinites set as its one, and the
-    // Infinites and Dystopian Nightmare modular sets join every other
-    // scenario with modular sets. Every earlier name and seed stays in place:
-    // the 307,424 configurations before them hash identically to the
-    // complete grid of 253c9fe.
+    // Age of Apocalypse's Four Horsemen join as the forty-third scenario,
+    // with every modular set as the first of their two, and the Hounds
+    // modular set joins every other scenario with modular sets. Every
+    // earlier name and seed stays in place: the 323,544 configurations
+    // before them hash identically to the complete grid of cf2fe78.
+    expect(
+      missions.filter((m) => m.villainId === "four_horsemen"),
+    ).toHaveLength(52 * 2 * 78 + 52 * 2);
+    for (const scenario of VILLAINS.filter(
+      (v) => v.moduleCount !== 0 && v.id !== "four_horsemen",
+    ))
+      expect(
+        missions.filter(
+          (m) => m.villainId === scenario.id && m.module === "hounds",
+        ),
+        scenario.id,
+      ).toHaveLength(52 * 2);
+    const unusGrid = missions.filter(
+      (m) => m.villainId !== "four_horsemen" && m.module !== "hounds",
+    );
+    expect(unusGrid).toHaveLength(323544);
+    expect(
+      createHash("sha256").update(manifest(unusGrid).join("\n")).digest("hex"),
+    ).toBe("27e85cc84d6c11658458de9faf518693cf9aed493fd5fa3cd951a4a780435d30");
+    // Age of Apocalypse's Unus joined as the forty-second scenario before
+    // that, with every modular set but its required Infinites set as its
+    // one, and the Infinites and Dystopian Nightmare modular sets joined
+    // every other scenario with modular sets: the 307,424 configurations
+    // before them hash identically to the complete grid of 253c9fe.
     const aoaSets = ["infinites", "dystopian_nightmare"];
-    expect(missions.filter((m) => m.villainId === "unus")).toHaveLength(
+    expect(unusGrid.filter((m) => m.villainId === "unus")).toHaveLength(
       52 * 2 * 76 + 52 * 2,
     );
     for (const scenario of VILLAINS.filter(
-      (v) => v.moduleCount !== 0 && v.id !== "unus",
+      (v) => v.moduleCount !== 0 && !["unus", "four_horsemen"].includes(v.id),
     ))
       for (const module of aoaSets)
         expect(
-          missions.filter(
+          unusGrid.filter(
             (m) => m.villainId === scenario.id && m.module === module,
           ),
           `${scenario.id}/${module}`,
         ).toHaveLength(52 * 2);
-    const styGrid = missions.filter(
+    const styGrid = unusGrid.filter(
       (m) => m.villainId !== "unus" && !aoaSets.includes(m.module),
     );
     expect(styGrid).toHaveLength(307424);
@@ -993,7 +1019,9 @@ describe("published expansion starters across every supported mission setting", 
       52 * 2 * 75 + 52 * 2,
     );
     for (const scenario of VILLAINS.filter(
-      (v) => v.moduleCount !== 0 && v.id !== "stryfe" && v.id !== "unus",
+      (v) =>
+        v.moduleCount !== 0 &&
+        !["stryfe", "unus", "four_horsemen"].includes(v.id),
     ))
       for (const module of stryfeSets)
         expect(
@@ -1031,7 +1059,13 @@ describe("published expansion starters across every supported mission setting", 
     for (const scenario of VILLAINS.filter(
       (v) =>
         v.moduleCount !== 0 &&
-        !["juggernaut", "mister_sinister", "stryfe", "unus"].includes(v.id),
+        ![
+          "juggernaut",
+          "mister_sinister",
+          "stryfe",
+          "unus",
+          "four_horsemen",
+        ].includes(v.id),
     ))
       expect(
         jugGrid.filter(
@@ -1064,6 +1098,7 @@ describe("published expansion starters across every supported mission setting", 
           "mister_sinister",
           "stryfe",
           "unus",
+          "four_horsemen",
         ].includes(v.id),
     ))
       expect(
@@ -1098,7 +1133,8 @@ describe("published expansion starters across every supported mission setting", 
         v.id !== "juggernaut" &&
         v.id !== "mister_sinister" &&
         v.id !== "stryfe" &&
-        v.id !== "unus",
+        v.id !== "unus" &&
+        v.id !== "four_horsemen",
     ))
       for (const module of nextSets)
         expect(
@@ -1133,6 +1169,7 @@ describe("published expansion starters across every supported mission setting", 
           "mister_sinister",
           "stryfe",
           "unus",
+          "four_horsemen",
         ].includes(v.id),
     ))
       expect(
@@ -1383,7 +1420,8 @@ describe("published expansion starters across every supported mission setting", 
     expect(jugGrid.filter((m) => m.variant === "ii")).toHaveLength(3848);
     expect(sinGrid.filter((m) => m.variant === "ii")).toHaveLength(3952);
     expect(styGrid.filter((m) => m.variant === "ii")).toHaveLength(4056);
-    expect(missions.filter((m) => m.variant === "ii")).toHaveLength(4160);
+    expect(unusGrid.filter((m) => m.variant === "ii")).toHaveLength(4160);
+    expect(missions.filter((m) => m.variant === "ii")).toHaveLength(4264);
     // Kang and the Temporal, Master of Time and Anachronauts modular sets
     // extended the grid before that: the 103,584 configurations before it
     // hash identically to the complete grid of 1600763.
@@ -1796,27 +1834,27 @@ describe("published expansion starters across every supported mission setting", 
     ).toBe("bfd15ff0e1081015f5b01d55beb096051c63af39d842c8342b0a8e70ad1f6b9e");
     const perShard = (keep: (mission: MissionConfig) => boolean) =>
       partitions.map((partition) => partition.filter(keep).length);
-    // Each shard runs 499 to 502 of the 8,008 configurations of a scenario
-    // with all 77 modular sets, and 492 to 496 of the 7,904 of a scenario
-    // whose fixed or reserved set leaves 76.
+    // Each shard runs 506 to 508 of the 8,112 configurations of a scenario
+    // with all 78 modular sets, and 500 or 501 of the 8,008 of a scenario
+    // whose fixed or reserved set leaves 77.
     for (const scenario of VILLAINS.filter((v) => v.moduleCount !== 0)) {
       const counts = perShard(
         (mission) => !mission.variant && mission.villainId === scenario.id,
       );
       const total = heroIds.length * 2 * scenarioModules(scenario.id).length;
-      expect([8008, 7904], scenario.id).toContain(total);
+      expect([8112, 8008], scenario.id).toContain(total);
       expect(
         counts.reduce((sum, count) => sum + count, 0),
         scenario.id,
       ).toBe(total);
       for (const count of counts)
         expect(
-          total === 8008 ? [499, 500, 501, 502] : [492, 493, 494, 495, 496],
+          total === 8112 ? [506, 507, 508] : [500, 501],
           scenario.id,
         ).toContain(count);
     }
     expect(
-      VILLAINS.filter((v) => scenarioModules(v.id).length === 76)
+      VILLAINS.filter((v) => scenarioModules(v.id).length === 77)
         .map((v) => v.id)
         .sort(),
     ).toEqual([
@@ -1835,64 +1873,64 @@ describe("published expansion starters across every supported mission setting", 
     expect(
       perShard((mission) => !mission.variant && mission.villainId === "kang"),
     ).toEqual([
-      501, 501, 502, 502, 502, 502, 501, 501, 500, 500, 499, 499, 499, 499, 500,
-      500,
+      506, 506, 507, 507, 507, 507, 507, 507, 508, 508, 507, 507, 507, 507, 507,
+      507,
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "the_hood",
       ),
     ).toEqual([
-      501, 501, 500, 500, 499, 499, 499, 499, 500, 500, 501, 501, 502, 502, 502,
-      502,
+      507, 507, 507, 507, 508, 508, 507, 507, 507, 507, 507, 507, 506, 506, 507,
+      507,
     ]);
     expect(
       perShard((mission) => !mission.variant && mission.villainId === "magog"),
     ).toEqual([
-      499, 499, 499, 499, 500, 500, 501, 501, 502, 502, 502, 502, 501, 501, 500,
-      500,
+      507, 507, 506, 506, 507, 507, 507, 507, 507, 507, 508, 508, 507, 507, 507,
+      507,
     ]);
     expect(
       perShard((mission) => !mission.variant && mission.villainId === "spiral"),
     ).toEqual([
-      501, 501, 502, 502, 502, 502, 501, 501, 500, 500, 499, 499, 499, 499, 500,
-      500,
+      507, 507, 507, 507, 507, 507, 508, 508, 507, 507, 507, 507, 507, 507, 506,
+      506,
     ]);
     expect(
       perShard((mission) => !mission.variant && mission.villainId === "mojo"),
     ).toEqual([
-      501, 501, 500, 500, 499, 499, 499, 499, 500, 500, 501, 501, 502, 502, 502,
-      502,
+      507, 507, 508, 508, 507, 507, 507, 507, 507, 507, 506, 506, 507, 507, 507,
+      507,
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "morlock_siege",
       ),
     ).toEqual([
-      499, 499, 500, 500, 501, 501, 502, 502, 502, 502, 501, 501, 500, 500, 499,
-      499,
+      507, 507, 507, 507, 507, 507, 506, 506, 507, 507, 507, 507, 507, 507, 508,
+      508,
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "on_the_run",
       ),
     ).toEqual([
-      496, 496, 495, 495, 494, 494, 493, 493, 492, 492, 493, 493, 494, 494, 495,
-      495,
+      500, 500, 500, 500, 500, 500, 501, 501, 501, 501, 501, 501, 501, 501, 500,
+      500,
     ]);
     expect(
       perShard((mission) => !mission.variant && mission.villainId === "stryfe"),
     ).toEqual([
-      501, 501, 500, 500, 499, 499, 499, 499, 500, 500, 501, 501, 502, 502, 502,
-      502,
+      507, 507, 507, 507, 506, 506, 507, 507, 507, 507, 507, 507, 508, 508, 507,
+      507,
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "juggernaut",
       ),
     ).toEqual([
-      499, 499, 499, 499, 500, 500, 501, 501, 502, 502, 502, 502, 501, 501, 500,
-      500,
+      507, 507, 507, 507, 508, 508, 507, 507, 507, 507, 507, 507, 506, 506, 507,
+      507,
     ]);
     expect(
       perShard(
@@ -1900,33 +1938,41 @@ describe("published expansion starters across every supported mission setting", 
           !mission.variant && mission.villainId === "mister_sinister",
       ),
     ).toEqual([
-      501, 501, 502, 502, 502, 502, 501, 501, 500, 500, 499, 499, 499, 499, 500,
-      500,
+      508, 508, 507, 507, 507, 507, 507, 507, 506, 506, 507, 507, 507, 507, 507,
+      507,
     ]);
     expect(
       perShard((mission) => !mission.variant && mission.villainId === "unus"),
     ).toEqual([
-      493, 493, 494, 494, 495, 495, 496, 496, 495, 495, 494, 494, 493, 493, 492,
-      492,
+      500, 500, 500, 500, 501, 501, 501, 501, 501, 501, 501, 501, 500, 500, 500,
+      500,
+    ]);
+    expect(
+      perShard(
+        (mission) => !mission.variant && mission.villainId === "four_horsemen",
+      ),
+    ).toEqual([
+      507, 507, 508, 508, 507, 507, 507, 507, 507, 507, 506, 506, 507, 507, 507,
+      507,
     ]);
     // The two scenarios without modular sets each spread over all sixteen
     // shards.
     expect(
       perShard((mission) => mission.villainId === "the_wrecking_crew"),
-    ).toEqual([7, 7, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7]);
+    ).toEqual([7, 7, 7, 7, 6, 6, 7, 7, 6, 6, 6, 6, 7, 7, 6, 6]);
     expect(perShard((mission) => mission.villainId === "sinister_six")).toEqual(
-      [6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7],
+      [6, 6, 6, 6, 7, 7, 6, 6, 7, 7, 7, 7, 6, 6, 7, 7],
     );
-    expect(perShard((mission) => mission.variant === "ii")).toEqual(
-      Array(16).fill(260),
-    );
-    expect(new Set(missions.map(key)).size).toBe(323544);
-    expect(new Set(combined.map(key)).size).toBe(323544);
-    expect(manifest(combined)).toEqual(manifest(missions));
-    expect(partitions.map((partition) => partition.length)).toEqual([
-      ...Array(8).fill(20222),
-      ...Array(8).fill(20221),
+    expect(perShard((mission) => mission.variant === "ii")).toEqual([
+      ...Array(8).fill(266),
+      ...Array(8).fill(267),
     ]);
+    expect(new Set(missions.map(key)).size).toBe(335920);
+    expect(new Set(combined.map(key)).size).toBe(335920);
+    expect(manifest(combined)).toEqual(manifest(missions));
+    expect(partitions.map((partition) => partition.length)).toEqual(
+      Array(16).fill(20995),
+    );
     for (const partition of partitions)
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     for (const heroId of heroIds) {
@@ -1934,14 +1980,14 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBeGreaterThanOrEqual(388);
-      expect(Math.max(...perShard)).toBeLessThanOrEqual(389);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(6222);
+      expect(Math.min(...perShard)).toBeGreaterThanOrEqual(403);
+      expect(Math.max(...perShard)).toBeLessThanOrEqual(405);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(6460);
     }
     expect(selectedMissions).toHaveLength(
-      isSharded ? partitions[Number(shardIndex)].length : 323544,
+      isSharded ? partitions[Number(shardIndex)].length : 335920,
     );
-    // Hashing every layer of the 323,544-configuration manifest takes a few
+    // Hashing every layer of the 335,920-configuration manifest takes a few
     // seconds on its own.
   }, 60000);
   for (const mission of selectedMissions)
