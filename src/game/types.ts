@@ -100,6 +100,8 @@ export interface Piece {
   inheritorBoosts?: Piece[];
   /** Physical acceleration tokens on this side scheme leave with its instance. */
   accelerationTokens?: number;
+  /** MojoMania: threat on this character. */
+  mojoThreat?: number;
   pendingDefeat?: boolean;
   id: string;
   code: string;
@@ -310,6 +312,8 @@ export interface GameState {
   venomGoblin?: import("./venom-goblin.js").VenomGoblinState;
   /** Across the Mojoverse: the show deck. */
   spiral?: import("./spiral.js").SpiralState;
+  /** MojoMania: the set-aside modular sets. */
+  mojo?: import("./mojo.js").MojoState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */
@@ -415,6 +419,8 @@ export interface GameState {
     spdrSuitId?: string;
     spdrPilotId?: string;
     hp: number;
+    /** MojoMania: threat on this identity. */
+    mojoThreat?: number;
     exhausted: boolean;
     flipped: boolean;
     stunned: boolean;

@@ -968,3 +968,14 @@ h3 {
     flex-wrap: wrap;
   }
 }
+/* MojoMania: threat on identities and allies. */
+.app .seat-vitals .seat-threat {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: #ffd27a;
+}
+.app .physical-table .in-play-image > .mini-token.mojo-threat-token {
+  right: auto;
+  left: 2px;
+}

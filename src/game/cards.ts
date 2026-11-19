@@ -1454,6 +1454,30 @@ export const VILLAINS = [
       "Spiral teleports from Show to Show. Search the show deck to corner her, then strike before her teleport counters carry her away again.",
     color: "#5e2a6b",
   },
+  {
+    id: "mojo",
+    name: "Mojo",
+    codes: ["39022", "39023", "39024"],
+    schemes: ["39025b"],
+    // The rulebook sets aside one MojoMania modular set plus one per player.
+    module: "crime",
+    moduleCount: 1,
+    moduleCountPerHero: 1,
+    defaultModules: [
+      "crime",
+      "fantasy",
+      "horror",
+      "sci-fi",
+      "sitcom",
+      "western",
+    ],
+    difficulty: 4,
+    title: "MojoMania",
+    location: "Mojoworld",
+    description:
+      "Mojo piles threat onto your heroes and allies and keeps the Wheel of Genres spinning. Every flip or fallen ally hands that threat to his main scheme, and when the wheel runs out of genres, the show is over.",
+    color: "#8a2f6b",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1536,7 +1560,17 @@ export const MODULES = [
   { id: "horror", name: "Horror", difficulty: 3 },
   { id: "sci-fi", name: "Sci-Fi", difficulty: 3 },
   { id: "sitcom", name: "Sitcom", difficulty: 3 },
+  { id: "longshot", name: "Longshot", difficulty: 1 },
 ];
+/** How many modular sets a scenario uses with this many players. */
+export function scenarioModuleCount(
+  scenario: { moduleCount?: number; moduleCountPerHero?: number } | undefined,
+  players: number,
+) {
+  return (
+    (scenario?.moduleCount ?? 1) + (scenario?.moduleCountPerHero ?? 0) * players
+  );
+}
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
   const scenario = VILLAINS.find((v) => v.id === villainId);

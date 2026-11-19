@@ -206,6 +206,7 @@ import {
   plain,
   resources,
   scenarioModules,
+  scenarioModuleCount,
 } from "./game/cards";
 import {
   SAVE_KEY,
@@ -306,6 +307,16 @@ import {
   spiralEscaped,
   spiralTeleportLimit,
 } from "./game/spiral";
+import {
+  MAJOR_DOMO,
+  PAPARAZZI,
+  STINGER_TAIL,
+  UNDERCOVER_MOJO,
+  WHEEL_SPINNING,
+  WHEEL_STOPPED,
+  characterThreat,
+  mojoDiscards,
+} from "./game/mojo";
 import { effectTitle, pacingOf } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
 import type { PaymentSource } from "./game/payment";
@@ -1059,6 +1070,9 @@ export default function App() {
       return next;
     });
     setSetupSeat((i) => Math.min(i, size - 1));
+    // Mojo sets aside one more modular set for each hero.
+    if (villain.moduleCountPerHero)
+      selectScenarioModules(villain, selectedModules, size);
   }
   const [villain, setVillain] = useState(VILLAINS[0]);
   const [difficulty, setDifficulty] = useState<"standard" | "expert">(
@@ -1066,14 +1080,16 @@ export default function App() {
   );
   const [module, setModule] = useState("bomb_scare");
   const [additionalModules, setAdditionalModules] = useState<string[]>([]);
-  // The Wrecking Crew uses no modular encounter sets.
-  const moduleCount = villain.moduleCount ?? 1;
+  // The Wrecking Crew uses no modular encounter sets; Mojo uses one more
+  // for each hero.
+  const moduleCount = scenarioModuleCount(villain, team.length);
   const selectedModules = moduleCount ? [module, ...additionalModules] : [];
   const [senatorDamage, setSenatorDamage] = useState("");
   const [captureAllocation, setCaptureAllocation] = useState(["", "", ""]);
   function selectScenarioModules(
     scenario: (typeof VILLAINS)[number],
     preferred: string[] = scenario.defaultModules || [scenario.module],
+    players = team.length,
   ) {
     const legal = scenarioModules(scenario.id).map((entry) => entry.id);
     const chosen = [
@@ -1084,7 +1100,7 @@ export default function App() {
       ]),
     ]
       .filter((id) => legal.includes(id))
-      .slice(0, scenario.moduleCount ?? 1);
+      .slice(0, scenarioModuleCount(scenario, players));
     setModule(chosen[0] ?? "");
     setAdditionalModules(chosen.slice(1));
   }
@@ -2679,6 +2695,18 @@ export default function App() {
                       her a teleport counter until she escapes again. The
                       rulebook uses three MojoMania genre sets; Crime, Fantasy
                       and Horror are preselected.
+                    </p>
+                  )}
+                  {villain.id === "mojo" && (
+                    <p className="setting-help">
+                      Choose one modular set plus one per hero. They wait set
+                      aside and one joins the encounter deck at random. Each
+                      time the encounter deck resets the Wheel of Genres stops
+                      and brings in another set at the next villain phase; with
+                      no set left, a reset loses the game. Mojo puts threat on
+                      your identities and allies, and it moves to the main
+                      scheme when a character flips or leaves play. The rulebook
+                      uses MojoMania genre sets, preselected in order.
                     </p>
                   )}
                   {villain.id === "magog" && (
@@ -6014,6 +6042,11 @@ function AttachedCards({
                 {p.counters} ATK
               </small>
             )}
+            {p.code === STINGER_TAIL && (
+              <small aria-label={`Stinger Tail damage: ${p.damage} of 5`}>
+                {p.damage}/5 damage · retaliate 2
+              </small>
+            )}
             {p.code === "39048" && (
               <small
                 aria-label={`${card(p).name}: ${p.counters} stake counters`}
@@ -6117,8 +6150,9 @@ function AttachedCards({
                 "27150",
                 "27151",
                 "27152",
-                // Spiral's Swords.
+                // Spiral's Swords; Mojo's Major Domo.
                 "39018",
+                MAJOR_DOMO,
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -6567,6 +6601,17 @@ function Tabletop({
                       <Cards size={13} />
                       {view.player.hand.length}
                     </span>
+                    {game.mojo &&
+                      characterThreat(game, `hero:${seat.id}`) > 0 && (
+                        <span
+                          className="seat-threat"
+                          title="Threat on this identity · moves to the main scheme when it flips"
+                          aria-label={`${characterThreat(game, `hero:${seat.id}`)} threat on this identity`}
+                        >
+                          <Target size={13} weight="fill" />
+                          {characterThreat(game, `hero:${seat.id}`)}
+                        </span>
+                      )}
                     <small>
                       {view.player.form === "hero" ? "Hero" : "Alter-ego"} ·{" "}
                       {view.player.exhausted ? "Exhausted" : "Ready"}
@@ -6769,6 +6814,13 @@ function Tabletop({
                       <span className="stat-caption">
                         Cannot be defeated · resets to {10 * s.playerCount} hit
                         points and wows The Challengers
+                      </span>
+                    )}
+                    {s.mojo && mojoDiscards(s) > 0 && (
+                      <span className="stat-caption">
+                        After each turn in hero form · discards{" "}
+                        {mojoDiscards(s)} encounter cards, 1 threat on that hero
+                        for each from another set
                       </span>
                     )}
                     {helaWounded(s) && (
@@ -7106,13 +7158,17 @@ function Tabletop({
                                 ? "ENVIRONMENT · DAMAGED"
                                 : isInfinityStone(p)
                                   ? "INFINITY STONE"
-                                  : MOJO_GENRE_SHOW_CAPTIONS[p.code]
-                                    ? "SETTING · SHOW"
-                                    : Object.values(MANHATTAN_FLIPPED).includes(
-                                          p.code,
-                                        )
-                                      ? "ENVIRONMENT · SYMBIOTE"
-                                      : "ENVIRONMENT"}
+                                  : p.code === WHEEL_SPINNING
+                                    ? "ENVIRONMENT · SPINNING"
+                                    : p.code === WHEEL_STOPPED
+                                      ? "ENVIRONMENT · STOPPED"
+                                      : MOJO_GENRE_SHOW_CAPTIONS[p.code]
+                                        ? "SETTING · SHOW"
+                                        : Object.values(
+                                              MANHATTAN_FLIPPED,
+                                            ).includes(p.code)
+                                          ? "ENVIRONMENT · SYMBIOTE"
+                                          : "ENVIRONMENT"}
                         </span>
                         <strong>{card(p).name}</strong>
                         {MOJO_GENRE_SHOW_CAPTIONS[p.code] && (
@@ -7125,6 +7181,22 @@ function Tabletop({
                           <span className="stat-caption">
                             Infested · a second Symbiote environment loses the
                             game
+                          </span>
+                        )}
+                        {p.code === WHEEL_SPINNING && (
+                          <span className="stat-caption">
+                            {s.mojo?.setAside.length || 0} set
+                            {s.mojo?.setAside.length === 1 ? "" : "s"} set aside
+                            ·{" "}
+                            {s.mojo?.setAside.length
+                              ? "stops when the encounter deck resets"
+                              : "the next reset loses the game"}
+                          </span>
+                        )}
+                        {p.code === WHEEL_STOPPED && (
+                          <span className="stat-caption" role="status">
+                            Brings in a set-aside set at the next villain phase
+                            · {s.mojo?.setAside.length || 0} left
                           </span>
                         )}
                         {(p.code === AVENGERS_TOWER ||
@@ -7368,6 +7440,11 @@ function Tabletop({
                           {s.spiral?.showDeck.length === 1 ? "card" : "cards"})
                         </span>
                       )}
+                      {p.code === UNDERCOVER_MOJO && (
+                        <span className="stat-caption">
+                          Damage to Mojo removes threat here instead
+                        </span>
+                      )}
                       {p.code === "27102a" && (
                         <span className="stat-caption">
                           Trap! · clearing it ambushes you and starts the Chase
@@ -7594,6 +7671,15 @@ function Tabletop({
                               discard that many after it activates against you
                             </span>
                           )}
+                          {(p.mojoThreat || 0) > 0 && (
+                            <span
+                              className="engagement-label"
+                              aria-label={`Threat on ${card(p).name}: ${p.mojoThreat}`}
+                            >
+                              {p.mojoThreat} threat · moves to the main scheme
+                              when it leaves play
+                            </span>
+                          )}
                           {!!p.captured?.length &&
                             ["39052", "39058"].includes(p.code) && (
                               <span className="minion-keyword">
@@ -7789,6 +7875,25 @@ function Tabletop({
                     )}
                   </div>
                   <Status piece={s.player} />
+                  {s.mojo &&
+                    characterThreat(s, `hero:${s.activePlayerId}`) > 0 && (
+                      <>
+                        <div className="identity-stats stat-row">
+                          <StatToken
+                            kind="threat"
+                            value={characterThreat(
+                              s,
+                              `hero:${s.activePlayerId}`,
+                            )}
+                            label="THREAT"
+                            compact
+                          />
+                        </div>
+                        <span className="stat-caption">
+                          Moves to the main scheme when you flip
+                        </span>
+                      </>
+                    )}
                   {venomIdentityBoosts(s, s.activePlayerId).length > 0 && (
                     <span className="stat-caption venom-boost-caption">
                       {venomIdentityBoosts(s, s.activePlayerId).length} facedown
@@ -8141,6 +8246,29 @@ function Tabletop({
                                   {pieceHP(s, p) - p.damage}
                                 </span>
                               )}
+                              {(p.mojoThreat || 0) > 0 && (
+                                <span
+                                  className="mini-token mojo-threat-token"
+                                  role="img"
+                                  aria-label={`Threat on ${card(p).name}: ${p.mojoThreat}`}
+                                  title={`Threat on ${card(p).name} · moves to the main scheme when it leaves play`}
+                                >
+                                  <PremiumToken kind="threat" />
+                                  {p.mojoThreat}
+                                </span>
+                              )}
+                              {p.code === PAPARAZZI && (
+                                <span
+                                  className="mini-token counter-token"
+                                  role="img"
+                                  aria-label={`Threat on Paparazzi: ${p.counters}`}
+                                  title="Threat on Paparazzi · moves to the main scheme when your turn ends"
+                                >
+                                  <PremiumToken kind="threat" />
+                                  {p.counters}
+                                  <small>THREAT</small>
+                                </span>
+                              )}
                               {["46008", "49006"].includes(p.code) && (
                                 <span
                                   className="mini-token"
@@ -8159,64 +8287,65 @@ function Tabletop({
                                   <small>STORED</small>
                                 </span>
                               )}
-                              {(p.counters > 0 ||
-                                ["50035a", "50035b"].includes(p.code)) && (
-                                <span
-                                  className="mini-token counter-token"
-                                  role={
-                                    ["50035a", "50035b"].includes(p.code)
-                                      ? "img"
-                                      : undefined
-                                  }
-                                  aria-label={
-                                    ["50035a", "50035b"].includes(p.code)
-                                      ? `Suit threat: ${p.counters}`
-                                      : undefined
-                                  }
-                                  title={
-                                    ["50035a", "50035b"].includes(p.code)
-                                      ? `Suit threat: ${p.counters}`
-                                      : undefined
-                                  }
-                                >
-                                  <PremiumToken
-                                    kind={
+                              {p.code !== PAPARAZZI &&
+                                (p.counters > 0 ||
+                                  ["50035a", "50035b"].includes(p.code)) && (
+                                  <span
+                                    className="mini-token counter-token"
+                                    role={
                                       ["50035a", "50035b"].includes(p.code)
-                                        ? "threat"
-                                        : "counter"
+                                        ? "img"
+                                        : undefined
                                     }
-                                  />
-                                  {p.counters}
-                                  <small>
-                                    {["50035a", "50035b"].includes(p.code)
-                                      ? "THREAT"
-                                      : p.code === "01066"
-                                        ? "ARROWS"
-                                        : p.code === "01018"
-                                          ? "ENERGY"
-                                          : p.code === "39036"
-                                            ? "CLUES"
-                                            : [
-                                                  "16034",
-                                                  "16036",
-                                                  "16037",
-                                                  "16038",
-                                                  "16046",
-                                                ].includes(p.code)
-                                              ? "CHARGES"
-                                              : card(p).type_code ===
-                                                    "support" &&
-                                                  card(p).traits?.includes(
-                                                    "S.H.I.E.L.D.",
-                                                  ) &&
-                                                  !/Uses\s*\(/.test(
-                                                    card(p).text || "",
-                                                  )
-                                                ? "ALL-PURPOSE"
-                                                : "USES"}
-                                  </small>
-                                </span>
-                              )}
+                                    aria-label={
+                                      ["50035a", "50035b"].includes(p.code)
+                                        ? `Suit threat: ${p.counters}`
+                                        : undefined
+                                    }
+                                    title={
+                                      ["50035a", "50035b"].includes(p.code)
+                                        ? `Suit threat: ${p.counters}`
+                                        : undefined
+                                    }
+                                  >
+                                    <PremiumToken
+                                      kind={
+                                        ["50035a", "50035b"].includes(p.code)
+                                          ? "threat"
+                                          : "counter"
+                                      }
+                                    />
+                                    {p.counters}
+                                    <small>
+                                      {["50035a", "50035b"].includes(p.code)
+                                        ? "THREAT"
+                                        : p.code === "01066"
+                                          ? "ARROWS"
+                                          : p.code === "01018"
+                                            ? "ENERGY"
+                                            : p.code === "39036"
+                                              ? "CLUES"
+                                              : [
+                                                    "16034",
+                                                    "16036",
+                                                    "16037",
+                                                    "16038",
+                                                    "16046",
+                                                  ].includes(p.code)
+                                                ? "CHARGES"
+                                                : card(p).type_code ===
+                                                      "support" &&
+                                                    card(p).traits?.includes(
+                                                      "S.H.I.E.L.D.",
+                                                    ) &&
+                                                    !/Uses\s*\(/.test(
+                                                      card(p).text || "",
+                                                    )
+                                                  ? "ALL-PURPOSE"
+                                                  : "USES"}
+                                    </small>
+                                  </span>
+                                )}
                               {!!p.nickAllPurposeCounters && (
                                 <span
                                   className="mini-token"

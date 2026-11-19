@@ -25,6 +25,7 @@ import { KREE_FANATIC_SCRIPT_CODES } from "../src/game/kree-fanatic";
 import { MOJO_GENRE_SCRIPT_CODES } from "../src/game/mojo-genres";
 import { MAGOG_SCRIPT_CODES } from "../src/game/magog";
 import { SPIRAL_SCRIPT_CODES } from "../src/game/spiral";
+import { LONGSHOT_CODES, MOJO_SCRIPT_CODES } from "../src/game/mojo";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -65,6 +66,8 @@ const badoonCodes = new Set<string>([
   ...MOJO_GENRE_SCRIPT_CODES,
   ...MAGOG_SCRIPT_CODES,
   ...SPIRAL_SCRIPT_CODES,
+  ...MOJO_SCRIPT_CODES,
+  ...LONGSHOT_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -448,7 +451,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(68);
+    expect(MODULES).toHaveLength(69);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "temporal",
@@ -478,9 +481,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2986);
-    expect(coverage.unsupportedFaces).toBe(1565);
-    expect(coverage.dedicatedFaces).toBe(2548);
+    expect(coverage.executableFaces).toBe(3002);
+    expect(coverage.unsupportedFaces).toBe(1549);
+    expect(coverage.dedicatedFaces).toBe(2564);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -696,6 +699,8 @@ describe("complete expansion rules inventory", () => {
         15 -
         // Across the Mojoverse: Spiral.
         14 -
+        // MojoMania: Mojo and Longshot.
+        16 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -823,7 +828,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(68);
+    expect(coverage.registeredModules).toHaveLength(69);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -1007,7 +1012,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(35);
+    ).toHaveLength(36);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "venom_goblin",
@@ -1254,7 +1259,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(157);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(158);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

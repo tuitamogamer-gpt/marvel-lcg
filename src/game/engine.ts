@@ -24,6 +24,7 @@ import * as kreeFanatic from "./kree-fanatic.js";
 import * as mojoGenres from "./mojo-genres.js";
 import * as magog from "./magog.js";
 import * as spiral from "./spiral.js";
+import * as mojoVillain from "./mojo.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -321,6 +322,7 @@ import {
   pieceHP,
   enemyAttachmentModifier,
   plain,
+  scenarioModuleCount,
 } from "./cards.js";
 import type {
   Aspect,
@@ -913,6 +915,12 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
   const p = find(s, source);
   if (!p) return 0;
   if (name === "Piercing" && p.code === "44015" && !isTextBlank(s, p)) return 1;
+  if (
+    name === "Piercing" &&
+    p.code === mojoVillain.LONGSHOT &&
+    !isTextBlank(s, p)
+  )
+    return 1;
   const wideawakeKeywords = wideawake.projectWideawakeModifiers(s, p, {
     isTextBlank,
   });
@@ -1062,7 +1070,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         hoodModular.hoodModularKeyword(s, p, "Retaliate") +
         hoodModular.hoodModularGlobal(s).retaliate +
         sinisterModulars.sinisterModularKeyword(s, p, "Retaliate") +
-        magog.magogKeyword(s, p, "Retaliate")
+        magog.magogKeyword(s, p, "Retaliate") +
+        mojoVillain.mojoKeyword(s, p, "Retaliate")
     : Math.max(intrinsic, grantedValue);
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
@@ -1311,6 +1320,7 @@ export function allyCount(s: GameState) {
       // An ally already leaving play through an interrupt is not counted
       // again, so its own leave interrupt can finish.
       !p.pendingDefeat &&
+      !(p.code === mojoVillain.LONGSHOT && !isTextBlank(s, p)) &&
       !antPack.antManPackAllyExcluded(s, p) &&
       !magnetoHero.magnetoHeroNewModifiers(s, p, captainPackHasTrait)
         .excluded &&
@@ -1681,6 +1691,7 @@ function recycleEncounter(s: GameState) {
     s.encounter.deck = shuffle(s, s.encounter.discard.splice(0));
     s.encounter.acceleration++;
     log(s, "Encounter deck reshuffles: +1 acceleration token.", "bad");
+    add(s, ...mojoVillain.mojoEncounterReset(s));
   }
 }
 function drawEncounter(s: GameState) {
@@ -1784,6 +1795,8 @@ function movePieceFromPlay(
   const healthBefore = maxHP(viewBefore);
   const removedSource = find(s, id);
   if (removedSource && redSkull.redSkullLocked(s, removedSource)) return;
+  if (removedSource?.mojoThreat)
+    add(s, ...mojoVillain.mojoCharacterThreatLeaves(s, removedSource.id));
   // These actual cards were attached from a hand, never put into play.
   // Retain the marker before Electro leaves so legacy saves also bypass all
   // leave-play interrupts and printed player-card effects during cleanup.
@@ -2777,6 +2790,9 @@ function check(s: GameState) {
       endGame(s, false, "Every hero has been defeated. The villain wins.");
       return;
     }
+    // MojoMania: the defeated identity leaves play, so its threat moves to
+    // the main scheme.
+    add(s, ...mojoVillain.mojoCharacterThreatLeaves(s, `hero:${seat.id}`));
     if (s.firstPlayerId === seat.id) {
       s.firstPlayerId = next.id;
       sabretooth.sabretoothFirstPlayerChanged(s);
@@ -3797,6 +3813,7 @@ function dealDamage(
             "Retaliate",
           ) +
           magog.magogKeyword(s, retaliationTarget, "Retaliate") +
+          mojoVillain.mojoKeyword(s, retaliationTarget, "Retaliate") +
           (retaliationTarget.id === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -4046,6 +4063,12 @@ function applyDamage(
       // Overkill still credits its unprevented amount when a TAKE replacement
       // redirects it; only prevention invokes the specific p31 exception.
       return traits.overkillDamage ? { ...none, damageDealt: n } : none;
+    }
+    const mojoReplaced = mojoVillain.mojoDamageReplaced(s, target, n);
+    if (mojoReplaced.amount !== n) {
+      add(s, ...mojoReplaced.effects);
+      n = mojoReplaced.amount;
+      if (!n) return none;
     }
     const infinite = hela.helaInfiniteHp(s);
     const excess = infinite ? 0 : Math.max(0, n - s.villain.hp);
@@ -5109,6 +5132,7 @@ function villainSetup(s: GameState) {
     ...mysterio.mysterioVillainRevealed(s),
     ...venomGoblin.venomGoblinVillainRevealed(s, s.villain.code),
     ...spiral.spiralVillainRevealed(s),
+    ...mojoVillain.mojoVillainRevealed(s, mojoVillainPorts),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -5153,6 +5177,14 @@ function threat(
       venomGoblin.withVgFocus(s, vgThreatKey, () =>
         threat(s, "main", n, skipInterrupt),
       );
+    return;
+  }
+  // MojoMania's Paparazzi: Hinder places threat on the obligation itself,
+  // which is not a scheme.
+  const mojoThreatCard = mojoVillain.mojoThreatCard(s, target);
+  if (mojoThreatCard) {
+    mojoThreatCard.counters += n;
+    log(s, `+${n} threat on ${card(mojoThreatCard).name}.`, "bad");
     return;
   }
   if (!skipInterrupt) {
@@ -8415,7 +8447,7 @@ export function newGame(config: {
     "This scenario’s complete rules are not implemented yet.",
   );
   const v = foundScenario!;
-  const moduleCount = v.moduleCount ?? 1;
+  const moduleCount = scenarioModuleCount(v, team.length);
   const primary = config.module || v.module;
   const selectedModules = config.modules
     ? [...config.modules]
@@ -8631,7 +8663,7 @@ export function newGame(config: {
                               (set) => set === c.set_code,
                             )
                           ? "ron"
-                          : mojoGenres.MOJO_GENRE_SETS.some(
+                          : [...mojoGenres.MOJO_GENRE_SETS, "longshot"].some(
                                 (set) => set === c.set_code,
                               )
                             ? "mojo"
@@ -8748,6 +8780,8 @@ export function newGame(config: {
   if (v.id === "venom_goblin") venomGoblin.venomGoblinSetup(s);
   if (v.id === "magog") magog.magogSetup(s, magogPorts);
   if (v.id === "spiral") spiral.spiralSetup(s, spiralPorts);
+  if (v.id === "mojo")
+    mojoVillain.mojoSetup(s, mojoVillainPorts, selectedModules);
   deadpool.deadpoolSetupPool(s, makePiece);
   if (s.deadpool?.initializedPoolSeats.length)
     s.encounter.deck = shuffle(s, s.encounter.deck);
@@ -11502,6 +11536,10 @@ function flip(
     s.player.form = s.player.form === "hero" ? "alter" : "hero";
   }
   if (counts) s.player.flipped = true;
+  add(
+    s,
+    ...mojoVillain.mojoCharacterThreatLeaves(s, `hero:${s.activePlayerId}`),
+  );
   spdr.spdrChangedForm(s, previousForm, s.player.form);
   add(s, ...phoenix.phoenixFormChanged(s), ...bishop.bishopChangedForm(s));
   add(
@@ -11647,6 +11685,7 @@ export function abilityOptions(
     ...sinisterModulars.sinisterModularActions(s, p),
     ...mojoGenres.mojoGenreActions(s, p, mojoGenrePorts),
     ...spiral.spiralActions(s, p, spiralPorts),
+    ...mojoVillain.mojoActions(s, p, mojoVillainPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -16304,6 +16343,40 @@ const spiralPorts: spiral.SpiralPorts = {
   // without surge.
   revealShow: (s, p) => add(s, { type: "mgen:show", piece: p }),
   dealPiece: (s, p, playerId) => kreeFanaticPorts.dealPiece(s, p, playerId),
+};
+const mojoVillainPorts: mojoVillain.MojoPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  makePiece: (s, code) => makePiece(s, code),
+  shuffle: (s, pieces) => shuffle(s, pieces),
+  pick: (s, n) => Math.floor(random(s) * n),
+  endGame: (s, won, reason) => endGame(s, won, reason),
+  revealShow: (s, p) => add(s, { type: "mgen:show", piece: p }),
+  dealPiece: (s, p, playerId) => kreeFanaticPorts.dealPiece(s, p, playerId),
+  characters: (s, playerId) => [
+    `hero:${playerId}`,
+    ...friends(seatView(s, playerId)).map((p) => p.id),
+  ],
+  heal: (s, target, amount, playerId) =>
+    add(s, {
+      type: "heal",
+      target,
+      amount,
+      origin: "encounter",
+      actorId: playerId,
+    }),
+  revealBoostCard: (s, p) => warlockPorts.revealBoostCard(s, p),
+  discardHandCard: (s, playerId, id) =>
+    kangPorts.discardHandCard(s, playerId, id),
+  canPayDifferent: (s, code) => msPorts.canPayDifferentTypes(s, 2, code),
+  payDifferent: (s, title, code) =>
+    msPorts.payDifferentTypes(s, title, 2, [], code),
+  allyEntered: (s, p) => allyEnter(s, p),
+  characterName: (s, target) =>
+    target.startsWith("hero:")
+      ? heroCard(seatView(s, target.slice(5))).name
+      : card(find(s, target) || target).name,
 };
 const kreeFanaticPorts: kreeFanatic.KreeFanaticPorts = {
   ...mutagenPorts,
@@ -24534,6 +24607,7 @@ function boostEffects(s: GameState, p: Piece) {
     mojoGenres.mojoGenreBoost(s, p) ??
     magog.magogBoost(s, p) ??
     spiral.spiralBoost(s, p) ??
+    mojoVillain.mojoBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -25060,6 +25134,7 @@ function finishScheme(s: GameState) {
       againstPlayer: true,
     }),
     ...spiral.spiralActivated(s, id),
+    ...mojoVillain.mojoActivated(s, id, false, 0),
     ...iceman.icemanActivated(s, id),
     ...mariaHill.mariaHillActivation(s, id),
     ...armadillo.armadilloActivationResponses(s, id).flatMap((r) => r.effects),
@@ -25709,6 +25784,7 @@ function finishAttackAfterDamage(
     }),
     ...magog.magogAttacked(s, a.attacker, a.damage > 0),
     ...spiral.spiralActivated(s, a.attacker),
+    ...mojoVillain.mojoActivated(s, a.attacker, true, a.damage || 0),
     ...sinisterModulars.sinisterModularActivated(s, {
       enemyId: a.attacker,
       playerId: recipientId,
@@ -26688,6 +26764,9 @@ function reveal(
         c.type_code !== "attachment") ||
       (spiral.SPIRAL_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (mojoVillain.MOJO_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
+      mojoVillain.LONGSHOT_CODES.some((code) => code === p.code) ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -26747,7 +26826,8 @@ function reveal(
         ) ||
         (
           mojoGenres.MOJO_GENRE_IN_PLAY_OBLIGATIONS as readonly string[]
-        ).includes(p.code))
+        ).includes(p.code) ||
+        p.code === mojoVillain.PAPARAZZI)
     ) {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       if (!s.player.inPlay.some((x) => x.id === p.id)) s.player.inPlay.push(p);
@@ -26903,6 +26983,8 @@ function reveal(
       ...mojoGenres.MOJO_GENRE_SCRIPT_CODES,
       ...magog.MAGOG_SCRIPT_CODES,
       ...spiral.SPIRAL_SCRIPT_CODES,
+      ...mojoVillain.MOJO_SCRIPT_CODES,
+      ...mojoVillain.LONGSHOT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -26956,6 +27038,7 @@ function reveal(
       mojoGenres.mojoGenreReveal(s, p) ??
       magog.magogReveal(s, p) ??
       spiral.spiralReveal(s, p) ??
+      mojoVillain.mojoReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -27052,6 +27135,7 @@ function reveal(
     mojoGenres.mojoGenreReveal(s, p) ??
     magog.magogReveal(s, p) ??
     spiral.spiralReveal(s, p) ??
+    mojoVillain.mojoReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -28487,6 +28571,7 @@ function resolve(s: GameState, e: Effect) {
           mojoGenres.mojoGenreReveal(state, piece) ??
           magog.magogReveal(state, piece) ??
           spiral.spiralReveal(state, piece) ??
+          mojoVillain.mojoReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -28639,6 +28724,7 @@ function resolve(s: GameState, e: Effect) {
   if (mojoGenres.resolveMojoGenreEffect(s, e, mojoGenrePorts)) return;
   if (magog.resolveMagogEffect(s, e, magogPorts)) return;
   if (spiral.resolveSpiralEffect(s, e, spiralPorts)) return;
+  if (mojoVillain.resolveMojoEffect(s, e, mojoVillainPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -34763,6 +34849,7 @@ function resolve(s: GameState, e: Effect) {
         }),
         ...magog.magogAttacked(s, a.attacker, a.damage > 0),
         ...spiral.spiralActivated(s, a.attacker),
+        ...mojoVillain.mojoActivated(s, a.attacker, true, a.damage || 0),
         ...(a.completionRecorded && a.attackerSnapshot
           ? spectrum.spectrumEnemyActivated(
               s,
@@ -37610,6 +37697,13 @@ function resolve(s: GameState, e: Effect) {
       dealEncounter(s, e.playerId || s.activePlayerId);
       break;
     case "dealEncounters": {
+      if (!e.mojoWheelHandled) {
+        const wheel = mojoVillain.mojoDealStep(s);
+        if (wheel.length) {
+          add(s, ...wheel, { ...e, mojoWheelHandled: true });
+          break;
+        }
+      }
       s.villainStep = "encounters";
       const order = playerOrder(s);
       for (const seat of order)
@@ -38489,6 +38583,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...sinisterModulars.sinisterModularActions(s, p),
               ...mojoGenres.mojoGenreActions(s, p, mojoGenrePorts),
               ...spiral.spiralActions(s, p, spiralPorts),
+              ...mojoVillain.mojoActions(s, p, mojoVillainPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -38606,6 +38701,16 @@ export function dispatch(state: GameState, command: Command): GameState {
               "This First Player Action needs the first player and the ready Milano.",
             );
             add(s, ...selected!.effects);
+          } else if (mojoVillain.mojoActionSource(s, command.id)) {
+            const selected = mojoVillain
+              .mojoActions(
+                s,
+                mojoVillain.mojoActionSource(s, command.id)!,
+                mojoVillainPorts,
+              )
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
+            add(s, ...selected!.effects);
           } else if (spiral.spiralActionSource(s, command.id)) {
             const selected = spiral
               .spiralActions(
@@ -38687,6 +38792,7 @@ export function dispatch(state: GameState, command: Command): GameState {
           }
           add(s, ...deadpool.deadpoolTurnEnded(s));
           add(s, ...hulkTurnEnds(s));
+          add(s, ...mojoVillain.mojoTurnEnded(s, s.activePlayerId));
           if (s.player.inPlay.some((p) => p.code === "32099"))
             add(
               s,

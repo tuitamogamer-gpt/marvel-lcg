@@ -187,3 +187,7 @@ Melee in the Mojo-seum is decided by two crowds rather than by the villain's hit
 ## Spiral's show deck, 2026-11-19
 
 Across the Mojoverse reuses the table's existing places. Spiral's label adds her side, ESCAPED or CORNERED, and the caption beneath her hit points says what that side means: what she ignores while Escaped, and her teleport counters against the number that flips her away while Cornered. The current Show keeps its "Setting · Show" column. The show deck itself stays hidden, as a pile should, but The Search for Spiral says how many cards it holds and that emptying it reveals the next one, with its Hero Action button beneath. Spiral's Swords count their sword counters and ATK bonus like the other counted attachments.
+
+## Threat on characters, 2026-11-19
+
+MojoMania is the first scenario that puts threat on the heroes' own characters, so the threat token already used for schemes marks them too. An identity with threat gets a THREAT token beneath its stats, with a one-line reminder that flipping moves it; each seat in the team strip shows the same number beside its hit points and hand size. An ally carries its threat on a token at the card's lower left, opposite its hit points, and a minion lists its threat beneath its name like other counted minions. The Wheel of Genres keeps an ordinary environment column whose label reads SPINNING or STOPPED, with a caption counting the set-aside sets or announcing the next set. Paparazzi, an obligation that stays in play, shows its threat with the threat token instead of a generic counter.
