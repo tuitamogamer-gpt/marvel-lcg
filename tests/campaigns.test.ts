@@ -141,7 +141,7 @@ describe("saved standalone campaigns", () => {
     const skipped = structuredClone(c);
     skipped.attempts[0].stage = 1;
     expect(() => validateCampaign(skipped)).toThrow();
-    expect(() => defaultCampaignStage("sinister_six")).toThrow(/implemented/);
+    expect(() => defaultCampaignStage("en_sabah_nur")).toThrow(/implemented/);
     expect(() =>
       createCampaign({
         ...create(),

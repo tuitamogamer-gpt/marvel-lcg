@@ -26,6 +26,17 @@ export function isPrintedTraitsBlank(s: GameState, p: Piece | undefined) {
 }
 
 /** Tech Theft blanks printed text, while retaining stats, traits and icons. */
+/** Printed "cannot be canceled" text. The Sinister Six's "In expert mode,
+ * this card gains ... and cannot be canceled" applies only in expert mode. */
+export function uncancelableText(
+  s: Pick<GameState, "difficulty">,
+  text: string | undefined,
+): boolean {
+  let printed = text || "";
+  if (s.difficulty !== "expert")
+    printed = printed.replace(/In expert mode, this card gains[^.]*\./gi, "");
+  return /cannot be cancel(?:ed|led)/i.test(printed);
+}
 export function isTextBlank(
   s: GameState,
   p: (Pick<Piece, "code"> & { id?: string }) | string,

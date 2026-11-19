@@ -452,6 +452,10 @@
   letter-spacing: 0.6px;
   color: #f2d69c;
 }
+/* A long caption wraps beside the threat chip instead of squeezing it. */
+.side-scheme-counter > .threat-chip {
+  flex-shrink: 0;
+}
 .threat-chip {
   display: flex;
   align-items: center;

@@ -137,6 +137,8 @@ jobs:
             scripts: test:venom-villain
           - group: mysterio
             scripts: test:mysterio
+          - group: sinister-six
+            scripts: test:sinister-six
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

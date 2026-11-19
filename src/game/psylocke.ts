@@ -1,6 +1,10 @@
 import { consumeStatus } from "./keywords.js";
 import { card } from "./card-definitions.js";
-import { isTextBlank, eventPlaySources } from "./card-text.js";
+import {
+  isTextBlank,
+  eventPlaySources,
+  uncancelableText,
+} from "./card-text.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import type { AntManPorts, AntManTarget } from "./ant-man.js";
 import type { PaymentSource } from "./payment.js";
@@ -508,7 +512,7 @@ export function psylockeRevealOptions(
   after: Effect[],
   ports: PsylockePorts,
 ): Option[] {
-  return fromDeck && !/cannot be cancel(?:ed|led)/i.test(card(p).text || "")
+  return fromDeck && !uncancelableText(s, card(p).text)
     ? reaction(s, "41007", P("suggestion", { piece: p }), after, ports)
     : [];
 }

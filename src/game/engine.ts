@@ -17,6 +17,7 @@ import * as hoodModular from "./hood-modular.js";
 import * as sandman from "./sandman.js";
 import * as venomVillain from "./venom-villain.js";
 import * as mysterio from "./mysterio.js";
+import * as sinisterSix from "./sinister-six.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -291,6 +292,7 @@ import {
   textActiveState,
   defenseEventSources,
   eventPlaySources,
+  uncancelableText,
 } from "./card-text.js";
 import { rulesCode } from "./rules-code.js";
 import {
@@ -2832,12 +2834,21 @@ function heal(
       towerDefense.otherTowerKey(s.towerDefense.focus),
       () => heal(s, target, n, origin),
     );
+  const sixHealCode = sinisterSix.sixBenchCode(s, target);
+  if (sixHealCode)
+    return sinisterSix.withSixFocus(s, sixHealCode, () =>
+      heal(s, target, n, origin),
+    );
   const crewHealKey = wreckingCrew.crewBenchKey(s, target);
   if (crewHealKey)
     return wreckingCrew.withCrewFocus(s, crewHealKey, () =>
       heal(s, target, n, origin),
     );
-  if (target === s.villain.id && kang.kangVillainAbsent(s)) return 0;
+  if (
+    target === s.villain.id &&
+    (kang.kangVillainAbsent(s) || sinisterSix.sixVillainAbsent(s))
+  )
+    return 0;
   if (target?.startsWith("hero:"))
     return heal(seatView(s, target.slice(5)), "hero", n, origin);
   if (target === "hero") {
@@ -3150,6 +3161,14 @@ function dealDamage(
       towerDefense.otherTowerKey(s.towerDefense.focus),
       () => dealDamage(s, target, n, source, attack, overkill, panther, traits),
     );
+  // The Sinister Six: damage to a villain out of focus resolves in focus.
+  const sixDamageCode = sinisterSix.sixBenchCode(s, target);
+  if (sixDamageCode)
+    return sinisterSix.withSixFocus(s, sixDamageCode, () =>
+      dealDamage(s, target, n, source, attack, overkill, panther, traits),
+    );
+  if (target === s.villain.id && sinisterSix.sixVillainAbsent(s))
+    return { actualDamage: 0, excessDamage: 0, damageDealt: 0 };
   // The Wrecking Crew: damage to a villain out of focus resolves in focus.
   const crewDamageKey = wreckingCrew.crewBenchKey(s, target);
   if (crewDamageKey)
@@ -4629,6 +4648,11 @@ function advanceVillain(
     );
     return;
   }
+  // The Sinister Six: a defeated villain is set aside.
+  if (s.sinisterSix) {
+    add(s, ...sinisterSix.sixVillainDefeated(s, sinisterSixPorts));
+    return;
+  }
   // The Wrecking Crew: a defeated villain and its side scheme are removed
   // from the game; the players win when all four are defeated.
   if (s.wreckingCrew) {
@@ -5404,11 +5428,15 @@ function threat(
         s,
         ...(s.villainId === "klaw"
           ? [E("findMinion", { actorId: s.firstPlayerId })]
-          : s.villainId === "mysterio"
-            ? mysterio
-                .mysterioMainAdvanced(s)
+          : s.villainId === "sinister_six"
+            ? sinisterSix
+                .sixMainAdvanced(s)
                 .map((e) => ({ ...e, actorId: s.firstPlayerId }))
-            : eachPlayer(s, E("drone"))),
+            : s.villainId === "mysterio"
+              ? mysterio
+                  .mysterioMainAdvanced(s)
+                  .map((e) => ({ ...e, actorId: s.firstPlayerId }))
+              : eachPlayer(s, E("drone"))),
       );
     }
   } else {
@@ -5490,6 +5518,15 @@ function thwart(
     log(s, `Remove ${removed} threat from ${card(p).name}.`, "good");
     if (removed > 0 && !p.counters)
       niNativeAchievement(s, source, "last-threat", p.id);
+    // Light at the End (Permanent): its last threat flips it or the players
+    // escape.
+    if (
+      removed > 0 &&
+      !p.counters &&
+      [sinisterSix.LIGHT_TRAP, sinisterSix.LIGHT_CHASE].includes(p.code) &&
+      sinisterSix.sixLightCleared(s, p, sinisterSixPorts)
+    )
+      return removed;
     if (
       !p.counters &&
       !isPermanent(card(p)) &&
@@ -5859,7 +5896,7 @@ export function targets(
         shadowcat.shadowcatIgnoresGuardPatrolCrisis(s, shadowcatPorts) ||
         !engaged(s).some((p) => keyword(p, "Guard", s))
           ? [
-              ...(kang.kangVillainAbsent(s)
+              ...(kang.kangVillainAbsent(s) || sinisterSix.sixVillainAbsent(s)
                 ? []
                 : [
                     {
@@ -5869,6 +5906,11 @@ export function targets(
                     },
                   ]),
               ...towerDefense.towerDefenseEnemyTarget(s),
+              ...sinisterSix.sixBench(s).map((v) => ({
+                id: v.id,
+                label: card(v).name,
+                code: v.code,
+              })),
               ...wreckingCrew.crewBench(s).map((v) => ({
                 id: v.id,
                 label: card(v).name,
@@ -5888,6 +5930,7 @@ export function targets(
             (globalMagnetoHeroAttackAllowed(s, t.id) &&
               valkyrie.valkyrieCanAttackTarget(s, t.id) &&
               !wreckingCrew.wreckingCrewAttackForbidden(s, t.id) &&
+              !sinisterSix.sixAttackForbidden(s, t.id) &&
               !kang.kangAttackForbidden(s, t.id) &&
               (t.id !== s.villain.id ||
                 !mystique.mystiqueVillainAttackProhibited(s, mystiquePorts)))),
@@ -5950,6 +5993,8 @@ export function targets(
               !warlock.warlockSchemeLocked(s, p.id) &&
               (!thwarting || !wreckingCrew.wreckingCrewThwartLocked(s, p.id)) &&
               (!thwarting || !sandman.sandmanCannotThwart(s, p.id)) &&
+              (!thwarting ||
+                !sinisterSix.sixThwartLocked(s, p.id, s.activePlayerId)) &&
               (!thwarting ||
                 sentinels.sentinelsCanThwart(
                   s,
@@ -8339,6 +8384,7 @@ export function newGame(config: {
                             ...sandman.SANDMAN_MODULAR_SETS,
                             ...venomVillain.VENOM_MODULAR_SETS,
                             ...mysterio.MYSTERIO_MODULAR_SETS,
+                            ...sinisterSix.SINISTER_SIX_MODULAR_SETS,
                           ].some((set) => set === c.set_code)
                         ? "sm"
                         : ["temporal", "anachronauts", "mot"].includes(
@@ -8557,6 +8603,44 @@ export function newGame(config: {
         ...(ebonyMaw.ebonyMawReveal(s, s.villain) || []),
         ...(ebonyMaw.ebonyMawReveal(s, s.ebonyMaw.currentMain) || []),
       ].map((e) => effectContext(s, { ...e, actorId: s.firstPlayerId })),
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "sinister_six") {
+    // Sinister Synchronization (1A) setup: one more villain than players
+    // at random, the active counter on the lowest activation order and
+    // Light at the End in play, Trap! side faceup.
+    const { villains, setAside } = sinisterSix.sinisterSixSetup(s, (n) =>
+      Math.floor(random(s) * n),
+    );
+    s.villain = sinisterSixPorts.makeVillain(s, villains[0]);
+    const bench: sinisterSix.SinisterSixState["bench"] = {};
+    for (const code of villains.slice(1))
+      bench[code] = sinisterSixPorts.makeVillain(s, code);
+    s.sinisterSix = {
+      bench,
+      focus: villains[0],
+      active: villains[0],
+      setAside,
+    };
+    const lightIndex = s.encounter.deck.findIndex(
+      (p) => p.code === sinisterSix.LIGHT_TRAP,
+    );
+    const light =
+      lightIndex >= 0
+        ? s.encounter.deck.splice(lightIndex, 1)[0]
+        : makePiece(s, sinisterSix.LIGHT_TRAP);
+    s.encounter.deck = s.encounter.deck.filter(
+      (p) => p.code !== sinisterSix.LIGHT_CHASE,
+    );
+    light.counters = sinisterSix.lightThreat(s, sinisterSix.LIGHT_TRAP);
+    s.sideSchemes.push(light);
+    s.scheme.threat =
+      (card(sinisterSix.SYNCHRONIZATION).base_threat || 0) * s.playerCount;
+    s.queue.push(
       effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
     );
     const pacing = s.pacing;
@@ -14110,7 +14194,7 @@ const nebulaPackPorts: nebulaPack.NebulaPackPorts = {
   canCancelBoostAbility: (s, p) =>
     !!(s.attack || s.scheming) &&
     bwPorts.hasBoostAbility(s, p.id) &&
-    !/cannot be cancel(?:ed|led)/i.test(card(p).text || ""),
+    !uncancelableText(s, card(p).text),
   cancelBoostAbility: bwPorts.cancelBoostAbility,
 };
 const warMachinePackPorts: warmPack.WarMachinePackPorts = {
@@ -14683,7 +14767,7 @@ const warlockPorts: warlock.WarlockPorts = {
   canCancelTreachery: (s, p) =>
     card(p).type_code === "treachery" &&
     s.resolving.some((x) => x.id === p.id) &&
-    !/cannot be cancel(?:ed|led)/i.test(card(p).text || ""),
+    !uncancelableText(s, card(p).text),
   cancelWhenRevealed: (s, p, after, context) => {
     const c = card(p);
     const revealCard = context?.knifeSurge
@@ -15759,6 +15843,34 @@ const sandmanPorts: sandman.SandmanPorts = {
     if (canChangeIdentityForm(s)) flip(s, false);
     activateSeat(s, previous);
   },
+};
+const sinisterSixPorts: sinisterSix.SinisterSixPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  makeVillain: (s, code) =>
+    Object.assign(makePiece(s, code), {
+      hp: card(code).health!,
+      maxHp: card(code).health!,
+      stage: 1,
+    }) as GameState["villain"],
+  pick: (s, n) => Math.floor(random(s) * n),
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  randomDiscard: (s, playerId) => hoodModularPorts.randomDiscard(s, playerId),
+  discardHandCard: (s, playerId, id) =>
+    kangPorts.discardHandCard(s, playerId, id),
+  millPlayer: (s, playerId, count) => {
+    mysterioPorts.millPlayer(s, playerId, count);
+  },
+  controlled: (s, playerId) =>
+    seatView(s, playerId).player.inPlay.filter((p) => !isPermanent(card(p))),
+  cost: (p) => Number(card(p).cost || 0),
+  allies: (s, playerId) => friends(seatView(s, playerId)),
+  win: (s, reason) => endGame(s, true, reason),
+  enemyStat: (s, p, stat) =>
+    stat === "attack"
+      ? enemyATK(s, p, s.activePlayerId)
+      : enemySCH(s, p, s.activePlayerId),
 };
 const mysterioPorts: mysterio.MysterioPorts = {
   ...mutagenPorts,
@@ -18698,6 +18810,7 @@ function minionEntered(s: GameState, p: Piece) {
     giveCharacterStatus(s, p, "tough");
   if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
     giveCharacterStatus(s, p, "tough");
+  if (sinisterSix.sixMinionTough(s, p)) giveCharacterStatus(s, p, "tough");
   if (underlying) p.droneCard = underlying;
   p.engagedWith = s.activePlayerId;
   for (const seat of s.players) {
@@ -23545,6 +23658,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     escape.escapeVillainStat(s, p) +
     hela.helaVillainStat(s, p) +
     mysterio.mysterioEnemyBonus(s, p) +
+    sinisterSix.sixEnemyModifier(s, p, "attack") +
     wreckingCrew.wreckingCrewAttackBonus(s, p) +
     kang.kangEnemyStat(s, p, "attack", originalPlayerId) +
     nebulaVillain.nebulaEnemyAttack(s, p) +
@@ -23949,6 +24063,7 @@ function boostEffects(s: GameState, p: Piece) {
     sandman.sandmanBoost(s, p) ??
     venomVillain.venomBoost(s, p) ??
     mysterio.mysterioBoost(s, p) ??
+    sinisterSix.sixBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -24308,6 +24423,7 @@ function enemySCH(s: GameState, p: Piece, playerId: string): number {
     escape.escapeVillainStat(s, p) +
     hela.helaVillainStat(s, p) +
     mysterio.mysterioEnemyBonus(s, p) +
+    sinisterSix.sixEnemyModifier(s, p, "scheme") +
     kang.kangEnemyStat(s, p, "scheme", playerId)
   );
 }
@@ -25318,6 +25434,12 @@ function finishAttackAfterDamage(
             playerId: recipientId,
             identityDamaged: (a.identityDamage || 0) > 0,
           }),
+          ...sinisterSix.sixAttackResponses(s, {
+            token: a.id!,
+            attackerId: a.attacker,
+            playerId: recipientId,
+            damaged: (a.identityDamage || 0) > 0,
+          }),
           ...hoodModular.hoodModularAttackResponses(
             s,
             {
@@ -26025,6 +26147,8 @@ function reveal(
         c.type_code !== "attachment") ||
       (mysterio.MYSTERIO_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (sinisterSix.SINISTER_SIX_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -26230,6 +26354,7 @@ function reveal(
       ...sandman.SANDMAN_SCRIPT_CODES,
       ...venomVillain.VENOM_VILLAIN_SCRIPT_CODES,
       ...mysterio.MYSTERIO_SCRIPT_CODES,
+      ...sinisterSix.SINISTER_SIX_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -26274,6 +26399,7 @@ function reveal(
       sandman.sandmanReveal(s, p) ??
       venomVillain.venomReveal(s, p) ??
       mysterio.mysterioReveal(s, p) ??
+      sinisterSix.sixReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -26363,6 +26489,7 @@ function reveal(
     sandman.sandmanReveal(s, p) ??
     venomVillain.venomReveal(s, p) ??
     mysterio.mysterioReveal(s, p) ??
+    sinisterSix.sixReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -27495,6 +27622,27 @@ function resolve(s: GameState, e: Effect) {
       return;
     }
   }
+  if (s.sinisterSix) {
+    const sixCode = sinisterSix.sixWindowCode(s, e);
+    if (sixCode) {
+      const before = new Set(s.queue);
+      const prompt = s.prompt;
+      const previous = sinisterSix.sixOpenWindow(s, sixCode);
+      resolve(s, { ...e, responseGroup: undefined });
+      const fresh = s.queue.some((q) => !before.has(q));
+      const index = s.queue.findIndex((q) => before.has(q));
+      const back = E("six:focus-back", {
+        code: previous,
+        mandatory: true,
+        responseGroup: undefined,
+      });
+      if (!fresh && s.prompt === prompt)
+        sinisterSix.sixCloseWindow(s, previous);
+      else if (index < 0) s.queue.push(back);
+      else s.queue.splice(index, 0, back);
+      return;
+    }
+  }
   if (s.wreckingCrew) {
     const crewKey = wreckingCrew.wreckingCrewWindowKey(s, e);
     if (crewKey) {
@@ -27769,6 +27917,7 @@ function resolve(s: GameState, e: Effect) {
           sandman.sandmanReveal(state, piece) ??
           venomVillain.venomReveal(state, piece) ??
           mysterio.mysterioReveal(state, piece) ??
+          sinisterSix.sixReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -27913,6 +28062,7 @@ function resolve(s: GameState, e: Effect) {
   if (sandman.resolveSandmanEffect(s, e, sandmanPorts)) return;
   if (venomVillain.resolveVenomEffect(s, e, venomVillainPorts)) return;
   if (mysterio.resolveMysterioEffect(s, e, mysterioPorts)) return;
+  if (sinisterSix.resolveSinisterSixEffect(s, e, sinisterSixPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -30290,6 +30440,13 @@ function resolve(s: GameState, e: Effect) {
     }
     case "defeatScheme": {
       const p = s.sideSchemes.find((x) => x.id === e.id);
+      // Light at the End flips or the players escape.
+      if (
+        p &&
+        [sinisterSix.LIGHT_TRAP, sinisterSix.LIGHT_CHASE].includes(p.code) &&
+        sinisterSix.sixLightCleared(s, p, sinisterSixPorts)
+      )
+        break;
       if (
         p &&
         (zeroTolerance.zeroToleranceIsPermanent(s, p) ||
@@ -36712,6 +36869,7 @@ function resolve(s: GameState, e: Effect) {
             hoodModular.hoodModularAcceleration(s) +
             inheritorsAcceleration(s) +
             angel.angelAcceleration(s) +
+            sinisterSix.sixEnemyIcons(s, "acceleration") +
             s.attachments.filter(
               (p) => p.code === "40031" && !isTextBlank(s, p),
             ).length +
@@ -36742,6 +36900,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     case "villainActivate": {
       s.villainStep = "activation";
+      if (s.sinisterSix) sinisterSix.sixBeforeActivation(s, sinisterSixPorts);
       if (kang.kangVillainAbsent(s)) {
         add(s, E("minionActivations"));
         break;
@@ -36827,6 +36986,7 @@ function resolve(s: GameState, e: Effect) {
       const hazardIcons = () =>
         deadpool.deadpoolPlayerIcons(s, "scheme_hazard") +
         ronan.ronanHazard(s) +
+        sinisterSix.sixEnemyIcons(s, "hazard") +
         (card(s.scheme.code).scheme_hazard || 0) +
         s.sideSchemes.reduce(
           (n, p) =>
@@ -37282,6 +37442,7 @@ function run(s: GameState) {
       e.type.startsWith("sandman:") ||
       e.type.startsWith("venomv:") ||
       e.type.startsWith("mysterio:") ||
+      e.type.startsWith("six:") ||
       e.type.startsWith("thanos:") ||
       e.type.startsWith("hela:") ||
       e.type.startsWith("loki:") ||

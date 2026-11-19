@@ -1,5 +1,5 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
-import { isTextBlank } from "./card-text.js";
+import { isTextBlank, uncancelableText } from "./card-text.js";
 import { seatView } from "./team.js";
 import type {
   MutagenEnginePorts,
@@ -287,7 +287,7 @@ export function ronanRevealInterrupts(
     !milano ||
     milano.exhausted ||
     isTextBlank(s, milano) ||
-    /cannot be cancel(?:ed|led)/i.test(definitions.get(p.code)?.text || "") ||
+    uncancelableText(s, definitions.get(p.code)?.text) ||
     !alive(s, s.firstPlayerId) ||
     !ports.canPayWithoutMilano(seatView(s, s.firstPlayerId), 1)
   )

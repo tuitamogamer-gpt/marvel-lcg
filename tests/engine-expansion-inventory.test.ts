@@ -18,6 +18,7 @@ import { HOOD_MODULAR_CODES } from "../src/game/hood-modular";
 import { SANDMAN_SCRIPT_CODES } from "../src/game/sandman";
 import { VENOM_VILLAIN_SCRIPT_CODES } from "../src/game/venom-villain";
 import { MYSTERIO_SCRIPT_CODES } from "../src/game/mysterio";
+import { SINISTER_SIX_SCRIPT_CODES } from "../src/game/sinister-six";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -51,6 +52,7 @@ const badoonCodes = new Set<string>([
   ...SANDMAN_SCRIPT_CODES,
   ...VENOM_VILLAIN_SCRIPT_CODES,
   ...MYSTERIO_SCRIPT_CODES,
+  ...SINISTER_SIX_SCRIPT_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -434,7 +436,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(57);
+    expect(MODULES).toHaveLength(58);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "temporal",
@@ -464,9 +466,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2853);
-    expect(coverage.unsupportedFaces).toBe(1698);
-    expect(coverage.dedicatedFaces).toBe(2415);
+    expect(coverage.executableFaces).toBe(2880);
+    expect(coverage.unsupportedFaces).toBe(1671);
+    expect(coverage.dedicatedFaces).toBe(2442);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -666,6 +668,8 @@ describe("complete expansion rules inventory", () => {
         19 -
         // Mysterio, Personal Nightmare and Whispers of Paranoia.
         21 -
+        // The Sinister Six and Guerrilla Tactics.
+        27 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -793,7 +797,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(57);
+    expect(coverage.registeredModules).toHaveLength(58);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -977,7 +981,16 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(31);
+    ).toHaveLength(32);
+    expect(
+      inventory.installedRegistryCoverage.registeredScenarios.find(
+        (entry: { id: string }) => entry.id === "sinister_six",
+      ),
+    ).toMatchObject({
+      schemes: ["27100b", "27101b"],
+      moduleCount: 0,
+      fixedSets: ["guerrilla_tactics"],
+    });
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "mysterio",
@@ -1205,7 +1218,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(150);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(151);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

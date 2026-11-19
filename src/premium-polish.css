@@ -808,9 +808,14 @@ h3 {
   background: #e9b65b2e;
   color: #ffe2a3;
 }
-.app .physical-table .side-scheme-counter:has(> .scheme-lock) {
+.app .physical-table .side-scheme-counter:has(> .scheme-lock),
+.app .physical-table .side-scheme-counter:has(> .stat-caption) {
   flex-wrap: wrap;
   row-gap: 3px;
+}
+/* Light at the End's caption takes its own line under the threat. */
+.app .physical-table .side-scheme-counter > .stat-caption {
+  flex: 1 0 100%;
 }
 .app .physical-table .side-scheme-counter > .scheme-lock {
   flex: 1 0 100%;

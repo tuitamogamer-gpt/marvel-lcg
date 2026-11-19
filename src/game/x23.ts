@@ -1,5 +1,9 @@
 import { card } from "./card-definitions.js";
-import { isTextBlank, eventPlaySources } from "./card-text.js";
+import {
+  isTextBlank,
+  eventPlaySources,
+  uncancelableText,
+} from "./card-text.js";
 import { withoutCollection } from "./collector.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import type { PaymentSource } from "./payment.js";
@@ -569,7 +573,7 @@ export function x23RevealOptions(
   return fromDeck &&
     card(p).type_code === "treachery" &&
     /When Revealed/i.test(card(p).text || "") &&
-    !/cannot be cancel(?:ed|led)/i.test(card(p).text || "")
+    !uncancelableText(s, card(p).text)
     ? reactions(
         s,
         "43038",

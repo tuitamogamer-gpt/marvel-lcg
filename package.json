@@ -81,7 +81,8 @@
     "test:hood": "node scripts/hood-check.mjs",
     "test:sandman": "node scripts/sandman-check.mjs",
     "test:venom-villain": "node scripts/venom-villain-check.mjs",
-    "test:mysterio": "node scripts/mysterio-check.mjs"
+    "test:mysterio": "node scripts/mysterio-check.mjs",
+    "test:sinister-six": "node scripts/sinister-six-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

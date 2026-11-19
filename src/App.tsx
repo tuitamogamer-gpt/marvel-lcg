@@ -251,6 +251,7 @@ import {
 } from "./game/kang";
 import { hoodSetAsideSets } from "./game/hood";
 import { CITY_STREETS as SANDMAN_CITY_STREETS } from "./game/sandman";
+import { order as sixOrder, sixVillains } from "./game/sinister-six";
 import {
   BELL_TOWER as VENOM_BELL_TOWER,
   RINGING_TOWER as VENOM_RINGING_TOWER,
@@ -2612,6 +2613,15 @@ export default function App() {
                       deck each time The Hood or his main scheme advances. His
                       Foul Play discards encounter cards and deals you each one
                       that is not from his own set.
+                    </p>
+                  )}
+                  {villain.id === "sinister_six" && (
+                    <p className="setting-help">
+                      No modular set: Guerrilla Tactics and the Standard set
+                      join the Sinister Six. One more villain than players
+                      starts in play; defeated villains are set aside and can
+                      ambush you again. Win only by escaping through the Light
+                      at the End.
                     </p>
                   )}
                   {villain.id === "mysterio" && (
@@ -5408,6 +5418,97 @@ function KangTimeline({ game: s }: { game: GameState }) {
     </div>
   );
 }
+/** The Sinister Six: the villains in play by activation order. */
+function SixVillains({
+  game: s,
+  inspect,
+  send,
+}: {
+  game: GameState;
+  inspect: (c: Inspect) => void;
+  send?: (c: Command) => void;
+}) {
+  const st = s.sinisterSix!;
+  const villains = sixVillains(s);
+  return (
+    <div
+      className="villain-area tower-villains crew-villains"
+      role="group"
+      aria-label="Villains"
+    >
+      <p className="crew-objective" role="status">
+        {villains.length} in play · {st.setAside.length} set aside, ready to
+        ambush
+      </p>
+      {!villains.length && (
+        <p className="stat-caption">
+          No villain is in play: the next activation ambushes you.
+        </p>
+      )}
+      {villains.map((v) => {
+        const name = card(v).name;
+        const active = st.active === v.code;
+        const stats = enemyStats(s, v);
+        return (
+          <div
+            className={`tower-villain${active ? " active" : ""}`}
+            key={v.id}
+            data-piece-id={v.id}
+            role="group"
+            aria-label={active ? `${name}, the active villain` : name}
+          >
+            <div className="host-card-stack">
+              <button
+                className="table-card villain-card"
+                onClick={() => inspect({ code: v.code })}
+                aria-label={`Inspect ${name}`}
+              >
+                <CardImage code={v.code} />
+                <span className="inspect-hint">
+                  <Eye size={13} /> Inspect
+                </span>
+              </button>
+              <AttachedCards game={s} host={v} inspect={inspect} send={send} />
+            </div>
+            <div className="villain-info">
+              <span className="small-label">
+                {active ? "ACTIVE VILLAIN" : "VILLAIN"} · ORDER{" "}
+                {sixOrder(v.code)}
+              </span>
+              <VillainName className="villain-name-long" name={name} />
+              <HealthDial
+                value={v.hp}
+                max={v.maxHp}
+                label={`${name} HP`}
+                villain
+              />
+              <div className="enemy-stats stat-row">
+                <StatToken
+                  kind="attack"
+                  value={stats.attack}
+                  label="ATK"
+                  compact
+                />
+                <StatToken
+                  kind="threat"
+                  value={stats.scheme}
+                  label="SCH"
+                  compact
+                />
+              </div>
+              <Status piece={v} />
+              {active && (
+                <span className="stat-caption">
+                  Has the active counter · passes it on after damaging a hero
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 function CrewVillains({
   game: s,
   inspect,
@@ -6110,11 +6211,13 @@ function Tabletop({
                       : "Defeat Hela's Mystic side"
                     : s.loki
                       ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
-                      : s.wreckingCrew
-                        ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
-                        : s.kang
-                          ? kangObjective(s)
-                          : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                      : s.sinisterSix
+                        ? "Escape: clear the Light at the End"
+                        : s.wreckingCrew
+                          ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
+                          : s.kang
+                            ? kangObjective(s)
+                            : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
             <span className={threatCritical ? "danger" : ""}>
@@ -6264,6 +6367,12 @@ function Tabletop({
             <section className="opposition">
               {s.towerDefense ? (
                 <TowerVillains
+                  game={s}
+                  inspect={inspect}
+                  send={canUseAction ? sendAction : undefined}
+                />
+              ) : s.sinisterSix ? (
+                <SixVillains
                   game={s}
                   inspect={inspect}
                   send={canUseAction ? sendAction : undefined}
@@ -6910,6 +7019,16 @@ function Tabletop({
                           {p.captured?.length || 0} captive{" "}
                           {p.captured?.length === 1 ? "ally" : "allies"} ·
                           facedown
+                        </span>
+                      )}
+                      {p.code === "27102a" && (
+                        <span className="stat-caption">
+                          Trap! · clearing it ambushes you and starts the Chase
+                        </span>
+                      )}
+                      {p.code === "27102b" && (
+                        <span className="stat-caption">
+                          Chase! · clear it to escape and win
                         </span>
                       )}
                       {p.code === "32104" && (

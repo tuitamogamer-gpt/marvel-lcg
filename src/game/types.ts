@@ -299,6 +299,7 @@ export interface GameState {
   sandman?: import("./sandman.js").SandmanState;
   venomVillain?: import("./venom-villain.js").VenomVillainState;
   mysterio?: import("./mysterio.js").MysterioState;
+  sinisterSix?: import("./sinister-six.js").SinisterSixState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */

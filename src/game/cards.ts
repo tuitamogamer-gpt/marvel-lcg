@@ -1388,6 +1388,21 @@ export const VILLAINS = [
       "Mysterio's illusions seep into your own deck. Encounter cards shuffled among your cards are dealt to you when you draw them, and his Illusion boosts return to haunt you.",
     color: "#4a6b5d",
   },
+  {
+    id: "sinister_six",
+    name: "The Sinister Six",
+    codes: ["27094", "27094"],
+    schemes: ["27100b", "27101b"],
+    module: "",
+    moduleCount: 0,
+    fixedSets: ["guerrilla_tactics"],
+    difficulty: 4,
+    title: "Sinister Synchronization",
+    location: "New York City",
+    description:
+      "Six villains take turns with the active counter, and every defeated one waits to ambush you again. You can only win by escaping: clear the Light at the End, then outrun the Chase.",
+    color: "#2f4b3c",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1459,6 +1474,7 @@ export const MODULES = [
   { id: "symbiotic_strength", name: "Symbiotic Strength", difficulty: 2 },
   { id: "personal_nightmare", name: "Personal Nightmare", difficulty: 3 },
   { id: "whispers_of_paranoia", name: "Whispers of Paranoia", difficulty: 2 },
+  { id: "guerrilla_tactics", name: "Guerrilla Tactics", difficulty: 2 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
