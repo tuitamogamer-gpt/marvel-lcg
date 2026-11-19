@@ -171,3 +171,7 @@ The two modular sets bring no new table furniture. Osborn Tech's gadgets sit in 
 ## Kree Fanatic, 2026-11-19
 
 Kree Fanatic adds no new table furniture either: The Accused sits with the identity it accuses, Ronan the Accuser in the minion row with his toughness status, and Judge, Jury, Executioner with the side schemes. When Ronan changes targets at the start of the villain phase, the mission log says so and his "Engaged with" line names the hero he now hunts.
+
+## MojoMania genre sets, 2026-11-19
+
+The genre sets add one new label rather than new furniture. A Show sits with the environments under "Setting · Show", its ongoing effect spelled out beneath the name with a reminder that another Setting replaces it, so the table always says which genre is on air. Crime side schemes carry their constant under the threat ("The villain cannot take damage"), and the Hero Action button says what X buys before the player picks it; X is chosen in the ordinary decision window, and the payment window after it is the familiar one. Build the Case counts its clues on its in-play card, and Dead or Alive hangs under its minion like any other attachment. On a phone the environment column joins the side schemes in the scheme lane that scrolls sideways.

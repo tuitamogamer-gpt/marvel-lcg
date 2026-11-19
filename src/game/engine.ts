@@ -21,6 +21,7 @@ import * as sinisterSix from "./sinister-six.js";
 import * as venomGoblin from "./venom-goblin.js";
 import * as sinisterModulars from "./sinister-modulars.js";
 import * as kreeFanatic from "./kree-fanatic.js";
+import * as mojoGenres from "./mojo-genres.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -802,6 +803,34 @@ function readyIdentity(s: GameState) {
   add(s, ...quicksilver.quicksilverReadied(s));
   return true;
 }
+/** Damage to an identity, ally, minion or villain. */
+function isCharacterTarget(s: GameState, target: string) {
+  if (target === "hero" || target.startsWith("hero:")) return true;
+  if (s.villain?.id === target || s.minions.some((m) => m.id === target))
+    return true;
+  return s.players.some((seat) =>
+    seatView(s, seat).player.inPlay.some(
+      (p) => p.id === target && card(p).type_code === "ally",
+    ),
+  );
+}
+/** The card that deals damage: the event being played, or the ally,
+ * upgrade or support itself. An identity has no printed resource. */
+function damageSourceCard(s: GameState, source: string) {
+  const id =
+    source === "hero" || source.startsWith("hero:") ? s.currentEventId : source;
+  if (!id) return undefined;
+  const piece =
+    find(s, id) ||
+    s.resolving.find((p) => p.id === id) ||
+    s.players
+      .flatMap((seat) => {
+        const p = seatView(s, seat).player;
+        return [...p.discard, ...p.hand];
+      })
+      .find((p) => p.id === id);
+  return piece ? card(piece) : undefined;
+}
 /** No character can defend against this enemy's attacks: Armadillo with
  * Armadillo's Shell, or Tracking Display attached. */
 function defenseBlocked(s: GameState, enemyId: string) {
@@ -984,6 +1013,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           venomVillain.venomKeyword(s, p, "Overkill") > 0 ||
           sinisterModulars.sinisterModularKeyword(s, p, "Overkill") > 0 ||
           kreeFanatic.kreeFanaticOverkill(s, p.id) ||
+          mojoGenres.mojoGenreOverkill(s, p) ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
             .overkill)
       ),
@@ -3267,6 +3297,12 @@ function dealDamage(
   // The Bell Tower (Ringing): increase all damage Venom takes by 1.
   if (!traits.noDamageInstance)
     n = venomVillain.venomIncreaseDamage(s, target, n);
+  // Dragnet: the villain cannot take damage. Wild Wild Mojo and the
+  // fantasy minions change the damage a character takes.
+  if (!traits.noDamageInstance && mojoGenres.mojoGenreVillainImmune(s, target))
+    n = 0;
+  if (!traits.noDamageInstance && isCharacterTarget(s, target))
+    n = mojoGenres.mojoGenreDamage(s, target, n, damageSourceCard(s, source));
   // Neocarbon Scales: 1 less damage from each attack.
   if (attack && !traits.noDamageInstance)
     n = Math.max(
@@ -4364,6 +4400,8 @@ function defeatCharacter(
       rulesCode(a) === "01007" && a.attachedTo === m.id && !isTextBlank(s, a),
   );
   add(s, ...mariaHill.mariaHillControlledDefeated(s, m));
+  // Dead or Alive leaves play with its minion: read it first.
+  const bounty = minion ? mojoGenres.mojoGenreDeadOrAlive(s, m) : [];
   const name = card(m).name;
   const textWasBlank = isTextBlank(s, m);
   const defeatedSentinel = minion && captainPackHasTrait(s, m.id, "Sentinel");
@@ -4449,6 +4487,17 @@ function defeatCharacter(
       add(s, ...hoodModular.hoodModularMinionDefeated(s, m, m.engagedWith));
     if (!textWasBlank) add(s, ...sandman.sandmanMinionDefeated(s, m));
     add(s, ...kreeFanatic.kreeFanaticMinionDefeated(s, m));
+    add(s, ...bounty);
+    add(
+      s,
+      ...mojoGenres.mojoGenreMinionDefeated(
+        s,
+        m,
+        source.startsWith("hero:")
+          ? source.slice(5)
+          : controller(s, source)?.id || s.activePlayerId,
+      ),
+    );
     if (!textWasBlank)
       add(
         s,
@@ -5511,6 +5560,7 @@ function thwart(
       towerDefense.otherTowerKey(s.towerDefense.focus),
       () => thwart(s, "main", n, ignoreCrisis, source),
     );
+  if (mojoGenres.mojoGenreThwartLocked(s, target)) return 0;
   const vgThwartKey = venomGoblin.vgTargetKey(target);
   if (vgThwartKey)
     return venomGoblin.vgScheme(s, vgThwartKey)
@@ -6017,7 +6067,8 @@ export function targets(
         ) &&
         rulesCode(s.scheme) !== "01139b"
           ? [
-              ...(s.scheme.threat > 0
+              ...(s.scheme.threat > 0 &&
+              !(thwarting && mojoGenres.mojoGenreThwartLocked(s, "main"))
                 ? [
                     {
                       id: "main",
@@ -6026,8 +6077,15 @@ export function targets(
                     },
                   ]
                 : []),
-              ...towerDefense.towerDefenseSchemeTarget(s),
-              ...venomGoblin.vgSchemeTargets(s, !!thwarting),
+              // Crime Scene Investigation keeps threat on every other
+              // scheme, including a second main scheme.
+              ...[
+                ...towerDefense.towerDefenseSchemeTarget(s),
+                ...venomGoblin.vgSchemeTargets(s, !!thwarting),
+              ].filter(
+                (t) =>
+                  !(thwarting && mojoGenres.mojoGenreThwartLocked(s, t.id)),
+              ),
             ]
           : []),
         ...s.sideSchemes
@@ -6051,6 +6109,7 @@ export function targets(
               !warlock.warlockSchemeLocked(s, p.id) &&
               (!thwarting || !wreckingCrew.wreckingCrewThwartLocked(s, p.id)) &&
               (!thwarting || !sandman.sandmanCannotThwart(s, p.id)) &&
+              (!thwarting || !mojoGenres.mojoGenreThwartLocked(s, p.id)) &&
               (!thwarting ||
                 !sinisterSix.sixThwartLocked(s, p.id, s.activePlayerId)) &&
               (!thwarting ||
@@ -8453,45 +8512,49 @@ export function newGame(config: {
                               (set) => set === c.set_code,
                             )
                           ? "ron"
-                          : ["temporal", "anachronauts", "mot"].includes(
-                                c.set_code || "",
+                          : mojoGenres.MOJO_GENRE_SETS.some(
+                                (set) => set === c.set_code,
                               )
-                            ? "toafk"
-                            : c.set_code === "exodus"
-                              ? "gambit"
-                              : c.set_code === "sauron"
-                                ? "iceman"
-                                : c.set_code === "crazy_gang"
-                                  ? "ncrawler"
-                                  : c.set_code === "hellfire"
-                                    ? "magneto"
-                                    : c.set_code === "arcade"
-                                      ? "jubilee"
-                                      : c.set_code === "reavers"
-                                        ? "rogue"
-                                        : c.set_code === "deathstrike"
-                                          ? "wolv"
-                                          : c.set_code === "shadow_king"
-                                            ? "storm"
-                                            : c.set_code ===
-                                                "ironspider_sinister"
-                                              ? "spdr"
-                                              : c.set_code === "inheritors"
-                                                ? "spiderham"
-                                                : c.set_code === "zzzax"
-                                                  ? "ironheart"
-                                                  : c.set_code === "armadillo"
-                                                    ? "nova"
-                                                    : [
-                                                          "goblin_gimmicks",
-                                                          "a_mess_of_things",
-                                                          "power_drain",
-                                                          "running_interference",
-                                                        ].includes(
-                                                          c.set_code || "",
-                                                        )
-                                                      ? "gob"
-                                                      : "core")) ||
+                            ? "mojo"
+                            : ["temporal", "anachronauts", "mot"].includes(
+                                  c.set_code || "",
+                                )
+                              ? "toafk"
+                              : c.set_code === "exodus"
+                                ? "gambit"
+                                : c.set_code === "sauron"
+                                  ? "iceman"
+                                  : c.set_code === "crazy_gang"
+                                    ? "ncrawler"
+                                    : c.set_code === "hellfire"
+                                      ? "magneto"
+                                      : c.set_code === "arcade"
+                                        ? "jubilee"
+                                        : c.set_code === "reavers"
+                                          ? "rogue"
+                                          : c.set_code === "deathstrike"
+                                            ? "wolv"
+                                            : c.set_code === "shadow_king"
+                                              ? "storm"
+                                              : c.set_code ===
+                                                  "ironspider_sinister"
+                                                ? "spdr"
+                                                : c.set_code === "inheritors"
+                                                  ? "spiderham"
+                                                  : c.set_code === "zzzax"
+                                                    ? "ironheart"
+                                                    : c.set_code === "armadillo"
+                                                      ? "nova"
+                                                      : [
+                                                            "goblin_gimmicks",
+                                                            "a_mess_of_things",
+                                                            "power_drain",
+                                                            "running_interference",
+                                                          ].includes(
+                                                            c.set_code || "",
+                                                          )
+                                                        ? "gob"
+                                                        : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -11455,6 +11518,7 @@ export function abilityOptions(
     ...mysterio.mysterioActions(s, p),
     ...venomGoblin.venomGoblinActions(s, p),
     ...sinisterModulars.sinisterModularActions(s, p),
+    ...mojoGenres.mojoGenreActions(s, p, mutagenPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -11624,6 +11688,7 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
     cyclops.cyclopsCharacterModifiers(s, p.id)[kind] +
     (kind === "attack" ? storm.stormGlobal(s).attack : 0) +
     hoodModular.hoodModularGlobal(s)[kind] +
+    mojoGenres.mojoGenreGlobal(s)[kind] +
     (p.code === "31003" && !isTextBlank(s, p) ? p.counters : 0) +
     (noir ? noir[kind] - (card(p)[kind] || 0) : 0) +
     (card(p)[kind] || 0) +
@@ -15998,6 +16063,65 @@ const sinisterModularPorts: sinisterModulars.SinisterModularPorts = {
       ? !!seatView(s, playerId).player.stunned
       : !!find(s, target)?.stunned,
   heroHp: (s, playerId) => seatView(s, playerId).player.hp,
+};
+const mojoGenrePorts: mojoGenres.MojoGenrePorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  millPlayer: (s, playerId, count) =>
+    mysterioPorts.millPlayer(s, playerId, count),
+  discardHandCard: (s, playerId, id) =>
+    kangPorts.discardHandCard(s, playerId, id),
+  controlled: (s, playerId) =>
+    seatView(s, playerId).player.inPlay.filter((p) => !isPermanent(card(p))),
+  payResources: (s, title, resources, after) =>
+    hoodPorts.payResources(s, title, resources, after),
+  putAllyFromDiscard: (s, playerId, id) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    mtsPlayerPackPorts.putAllyFromDiscard(s, id);
+    activateSeat(s, previous);
+  },
+  // Fetch Quest plays the card from the deck through the ordinary play
+  // sequence; its resource cost is ignored, so nothing is paid.
+  canPlayFromDeck: (s, playerId, p) => {
+    if (!seatView(s, playerId).player.deck.some((q) => q.id === p.id))
+      return false;
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    try {
+      return !playable(
+        {
+          ...s,
+          prompt: null,
+          review: null,
+          phase: "player",
+          turnPlayerId: playerId,
+          flags: { ...s.flags, scwIgnoreResourceCost: true },
+        },
+        p,
+      );
+    } finally {
+      activateSeat(s, previous);
+    }
+  },
+  playFromDeck: (s, playerId, id, after) => {
+    const p = seatView(s, playerId).player.deck.find((q) => q.id === id);
+    if (!p) return;
+    add(
+      s,
+      { ...E("play", { piece: p, fromDeck: true }), actorId: playerId },
+      ...after,
+    );
+  },
+  shuffleDeck: (s, playerId) => {
+    const view = seatView(s, playerId);
+    view.player.deck = shuffle(s, view.player.deck);
+  },
+  heroAttack: (s, playerId) => heroStats(seatView(s, playerId)).attack,
+  reveal: (s, p, playerId) => wreckingCrewPorts.reveal(s, p, playerId),
 };
 const kreeFanaticPorts: kreeFanatic.KreeFanaticPorts = {
   ...mutagenPorts,
@@ -24209,6 +24333,7 @@ function boostEffects(s: GameState, p: Piece) {
     venomGoblin.venomGoblinBoost(s, p) ??
     sinisterModulars.sinisterModularBoost(s, p) ??
     kreeFanatic.kreeFanaticBoost(s, p) ??
+    mojoGenres.mojoGenreBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -25367,6 +25492,7 @@ function finishAttackAfterDamage(
       playerId: recipientId,
       attack: true,
     }),
+    ...mojoGenres.mojoGenreAttacked(s, a.attacker, recipientId),
     ...sinisterModulars.sinisterModularActivated(s, {
       enemyId: a.attacker,
       playerId: recipientId,
@@ -25842,6 +25968,7 @@ function reveal(
       }),
     );
   if (!repeat) beginResolution(s, p);
+  if (!repeat && !skip) add(s, ...mojoGenres.mojoGenreRevealIncite(s, p));
   s.lastEncounter = p.code;
   log(s, `${skip ? "Resolve" : "Encounter"}: ${card(p).name}.`, "bad");
   if (!skip) {
@@ -26337,6 +26464,8 @@ function reveal(
         c.type_code !== "attachment") ||
       (kreeFanatic.KREE_FANATIC_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (mojoGenres.MOJO_GENRE_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -26393,7 +26522,10 @@ function reveal(
         (kang.KANG_IN_PLAY_OBLIGATIONS as readonly string[]).includes(p.code) ||
         (sandman.SANDMAN_IN_PLAY_OBLIGATIONS as readonly string[]).includes(
           p.code,
-        ))
+        ) ||
+        (
+          mojoGenres.MOJO_GENRE_IN_PLAY_OBLIGATIONS as readonly string[]
+        ).includes(p.code))
     ) {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       if (!s.player.inPlay.some((x) => x.id === p.id)) s.player.inPlay.push(p);
@@ -26546,6 +26678,7 @@ function reveal(
       ...venomGoblin.VENOM_GOBLIN_SCRIPT_CODES,
       ...sinisterModulars.SINISTER_MODULAR_SCRIPT_CODES,
       ...kreeFanatic.KREE_FANATIC_SCRIPT_CODES,
+      ...mojoGenres.MOJO_GENRE_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -26596,6 +26729,7 @@ function reveal(
       venomGoblin.venomGoblinReveal(s, p) ??
       sinisterModulars.sinisterModularReveal(s, p) ??
       kreeFanatic.kreeFanaticReveal(s, p) ??
+      mojoGenres.mojoGenreReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -26689,6 +26823,7 @@ function reveal(
     venomGoblin.venomGoblinReveal(s, p) ??
     sinisterModulars.sinisterModularReveal(s, p) ??
     kreeFanatic.kreeFanaticReveal(s, p) ??
+    mojoGenres.mojoGenreReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -28121,6 +28256,7 @@ function resolve(s: GameState, e: Effect) {
           venomGoblin.venomGoblinReveal(state, piece) ??
           sinisterModulars.sinisterModularReveal(state, piece) ??
           kreeFanatic.kreeFanaticReveal(state, piece) ??
+          mojoGenres.mojoGenreReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -28270,6 +28406,7 @@ function resolve(s: GameState, e: Effect) {
   if (sinisterModulars.resolveSinisterModularEffect(s, e, sinisterModularPorts))
     return;
   if (kreeFanatic.resolveKreeFanaticEffect(s, e, kreeFanaticPorts)) return;
+  if (mojoGenres.resolveMojoGenreEffect(s, e, mojoGenrePorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -30683,6 +30820,7 @@ function resolve(s: GameState, e: Effect) {
         }
       }
       if (p && !p.counters) {
+        add(s, ...mojoGenres.mojoGenreSchemeDefeated(s, p));
         defeatScheme(s, p, e.source);
         if (e.spiderHamBatchToken) {
           const key = `spiderHamBatchDefeated:${e.spiderHamBatchToken}`;
@@ -30745,6 +30883,7 @@ function resolve(s: GameState, e: Effect) {
       if (p)
         add(
           s,
+          ...mojoGenres.mojoGenreEngaged(s, p, s.activePlayerId),
           ...(keyword(p, "Quickstrike", s) && s.player.form === "hero"
             ? [E("enemyAttack", { id: p.id })]
             : []),
@@ -37670,6 +37809,7 @@ function run(s: GameState) {
       e.type.startsWith("vgob:") ||
       e.type.startsWith("smod:") ||
       e.type.startsWith("kfan:") ||
+      e.type.startsWith("mgen:") ||
       e.type.startsWith("thanos:") ||
       e.type.startsWith("hela:") ||
       e.type.startsWith("loki:") ||
@@ -38060,6 +38200,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...mysterio.mysterioActions(s, p),
               ...venomGoblin.venomGoblinActions(s, p),
               ...sinisterModulars.sinisterModularActions(s, p),
+              ...mojoGenres.mojoGenreActions(s, p, mutagenPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -38175,6 +38316,19 @@ export function dispatch(state: GameState, command: Command): GameState {
             need(
               selected,
               "This First Player Action needs the first player and the ready Milano.",
+            );
+            add(s, ...selected!.effects);
+          } else if (mojoGenres.mojoGenreActionSource(s, command.id)) {
+            const selected = mojoGenres
+              .mojoGenreActions(
+                s,
+                mojoGenres.mojoGenreActionSource(s, command.id)!,
+                mutagenPorts,
+              )
+              .find((o) => o.id === (command.action || "remove"));
+            need(
+              selected,
+              "This Hero Action needs hero form, threat on the scheme and a resource of its type.",
             );
             add(s, ...selected!.effects);
           } else {

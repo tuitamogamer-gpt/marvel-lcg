@@ -66,6 +66,11 @@ import { warMachineTraits } from "./war-machine.js";
 import { sinisterPlayerPackIdentityModifiers } from "./sinister-player-pack.js";
 import { mysterioHandSize } from "./mysterio.js";
 import { venomGoblinHealth } from "./venom-goblin.js";
+import {
+  mojoGenreGlobal,
+  mojoGenreHandSize,
+  mojoGenreHealth,
+} from "./mojo-genres.js";
 import { novaHandSize, novaTraits } from "./nova.js";
 import {
   ironheartIdentityCode,
@@ -1494,6 +1499,9 @@ export const MODULES = [
   { id: "osborn_tech", name: "Osborn Tech", difficulty: 3 },
   { id: "sinister_assault", name: "Sinister Assault", difficulty: 4 },
   { id: "kree_fanatic", name: "Kree Fanatic", difficulty: 3 },
+  { id: "crime", name: "Crime", difficulty: 3 },
+  { id: "fantasy", name: "Fantasy", difficulty: 3 },
+  { id: "western", name: "Western", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -1902,6 +1910,7 @@ export function heroStats(s: GameState) {
       collectorIdentityStats(s).attack +
       stormGlobal(s).attack +
       hoodModularGlobal(s).attack +
+      mojoGenreGlobal(s).attack +
       s.attachments
         .filter(
           (p) =>
@@ -1961,6 +1970,7 @@ export function heroStats(s: GameState) {
       collectorIdentityStats(s).thwart +
       stormStats(s).thwart +
       hoodModularGlobal(s).thwart +
+      mojoGenreGlobal(s).thwart +
       (has(s, "01065") ? 1 : 0) +
       Number(s.flags.lead || 0) +
       captainStats(s).thw +
@@ -2061,7 +2071,8 @@ export function handSize(s: GameState) {
         starLordHandSizeBonus(s) +
         antManPackHandSize(s) +
         sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).handSize +
-        mysterioHandSize(s)
+        mysterioHandSize(s) +
+        mojoGenreHandSize(s)
       : heroCard(s).hand_size! +
         scriptedModifier(s, "hand_size") +
         doctorStrangeHandSize(s) +
@@ -2070,7 +2081,8 @@ export function handSize(s: GameState) {
         antManPackHandSize(s) +
         visionAlterStats(s).handSize +
         sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).handSize +
-        mysterioHandSize(s);
+        mysterioHandSize(s) +
+        mojoGenreHandSize(s);
   return novaHandSize(s, base + deadpoolHandBonus(s), { isTextBlank });
 }
 /** Printed encounter attachment modifiers apply to their attached enemy.
@@ -2139,6 +2151,7 @@ export function pieceHP(s: GameState, p: Piece) {
     nebulaPackModifiers(s, p.id).health +
     novaIronheartCharacterModifiers(s, p.id).health +
     captainPackModifiers(textActiveState(s), p.id).hp +
-    venomGoblinHealth(s, p)
+    venomGoblinHealth(s, p) +
+    mojoGenreHealth(s, p)
   );
 }

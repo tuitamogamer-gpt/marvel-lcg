@@ -281,6 +281,10 @@ import {
   vgScheme,
   vgSchemeLimit,
 } from "./game/venom-goblin";
+import {
+  MOJO_GENRE_SCHEME_CAPTIONS,
+  MOJO_GENRE_SHOW_CAPTIONS,
+} from "./game/mojo-genres";
 import { effectTitle, pacingOf } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
 import type { PaymentSource } from "./game/payment";
@@ -6903,13 +6907,21 @@ function Tabletop({
                               ? "ENVIRONMENT · DAMAGED"
                               : isInfinityStone(p)
                                 ? "INFINITY STONE"
-                                : Object.values(MANHATTAN_FLIPPED).includes(
-                                      p.code,
-                                    )
-                                  ? "ENVIRONMENT · SYMBIOTE"
-                                  : "ENVIRONMENT"}
+                                : MOJO_GENRE_SHOW_CAPTIONS[p.code]
+                                  ? "SETTING · SHOW"
+                                  : Object.values(MANHATTAN_FLIPPED).includes(
+                                        p.code,
+                                      )
+                                    ? "ENVIRONMENT · SYMBIOTE"
+                                    : "ENVIRONMENT"}
                       </span>
                       <strong>{card(p).name}</strong>
+                      {MOJO_GENRE_SHOW_CAPTIONS[p.code] && (
+                        <span className="stat-caption">
+                          {MOJO_GENRE_SHOW_CAPTIONS[p.code]} · another Setting
+                          discards it
+                        </span>
+                      )}
                       {Object.values(MANHATTAN_FLIPPED).includes(p.code) && (
                         <span className="stat-caption">
                           Infested · a second Symbiote environment loses the
@@ -7142,6 +7154,11 @@ function Tabletop({
                           {p.captured?.length || 0} captive{" "}
                           {p.captured?.length === 1 ? "ally" : "allies"} ·
                           facedown
+                        </span>
+                      )}
+                      {MOJO_GENRE_SCHEME_CAPTIONS[p.code] && (
+                        <span className="stat-caption">
+                          {MOJO_GENRE_SCHEME_CAPTIONS[p.code]}
                         </span>
                       )}
                       {p.code === "27102a" && (
@@ -7942,23 +7959,26 @@ function Tabletop({
                                         ? "ARROWS"
                                         : p.code === "01018"
                                           ? "ENERGY"
-                                          : [
-                                                "16034",
-                                                "16036",
-                                                "16037",
-                                                "16038",
-                                                "16046",
-                                              ].includes(p.code)
-                                            ? "CHARGES"
-                                            : card(p).type_code === "support" &&
-                                                card(p).traits?.includes(
-                                                  "S.H.I.E.L.D.",
-                                                ) &&
-                                                !/Uses\s*\(/.test(
-                                                  card(p).text || "",
-                                                )
-                                              ? "ALL-PURPOSE"
-                                              : "USES"}
+                                          : p.code === "39036"
+                                            ? "CLUES"
+                                            : [
+                                                  "16034",
+                                                  "16036",
+                                                  "16037",
+                                                  "16038",
+                                                  "16046",
+                                                ].includes(p.code)
+                                              ? "CHARGES"
+                                              : card(p).type_code ===
+                                                    "support" &&
+                                                  card(p).traits?.includes(
+                                                    "S.H.I.E.L.D.",
+                                                  ) &&
+                                                  !/Uses\s*\(/.test(
+                                                    card(p).text || "",
+                                                  )
+                                                ? "ALL-PURPOSE"
+                                                : "USES"}
                                   </small>
                                 </span>
                               )}

@@ -280,8 +280,8 @@ describe("Crossbones executable setup and source acceptance", () => {
       defaultModules,
       reservedSets: ["exper_weapon"],
     });
-    expect(MODULES).toHaveLength(62);
-    expect(scenarioModules("crossbones")).toHaveLength(61);
+    expect(MODULES).toHaveLength(65);
+    expect(scenarioModules("crossbones")).toHaveLength(64);
     expect(
       scenarioModules("crossbones").some((m) => m.id === "exper_weapon"),
     ).toBe(false);

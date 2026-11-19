@@ -699,9 +699,11 @@ export function resolveSpiderWomanEffect(
       );
       break;
     case "sw:spider-man": {
+      // Only a side scheme: never a main scheme, including Tower Defense's
+      // other main scheme or a Venom Goblin district.
       const targets = ports
         .schemeTargets(s, false)
-        .filter((p) => p.id !== "main");
+        .filter((p) => s.sideSchemes.some((q) => q.id === p.id));
       if (targets.length)
         ports.choose(
           s,
@@ -720,9 +722,8 @@ export function resolveSpiderWomanEffect(
     }
     case "sw:spider-man-thwart":
       need(
-        ports
-          .schemeTargets(s, false)
-          .some((p) => p.id === e.target && p.id !== "main"),
+        s.sideSchemes.some((q) => q.id === e.target) &&
+          ports.schemeTargets(s, false).some((p) => p.id === e.target),
         "Spider-Man's side scheme is no longer legal.",
       );
       ports.queue(

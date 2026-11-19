@@ -26,6 +26,13 @@ function command(input: GameState, c: Command) {
   expect(s.error).toBeUndefined();
   return s;
 }
+/** Scenario decisions before the opening hands, such as Tower Defense's
+ * Black Order Besieger engaging during setup. */
+function setupChoices(s: GameState) {
+  for (let n = 0; s.prompt?.kind === "choice" && n < 20; n++)
+    s = command(s, { type: "CHOOSE", id: s.prompt.options[0].id });
+  return s;
+}
 function base(team = false, villainId = "rhino") {
   let s = newGame({
     heroId: "spider_woman",
@@ -42,8 +49,9 @@ function base(team = false, villainId = "rhino") {
         }
       : {}),
   });
-  s = command(s, { type: "MULLIGAN", ids: [] });
-  if (team) s = command(s, { type: "MULLIGAN", ids: [] });
+  s = setupChoices(s);
+  s = setupChoices(command(s, { type: "MULLIGAN", ids: [] }));
+  if (team) s = setupChoices(command(s, { type: "MULLIGAN", ids: [] }));
   for (const seat of s.players) {
     const view = seatView(s, seat);
     view.player.form = "hero";
@@ -686,6 +694,25 @@ describe("Spider-Woman's full retail set through actual engine commands", () => 
     expect(s.sideSchemes).toHaveLength(0);
     expect(s.player.confused).toBe(true);
     expect(s.scheme.threat).toBe(0);
+  });
+  it("Spider-Man's response offers only side schemes, not Tower Defense's other main scheme", () => {
+    let s = base(false, "tower_defense");
+    s.scheme.threat = 3;
+    s.towerDefense!.other.scheme.threat = 3;
+    const target = scheme(s, "04055", 3);
+    const h = hand(s, "04045", "04050", "04051", "04052");
+    s = playPaid(
+      s,
+      h[0],
+      h.slice(1).map((p) => p.id),
+    );
+    expect(s.prompt?.title).toBe("Spider-Man");
+    s = choose(s, "yes");
+    expect(s.prompt?.options.map((o) => o.id)).toEqual([target.id]);
+    s = choose(s, target.id);
+    expect(s.sideSchemes).toHaveLength(0);
+    expect(s.scheme.threat).toBe(3);
+    expect(s.towerDefense!.other.scheme.threat).toBe(3);
   });
   it("Skilled Investigator responds for another hero's controller and obeys its printed one-per-player limit", () => {
     let s = base(true);

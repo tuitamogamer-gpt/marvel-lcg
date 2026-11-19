@@ -30,11 +30,11 @@ import {
   side,
   attach,
 } from "./dv-test-helpers.js";
-function base(team = false) {
+function base(team = false, villainId = "rhino") {
   let s = newGame({
     heroId: "domino",
     aspect: "justice",
-    villainId: "rhino",
+    villainId,
     seed: 40037,
     pacing: "expert",
     ...(team
@@ -46,6 +46,10 @@ function base(team = false) {
         }
       : {}),
   });
+  // Scenario decisions before the opening hands, such as Tower Defense's
+  // Black Order Besieger engaging during setup.
+  for (let n = 0; s.prompt?.kind === "choice" && n < 20; n++)
+    s = command(s, { type: "CHOOSE", id: s.prompt.options[0].id });
   for (const _ of s.players) s = command(s, { type: "MULLIGAN", ids: [] });
   s = finish(s);
   for (const seat of s.players) {
@@ -544,6 +548,21 @@ it("Team Investigation uses Alliance across both actual owners and its per-playe
   expect(seatView(s, "p2").player.discard.some((p) => p.id === genius.id)).toBe(
     true,
   );
+});
+
+it("Team Investigation removes threat only from a side scheme, never Tower Defense's other main scheme", () => {
+  let s = base(false, "tower_defense");
+  s.towerDefense!.other.scheme.threat = 3;
+  const scheme = side(s, "01107", 8);
+  const [event, energy] = hand(s, "40053", "40061");
+  s = command(s, { type: "PLAY", id: event.id });
+  expect(s.prompt?.cost).toBe(2);
+  s = command(s, { type: "PAY", ids: [energy.id] });
+  if (s.prompt?.kind === "choice")
+    expect(s.prompt.options.map((o) => o.id)).toEqual([scheme.id]);
+  s = finish(target(s, scheme.id));
+  expect(s.sideSchemes.find((p) => p.id === scheme.id)?.counters).toBe(5);
+  expect(s.towerDefense!.other.scheme.threat).toBe(3);
 });
 
 it("Spear Shot completes the native discard cohort before exposing new player-card responses", () => {

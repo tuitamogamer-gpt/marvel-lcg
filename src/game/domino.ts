@@ -709,11 +709,15 @@ export function resolveDominoEffect(
           D("right-place", { piece: p }),
           ports,
         );
+      // Only a side scheme: never a main scheme, including Tower Defense's
+      // other main scheme or a Venom Goblin district.
       if (p.code === "40053")
         select(
           s,
           card(p).name,
-          ports.schemes(s, false).filter((t) => t.id !== "main"),
+          ports
+            .schemes(s, false)
+            .filter((t) => s.sideSchemes.some((q) => q.id === t.id)),
           E("thwart", { amount: 3 * s.playerCount, source: "hero" }),
           ports,
         );

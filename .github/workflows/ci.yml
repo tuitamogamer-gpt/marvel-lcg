@@ -145,6 +145,8 @@ jobs:
             scripts: test:sinister-modulars
           - group: kree-fanatic
             scripts: test:kree-fanatic
+          - group: mojo-genres
+            scripts: test:mojo-genres
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules
