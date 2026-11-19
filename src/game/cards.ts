@@ -1437,6 +1437,23 @@ export const VILLAINS = [
       "MaGog never stays down: every knockout resets him and wows the crowd. Win the ratings war as The Challengers before The Champion's fans cheer him to victory again.",
     color: "#7a3b1f",
   },
+  {
+    id: "spiral",
+    name: "Spiral",
+    // Each stage starts on her Escaped side.
+    codes: ["39012a", "39013a", "39014a"],
+    schemes: ["39015b"],
+    // The rulebook uses three MojoMania modular sets.
+    module: "crime",
+    moduleCount: 3,
+    defaultModules: ["crime", "fantasy", "horror"],
+    difficulty: 4,
+    title: "Across the Mojoverse",
+    location: "The Mojoverse",
+    description:
+      "Spiral teleports from Show to Show. Search the show deck to corner her, then strike before her teleport counters carry her away again.",
+    color: "#5e2a6b",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },

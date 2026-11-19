@@ -393,12 +393,25 @@ export function mojoGenreMinionDefeated(
   if (m.code === KRAKEN) out.push(G("kraken-heal"));
   return out;
 }
+/** Each card returns to its owner's hand, or is removed from the game with
+ * an eliminated owner. */
+function returnToHands(s: GameState, cards: Piece[]) {
+  for (const q of cards) {
+    const owner = s.players.find(
+      (seat) => seat.id === q.ownerId && !seat.eliminated,
+    );
+    if (owner) seatView(s, owner.id).player.hand.push(q);
+    else s.removed.push(q);
+  }
+}
 /** Toad 2.0's When Defeated, read before the cards under it leave with it:
- * each returns to its owner's hand. */
+ * each returns to its owner's hand at once, so no card waits in a queued
+ * effect while a response window is open. */
 export function mojoGenreToadDefeated(s: GameState, m: Piece): Effect[] {
   if (over(s) || m.code !== TOAD || !active(s, m) || !m.captured?.length)
     return [];
-  return [G("toad-return", { cards: m.captured.splice(0) })];
+  returnToHands(s, m.captured.splice(0));
+  return [];
 }
 /** Werewolf Pack's Forced Interrupt replaces its defeat while an ally is
  * under it. */
@@ -1517,14 +1530,9 @@ export function resolveMojoGenreEffect(
       if (s.minions.some((q) => q.id === e.id))
         ports.moveUnder(s, e.playerId, e.upgradeId, e.id);
       break;
+    // Saved before Toad 2.0's cards returned at once.
     case "mgen:toad-return":
-      for (const q of e.cards as Piece[]) {
-        const owner = s.players.find(
-          (seat) => seat.id === q.ownerId && !seat.eliminated,
-        );
-        if (owner) seatView(s, owner.id).player.hand.push(q);
-        else s.removed.push(q);
-      }
+      returnToHands(s, e.cards as Piece[]);
       break;
     case "mgen:ice-teroid": {
       if (!alive(s, e.playerId)) break;

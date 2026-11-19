@@ -149,6 +149,8 @@ jobs:
             scripts: test:mojo-genres
           - group: magog
             scripts: test:magog
+          - group: spiral
+            scripts: test:spiral
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

@@ -1,6 +1,6 @@
 # MojoMania genre sets
 
-MojoMania's six genre modular sets are playable: Crime, Fantasy and Western, imported first, and Horror, Sci-Fi and Sitcom. Each can be chosen as the modular set of every scenario that uses modular sets. The box's first scenario, [MaGog's Melee in the Mojo-seum](magog-integration.md), is playable too; its other two scenarios and its Longshot card follow in later imports.
+MojoMania's six genre modular sets are playable: Crime, Fantasy and Western, imported first, and Horror, Sci-Fi and Sitcom. Each can be chosen as the modular set of every scenario that uses modular sets. The box's first two scenarios, [MaGog's Melee in the Mojo-seum](magog-integration.md) and [Spiral's Across the Mojoverse](spiral-integration.md), are playable too; its Mojo scenario and its Longshot card follow in later imports.
 
 ## Original source and scope
 
@@ -79,6 +79,7 @@ The sitcom obligations stay in their player's play area, each with an Alter-Ego 
 - Hinder follows the reminder text printed on each side scheme.
 - Peril follows the engine's existing peril rule: other players cannot play reaction cards for a reveal with peril.
 - A player discarding an obligation covers obligations that leave a player's play area; an obligation that resolves and goes to the encounter discard pile never entered play.
+- The cards under Toad 2.0 return to their owners' hands as it is defeated, before any response to its defeat.
 - The mission sweep also corrected two player cards that offered Tower Defense's other main scheme as a side scheme: Spider-Woman's Spider-Man and Domino's Team Investigation now offer side schemes only.
 - The Horror, Sci-Fi and Sitcom sweep corrected older gaps they expose: payment now reads whether the physical source is blank, so Family Matters and Panic in the Streets also blank a support's resource ability; Shield Toss's play check counts the engine's own attack targets, so it cannot be played while Kang has no villain in play; and Powerful Enchantments only stops players discarding attachments, not Frozen in Time discarding itself or attachments leaving play with their host.
 - The executable registry contains 2,957 faces, including 2,519 dedicated faces, with 1,594 imported faces still unsupported. There are 57 playable identities, thirty-three scenarios and sixty-eight modular sets. The inventory pins 155 source files.

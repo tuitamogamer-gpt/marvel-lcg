@@ -300,6 +300,12 @@ import {
   magogRatings,
   magogScenario,
 } from "./game/magog";
+import {
+  THE_SEARCH_FOR_SPIRAL,
+  spiralCornered,
+  spiralEscaped,
+  spiralTeleportLimit,
+} from "./game/spiral";
 import { effectTitle, pacingOf } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
 import type { PaymentSource } from "./game/payment";
@@ -2661,6 +2667,18 @@ export default function App() {
                       the one with the glider counter. A completed main scheme
                       becomes a Symbiote environment, and a second one loses the
                       game.
+                    </p>
+                  )}
+                  {villain.id === "spiral" && (
+                    <p className="setting-help">
+                      Spiral starts Escaped: she cannot take damage, schemes
+                      instead of attacking and keeps her threat on the main
+                      scheme. Empty The Search for Spiral to reveal the show
+                      deck, the Shows of your three modular sets and Cornered!.
+                      Cornered, she can be damaged, but each activation gives
+                      her a teleport counter until she escapes again. The
+                      rulebook uses three MojoMania genre sets; Crime, Fantasy
+                      and Horror are preselected.
                     </p>
                   )}
                   {villain.id === "magog" && (
@@ -5988,6 +6006,14 @@ function AttachedCards({
                 {p.counters} {p.counters === 1 ? "bomb" : "bombs"}
               </small>
             )}
+            {p.code === "39018" && (
+              <small
+                aria-label={`${card(p).name}: ${p.counters} sword counters`}
+              >
+                {p.counters} {p.counters === 1 ? "sword" : "swords"} · +
+                {p.counters} ATK
+              </small>
+            )}
             {p.code === "39048" && (
               <small
                 aria-label={`${card(p).name}: ${p.counters} stake counters`}
@@ -6091,6 +6117,8 @@ function AttachedCards({
                 "27150",
                 "27151",
                 "27152",
+                // Spiral's Swords.
+                "39018",
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -6453,7 +6481,9 @@ function Tabletop({
                             ? kangObjective(s)
                             : magogScenario(s)
                               ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
-                              : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                              : s.spiral
+                                ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
+                                : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
             <span
@@ -6662,7 +6692,9 @@ function Tabletop({
                             ? `VILLAIN · ${s.difficulty === "expert" ? "B" : "A"} · ${helaWounded(s) ? "WOUNDED" : "MYSTIC"}`
                             : magogScenario(s)
                               ? `VILLAIN · ${s.villain.code === "39001b" ? "B" : "A"}`
-                              : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
+                              : s.spiral
+                                ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${spiralCornered(s) ? "CORNERED" : "ESCAPED"}`
+                                : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
                     {s.kang ? (
                       <h2>
@@ -6715,6 +6747,22 @@ function Tabletop({
                     {escapeWounded(s) && (
                       <span className="stat-caption" role="status">
                         Wounded · cannot be defeated until the round ends
+                      </span>
+                    )}
+                    {spiralEscaped(s) && (
+                      <span className="stat-caption" role="status">
+                        Escaped · cannot take damage or be stunned · schemes
+                        instead of attacking · main scheme threat stays
+                      </span>
+                    )}
+                    {spiralCornered(s) && (
+                      <span
+                        className="stat-caption"
+                        role="status"
+                        aria-label={`Cornered: ${s.villain.counters} of ${spiralTeleportLimit(s)} teleport counters`}
+                      >
+                        Cornered · {s.villain.counters} of{" "}
+                        {spiralTeleportLimit(s)} teleport counters
                       </span>
                     )}
                     {magogScenario(s) && (
@@ -7311,6 +7359,13 @@ function Tabletop({
                       {MOJO_GENRE_SCHEME_CAPTIONS[p.code] && (
                         <span className="stat-caption">
                           {MOJO_GENRE_SCHEME_CAPTIONS[p.code]}
+                        </span>
+                      )}
+                      {p.code === THE_SEARCH_FOR_SPIRAL && (
+                        <span className="stat-caption">
+                          Permanent · its last threat reveals the show deck (
+                          {s.spiral?.showDeck.length || 0}{" "}
+                          {s.spiral?.showDeck.length === 1 ? "card" : "cards"})
                         </span>
                       )}
                       {p.code === "27102a" && (

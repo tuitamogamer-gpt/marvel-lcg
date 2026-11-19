@@ -308,6 +308,8 @@ export interface GameState {
   mysterio?: import("./mysterio.js").MysterioState;
   sinisterSix?: import("./sinister-six.js").SinisterSixState;
   venomGoblin?: import("./venom-goblin.js").VenomGoblinState;
+  /** Across the Mojoverse: the show deck. */
+  spiral?: import("./spiral.js").SpiralState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */

@@ -23,6 +23,7 @@ import * as sinisterModulars from "./sinister-modulars.js";
 import * as kreeFanatic from "./kree-fanatic.js";
 import * as mojoGenres from "./mojo-genres.js";
 import * as magog from "./magog.js";
+import * as spiral from "./spiral.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -674,6 +675,12 @@ function giveCharacterStatus(
     kind === "stunned" &&
     "code" in p &&
     kreeFanatic.kreeFanaticCannotStun(s, p as Piece)
+  )
+    return false;
+  if (
+    kind === "stunned" &&
+    "code" in p &&
+    spiral.spiralCannotStun(s, p as Piece)
   )
     return false;
   const changed = giveStatus(
@@ -1725,6 +1732,12 @@ function discardPiece(s: GameState, id: string) {
   );
   const obligationOwner =
     p && card(p).type_code === "obligation" ? controller(s, id)?.id : undefined;
+  if (p && s.spiral && spiral.spiralKeepsShow(s, p)) {
+    s.environments = (s.environments || []).filter((q) => q.id !== p.id);
+    s.spiral.showDeck.push(resetPiece(p));
+    log(s, `${card(p).name} goes to the bottom of the show deck.`);
+    return;
+  }
   movePieceFromPlay(s, id, false);
   if (obligationOwner)
     add(s, ...mojoGenres.mojoGenreObligationDiscarded(s, obligationOwner));
@@ -3333,7 +3346,11 @@ function dealDamage(
     n = venomVillain.venomIncreaseDamage(s, target, n);
   // Dragnet: the villain cannot take damage. Wild Wild Mojo and the
   // fantasy minions change the damage a character takes.
-  if (!traits.noDamageInstance && mojoGenres.mojoGenreVillainImmune(s, target))
+  if (
+    !traits.noDamageInstance &&
+    (mojoGenres.mojoGenreVillainImmune(s, target) ||
+      spiral.spiralVillainImmune(s, target))
+  )
     n = 0;
   if (!traits.noDamageInstance && isCharacterTarget(s, target))
     n = mojoGenres.mojoGenreDamage(s, target, n, damageSourceCard(s, source), {
@@ -5023,6 +5040,7 @@ function advanceVillain(
     return;
   }
   const previousTitle = card(s.villain).name;
+  const previousCode = s.villain.code;
   const last = s.difficulty === "expert" ? 3 : 2;
   if (s.villain.stage === last) {
     endGame(
@@ -5038,6 +5056,9 @@ function advanceVillain(
   s.villain.code =
     riskyNextVillainFace(s, config.codes[s.villain.stage - 1]) ||
     config.codes[s.villain.stage - 1];
+  // Across the Mojoverse: the next Spiral enters play on the side the
+  // defeated one was on.
+  s.villain.code = spiral.spiralNextStageCode(s, previousCode, s.villain.code);
   s.villain.maxHp =
     card(s.villain).health! * s.playerCount +
     wideawake.projectWideawakeModifiers(s, s.villain, { isTextBlank }).health +
@@ -5087,6 +5108,7 @@ function villainSetup(s: GameState) {
     ...venomVillain.venomVillainRevealed(s),
     ...mysterio.mysterioVillainRevealed(s),
     ...venomGoblin.venomGoblinVillainRevealed(s, s.villain.code),
+    ...spiral.spiralVillainRevealed(s),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -5632,7 +5654,11 @@ function thwart(
       towerDefense.otherTowerKey(s.towerDefense.focus),
       () => thwart(s, "main", n, ignoreCrisis, source),
     );
-  if (mojoGenres.mojoGenreThwartLocked(s, target)) return 0;
+  if (
+    mojoGenres.mojoGenreThwartLocked(s, target) ||
+    spiral.spiralThwartLocked(s, target)
+  )
+    return 0;
   const vgThwartKey = venomGoblin.vgTargetKey(target);
   if (vgThwartKey)
     return venomGoblin.vgScheme(s, vgThwartKey)
@@ -5697,6 +5723,21 @@ function thwart(
     log(s, `Remove ${removed} threat from ${card(p).name}.`, "good");
     if (removed > 0 && !p.counters)
       niNativeAchievement(s, source, "last-threat", p.id);
+    // The Search for Spiral (Permanent): the player who removes its last
+    // threat reveals the top card of the show deck, and it refills.
+    if (removed > 0 && !p.counters) {
+      const searched = spiral.spiralSearchEmptied(
+        s,
+        p,
+        source.startsWith("hero:")
+          ? source.slice(5)
+          : controller(s, source)?.id || s.activePlayerId,
+      );
+      if (searched) {
+        add(s, ...searched);
+        return removed;
+      }
+    }
     // Light at the End (Permanent): its last threat flips it or the players
     // escape.
     if (
@@ -6141,7 +6182,11 @@ export function targets(
         rulesCode(s.scheme) !== "01139b"
           ? [
               ...(s.scheme.threat > 0 &&
-              !(thwarting && mojoGenres.mojoGenreThwartLocked(s, "main"))
+              !(
+                thwarting &&
+                (mojoGenres.mojoGenreThwartLocked(s, "main") ||
+                  spiral.spiralThwartLocked(s, "main"))
+              )
                 ? [
                     {
                       id: "main",
@@ -8702,6 +8747,7 @@ export function newGame(config: {
   if (v.id === "mysterio") mysterio.mysterioSetup(s, mysterioPorts);
   if (v.id === "venom_goblin") venomGoblin.venomGoblinSetup(s);
   if (v.id === "magog") magog.magogSetup(s, magogPorts);
+  if (v.id === "spiral") spiral.spiralSetup(s, spiralPorts);
   deadpool.deadpoolSetupPool(s, makePiece);
   if (s.deadpool?.initializedPoolSeats.length)
     s.encounter.deck = shuffle(s, s.encounter.deck);
@@ -11600,6 +11646,7 @@ export function abilityOptions(
     ...venomGoblin.venomGoblinActions(s, p),
     ...sinisterModulars.sinisterModularActions(s, p),
     ...mojoGenres.mojoGenreActions(s, p, mojoGenrePorts),
+    ...spiral.spiralActions(s, p, spiralPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -16246,6 +16293,17 @@ const magogPorts: magog.MagogPorts = {
   makePiece: (s, code) => makePiece(s, code),
   endGame: (s, won, reason) => endGame(s, won, reason),
   revealBoostCard: (s, p) => warlockPorts.revealBoostCard(s, p),
+};
+const spiralPorts: spiral.SpiralPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  makePiece: (s, code) => makePiece(s, code),
+  shuffle: (s, pieces) => shuffle(s, pieces),
+  // A Show revealed from the show deck resolves its When Revealed ability
+  // without surge.
+  revealShow: (s, p) => add(s, { type: "mgen:show", piece: p }),
+  dealPiece: (s, p, playerId) => kreeFanaticPorts.dealPiece(s, p, playerId),
 };
 const kreeFanaticPorts: kreeFanatic.KreeFanaticPorts = {
   ...mutagenPorts,
@@ -23710,6 +23768,17 @@ function enemyAttack(
     delete seatView(s, colossusActivationReceipt.playerId).flags[
       `colossusActivation:${colossusActivationReceipt.token}`
     ];
+  // Across the Mojoverse: an Escaped Spiral schemes instead of attacking.
+  if (!originalTarget && spiral.spiralSchemesInstead(s, id)) {
+    log(s, "Spiral is Escaped: she schemes instead of attacking.");
+    enemyScheme(
+      s,
+      id,
+      extra,
+      activation ? { ...activation, kind: "scheme" } : undefined,
+    );
+    return;
+  }
   if (
     !activation?.after?.nebulaGamoraSource &&
     find(s, id) &&
@@ -24056,6 +24125,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     wreckingCrew.wreckingCrewAttackBonus(s, p) +
     kang.kangEnemyStat(s, p, "attack", originalPlayerId) +
     nebulaVillain.nebulaEnemyAttack(s, p) +
+    spiral.spiralAttackBonus(s, p) +
     mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).attack;
   const attachments = enemyAttachmentModifier(s, p.id, "attack");
   const base =
@@ -24463,6 +24533,7 @@ function boostEffects(s: GameState, p: Piece) {
     kreeFanatic.kreeFanaticBoost(s, p) ??
     mojoGenres.mojoGenreBoost(s, p) ??
     magog.magogBoost(s, p) ??
+    spiral.spiralBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -24988,6 +25059,7 @@ function finishScheme(s: GameState) {
       attack: false,
       againstPlayer: true,
     }),
+    ...spiral.spiralActivated(s, id),
     ...iceman.icemanActivated(s, id),
     ...mariaHill.mariaHillActivation(s, id),
     ...armadillo.armadilloActivationResponses(s, id).flatMap((r) => r.effects),
@@ -25636,6 +25708,7 @@ function finishAttackAfterDamage(
       damagedTarget: a.damage > 0 ? target : undefined,
     }),
     ...magog.magogAttacked(s, a.attacker, a.damage > 0),
+    ...spiral.spiralActivated(s, a.attacker),
     ...sinisterModulars.sinisterModularActivated(s, {
       enemyId: a.attacker,
       playerId: recipientId,
@@ -26613,6 +26686,8 @@ function reveal(
         c.type_code !== "attachment") ||
       (magog.MAGOG_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (spiral.SPIRAL_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -26827,6 +26902,7 @@ function reveal(
       ...kreeFanatic.KREE_FANATIC_SCRIPT_CODES,
       ...mojoGenres.MOJO_GENRE_SCRIPT_CODES,
       ...magog.MAGOG_SCRIPT_CODES,
+      ...spiral.SPIRAL_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -26879,6 +26955,7 @@ function reveal(
       kreeFanatic.kreeFanaticReveal(s, p) ??
       mojoGenres.mojoGenreReveal(s, p) ??
       magog.magogReveal(s, p) ??
+      spiral.spiralReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -26974,6 +27051,7 @@ function reveal(
     kreeFanatic.kreeFanaticReveal(s, p) ??
     mojoGenres.mojoGenreReveal(s, p) ??
     magog.magogReveal(s, p) ??
+    spiral.spiralReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -28408,6 +28486,7 @@ function resolve(s: GameState, e: Effect) {
           kreeFanatic.kreeFanaticReveal(state, piece) ??
           mojoGenres.mojoGenreReveal(state, piece) ??
           magog.magogReveal(state, piece) ??
+          spiral.spiralReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -28559,6 +28638,7 @@ function resolve(s: GameState, e: Effect) {
   if (kreeFanatic.resolveKreeFanaticEffect(s, e, kreeFanaticPorts)) return;
   if (mojoGenres.resolveMojoGenreEffect(s, e, mojoGenrePorts)) return;
   if (magog.resolveMagogEffect(s, e, magogPorts)) return;
+  if (spiral.resolveSpiralEffect(s, e, spiralPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -34682,6 +34762,7 @@ function resolve(s: GameState, e: Effect) {
           damagedTarget: a.damage > 0 ? a.originalTarget : undefined,
         }),
         ...magog.magogAttacked(s, a.attacker, a.damage > 0),
+        ...spiral.spiralActivated(s, a.attacker),
         ...(a.completionRecorded && a.attackerSnapshot
           ? spectrum.spectrumEnemyActivated(
               s,
@@ -38407,6 +38488,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...venomGoblin.venomGoblinActions(s, p),
               ...sinisterModulars.sinisterModularActions(s, p),
               ...mojoGenres.mojoGenreActions(s, p, mojoGenrePorts),
+              ...spiral.spiralActions(s, p, spiralPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -38522,6 +38604,19 @@ export function dispatch(state: GameState, command: Command): GameState {
             need(
               selected,
               "This First Player Action needs the first player and the ready Milano.",
+            );
+            add(s, ...selected!.effects);
+          } else if (spiral.spiralActionSource(s, command.id)) {
+            const selected = spiral
+              .spiralActions(
+                s,
+                spiral.spiralActionSource(s, command.id)!,
+                spiralPorts,
+              )
+              .find((o) => !command.action || o.id === command.action);
+            need(
+              selected,
+              "This Hero Action needs hero form and its printed cost.",
             );
             add(s, ...selected!.effects);
           } else if (mojoGenres.mojoGenreActionSource(s, command.id)) {
