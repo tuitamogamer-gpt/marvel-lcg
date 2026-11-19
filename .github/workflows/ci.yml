@@ -163,6 +163,8 @@ jobs:
             scripts: test:mister-sinister
           - group: stryfe
             scripts: test:stryfe
+          - group: unus
+            scripts: test:unus
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

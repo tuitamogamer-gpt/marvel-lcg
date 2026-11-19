@@ -355,6 +355,16 @@ import {
   stryfe,
 } from "./game/stryfe";
 import {
+  GENE_POOL,
+  HUNTING_GENE_TRAITORS,
+  INFINITE_SOLDIER,
+  genePoolLevel,
+  genePoolThreat,
+  soldierGains,
+  unus,
+  unusCaption,
+} from "./game/unus";
+import {
   AERIAL_BOMBARDMENT,
   IMPERVIOUS,
   OUT_OF_REACH,
@@ -2788,6 +2798,18 @@ export default function App() {
                       becomes the Living Bomb, and Stryfe cannot be defeated
                       until it is gone. Extreme Measures and Mutant Insurrection
                       are preselected.
+                    </p>
+                  )}
+                  {villain.id === "unus" && (
+                    <p className="setting-help">
+                      Gene Pool starts in play with 4 threat. It gains 3 threat
+                      whenever an ally is defeated by anything other than
+                      consequential damage, and 1 after step one of each villain
+                      phase. At 3, 6 and 9 threat Unus gains retaliate 1,
+                      stalwart and an amplify icon, and each Infinite Soldier
+                      gains quickstrike, surge and 3 hit points. The Infinites
+                      set is always included; Dystopian Nightmare is
+                      preselected.
                     </p>
                   )}
                   {villain.id === "mister_sinister" && (
@@ -6879,9 +6901,11 @@ function Tabletop({
                                       ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${momentum(s)} MOMENTUM`
                                       : stryfe(s)
                                         ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · +${commonType(s, s.activePlayerId)} ATK VS YOU`
-                                        : misterSinister(s)
-                                          ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${superpowers(s)} ${superpowers(s) === 1 ? "SUPERPOWER" : "SUPERPOWERS"}`
-                                          : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
+                                        : unus(s)
+                                          ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · GENE POOL ${genePoolThreat(s)}`
+                                          : misterSinister(s)
+                                            ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${superpowers(s)} ${superpowers(s) === 1 ? "SUPERPOWER" : "SUPERPOWERS"}`
+                                            : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
                     {s.kang ? (
                       <h2>
@@ -6975,6 +6999,9 @@ function Tabletop({
                           ? " · Living Bomb: he cannot be defeated"
                           : ""}
                       </span>
+                    )}
+                    {unus(s) && (
+                      <span className="stat-caption">{unusCaption(s)}</span>
                     )}
                     {misterSinister(s) && (
                       <span className="stat-caption">
@@ -7107,7 +7134,7 @@ function Tabletop({
                   <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
-                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) ? " magog-scheme" : ""}`}
+                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) ? " magog-scheme" : ""}`}
                     style={
                       {
                         "--scheme-actions": mainActionPiece
@@ -7223,6 +7250,11 @@ function Tabletop({
                     {stryfe(s) && s.scheme.code === LEFT_TO_YOUR_FATE && (
                       <p className="magog-scheme-note">
                         +2 hand size · cards cost 1 more
+                      </p>
+                    )}
+                    {unus(s) && s.scheme.code === HUNTING_GENE_TRAITORS && (
+                      <p className="magog-scheme-note">
+                        After step one: +1 on Gene Pool
                       </p>
                     )}
                     {misterSinister(s) && s.scheme.code === SINISTER_ENDS && (
@@ -7681,6 +7713,14 @@ function Tabletop({
                           Damage to Mojo removes threat here instead
                         </span>
                       )}
+                      {p.code === GENE_POOL && (
+                        <span className="stat-caption">
+                          Permanent ·{" "}
+                          {genePoolLevel(s) < 3
+                            ? `next at ${[3, 6, 9][genePoolLevel(s)]}`
+                            : "all reached"}
+                        </span>
+                      )}
                       {p.code === "27102a" && (
                         <span className="stat-caption">
                           Trap! · clearing it ambushes you and starts the Chase
@@ -7907,6 +7947,15 @@ function Tabletop({
                               discard that many after it activates against you
                             </span>
                           )}
+                          {p.code === INFINITE_SOLDIER &&
+                            soldierGains(s).length > 0 && (
+                              <span
+                                className="engagement-label"
+                                aria-label={`Gene Pool gives ${card(p).name} ${soldierGains(s).join(", ")}`}
+                              >
+                                Gene Pool: {soldierGains(s).join(" · ")}
+                              </span>
+                            )}
                           {p.code === SAMURAI && p.counters > 0 && (
                             <span
                               className="engagement-label"

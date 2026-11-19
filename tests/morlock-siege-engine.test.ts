@@ -242,7 +242,7 @@ describe("Morlock Siege: original source", () => {
       moduleCount: 2,
       defaultModules: ["military_grade", "mutant_slayers"],
     });
-    expect(MODULES.slice(-6, -4).map((m) => m.id)).toEqual([
+    expect(MODULES.slice(-8, -6).map((m) => m.id)).toEqual([
       "military_grade",
       "mutant_slayers",
     ]);

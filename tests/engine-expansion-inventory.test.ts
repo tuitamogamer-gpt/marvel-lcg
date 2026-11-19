@@ -51,6 +51,11 @@ import {
   MUTANT_INSURRECTION_CODES,
   STRYFE_SCRIPT_CODES,
 } from "../src/game/stryfe";
+import {
+  DYSTOPIAN_NIGHTMARE_CODES,
+  INFINITES_CODES,
+  UNUS_SCRIPT_CODES,
+} from "../src/game/unus";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -108,6 +113,9 @@ const badoonCodes = new Set<string>([
   ...STRYFE_SCRIPT_CODES,
   ...EXTREME_MEASURES_CODES,
   ...MUTANT_INSURRECTION_CODES,
+  ...UNUS_SCRIPT_CODES,
+  ...INFINITES_CODES,
+  ...DYSTOPIAN_NIGHTMARE_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -491,7 +499,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(75);
+    expect(MODULES).toHaveLength(77);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "temporal",
@@ -521,9 +529,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(3145);
-    expect(coverage.unsupportedFaces).toBe(1406);
-    expect(coverage.dedicatedFaces).toBe(2707);
+    expect(coverage.executableFaces).toBe(3162);
+    expect(coverage.unsupportedFaces).toBe(1389);
+    expect(coverage.dedicatedFaces).toBe(2724);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -589,24 +597,46 @@ describe("complete expansion rules inventory", () => {
       ).registered,
     ).toBe(true);
   });
-  it("closes the Age of Apocalypse hero slice and both complete retail Hero Packs", () => {
+  it("closes the Age of Apocalypse hero slice, Unus and both complete retail Hero Packs", () => {
     const products = inventory.installedRegistryCoverage.products;
     const apocalypse = products.find(
       (pack: { code: string }) => pack.code === "aoa",
     );
     expect(apocalypse).toMatchObject({
       faceCount: 220,
-      executableFaces: 60,
+      executableFaces: 77,
       installedCardClosure: false,
     });
+    // Unus with the Infinites and Dystopian Nightmare sets fills positions
+    // 59 to 74; Standard III and the other scenarios remain.
+    const unusFaces = new Set<string>([
+      ...UNUS_SCRIPT_CODES,
+      ...INFINITES_CODES,
+      ...DYSTOPIAN_NIGHTMARE_CODES,
+    ]);
+    expect(unusFaces.size).toBe(17);
+    expect(
+      cards
+        .filter(
+          (entry: { pack_code: string; position: number }) =>
+            entry.pack_code === "aoa" &&
+            entry.position > 58 &&
+            entry.position <= 74,
+        )
+        .map((entry: { code: string }) => entry.code)
+        .sort(),
+    ).toEqual([...unusFaces].sort());
     expect(apocalypse.unsupportedFaceCodes).toEqual(
       cards
         .filter(
           (entry: { pack_code: string; position: number }) =>
-            entry.pack_code === "aoa" && entry.position > 58,
+            entry.pack_code === "aoa" && entry.position > 74,
         )
         .map((entry: { code: string }) => entry.code)
         .sort(),
+    );
+    expect(apocalypse.unsupportedFaceCodes).toEqual(
+      expect.arrayContaining(["45075a", "45081a", "45101a"]),
     );
     for (const [code, count] of [
       ["iceman", 33],
@@ -751,6 +781,8 @@ describe("complete expansion rules inventory", () => {
         32 -
         // NeXt Evolution: Stryfe, Extreme Measures and Mutant Insurrection.
         30 -
+        // Age of Apocalypse: Unus, Infinites and Dystopian Nightmare.
+        17 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -923,7 +955,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(75);
+    expect(coverage.registeredModules).toHaveLength(77);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -1107,7 +1139,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(41);
+    ).toHaveLength(42);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "venom_goblin",
@@ -1354,7 +1386,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(163);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(164);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

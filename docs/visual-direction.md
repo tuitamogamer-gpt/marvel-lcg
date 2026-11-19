@@ -211,3 +211,7 @@ Mister Sinister keeps the usual villain column: the label counts his superpowers
 ## Stryfe's hand reading, 2026-11-19
 
 Stryfe's numbers change with the active player's hand, so the villain label shows the ATK he gains against that player and the caption names the count of their most common card type; both update as cards are played or drawn. The main scheme's one-line note gives the threat that player adds after step one, or Left to Your Fate's hand size and cost, with the threat token raised by that line. Stryfe's Grasp and the Living Bomb are ordinary side schemes, and the caption warns while the Living Bomb keeps Stryfe from being defeated.
+
+## Unus and Gene Pool, 2026-11-19
+
+Unus grows with the threat on Gene Pool, so the villain label carries that threat beside his stage and the caption lists what it gives him and the next threshold. Gene Pool is an ordinary side scheme; its one-line caption marks it permanent and names the next threshold. Each Infinite Soldier's engagement line lists the keywords and hit points Gene Pool gives it, and the main scheme's note recalls the threat added after step one.

@@ -47,6 +47,11 @@ import {
   MUTANT_INSURRECTION_CODES,
   STRYFE_SCRIPT_CODES,
 } from "./stryfe.js";
+import {
+  DYSTOPIAN_NIGHTMARE_CODES,
+  INFINITES_CODES,
+  UNUS_SCRIPT_CODES,
+} from "./unus.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -335,6 +340,9 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...STRYFE_SCRIPT_CODES,
   ...EXTREME_MEASURES_CODES,
   ...MUTANT_INSURRECTION_CODES,
+  ...UNUS_SCRIPT_CODES,
+  ...INFINITES_CODES,
+  ...DYSTOPIAN_NIGHTMARE_CODES,
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

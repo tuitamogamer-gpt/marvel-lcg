@@ -94,7 +94,8 @@
     "test:on-the-run": "node scripts/on-the-run-check.mjs",
     "test:juggernaut": "node scripts/juggernaut-check.mjs",
     "test:mister-sinister": "node scripts/mister-sinister-check.mjs",
-    "test:stryfe": "node scripts/stryfe-check.mjs"
+    "test:stryfe": "node scripts/stryfe-check.mjs",
+    "test:unus": "node scripts/unus-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

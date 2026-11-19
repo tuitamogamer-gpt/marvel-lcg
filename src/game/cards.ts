@@ -66,6 +66,7 @@ import { warMachineTraits } from "./war-machine.js";
 import { sinisterPlayerPackIdentityModifiers } from "./sinister-player-pack.js";
 import { mysterioHandSize } from "./mysterio.js";
 import { stryfeHandSize, stryfeIdentityPenalty } from "./stryfe.js";
+import { unusHealth } from "./unus.js";
 import { venomGoblinHealth } from "./venom-goblin.js";
 import {
   mojoGenreGlobal,
@@ -1581,6 +1582,24 @@ export const VILLAINS = [
       "Stryfe reads your hand: his attacks and his scheme grow with the most common card type you hold, and Hope Summers is trapped in his grasp until it turns into a Living Bomb.",
     color: "#5a3a2e",
   },
+  {
+    id: "unus",
+    name: "Unus",
+    // Unus (I) and (II) in Standard, (II) and (III) in Expert; Gene Pool
+    // starts in play with the required Infinites set.
+    codes: ["45059", "45060", "45061"],
+    schemes: ["45062b"],
+    module: "dystopian_nightmare",
+    moduleCount: 1,
+    defaultModules: ["dystopian_nightmare"],
+    fixedSets: ["infinites"],
+    difficulty: 3,
+    title: "Hunting Gene Traitors",
+    location: "The ruins of the X-Mansion",
+    description:
+      "Unus and his Infinites grow stronger with the threat on Gene Pool, and every ally you lose feeds it.",
+    color: "#3f6b3a",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1670,6 +1689,8 @@ export const MODULES = [
   { id: "black_tom_cassidy", name: "Black Tom Cassidy", difficulty: 2 },
   { id: "extreme_measures", name: "Extreme Measures", difficulty: 3 },
   { id: "mutant_insurrection", name: "Mutant Insurrection", difficulty: 3 },
+  { id: "infinites", name: "Infinites", difficulty: 3 },
+  { id: "dystopian_nightmare", name: "Dystopian Nightmare", difficulty: 2 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(
@@ -2342,6 +2363,7 @@ export function pieceHP(s: GameState, p: Piece) {
     novaIronheartCharacterModifiers(s, p.id).health +
     captainPackModifiers(textActiveState(s), p.id).hp +
     venomGoblinHealth(s, p) +
-    mojoGenreHealth(s, p)
+    mojoGenreHealth(s, p) +
+    unusHealth(s, p)
   );
 }

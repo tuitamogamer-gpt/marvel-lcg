@@ -49494,21 +49494,9 @@
       ],
       "baseline": "imported_requires_implementation",
       "note": "Encounter-set grouping is not a playable-scenario definition. Rulebook setup, mandatory modular sets, special assets, alternate modes and stage transitions require separate authored metadata.",
-      "registered": false,
-      "installedUnsupportedSetFaces": [
-        "45059",
-        "45060",
-        "45061",
-        "45062a",
-        "45062b",
-        "45063",
-        "45064",
-        "45065",
-        "45066",
-        "45067",
-        "45068"
-      ],
-      "installedSetCardClosure": false,
+      "registered": true,
+      "installedUnsupportedSetFaces": [],
+      "installedSetCardClosure": true,
       "automationCertification": "requires_full_scenario_dependency_graph_and_native_mission_evidence"
     },
     {
@@ -164361,8 +164349,8 @@
       },
       "installedRegistry": {
         "code": "45059",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164402,8 +164390,8 @@
       },
       "installedRegistry": {
         "code": "45060",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164443,8 +164431,8 @@
       },
       "installedRegistry": {
         "code": "45061",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164483,8 +164471,8 @@
       },
       "installedRegistry": {
         "code": "45062a",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164520,8 +164508,8 @@
       },
       "installedRegistry": {
         "code": "45062b",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164561,8 +164549,8 @@
       },
       "installedRegistry": {
         "code": "45063",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164602,8 +164590,8 @@
       },
       "installedRegistry": {
         "code": "45064",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164642,8 +164630,8 @@
       },
       "installedRegistry": {
         "code": "45065",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164685,8 +164673,8 @@
       },
       "installedRegistry": {
         "code": "45066",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164723,8 +164711,8 @@
       },
       "installedRegistry": {
         "code": "45067",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164757,8 +164745,8 @@
       },
       "installedRegistry": {
         "code": "45068",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164796,8 +164784,8 @@
       },
       "installedRegistry": {
         "code": "45069",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164832,8 +164820,8 @@
       },
       "installedRegistry": {
         "code": "45070",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164875,8 +164863,8 @@
       },
       "installedRegistry": {
         "code": "45071",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164908,8 +164896,8 @@
       },
       "installedRegistry": {
         "code": "45072",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164947,8 +164935,8 @@
       },
       "installedRegistry": {
         "code": "45073",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -164981,8 +164969,8 @@
       },
       "installedRegistry": {
         "code": "45074",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -263827,15 +263815,15 @@
     "src/data/catalog-decks.json": "6d75a9c883223b59a9b9d950696de7b6876f8921ffe025d40e352495c1a2b886",
     "src/data/core-player.json": "451c26f5ca50fd7b9c4bfc167675a23031b411c291bc546ad011c608603bbfa2",
     "src/data/core-encounter.json": "db9ec82bf2b9aa6b00bc813bc6b64aac3d0237996e3393f47d8dbd3645ddd2da",
-    "src/game/engine.ts": "173e89fc1db3e75981d1fca638480dd94c39735c329ca36d0a47472598f76689",
+    "src/game/engine.ts": "a990792c1ec1daf42cb35fe94c298fe422cd322cf45117e524a3b08e2c94f2b1",
     "src/data/catalog-provenance.json": "8dddd4de54508b44039d4cf196a98550503486efdaf2ac9771de55992a77b7e4",
     "src/game/scripts/compiler.ts": "33feb608b78cc98fa23bfca85926b8213dd82b4a056d419fa459e6bef5363e87",
     "src/game/scripts/runtime.ts": "60ed7040b44d97589d6eb3e0583e6153680757c1de50fe8788c5dd48d1c355ac",
     "src/game/scripts/types.ts": "7c911c5060b6d6945391256137de71ac00a4adb75b5765040b7a6f0a71dbe2fc",
     "src/game/script-registry.ts": "6914c40870648556608434bd91e7ba4570f9f7c522037b97b082cd9bac33aeb3",
     "src/game/keywords.ts": "23c0b1b3ec10b57906f5412b8f5dc29039600a03c15d14c538a9246dfac2c4dc",
-    "src/game/engine-support.ts": "232a8be84260a47361773ef843670ebfecace68944ee666037bb0fed565ee2d5",
-    "src/game/cards.ts": "af485be34f9dea22f87737b5a0bc3c26c6262ce16199e723aabf484ed31d054a",
+    "src/game/engine-support.ts": "363723ea09b152e5e47acf9da68a462dcc4ebc6d1789d16ead9a92f66d83a90a",
+    "src/game/cards.ts": "32ad678501135a4c810f4cc8fb22a3c283e334bb8a0470cb2324e83339f0d26c",
     "src/game/catalog.ts": "ba1475c5bcebc37b7da34da94ff272044c5a1b27e5b3646ca1ef8ab314318012",
     "src/game/combat.ts": "bb9c574ac2821ce2a7e0f111c03351d6557eed8e6e73b640a5a9e2b6227ad3e0",
     "src/game/presentation.ts": "a5eb46d7c758350a8c5f63139425d4d4a31dfd7370b1ad9cadb781b3892bc721",
@@ -263889,6 +263877,7 @@
     "src/game/juggernaut.ts": "785b04d147e965fd800e79fa0640ae8d26e390386836e5a68a645485025ba7f3",
     "src/game/mister-sinister.ts": "c2bedc30950be90899a65790d8a76dda7dfef8f9a024a030b2adfd056b2eabe4",
     "src/game/stryfe.ts": "d56275b11e2e0fd7773ea698e12b12fbbc75d3582519619c533fa7fab4161c31",
+    "src/game/unus.ts": "f4e475da9ce90589edeadad40934d4aee133b0e6c1f0c273ca78ce9877e95ca1",
     "src/game/reveal-window.ts": "33941f948c63a1e17da531bfe8e2c291426a513556324d28f301455892ef7026",
     "src/game/black-widow.ts": "96238d58d465e37f13bb0c970ca96fc436f2bfc8aa52f1c379f2ea00c8570295",
     "src/game/doctor-strange.ts": "0b83c44502e2a44f8e0ff1d65a1c6e1ff045f903033c40e8b49838dc3a1596b0",
@@ -288606,9 +288595,9 @@
   },
   "installedRegistryCoverage": {
     "total": 4551,
-    "executableFaces": 3145,
-    "unsupportedFaces": 1406,
-    "dedicatedFaces": 2707,
+    "executableFaces": 3162,
+    "unsupportedFaces": 1389,
+    "dedicatedFaces": 2724,
     "dedicatedCodes": [
       "02001a",
       "02001b",
@@ -291094,6 +291083,23 @@
       "45056",
       "45057",
       "45058",
+      "45059",
+      "45060",
+      "45061",
+      "45062a",
+      "45062b",
+      "45063",
+      "45064",
+      "45065",
+      "45066",
+      "45067",
+      "45068",
+      "45069",
+      "45070",
+      "45071",
+      "45072",
+      "45073",
+      "45074",
       "46001a",
       "46001b",
       "46002",
@@ -291416,6 +291422,7 @@
       "the_wrecking_crew",
       "tower_defense",
       "ultron",
+      "unus",
       "venom",
       "venom_goblin",
       "zola"
@@ -291441,6 +291448,7 @@
       "crossfire_crew",
       "deathstrike",
       "down_to_earth",
+      "dystopian_nightmare",
       "enchantress",
       "exodus",
       "exper_weapon",
@@ -291454,6 +291462,7 @@
       "horror",
       "hydra_assault",
       "hydra_patrol",
+      "infinites",
       "inheritors",
       "ironspider_sinister",
       "kree_fanatic",
@@ -292613,6 +292622,32 @@
         "unsupportedFaceCodes": [],
         "installedCardClosure": true,
         "automationCertification": "registration_closure_only_requires_rules_and_native_integration_evidence"
+      },
+      {
+        "id": "infinites",
+        "name": "Infinites",
+        "faceCodes": [
+          "45069",
+          "45070",
+          "45071"
+        ],
+        "faceCount": 3,
+        "unsupportedFaceCodes": [],
+        "installedCardClosure": true,
+        "automationCertification": "registration_closure_only_requires_rules_and_native_integration_evidence"
+      },
+      {
+        "id": "dystopian_nightmare",
+        "name": "Dystopian Nightmare",
+        "faceCodes": [
+          "45072",
+          "45073",
+          "45074"
+        ],
+        "faceCount": 3,
+        "unsupportedFaceCodes": [],
+        "installedCardClosure": true,
+        "automationCertification": "registration_closure_only_requires_rules_and_native_integration_evidence"
       }
     ],
     "registeredHeroes": [
@@ -293744,6 +293779,26 @@
           "hope_summers"
         ],
         "reservedSets": []
+      },
+      {
+        "id": "unus",
+        "codes": [
+          "45059",
+          "45060",
+          "45061"
+        ],
+        "schemes": [
+          "45062b"
+        ],
+        "defaultModule": "dystopian_nightmare",
+        "moduleCount": 1,
+        "defaultModules": [
+          "dystopian_nightmare"
+        ],
+        "fixedSets": [
+          "infinites"
+        ],
+        "reservedSets": []
       }
     ],
     "campaignSupport": [],
@@ -294321,25 +294376,8 @@
         "code": "aoa",
         "name": "Age of Apocalypse",
         "faceCount": 220,
-        "executableFaces": 60,
+        "executableFaces": 77,
         "unsupportedFaceCodes": [
-          "45059",
-          "45060",
-          "45061",
-          "45062a",
-          "45062b",
-          "45063",
-          "45064",
-          "45065",
-          "45066",
-          "45067",
-          "45068",
-          "45069",
-          "45070",
-          "45071",
-          "45072",
-          "45073",
-          "45074",
           "45075a",
           "45075b",
           "45076",
@@ -313998,104 +314036,104 @@
       },
       {
         "code": "45059",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45060",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45061",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45062a",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45062b",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45063",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45064",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45065",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45066",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45067",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45068",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45069",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45070",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45071",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45072",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45073",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "45074",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {

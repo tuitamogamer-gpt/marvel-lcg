@@ -241,7 +241,7 @@ describe("The Unstoppable Juggernaut: original source", () => {
       module: "black_tom_cassidy",
       fixedSets: ["hope_summers"],
     });
-    expect(MODULES.at(-3)?.id).toBe("black_tom_cassidy");
+    expect(MODULES.at(-5)?.id).toBe("black_tom_cassidy");
     expect(scenarioModules("juggernaut").map((m) => m.id)).toContain(
       "black_tom_cassidy",
     );
@@ -433,6 +433,14 @@ describe("Juggernaut encounter cards", () => {
     expect(helmet(s).code).toBe("40122a");
     expect(s.villain.counters).toBe(1);
   });
+
+  it("Cyttorak's Exemplar gains incite 1 in expert mode", () => {
+    let s = started("expert");
+    const threat = s.scheme.threat;
+    const damage = atk(s);
+    s = settle(resolveEncounter(reveal(s, "40129")));
+    expect(s.scheme.threat - threat).toBe(damage + 1);
+  });
 });
 
 describe("Hope Summers", () => {
@@ -484,6 +492,22 @@ describe("Black Tom Cassidy", () => {
       native(reload(s), { type: "enemyAttack", id: willow.id, actorId: "p1" }),
     );
     expect(s.player.stunned).toBe(true);
+  });
+
+  it("Making Green gives each Creeping Willow surge", () => {
+    let s = started("standard", 1, "rhino", ["black_tom_cassidy"]);
+    s = settle(resolveEncounter(reveal(s, "40134")));
+    expect(s.sideSchemes.some((p) => p.code === "40134")).toBe(true);
+    const willow = take(s, "40133");
+    const deck = s.encounter.deck.length;
+    s = settle(
+      resolveEncounter(
+        native(s, { type: "reveal", piece: willow, actorId: "p1" }),
+      ),
+    );
+    expect(s.minions.some((m) => m.id === willow.id)).toBe(true);
+    // Surge: another encounter card is revealed.
+    expect(s.encounter.deck.length).toBe(deck - 1);
   });
 
   it("A Sound Thrashing reveals a Creeping Willow when none attacked you", () => {

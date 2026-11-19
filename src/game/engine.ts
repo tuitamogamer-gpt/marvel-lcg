@@ -30,6 +30,7 @@ import * as otr from "./on-the-run.js";
 import * as jug from "./juggernaut.js";
 import * as sin from "./mister-sinister.js";
 import * as sty from "./stryfe.js";
+import * as unus from "./unus.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -617,6 +618,7 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
     !!(s && typeof p !== "string" && otr.otrKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && jug.jugKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && sin.sinisterKeyword(s, p, name) > 0) ||
+    !!(s && typeof p !== "string" && unus.unusKeyword(s, p, name) > 0) ||
     !!(
       s &&
       typeof p !== "string" &&
@@ -659,7 +661,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     magog.magogKeyword(s, piece, "Stalwart") > 0 ||
     !!morlock.morlockStatusModifiers(s, piece).stalwart ||
     jug.jugKeyword(s, piece, "Stalwart") > 0 ||
-    sty.stryfeStalwart(s, piece)
+    sty.stryfeStalwart(s, piece) ||
+    unus.unusKeyword(s, piece, "Stalwart") > 0
       ? { stalwart: true }
       : {}),
     ...(piece.code === "50060" && !isTextBlank(s, piece)
@@ -1103,7 +1106,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         mojoVillain.mojoKeyword(s, p, "Retaliate") +
         morlock.morlockKeyword(s, p, "Retaliate") +
         jug.jugKeyword(s, p, "Retaliate") +
-        sin.sinisterKeyword(s, p, "Retaliate")
+        sin.sinisterKeyword(s, p, "Retaliate") +
+        unus.unusKeyword(s, p, "Retaliate")
     : Math.max(intrinsic, grantedValue);
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
@@ -3878,6 +3882,7 @@ function dealDamage(
           morlock.morlockKeyword(s, retaliationTarget, "Retaliate") +
           jug.jugKeyword(s, retaliationTarget, "Retaliate") +
           sin.sinisterKeyword(s, retaliationTarget, "Retaliate") +
+          unus.unusKeyword(s, retaliationTarget, "Retaliate") +
           (retaliationTarget.id === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -4594,6 +4599,8 @@ function defeatCharacter(
   add(s, ...mariaHill.mariaHillControlledDefeated(s, m));
   // Dead or Alive leaves play with its minion: read it first.
   const bounty = minion ? mojoGenres.mojoGenreDeadOrAlive(s, m) : [];
+  // Genetic Experiments leaves play with its minion: read it first.
+  const geneticExperiments = minion ? unus.unusMinionDefeating(s, m) : [];
   // Toad 2.0's cards return to their owners' hands instead of leaving with it.
   const underToad = minion ? mojoGenres.mojoGenreToadDefeated(s, m) : [];
   const name = card(m).name;
@@ -4636,6 +4643,9 @@ function defeatCharacter(
   if (!textWasBlank)
     add(s, ...deadpool.deadpoolDefeated(s, m, source, allyController));
   if (!minion) add(s, ...rogue.rogueAllyDefeated(s, m, source, allyController));
+  // Gene Pool and Prelate Sidearm: after an ally is defeated.
+  if (!minion && card(m).type_code === "ally")
+    add(s, ...unus.unusAllyDefeated(s, source, enemyAttack));
   if (!minion && enemyAttack && sabretoothDefeat?.attackerId === source) {
     delete (m as SabretoothAttackDefeatPiece).sabretoothAttackDefeatReceipt;
     add(
@@ -4685,7 +4695,7 @@ function defeatCharacter(
     if (!textWasBlank) add(s, ...sandman.sandmanMinionDefeated(s, m));
     if (!textWasBlank) add(s, ...magog.magogMinionDefeated(s, m));
     add(s, ...kreeFanatic.kreeFanaticMinionDefeated(s, m));
-    add(s, ...bounty, ...underToad);
+    add(s, ...bounty, ...underToad, ...geneticExperiments);
     add(
       s,
       ...mojoGenres.mojoGenreMinionDefeated(
@@ -6109,6 +6119,13 @@ function defeatScheme(
         ...morlock.morlockSchemeDefeated(s, p),
         ...otr.otrSchemeDefeated(s, p),
         ...sty.stryfeSchemeDefeated(
+          s,
+          p,
+          source.startsWith("hero:")
+            ? source.slice(5)
+            : controller(s, source)?.id || s.activePlayerId,
+        ),
+        ...unus.unusSchemeDefeated(
           s,
           p,
           source.startsWith("hero:")
@@ -8884,46 +8901,52 @@ export function newGame(config: {
                                   (set) => set === c.set_code,
                                 )
                               ? "next_evol"
-                              : ["temporal", "anachronauts", "mot"].includes(
-                                    c.set_code || "",
+                              : unus.AOA_MODULAR_SETS.some(
+                                    (set) => set === c.set_code,
                                   )
-                                ? "toafk"
-                                : c.set_code === "exodus"
-                                  ? "gambit"
-                                  : c.set_code === "sauron"
-                                    ? "iceman"
-                                    : c.set_code === "crazy_gang"
-                                      ? "ncrawler"
-                                      : c.set_code === "hellfire"
-                                        ? "magneto"
-                                        : c.set_code === "arcade"
-                                          ? "jubilee"
-                                          : c.set_code === "reavers"
-                                            ? "rogue"
-                                            : c.set_code === "deathstrike"
-                                              ? "wolv"
-                                              : c.set_code === "shadow_king"
-                                                ? "storm"
-                                                : c.set_code ===
-                                                    "ironspider_sinister"
-                                                  ? "spdr"
-                                                  : c.set_code === "inheritors"
-                                                    ? "spiderham"
-                                                    : c.set_code === "zzzax"
-                                                      ? "ironheart"
-                                                      : c.set_code ===
-                                                          "armadillo"
-                                                        ? "nova"
-                                                        : [
-                                                              "goblin_gimmicks",
-                                                              "a_mess_of_things",
-                                                              "power_drain",
-                                                              "running_interference",
-                                                            ].includes(
-                                                              c.set_code || "",
-                                                            )
-                                                          ? "gob"
-                                                          : "core")) ||
+                                ? "aoa"
+                                : ["temporal", "anachronauts", "mot"].includes(
+                                      c.set_code || "",
+                                    )
+                                  ? "toafk"
+                                  : c.set_code === "exodus"
+                                    ? "gambit"
+                                    : c.set_code === "sauron"
+                                      ? "iceman"
+                                      : c.set_code === "crazy_gang"
+                                        ? "ncrawler"
+                                        : c.set_code === "hellfire"
+                                          ? "magneto"
+                                          : c.set_code === "arcade"
+                                            ? "jubilee"
+                                            : c.set_code === "reavers"
+                                              ? "rogue"
+                                              : c.set_code === "deathstrike"
+                                                ? "wolv"
+                                                : c.set_code === "shadow_king"
+                                                  ? "storm"
+                                                  : c.set_code ===
+                                                      "ironspider_sinister"
+                                                    ? "spdr"
+                                                    : c.set_code ===
+                                                        "inheritors"
+                                                      ? "spiderham"
+                                                      : c.set_code === "zzzax"
+                                                        ? "ironheart"
+                                                        : c.set_code ===
+                                                            "armadillo"
+                                                          ? "nova"
+                                                          : [
+                                                                "goblin_gimmicks",
+                                                                "a_mess_of_things",
+                                                                "power_drain",
+                                                                "running_interference",
+                                                              ].includes(
+                                                                c.set_code ||
+                                                                  "",
+                                                              )
+                                                            ? "gob"
+                                                            : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -8958,6 +8981,8 @@ export function newGame(config: {
           // Juggernaut's Helmet and Hope Summers start in play.
           !jug.jugSetupCard(c.code) &&
           !sty.stryfeSetupCard(c.code) &&
+          // Gene Pool (Setup) begins the game in play.
+          !unus.unusSetupCard(c.code) &&
           !(v.id === "magneto" && ["32144b", "32145b"].includes(c.code)) &&
           (c.type_code !== "environment" ||
             (v.id === "absorbing_man" &&
@@ -9022,6 +9047,12 @@ export function newGame(config: {
       installVillain: (s, p) => morlockPorts.installVillain(s, p),
       pick: (s, n) => Math.floor(random(s) * n),
     });
+  // Gene Pool (Setup) begins the game in play with the Infinites set.
+  if (
+    v.fixedSets?.includes("infinites") ||
+    selectedModules.includes("infinites")
+  )
+    unus.genePoolSetup(s, { makePiece: (s, code) => makePiece(s, code) });
   deadpool.deadpoolSetupPool(s, makePiece);
   if (s.deadpool?.initializedPoolSeats.length)
     s.encounter.deck = shuffle(s, s.encounter.deck);
@@ -9890,6 +9921,7 @@ function initialSetup(s: GameState) {
   setup.push(...otr.otrSetupEffects(s));
   setup.push(...sin.sinisterSetupEffects(s));
   setup.push(...sty.stryfeSetupEffects(s, makePiece));
+  setup.push(...unus.unusSetupEffects(s));
   // Queue stage setup after scenario setup and before the first turn.
   add(
     s,
@@ -11937,6 +11969,7 @@ export function abilityOptions(
     ...jug.jugActions(s, p, jugPorts),
     ...sin.sinisterActions(s, p, sinPorts),
     ...sty.stryfeActions(s, p, stryfePorts),
+    ...unus.unusActions(s, p),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -13467,6 +13500,7 @@ function activationAmplify(s: GameState): number {
   return (
     deadpool.deadpoolPlayerIcons(s, "scheme_amplify") +
     otr.otrAmplify(s) +
+    unus.unusAmplify(s) +
     definitions.filter(
       (c) => (c as Card & { scheme_amplify?: boolean }).scheme_amplify,
     ).length
@@ -16829,6 +16863,36 @@ function damageSourceTiny(s: GameState, source: string | undefined) {
   const c = damageSourceCard(s, source);
   return !!c && (c.traits || "").split(/\.\s*/).includes("Tiny");
 }
+const unusPorts: unus.UnusPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  allies: (s, playerId) => friends(seatView(s, playerId)),
+  heal: (s, target, n) => {
+    heal(s, target, n, "encounter");
+  },
+  attachBoost: (s, id, minionId) => {
+    const p = sinisterNativePiece(s, id);
+    need(
+      p?.code === unus.GENETIC_EXPERIMENTS &&
+        s.minions.some((m) => m.id === minionId),
+      "Genetic Experiments requires its actual card and a live minion.",
+    );
+    const activation = s.scheming || s.attack;
+    need(activation, "The actual boost activation is unavailable.");
+    if (!activation!.retainedBoostIds?.includes(id))
+      (activation!.retainedBoostIds ||= []).push(id);
+    // Remove its zones only; the activation keeps its boost receipts.
+    removeEncounterInstance(s, id);
+    p!.attachedTo = minionId;
+    s.attachments.push(p!);
+  },
+  discardFromHand: (s, playerId, id) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    if (s.player.hand.some((p) => p.id === id)) discardHand(s, id);
+    activateSeat(s, previous);
+  },
+};
 const stryfePorts: sty.StryfePorts = {
   ...mutagenPorts,
   log: (s, text, kind) => log(s, text, kind),
@@ -25265,6 +25329,7 @@ function boostEffects(s: GameState, p: Piece) {
     jug.jugBoost(s, p) ??
     sin.sinisterBoost(s, p) ??
     sty.stryfeBoost(s, p) ??
+    unus.unusBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -25740,6 +25805,7 @@ function finishScheme(s: GameState) {
     ...hela.helaSchemed(s, id),
     ...wreckingCrew.wreckingCrewSchemed(s, id),
     ...jug.jugSchemed(s, id),
+    ...unus.unusSchemed(s, id),
     ...hood
       .hoodAfterActivation(s, {
         token: (activation.id ||= `scheme${s.nextId++}`),
@@ -27251,8 +27317,17 @@ function reveal(
     p,
     ironspiderPorts,
   );
-  const revealCard =
-    knifeSurge || moduleSurge ? { ...c, text: `Surge.\n${c.text || ""}` } : c;
+  // Gained keywords: Making Green's surge for Creeping Willow, Cyttorak's
+  // Exemplar's expert incite and Infinite Soldier's surge from Gene Pool.
+  const revealCard = unus.unusRevealCard(
+    s,
+    p,
+    jug.jugRevealCard(
+      s,
+      p,
+      knifeSurge || moduleSurge ? { ...c, text: `Surge.\n${c.text || ""}` } : c,
+    ),
+  );
   if (!repeat && s.flags[`ghostCancelReveal:${p.id}`]) {
     delete s.flags[`ghostCancelReveal:${p.id}`];
     if (c.type_code === "minion") {
@@ -27463,6 +27538,9 @@ function reveal(
         ...sty.STRYFE_SCRIPT_CODES,
         ...sty.EXTREME_MEASURES_CODES,
         ...sty.MUTANT_INSURRECTION_CODES,
+        ...unus.UNUS_SCRIPT_CODES,
+        ...unus.INFINITES_CODES,
+        ...unus.DYSTOPIAN_NIGHTMARE_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -27528,7 +27606,8 @@ function reveal(
         p.code === mojoVillain.PAPARAZZI ||
         (sin.SINISTER_IN_PLAY_OBLIGATIONS as readonly string[]).includes(
           p.code,
-        ))
+        ) ||
+        (unus.UNUS_IN_PLAY_OBLIGATIONS as readonly string[]).includes(p.code))
     ) {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       if (!s.player.inPlay.some((x) => x.id === p.id)) s.player.inPlay.push(p);
@@ -27701,6 +27780,9 @@ function reveal(
       ...sty.STRYFE_SCRIPT_CODES,
       ...sty.EXTREME_MEASURES_CODES,
       ...sty.MUTANT_INSURRECTION_CODES,
+      ...unus.UNUS_SCRIPT_CODES,
+      ...unus.INFINITES_CODES,
+      ...unus.DYSTOPIAN_NIGHTMARE_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -27721,12 +27803,16 @@ function reveal(
     const window = beginRevealWindow(
       s,
       p,
-      jug.jugRevealCard(
+      unus.unusRevealCard(
         s,
         p,
-        venomGoblin.venomGoblinGainsSurge(s, p) && !printedKeyword(c, "Surge")
-          ? { ...c, text: `Surge.\n${c.text || ""}` }
-          : c,
+        jug.jugRevealCard(
+          s,
+          p,
+          venomGoblin.venomGoblinGainsSurge(s, p) && !printedKeyword(c, "Surge")
+            ? { ...c, text: `Surge.\n${c.text || ""}` }
+            : c,
+        ),
       ),
       s.activePlayerId,
       1 + goblinWhenRevealedCopies(s),
@@ -27764,6 +27850,7 @@ function reveal(
       jug.jugReveal(s, p) ??
       sin.sinisterReveal(s, p) ??
       sty.stryfeReveal(s, p) ??
+      unus.unusReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -27866,6 +27953,7 @@ function reveal(
     jug.jugReveal(s, p) ??
     sin.sinisterReveal(s, p) ??
     sty.stryfeReveal(s, p) ??
+    unus.unusReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -29307,6 +29395,7 @@ function resolve(s: GameState, e: Effect) {
           jug.jugReveal(state, piece) ??
           sin.sinisterReveal(state, piece) ??
           sty.stryfeReveal(state, piece) ??
+          unus.unusReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -29465,6 +29554,7 @@ function resolve(s: GameState, e: Effect) {
   if (jug.resolveJuggernautEffect(s, e, jugPorts)) return;
   if (sin.resolveSinisterEffect(s, e, sinPorts)) return;
   if (sty.resolveStryfeEffect(s, e, stryfePorts)) return;
+  if (unus.resolveUnusEffect(s, e, unusPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -31357,6 +31447,9 @@ function resolve(s: GameState, e: Effect) {
         ...(e.draxBasicAttack ? drax.draxAfterBasicAttack(s, draxPorts) : []),
         ...(e.draxBasicAttack
           ? thanos.thanosAfterBasicAttack(s, e.target, thanosPorts)
+          : []),
+        ...(e.draxBasicAttack
+          ? unus.unusAfterBasicAttack(s, e.target, unusPorts)
           : []),
         ...(e.draxBasicAttack
           ? loki.lokiAfterBasicAttack(s, e.target, lokiPorts)
@@ -38358,6 +38451,7 @@ function resolve(s: GameState, e: Effect) {
         ...venomGoblin.venomGoblinStepOne(s),
         ...morlock.morlockStepOne(s),
         ...sty.stryfeStepOne(s),
+        ...unus.unusStepOne(s),
       );
       break;
     case "villainActivate": {
@@ -38456,6 +38550,7 @@ function resolve(s: GameState, e: Effect) {
         deadpool.deadpoolPlayerIcons(s, "scheme_hazard") +
         ronan.ronanHazard(s) +
         sinisterSix.sixEnemyIcons(s, "hazard") +
+        unus.unusHazard(s) +
         (card(s.scheme.code).scheme_hazard || 0) +
         s.sideSchemes.reduce(
           (n, p) =>
@@ -39335,6 +39430,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...jug.jugActions(s, p, jugPorts),
               ...sin.sinisterActions(s, p, sinPorts),
               ...sty.stryfeActions(s, p, stryfePorts),
+              ...unus.unusActions(s, p),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -39468,6 +39564,17 @@ export function dispatch(state: GameState, command: Command): GameState {
                 morlock.morlockActionSource(s, command.id)!,
                 morlockPorts,
               )
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
+            add(s, ...selected!.effects);
+          } else if (
+            unus.unusActionSource(s, command.id) &&
+            unus
+              .unusActions(s, unus.unusActionSource(s, command.id)!)
+              .some((o) => !command.action || o.id === command.action)
+          ) {
+            const selected = unus
+              .unusActions(s, unus.unusActionSource(s, command.id)!)
               .find((o) => !command.action || o.id === command.action);
             need(selected, "This action needs its printed cost.");
             add(s, ...selected!.effects);
