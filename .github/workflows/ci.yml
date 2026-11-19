@@ -155,6 +155,8 @@ jobs:
             scripts: test:mojo
           - group: morlock
             scripts: test:morlock
+          - group: on-the-run
+            scripts: test:on-the-run
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

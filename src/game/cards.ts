@@ -1503,6 +1503,32 @@ export const VILLAINS = [
       "Mister Sinister's Marauders storm the tunnels beneath New York. Hold the line with the Morlocks and rout three of the killers before the massacre is complete.",
     color: "#4f5d3a",
   },
+  {
+    id: "on_the_run",
+    name: "On the Run",
+    // One random Marauder, side A in Standard and B in Expert, holds Hope
+    // with Hope's Captor; Mutant Slayers is required.
+    codes: [
+      "40070a",
+      "40071a",
+      "40072a",
+      "40073a",
+      "40074a",
+      "40075a",
+      "40076a",
+    ],
+    schemes: ["40103b", "40104b"],
+    module: "military_grade",
+    moduleCount: 2,
+    defaultModules: ["military_grade", "nasty_boys"],
+    fixedSets: ["mutant_slayers"],
+    difficulty: 3,
+    title: "Gotta Get Away",
+    location: "Muir Island",
+    description:
+      "A Marauder has taken Hope and her captor will not stay down. Beat the villain twice, through a wall of Marauder minions, before they get away.",
+    color: "#3d5566",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1588,6 +1614,7 @@ export const MODULES = [
   { id: "longshot", name: "Longshot", difficulty: 1 },
   { id: "military_grade", name: "Military Grade", difficulty: 2 },
   { id: "mutant_slayers", name: "Mutant Slayers", difficulty: 3 },
+  { id: "nasty_boys", name: "Nasty Boys", difficulty: 3 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(

@@ -30,6 +30,7 @@ import {
   MORLOCK_SIEGE_SCRIPT_CODES,
   MUTANT_SLAYERS_CODES,
 } from "./morlock-siege.js";
+import { NASTY_BOYS_CODES, ON_THE_RUN_SCRIPT_CODES } from "./on-the-run.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -306,6 +307,8 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...MORLOCK_SIEGE_SCRIPT_CODES,
   ...MILITARY_GRADE_CODES,
   ...MUTANT_SLAYERS_CODES,
+  ...ON_THE_RUN_SCRIPT_CODES,
+  ...NASTY_BOYS_CODES,
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

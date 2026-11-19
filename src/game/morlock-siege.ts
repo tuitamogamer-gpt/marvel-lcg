@@ -60,7 +60,11 @@ export const MUTANT_SLAYERS_CODES = [
   "40101",
   "40102",
 ] as const;
-export const NEXT_MODULAR_SETS = ["military_grade", "mutant_slayers"] as const;
+export const NEXT_MODULAR_SETS = [
+  "military_grade",
+  "mutant_slayers",
+  "nasty_boys",
+] as const;
 
 export const KNOCK_KNOCK = "40077b";
 export const MUTANT_MASSACRE = "40078b";

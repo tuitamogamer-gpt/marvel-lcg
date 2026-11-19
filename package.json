@@ -90,7 +90,8 @@
     "test:magog": "node scripts/magog-check.mjs",
     "test:spiral": "node scripts/spiral-check.mjs",
     "test:mojo": "node scripts/mojo-check.mjs",
-    "test:morlock": "node scripts/morlock-check.mjs"
+    "test:morlock": "node scripts/morlock-check.mjs",
+    "test:on-the-run": "node scripts/on-the-run-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

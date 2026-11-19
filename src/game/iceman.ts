@@ -5,6 +5,7 @@ import { deadpoolTriggeredBlocked } from "./deadpool.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import type { PaymentSource } from "./payment.js";
 import type { Effect, GameState, Option, Piece } from "./types.js";
+import { otrSchemeIcon } from "./on-the-run.js";
 
 const E = (type: string, args: Record<string, unknown> = {}): Effect => ({
   type,
@@ -514,7 +515,12 @@ export function icemanSchemeIcon(
     | "scheme_amplify"
     | "scheme_crisis",
 ) {
-  return icemanSchemeIconsSuppressed(s, p) ? 0 : Number(card(p)[key] || 0);
+  if (icemanSchemeIconsSuppressed(s, p)) return 0;
+  // Pure Force gains crisis while Blockbuster is in play.
+  return (
+    Number(card(p)[key] || 0) ||
+    (key === "scheme_crisis" ? otrSchemeIcon(s, p, "scheme_crisis") : 0)
+  );
 }
 export function icemanEncounter(s: GameState, p: Piece): Effect[] | null {
   if (isTextBlank(s, p) && ICEMAN_SCRIPT_CODES.includes(p.code)) return [];

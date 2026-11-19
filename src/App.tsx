@@ -329,6 +329,13 @@ import {
   TITANIUM_EXOSKELETON,
   morlockRouted,
 } from "./game/morlock-siege";
+import {
+  CAPTOR_CONFIDENT,
+  HIDDEN_IN_THE_CLUTTER,
+  SLAB,
+  onTheRun,
+  otrCaptor,
+} from "./game/on-the-run";
 import { effectTitle, pacingOf } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
 import type { PaymentSource } from "./game/payment";
@@ -2731,6 +2738,16 @@ export default function App() {
                       you and take the enemies&rsquo; attacks; lose them all and
                       the Mutant Massacre is complete. Military Grade and Mutant
                       Slayers are preselected.
+                    </p>
+                  )}
+                  {villain.id === "on_the_run" && (
+                    <p className="setting-help">
+                      One random Marauder holds Hope with Hope&rsquo;s Captor.
+                      The first time you would defeat it, its hit points reset
+                      and the Captor turns Desperate; defeat it again to win.
+                      While a Marauder minion is engaged with you, the villain
+                      schemes instead of attacking you. Mutant Slayers is always
+                      included; Military Grade and Nasty Boys are preselected.
                     </p>
                   )}
                   {villain.id === "magog" && (
@@ -6066,6 +6083,13 @@ function AttachedCards({
                 {p.counters} ATK
               </small>
             )}
+            {p.code === HIDDEN_IN_THE_CLUTTER && (
+              <small
+                aria-label={`Hidden in the Clutter damage: ${p.damage || 0} of 3`}
+              >
+                {p.damage || 0}/3 damage
+              </small>
+            )}
             {p.code === STINGER_TAIL && (
               <small aria-label={`Stinger Tail damage: ${p.damage} of 5`}>
                 {p.damage}/5 damage · retaliate 2
@@ -6548,7 +6572,9 @@ function Tabletop({
                                 ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
                                 : s.morlockSiege
                                   ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
-                                  : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                                  : onTheRun(s)
+                                    ? `Defeat ${card(s.villain).name} twice · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? 0 : 1} of 2`
+                                    : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
             <span
@@ -6772,7 +6798,9 @@ function Tabletop({
                                 ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${spiralCornered(s) ? "CORNERED" : "ESCAPED"}`
                                 : s.morlockSiege
                                   ? `VILLAIN · ${s.villain.code.endsWith("b") ? "B" : "A"} · ${morlockRouted(s)} OF ${ROUTED_TO_WIN} ROUTED`
-                                  : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
+                                  : onTheRun(s)
+                                    ? `VILLAIN · ${s.villain.code.endsWith("b") ? "B" : "A"} · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? "CONFIDENT" : "DESPERATE"}`
+                                    : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
                     {s.kang ? (
                       <h2>
@@ -6847,6 +6875,13 @@ function Tabletop({
                       <span className="stat-caption">
                         Cannot be defeated · resets to {10 * s.playerCount} hit
                         points and wows The Challengers
+                      </span>
+                    )}
+                    {onTheRun(s) && (
+                      <span className="stat-caption">
+                        {otrCaptor(s)?.code === CAPTOR_CONFIDENT
+                          ? "Hope's Captor · resets instead of being defeated once"
+                          : "Desperate · defeat the villain to win"}
                       </span>
                     )}
                     {s.morlockSiege && (
@@ -7733,6 +7768,16 @@ function Tabletop({
                               {p.counters} magnetic{" "}
                               {p.counters === 1 ? "counter" : "counters"} ·
                               discard that many after it activates against you
+                            </span>
+                          )}
+                          {p.code === SLAB && p.counters > 0 && (
+                            <span
+                              className="engagement-label"
+                              aria-label={`Growth counters on Slab: ${p.counters}`}
+                            >
+                              {p.counters} growth{" "}
+                              {p.counters === 1 ? "counter" : "counters"} · +
+                              {p.counters} ATK when he attacks
                             </span>
                           )}
                           {(p.mojoThreat || 0) > 0 && (

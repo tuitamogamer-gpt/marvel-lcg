@@ -26,6 +26,7 @@ import * as magog from "./magog.js";
 import * as spiral from "./spiral.js";
 import * as mojoVillain from "./mojo.js";
 import * as morlock from "./morlock-siege.js";
+import * as otr from "./on-the-run.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -609,7 +610,8 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
       venomGoblin.venomGoblinKeyword(s, p, name)
     ) ||
     !!(s && typeof p !== "string" && mojoGenres.mojoGenreKeyword(s, p, name)) ||
-    !!(s && typeof p !== "string" && morlock.morlockKeyword(s, p, name) > 0)
+    !!(s && typeof p !== "string" && morlock.morlockKeyword(s, p, name) > 0) ||
+    !!(s && typeof p !== "string" && otr.otrKeyword(s, p, name) > 0)
   );
 }
 function nativeStatusModifiers(s: GameState, p: StatusState) {
@@ -655,7 +657,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
       : {}),
     ...(hood.hoodSteady(s, piece) ? { steady: true } : {}),
     ...(hoodModular.hoodModularSteady(s) ? { steady: true } : {}),
-    ...(morlock.morlockStatusModifiers(s, piece).steady
+    ...(morlock.morlockStatusModifiers(s, piece).steady ||
+    otr.otrStatusModifiers(s, piece).steady
       ? { steady: true }
       : {}),
   };
@@ -4067,6 +4070,20 @@ function applyDamage(
     check(s);
     return { actualDamage: n, excessDamage: 0 };
   }
+  // Hidden in the Clutter takes the damage dealt to the attached enemy.
+  if (
+    n > 0 &&
+    (target === s.villain.id || s.minions.some((m) => m.id === target))
+  ) {
+    const dealer = source?.startsWith("hero:")
+      ? source.slice(5)
+      : controller(s, source)?.id || s.activePlayerId;
+    const clutter = otr.otrDamageReplaced(s, target, n, dealer);
+    if (clutter.amount !== n) {
+      add(s, ...clutter.effects);
+      return none;
+    }
+  }
   if (target === s.villain.id) {
     const armor = crossbones.crossbonesArmor(s);
     if (armor) {
@@ -4743,6 +4760,20 @@ function advanceVillain(
 ) {
   // The Once and Future Kang: no villain is in play during the gaps.
   if (kang.kangVillainAbsent(s)) return;
+  // On the Run: Hope's Captor resets the villain once; then its defeat wins.
+  const otrDefeat = otr.otrVillainWouldBeDefeated(s);
+  if (otrDefeat === "reset") {
+    add(s, ...otr.otrResetEffects(s));
+    return;
+  }
+  if (otrDefeat === "won") {
+    endGame(
+      s,
+      true,
+      `${card(s.villain).name} is defeated. Hope escapes with the heroes.`,
+    );
+    return;
+  }
   // Melee in the Mojo-seum: MaGog's hit points reset instead of his defeat.
   const magogReset = magog.magogVillainWouldBeDefeated(s);
   if (magogReset) {
@@ -5675,6 +5706,14 @@ function threat(
         );
         return;
       }
+      if (otr.otrMainLoses(s)) {
+        endGame(
+          s,
+          false,
+          "Gotta Get Away is complete. The Marauders escape with Hope.",
+        );
+        return;
+      }
       const v = VILLAINS.find((v) => v.id === s.villainId)!;
       if (s.scheme.index >= v.schemes.length - 1) {
         endGame(
@@ -5948,6 +5987,7 @@ function defeatScheme(
         ...sandman.sandmanSchemeDefeated(s, p),
         ...magog.magogSchemeDefeated(s, p),
         ...morlock.morlockSchemeDefeated(s, p),
+        ...otr.otrSchemeDefeated(s, p),
       ]
     : [];
   const helaFlip = hela.helaSideSchemeDefeated(s);
@@ -8784,6 +8824,9 @@ export function newGame(config: {
           c.set_code !== "infinity_gauntlet" &&
           c.code !== hela.ODIN_KING_SIDE &&
           c.code !== kang.KANGS_DOMINION &&
+          // Hope's Captor is attached to the villain during setup.
+          c.code !== otr.CAPTOR_CONFIDENT &&
+          c.code !== otr.CAPTOR_DESPERATE &&
           !(v.id === "magneto" && ["32144b", "32145b"].includes(c.code)) &&
           (c.type_code !== "environment" ||
             (v.id === "absorbing_man" &&
@@ -8833,6 +8876,13 @@ export function newGame(config: {
   if (v.id === "mojo")
     mojoVillain.mojoSetup(s, mojoVillainPorts, selectedModules);
   if (v.id === "morlock_siege") morlock.morlockSetup(s, morlockPorts);
+  if (v.id === "on_the_run")
+    otr.otrSetup(s, {
+      shuffle: (s, pieces) => shuffle(s, pieces),
+      makePiece: (s, code) => makePiece(s, code),
+      installVillain: (s, p) => morlockPorts.installVillain(s, p),
+      pick: (s, n) => Math.floor(random(s) * n),
+    });
   deadpool.deadpoolSetupPool(s, makePiece);
   if (s.deadpool?.initializedPoolSeats.length)
     s.encounter.deck = shuffle(s, s.encounter.deck);
@@ -9698,6 +9748,7 @@ function initialSetup(s: GameState) {
       E("findMinion", { actorId: s.firstPlayerId }),
     );
   if (s.villainId === "ultron") setup.push(...eachPlayer(s, E("drone")));
+  setup.push(...otr.otrSetupEffects(s));
   // Queue stage setup after scenario setup and before the first turn.
   add(
     s,
@@ -13263,6 +13314,7 @@ function activationAmplify(s: GameState): number {
   ];
   return (
     deadpool.deadpoolPlayerIcons(s, "scheme_amplify") +
+    otr.otrAmplify(s) +
     definitions.filter(
       (c) => (c as Card & { scheme_amplify?: boolean }).scheme_amplify,
     ).length
@@ -16526,6 +16578,37 @@ const morlockPorts: morlock.MorlockPorts = {
     if (p) consumeStatus(p, status);
   },
 };
+const otrPorts: otr.OnTheRunPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  shuffle: (s, pieces) => shuffle(s, pieces),
+  findMinions: (s, trait, discardToo) =>
+    [...s.encounter.deck, ...(discardToo ? s.encounter.discard : [])].filter(
+      (p) =>
+        card(p).type_code === "minion" &&
+        (card(p).traits || "").split(/\.\s*/).some((t) => t.trim() === trait),
+    ),
+  putFound: (s, p, playerId, reveal) => {
+    if (p) {
+      if (reveal) {
+        removeEncounterInstance(s, p.id);
+        wreckingCrewPorts.reveal(s, p, playerId);
+      } else mutagenPorts.putMinion(s, p, playerId);
+    }
+    s.encounter.deck = shuffle(s, s.encounter.deck);
+    delete s.encounter.knownTop;
+  },
+  advanceMain: (s) => morlockPorts.advanceMain(s),
+  allies: (s, playerId) => friends(seatView(s, playerId)),
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  enemyStat: (s, p, stat) => enemyStats(s, p)[stat],
+  remainingHp: (s, p) =>
+    p.id === s.villain.id ? s.villain.hp : pieceHP(s, p) - p.damage,
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+  canStatus: (s, target, status) => morlockPorts.canStatus(s, target, status),
+  endGame: (s, won, reason) => endGame(s, won, reason),
+};
 const kreeFanaticPorts: kreeFanatic.KreeFanaticPorts = {
   ...mutagenPorts,
   log: (s, text, kind) => log(s, text, kind),
@@ -19517,6 +19600,7 @@ function minionEntered(s: GameState, p: Piece) {
     ),
     ...rogue.rogueMinionEntered(s, p),
     ...acolytes.acolytesEngaged(s, p),
+    ...otr.otrEngaged(s, p),
     ...ironspider.ironspiderSinisterEngagementResponses(s, p),
     ...spiderHam.spiderHamMinionEngaged(s, p),
     E("valkPackEngagementWindow", { id: p.id }),
@@ -22227,6 +22311,7 @@ const nightcrawlerEncounterPorts: nightcrawlerEncounter.NightcrawlerEncounterPor
           ),
           ...rogue.rogueMinionEngaged(s, p),
           ...acolytes.acolytesEngaged(s, p),
+          ...otr.otrEngaged(s, p),
           ...ironspider.ironspiderSinisterEngagementResponses(s, p),
           ...spiderHam.spiderHamMinionEngaged(s, p),
           E("valkPackEngagementWindow", { id: p.id }),
@@ -23992,6 +24077,21 @@ function enemyAttack(
     delete seatView(s, colossusActivationReceipt.playerId).flags[
       `colossusActivation:${colossusActivationReceipt.token}`
     ];
+  // On the Run: Hope's Captor makes the villain scheme instead of attacking
+  // a player engaged with a Marauder minion.
+  if (!originalTarget && otr.otrSchemesInstead(s, id)) {
+    log(
+      s,
+      "Hope's Captor: a Marauder minion is engaged with you, so the villain schemes instead.",
+    );
+    enemyScheme(
+      s,
+      id,
+      extra,
+      activation ? { ...activation, kind: "scheme" } : undefined,
+    );
+    return;
+  }
   // Across the Mojoverse: an Escaped Spiral schemes instead of attacking.
   if (!originalTarget && spiral.spiralSchemesInstead(s, id)) {
     log(s, "Spiral is Escaped: she schemes instead of attacking.");
@@ -24308,6 +24408,7 @@ function enemyAttack(
       ...crossbones.crossbonesAttackStarted(s, id, s.attack.originalPlayerId!),
       ...mojoGenres.mojoGenreAttackInitiated(s, id, s.attack.originalPlayerId!),
       ...morlock.morlockAttackInitiated(s, id, s.attack.originalPlayerId!),
+      ...otr.otrAttackInitiated(s, id, s.attack.originalPlayerId!),
     );
   if (!friendlySource)
     add(
@@ -24382,6 +24483,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     kang.kangEnemyStat(s, p, "attack", originalPlayerId) +
     nebulaVillain.nebulaEnemyAttack(s, p) +
     spiral.spiralAttackBonus(s, p) +
+    otr.otrAttackBonus(s, p) +
     mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).attack;
   const attachments = enemyAttachmentModifier(s, p.id, "attack");
   const base =
@@ -24794,6 +24896,7 @@ function boostEffects(s: GameState, p: Piece) {
     spiral.spiralBoost(s, p) ??
     mojoVillain.mojoBoost(s, p) ??
     morlock.morlockBoost(s, p) ??
+    otr.otrBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -25971,6 +26074,13 @@ function finishAttackAfterDamage(
     ...magog.magogAttacked(s, a.attacker, a.damage > 0),
     ...spiral.spiralActivated(s, a.attacker),
     ...mojoVillain.mojoActivated(s, a.attacker, true, a.damage || 0),
+    ...otr.otrAttacked(
+      s,
+      a.attacker,
+      a.defender === "hero",
+      a.damage || 0,
+      recipientId,
+    ),
     ...sinisterModulars.sinisterModularActivated(s, {
       enemyId: a.attacker,
       playerId: recipientId,
@@ -26957,6 +27067,8 @@ function reveal(
         ...morlock.MORLOCK_SIEGE_SCRIPT_CODES,
         ...morlock.MILITARY_GRADE_CODES,
         ...morlock.MUTANT_SLAYERS_CODES,
+        ...otr.ON_THE_RUN_SCRIPT_CODES,
+        ...otr.NASTY_BOYS_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -27180,6 +27292,8 @@ function reveal(
       ...morlock.MORLOCK_SIEGE_SCRIPT_CODES,
       ...morlock.MILITARY_GRADE_CODES,
       ...morlock.MUTANT_SLAYERS_CODES,
+      ...otr.ON_THE_RUN_SCRIPT_CODES,
+      ...otr.NASTY_BOYS_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -27235,6 +27349,7 @@ function reveal(
       spiral.spiralReveal(s, p) ??
       mojoVillain.mojoReveal(s, p) ??
       morlock.morlockReveal(s, p) ??
+      otr.otrReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -27333,6 +27448,7 @@ function reveal(
     spiral.spiralReveal(s, p) ??
     mojoVillain.mojoReveal(s, p) ??
     morlock.morlockReveal(s, p) ??
+    otr.otrReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -28770,6 +28886,7 @@ function resolve(s: GameState, e: Effect) {
           spiral.spiralReveal(state, piece) ??
           mojoVillain.mojoReveal(state, piece) ??
           morlock.morlockReveal(state, piece) ??
+          otr.otrReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -28924,6 +29041,7 @@ function resolve(s: GameState, e: Effect) {
   if (spiral.resolveSpiralEffect(s, e, spiralPorts)) return;
   if (mojoVillain.resolveMojoEffect(s, e, mojoVillainPorts)) return;
   if (morlock.resolveMorlockEffect(s, e, morlockPorts)) return;
+  if (otr.resolveOnTheRunEffect(s, e, otrPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;

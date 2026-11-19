@@ -195,3 +195,7 @@ MojoMania is the first scenario that puts threat on the heroes' own characters, 
 ## Morlock Siege's villain deck, 2026-11-19
 
 Morlock Siege keeps one villain on the table at a time, so the villain column stays as it is: its label adds the Marauder's side and how many of the three needed are routed, and the caption counts the facedown villain deck. Routed is an ordinary environment column whose label repeats the routed count and whose caption names what the next Marauder does. Knock, Knock carries its knock counters on the one-line note under the main scheme that MaGog introduced, and Mutant Massacre uses the same line for its loss condition. The Morlocks are ordinary allies at the table, outside the ally count shown above them.
+
+## On the Run's Hope's Captor, 2026-11-19
+
+On the Run has one villain and one way to win, so the villain column keeps its usual shape. Its label adds the Marauder's side and the Captor's side, Confident or Desperate, and the caption says what the Captor does next. The objective counts the defeats out of two. Hope's Captor is an ordinary attachment beside the villain. Hidden in the Clutter shows its damage out of 3 the way Crossbones' Armor does, and Slab's growth counters use the engagement line under a minion that Mojo's threat introduced.
