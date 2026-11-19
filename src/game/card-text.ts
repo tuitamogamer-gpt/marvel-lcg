@@ -33,6 +33,15 @@ export function isTextBlank(
   if (typeof p !== "string" && "treatedAsAlly" in p && p.treatedAsAlly)
     return true;
   const targetId = typeof p !== "string" ? p.id : undefined;
+  // Panic in the Streets: Location and Persona supports have blank text.
+  if (targetId && s.sideSchemes?.some((q) => q.code === "27127")) {
+    const support = definitions.get(typeof p === "string" ? p : p.code);
+    if (
+      support?.type_code === "support" &&
+      /(^|\.\s*)(Location|Persona)\./.test(support.traits || "")
+    )
+      return true;
+  }
   if (
     targetId &&
     s.minions.some((m) => m.id === targetId) &&

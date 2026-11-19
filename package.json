@@ -78,7 +78,8 @@
     "test:loki": "node scripts/loki-check.mjs",
     "test:wrecking-crew": "node scripts/wrecking-crew-check.mjs",
     "test:kang": "node scripts/kang-check.mjs",
-    "test:hood": "node scripts/hood-check.mjs"
+    "test:hood": "node scripts/hood-check.mjs",
+    "test:sandman": "node scripts/sandman-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

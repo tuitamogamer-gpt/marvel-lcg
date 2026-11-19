@@ -131,6 +131,8 @@ jobs:
             scripts: test:kang
           - group: hood
             scripts: test:hood
+          - group: sandman
+            scripts: test:sandman
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

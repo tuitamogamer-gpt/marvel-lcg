@@ -14,6 +14,7 @@ import * as wreckingCrew from "./wrecking-crew.js";
 import * as kang from "./kang.js";
 import * as hood from "./hood.js";
 import * as hoodModular from "./hood-modular.js";
+import * as sandman from "./sandman.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -897,6 +898,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           hela.helaKeyword(s, p, "Piercing") ||
           loki.lokiKeyword(s, p, "Piercing") ||
           kang.kangKeyword(s, p, "Piercing") > 0 ||
+          sandman.sandmanKeyword(s, p, "Piercing") > 0 ||
           badoon.badoonKeyword(s, p, "Piercing") ||
           ronan.ronanKeyword(s, p, "Piercing") ||
           taskmaster.taskmasterKeyword(s, p, "Piercing") ||
@@ -953,6 +955,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           wreckingCrew.wreckingCrewKeyword(s, p, "Overkill") > 0 ||
           kang.kangKeyword(s, p, "Overkill") > 0 ||
           hoodModular.hoodModularKeyword(s, p, "Overkill") > 0 ||
+          sandman.sandmanKeyword(s, p, "Overkill") > 0 ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
             .overkill)
       ),
@@ -2433,6 +2436,7 @@ function check(s: GameState) {
     if (["won", "lost"].includes(s.phase)) return;
   }
   if (s.kang) kang.kangCheck(s, kangPorts);
+  if (s.sandman) add(s, ...sandman.sandmanCheck(s));
   if (collector.collectorLost(s) && !["won", "lost"].includes(s.phase)) {
     endGame(
       s,
@@ -3199,6 +3203,28 @@ function dealDamage(
       track(s, "damageDealt", dealt);
       log(s, `Armored Rhino Suit absorbs ${dealt} damage.`);
       if (armor.damage >= 5) discardPiece(s, armor.id);
+      replaced = { actualDamage: 0, excessDamage: 0, damageDealt: 0 };
+    }
+  }
+  // Sand Form: damage a player would deal to Sandman is replaced.
+  if (!replaced && n > 0) {
+    const sand = sandman.sandmanDamageReplacement(
+      s,
+      target,
+      n,
+      source === "hero" ||
+        source.startsWith("hero:") ||
+        !!controller(s, source) ||
+        s.players.some((seat) => {
+          const player = seatView(s, seat).player;
+          return [...player.hand, ...player.discard].some(
+            (q) => q.id === source,
+          );
+        }),
+      sandmanPorts,
+    );
+    if (sand) {
+      add(s, ...sand);
       replaced = { actualDamage: 0, excessDamage: 0, damageDealt: 0 };
     }
   }
@@ -4272,6 +4298,7 @@ function defeatCharacter(
       add(s, ...ironspider.ironspiderSinisterDefeatResponses(s, m, excess));
     if (!textWasBlank)
       add(s, ...hoodModular.hoodModularMinionDefeated(s, m, m.engagedWith));
+    if (!textWasBlank) add(s, ...sandman.sandmanMinionDefeated(s, m));
     if (!textWasBlank)
       add(
         s,
@@ -4780,6 +4807,7 @@ function villainSetup(s: GameState) {
     ...(ebonyMaw.ebonyMawReveal(s, s.villain) || []),
     ...(thanos.thanosReveal(s, s.villain) || []),
     ...hood.hoodVillainRevealed(s),
+    ...sandman.sandmanVillainRevealed(s),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -5471,6 +5499,7 @@ function defeatScheme(
         ...hela.helaSchemeDefeated(s, p, s.activePlayerId),
         ...loki.lokiSchemeDefeated(s, p),
         ...kang.kangSchemeDefeated(s, p, s.activePlayerId),
+        ...sandman.sandmanSchemeDefeated(s, p),
       ]
     : [];
   const helaFlip = hela.helaSideSchemeDefeated(s);
@@ -5807,6 +5836,7 @@ export function targets(
               !venom.venomSchemeLocked(s, p.id) &&
               !warlock.warlockSchemeLocked(s, p.id) &&
               (!thwarting || !wreckingCrew.wreckingCrewThwartLocked(s, p.id)) &&
+              (!thwarting || !sandman.sandmanCannotThwart(s, p.id)) &&
               (!thwarting ||
                 sentinels.sentinelsCanThwart(
                   s,
@@ -5999,6 +6029,7 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
       thorAllyDiscount(s, c) -
       blackWidowAllyDiscount(s, c) +
       doctorStrangeCostModifier(s, c) +
+      sandman.sandmanCostIncrease(s, c) +
       scarletWitch.scarletWitchCardCostBonus(s),
   );
 }
@@ -8174,42 +8205,48 @@ export function newGame(config: {
                           (set) => set === c.set_code,
                         )
                       ? "hood"
-                      : ["temporal", "anachronauts", "mot"].includes(
-                            c.set_code || "",
+                      : sandman.SANDMAN_MODULAR_SETS.some(
+                            (set) => set === c.set_code,
                           )
-                        ? "toafk"
-                        : c.set_code === "exodus"
-                          ? "gambit"
-                          : c.set_code === "sauron"
-                            ? "iceman"
-                            : c.set_code === "crazy_gang"
-                              ? "ncrawler"
-                              : c.set_code === "hellfire"
-                                ? "magneto"
-                                : c.set_code === "arcade"
-                                  ? "jubilee"
-                                  : c.set_code === "reavers"
-                                    ? "rogue"
-                                    : c.set_code === "deathstrike"
-                                      ? "wolv"
-                                      : c.set_code === "shadow_king"
-                                        ? "storm"
-                                        : c.set_code === "ironspider_sinister"
-                                          ? "spdr"
-                                          : c.set_code === "inheritors"
-                                            ? "spiderham"
-                                            : c.set_code === "zzzax"
-                                              ? "ironheart"
-                                              : c.set_code === "armadillo"
-                                                ? "nova"
-                                                : [
-                                                      "goblin_gimmicks",
-                                                      "a_mess_of_things",
-                                                      "power_drain",
-                                                      "running_interference",
-                                                    ].includes(c.set_code || "")
-                                                  ? "gob"
-                                                  : "core")) ||
+                        ? "sm"
+                        : ["temporal", "anachronauts", "mot"].includes(
+                              c.set_code || "",
+                            )
+                          ? "toafk"
+                          : c.set_code === "exodus"
+                            ? "gambit"
+                            : c.set_code === "sauron"
+                              ? "iceman"
+                              : c.set_code === "crazy_gang"
+                                ? "ncrawler"
+                                : c.set_code === "hellfire"
+                                  ? "magneto"
+                                  : c.set_code === "arcade"
+                                    ? "jubilee"
+                                    : c.set_code === "reavers"
+                                      ? "rogue"
+                                      : c.set_code === "deathstrike"
+                                        ? "wolv"
+                                        : c.set_code === "shadow_king"
+                                          ? "storm"
+                                          : c.set_code === "ironspider_sinister"
+                                            ? "spdr"
+                                            : c.set_code === "inheritors"
+                                              ? "spiderham"
+                                              : c.set_code === "zzzax"
+                                                ? "ironheart"
+                                                : c.set_code === "armadillo"
+                                                  ? "nova"
+                                                  : [
+                                                        "goblin_gimmicks",
+                                                        "a_mess_of_things",
+                                                        "power_drain",
+                                                        "running_interference",
+                                                      ].includes(
+                                                        c.set_code || "",
+                                                      )
+                                                    ? "gob"
+                                                    : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -8249,6 +8286,8 @@ export function newGame(config: {
             (v.id === "ebony_maw" &&
               c.set_code === v.id &&
               c.pack_code === scenarioPack) ||
+            // Setup searches the encounter deck for City Streets.
+            (v.id === "sandman" && c.code === sandman.CITY_STREETS) ||
             selectedModules.includes(c.set_code || ""))) ||
           (v.id !== "kang" &&
             team.some(
@@ -8275,6 +8314,7 @@ export function newGame(config: {
     );
   }
   if (config.expertII && difficulty === "expert") s.expertII = true;
+  if (v.id === "sandman") sandman.sandmanSetup(s, sandmanPorts);
   deadpool.deadpoolSetupPool(s, makePiece);
   if (s.deadpool?.initializedPoolSeats.length)
     s.encounter.deck = shuffle(s, s.encounter.deck);
@@ -10840,6 +10880,7 @@ export function canChangeIdentityForm(
     !goblinIdentityLocked(s) &&
     storm.stormCanChangeForm(s, to) &&
     !s.flags.antManCannotChangeUntilTurnEnd &&
+    !sandman.sandmanFormLocked(s) &&
     sentinels.sentinelsCanChangeForm(
       s,
       s.activePlayerId,
@@ -11122,6 +11163,7 @@ export function abilityOptions(
     ...wreckingCrew.wreckingCrewActions(s, p, wreckingCrewPorts),
     ...kang.kangActions(s, p),
     ...hood.hoodActions(s, p),
+    ...sandman.sandmanActions(s, p),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -15510,6 +15552,39 @@ const hoodModularPorts: hoodModular.HoodModularPorts = {
         actorId: playerId,
       }),
     ),
+};
+const sandmanPorts: sandman.SandmanPorts = {
+  ...mutagenPorts,
+  reveal: (s, p, playerId) => wreckingCrewPorts.reveal(s, p, playerId),
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  log: (s, text, kind) => log(s, text, kind),
+  attackOf: (s, id) => hoodModularPorts.attackOf(s, id),
+  randomDiscard: (s, playerId) => hoodModularPorts.randomDiscard(s, playerId),
+  discardHandCard: (s, playerId, id) =>
+    kangPorts.discardHandCard(s, playerId, id),
+  allies: (s, playerId) => friends(seatView(s, playerId)),
+  canDiscard: (_s, p) => !isPermanent(card(p)),
+  recover: (s, playerId) => heroStats(seatView(s, playerId)).recover,
+  hasTrait: (s, target, trait) => captainPackHasTrait(s, target, trait),
+  findObligation: (s, playerId) => {
+    const heroId = s.players.find((seat) => seat.id === playerId)?.heroId;
+    const own = (p: Piece) =>
+      card(p).type_code === "obligation" && card(p).set_code === heroId;
+    return [
+      ...s.encounter.deck,
+      ...s.encounter.discard,
+      ...(seatView(s, playerId).player.setAside || []),
+      ...s.removed,
+    ].find(own);
+  },
+  changeForm: (s, playerId) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    if (canChangeIdentityForm(s)) flip(s, false);
+    activateSeat(s, previous);
+  },
 };
 const kangPorts: kang.KangPorts = {
   ...mutagenPorts,
@@ -23283,6 +23358,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     storm.stormGlobal(s).attack +
     hoodModular.hoodModularGlobal(s).attack +
     hoodModular.hoodModularEnemyAttack(s, p) +
+    sandman.sandmanEnemyAttack(s, p) +
     (s.attack?.attacker === p.id
       ? storm.stormFreezeModifier(
           s,
@@ -23646,6 +23722,7 @@ function boostEffects(s: GameState, p: Piece) {
     kang.kangBoost(s, p) ??
     hood.hoodBoost(s, p) ??
     hoodModular.hoodModularBoost(s, p) ??
+    sandman.sandmanBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -24349,7 +24426,8 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
     (angel.angelIndirectAttack(s, p) ||
       iceman.icemanPyroIndirect(s, p) ||
       collector.collectorIndirectAttack(s, p) ||
-      hoodModular.hoodModularIndirectAttack(s, p.id))
+      hoodModular.hoodModularIndirectAttack(s, p.id) ||
+      sandman.sandmanIndirectAttack(s, p.id))
   ) {
     add(
       s,
@@ -24360,14 +24438,17 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
           ? "Starshark"
           : hoodModular.hoodModularIndirectAttack(s, p.id)
             ? "Flamethrower"
-            : "Hook, Line, and Sinker",
+            : sandman.sandmanIndirectAttack(s, p.id)
+              ? "Sand Blast"
+              : "Hook, Line, and Sinker",
         zzzaxBatchId: `angel-attack:${s.nextId++}`,
         zzzaxBatchOwner: s.activePlayerId,
         attackDamage: true,
         exhaustDamaged:
           !iceman.icemanPyroIndirect(s, p) &&
           !collector.collectorIndirectAttack(s, p) &&
-          !hoodModular.hoodModularIndirectAttack(s, p.id),
+          !hoodModular.hoodModularIndirectAttack(s, p.id) &&
+          !sandman.sandmanIndirectAttack(s, p.id),
         zzzaxAfter: E("ironspiderAttackComplete", {
           attack: structuredClone(a),
           target,
@@ -24993,6 +25074,12 @@ function finishAttackAfterDamage(
             token: a.id!,
             attackerId: a.attacker,
             playerId: a.originalPlayerId || recipientId,
+          }),
+          ...sandman.sandmanAttackResponses(s, {
+            token: a.id!,
+            attackerId: a.attacker,
+            playerId: recipientId,
+            identityDamaged: (a.identityDamage || 0) > 0,
           }),
           ...hoodModular.hoodModularAttackResponses(
             s,
@@ -25693,6 +25780,8 @@ function reveal(
         c.type_code !== "attachment") ||
       (hoodModular.HOOD_MODULAR_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (sandman.SANDMAN_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -25746,7 +25835,10 @@ function reveal(
     if (
       c.type_code === "obligation" &&
       (p.code === "32099" ||
-        (kang.KANG_IN_PLAY_OBLIGATIONS as readonly string[]).includes(p.code))
+        (kang.KANG_IN_PLAY_OBLIGATIONS as readonly string[]).includes(p.code) ||
+        (sandman.SANDMAN_IN_PLAY_OBLIGATIONS as readonly string[]).includes(
+          p.code,
+        ))
     ) {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       if (!s.player.inPlay.some((x) => x.id === p.id)) s.player.inPlay.push(p);
@@ -25892,6 +25984,7 @@ function reveal(
       ...kang.KANG_SCRIPT_CODES,
       ...hood.HOOD_SCRIPT_CODES,
       ...hoodModular.HOOD_MODULAR_CODES,
+      ...sandman.SANDMAN_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -25933,6 +26026,7 @@ function reveal(
       kang.kangReveal(s, p) ??
       hood.hoodReveal(s, p) ??
       hoodModular.hoodModularReveal(s, p) ??
+      sandman.sandmanReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -26019,6 +26113,7 @@ function reveal(
     kang.kangReveal(s, p) ??
     hood.hoodReveal(s, p) ??
     hoodModular.hoodModularReveal(s, p) ??
+    sandman.sandmanReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -27422,6 +27517,7 @@ function resolve(s: GameState, e: Effect) {
           kang.kangReveal(state, piece) ??
           hood.hoodReveal(state, piece) ??
           hoodModular.hoodModularReveal(state, piece) ??
+          sandman.sandmanReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -27563,6 +27659,7 @@ function resolve(s: GameState, e: Effect) {
   if (kang.resolveKangEffect(s, e, kangPorts)) return;
   if (hood.resolveHoodEffect(s, e, hoodPorts)) return;
   if (hoodModular.resolveHoodModularEffect(s, e, hoodModularPorts)) return;
+  if (sandman.resolveSandmanEffect(s, e, sandmanPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -36892,6 +36989,7 @@ function run(s: GameState) {
       e.type.startsWith("kang:") ||
       e.type.startsWith("hood:") ||
       e.type.startsWith("hoodmod:") ||
+      e.type.startsWith("sandman:") ||
       e.type.startsWith("thanos:") ||
       e.type.startsWith("hela:") ||
       e.type.startsWith("loki:") ||
@@ -37362,6 +37460,17 @@ export function dispatch(state: GameState, command: Command): GameState {
               "This Hero Action needs hero form and your once-per-round use.",
             );
             add(s, ...selected!.effects);
+          } else if (sandman.sandmanActionSource(s, command.id)) {
+            const selected =
+              sandman
+                .sandmanActions(s, sandman.sandmanActionSource(s, command.id)!)
+                .find((o) => o.id === command.action) ||
+              sandman.sandmanActions(
+                s,
+                sandman.sandmanActionSource(s, command.id)!,
+              )[0];
+            need(selected, "This action is not available now.");
+            add(s, ...selected!.effects);
           } else if (badoon.badoonActionSource(s, command.id)) {
             const selected = badoon
               .badoonActions(
@@ -37407,6 +37516,7 @@ export function dispatch(state: GameState, command: Command): GameState {
           rocket.rocketTurnEnded(s);
           gamora.gamoraTurnEnded(s);
           gmwPack.gmwPlayerPackTurnEnded(s);
+          sandman.sandmanTurnEnded(s);
           seat.ended = true;
           log(s, `${heroCard(s).name} ends their turn.`, "phase");
           const wolverineTurnEnd = wolverine.wolverineTurnEnded(s);

@@ -290,6 +290,7 @@ export interface GameState {
   wreckingCrew?: import("./wrecking-crew.js").WreckingCrewState;
   kang?: import("./kang.js").KangState;
   hood?: import("./hood.js").HoodState;
+  sandman?: import("./sandman.js").SandmanState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */

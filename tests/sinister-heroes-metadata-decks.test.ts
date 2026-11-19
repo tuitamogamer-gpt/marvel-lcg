@@ -289,7 +289,10 @@ describe("Sinister shared registration, printings and identity limits", () => {
     }
     expect(rulesCode("27013")).toBe("27013");
     expect(rulesCode("27050")).toBe("27050");
-    expect(EXPLICIT_CARD_SCRIPTS.has("27061")).toBe(false);
+    // The box's scenarios are registered by their own modules: Sandman by
+    // src/game/sandman.ts, while Venom and the later scenarios stay outside.
+    expect(EXPLICIT_CARD_SCRIPTS.has("27061")).toBe(true);
+    expect(EXPLICIT_CARD_SCRIPTS.has("27073")).toBe(false);
   });
   it("matches all sixteen printed fields across seven supplementary Core pairs and Web-Shooter", () => {
     const fields: (keyof Card)[] = [

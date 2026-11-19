@@ -1345,6 +1345,20 @@ export const VILLAINS = [
       "The Hood unites the city's criminals under his banner. Seven modular sets wait set aside and join the encounter deck one by one as his empire grows, and his Foul Play keeps dealing the heroes the cards he discards.",
     color: "#5b2a3a",
   },
+  {
+    id: "sandman",
+    name: "Sandman",
+    codes: ["27061", "27062", "27063"],
+    schemes: ["27064b"],
+    module: "down_to_earth",
+    fixedSets: ["city_in_chaos"],
+    difficulty: 2,
+    title: "Hapless Pedestrians",
+    location: "New York City",
+    description:
+      "Sandman turns the streets into a storm of sand. Every surge of sand buries more of the encounter deck, and each acceleration token it causes falls on the first player.",
+    color: "#b08a4e",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1410,6 +1424,9 @@ export const MODULES = [
   { id: "state_of_emergency", name: "State of Emergency", difficulty: 3 },
   { id: "streets_of_mayhem", name: "Streets of Mayhem", difficulty: 1 },
   { id: "wrecking_crew_modular", name: "Wrecking Crew", difficulty: 5 },
+  // Sinister Motives modular sets.
+  { id: "city_in_chaos", name: "City in Chaos", difficulty: 3 },
+  { id: "down_to_earth", name: "Down to Earth", difficulty: 2 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {

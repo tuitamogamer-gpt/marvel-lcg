@@ -267,6 +267,10 @@
 .physical-table .villain-info h2.villain-name-long {
   font-size: 22px;
 }
+/* Words never break inside: VillainName shrinks the name until each fits. */
+.villain-name-word {
+  white-space: nowrap;
+}
 .health-dial {
   position: relative;
   display: flex;
@@ -1825,7 +1829,10 @@ button.table-pile:hover .pile-face {
 }
 
 @media (max-width: 360px) {
-  .physical-table .villain-info h2 {
+  /* Long names are not set larger than short ones; VillainName shrinks a
+     word that still does not fit. */
+  .physical-table .villain-info h2,
+  .physical-table .villain-info h2.villain-name-long {
     font-size: 18px;
   }
 }

@@ -14,6 +14,7 @@ import { WRECKING_CREW_SCRIPT_CODES } from "./wrecking-crew.js";
 import { KANG_SCRIPT_CODES } from "./kang.js";
 import { HOOD_SCRIPT_CODES } from "./hood.js";
 import { HOOD_MODULAR_CODES } from "./hood-modular.js";
+import { SANDMAN_SCRIPT_CODES } from "./sandman.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -275,6 +276,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...KANG_SCRIPT_CODES,
   ...HOOD_SCRIPT_CODES,
   ...HOOD_MODULAR_CODES,
+  ...SANDMAN_SCRIPT_CODES,
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

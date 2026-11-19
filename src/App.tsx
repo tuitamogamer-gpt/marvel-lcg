@@ -69,10 +69,12 @@ import {
 } from "./game/goblin-modules";
 import {
   Component,
+  Fragment,
   lazy,
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -248,6 +250,7 @@ import {
   kangVillainAbsent,
 } from "./game/kang";
 import { hoodSetAsideSets } from "./game/hood";
+import { CITY_STREETS as SANDMAN_CITY_STREETS } from "./game/sandman";
 import {
   CREW_KEYS,
   CREW_VILLAINS,
@@ -2604,6 +2607,14 @@ export default function App() {
                       deck each time The Hood or his main scheme advances. His
                       Foul Play discards encounter cards and deals you each one
                       that is not from his own set.
+                    </p>
+                  )}
+                  {villain.id === "sandman" && (
+                    <p className="setting-help">
+                      City in Chaos is always included. City Streets starts with
+                      4 sand counters; each Surging Sands adds one and discards
+                      that many encounter cards, and every acceleration token
+                      deals the first player 3 indirect damage.
                     </p>
                   )}
                   {villain.id === "the_wrecking_crew" && (
@@ -5175,7 +5186,7 @@ function TowerVillains({
                 {active ? "ACTIVE VILLAIN" : "VILLAIN"} · STAGE{" "}
                 {["", "I", "II", "III"][v.stage]}
               </span>
-              <h2 className="villain-name-long">{name.toUpperCase()}</h2>
+              <VillainName className="villain-name-long" name={name} />
               <HealthDial
                 value={v.hp}
                 max={v.maxHp}
@@ -5223,6 +5234,60 @@ function TowerVillains({
 /** The Wrecking Crew: four villains, the active one lit, each with his
  * side scheme's threat and his own encounter deck. */
 /** Every Kang shares the title: the subtitle names this version. */
+/** A villain's name in capitals that shrinks until its longest word fits on
+ * one line, instead of breaking inside a word ("SANDMA / N"). */
+function VillainName({
+  name,
+  className,
+}: {
+  name: string;
+  className?: string;
+}) {
+  const ref = useRef<HTMLHeadingElement>(null);
+  useLayoutEffect(() => {
+    const heading = ref.current;
+    if (!heading) return;
+    const fit = () => {
+      heading.style.fontSize = "";
+      const width = heading.clientWidth;
+      const widest = Math.max(
+        0,
+        ...[...heading.querySelectorAll(".villain-name-word")].map(
+          (word) => word.getBoundingClientRect().width,
+        ),
+      );
+      if (!width || widest <= width) return;
+      const size = parseFloat(getComputedStyle(heading).fontSize);
+      heading.style.fontSize = `${Math.max(12, Math.floor((size * width * 10) / widest) / 10)}px`;
+    };
+    fit();
+    let live = true;
+    document.fonts?.ready.then(() => live && fit());
+    if (typeof ResizeObserver === "undefined")
+      return () => {
+        live = false;
+      };
+    const observer = new ResizeObserver(fit);
+    observer.observe(heading);
+    return () => {
+      live = false;
+      observer.disconnect();
+    };
+  }, [name]);
+  return (
+    <h2 ref={ref} className={className}>
+      {name
+        .toUpperCase()
+        .split(/\s+/)
+        .map((word, i) => (
+          <Fragment key={i}>
+            {i ? " " : ""}
+            <span className="villain-name-word">{word}</span>
+          </Fragment>
+        ))}
+    </h2>
+  );
+}
 function KangName({ name }: { name: string }) {
   const m = /^(.*?) \((.*)\)$/.exec(name);
   if (!m) return <>{name.toUpperCase()}</>;
@@ -5351,7 +5416,7 @@ function CrewVillains({
               aria-label={`${name}, defeated`}
             >
               <span className="small-label">DEFEATED</span>
-              <h2 className="villain-name-long">{name.toUpperCase()}</h2>
+              <VillainName className="villain-name-long" name={name} />
             </div>
           );
         const active = wc.active === key;
@@ -5384,7 +5449,7 @@ function CrewVillains({
                 {active ? "ACTIVE VILLAIN" : "VILLAIN"} ·{" "}
                 {s.difficulty === "expert" ? "B" : "A"}
               </span>
-              <h2 className="villain-name-long">{name.toUpperCase()}</h2>
+              <VillainName className="villain-name-long" name={name} />
               <HealthDial
                 value={v.hp}
                 max={v.maxHp}
@@ -6208,25 +6273,24 @@ function Tabletop({
                             ? `VILLAIN · ${s.difficulty === "expert" ? "B" : "A"} · ${helaWounded(s) ? "WOUNDED" : "MYSTIC"}`
                             : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
-                    <h2
-                      className={
-                        s.kang
-                          ? undefined
-                          : Math.max(
-                                ...card(s.villain)
-                                  .name.split(/\s+/)
-                                  .map((word) => word.length),
-                              ) >= 9 || card(s.villain).name.length >= 15
+                    {s.kang ? (
+                      <h2>
+                        <KangName name={card(s.villain).name} />
+                      </h2>
+                    ) : (
+                      <VillainName
+                        className={
+                          Math.max(
+                            ...card(s.villain)
+                              .name.split(/\s+/)
+                              .map((word) => word.length),
+                          ) >= 9 || card(s.villain).name.length >= 15
                             ? "villain-name-long"
                             : undefined
-                      }
-                    >
-                      {s.kang ? (
-                        <KangName name={card(s.villain).name} />
-                      ) : (
-                        card(s.villain).name.toUpperCase()
-                      )}
-                    </h2>
+                        }
+                        name={card(s.villain).name}
+                      />
+                    )}
                     <HealthDial
                       value={s.villain.hp}
                       max={s.villain.maxHp}
@@ -6625,33 +6689,61 @@ function Tabletop({
                           next activates against a player
                         </span>
                       )}
-                      {p.code !== AVENGERS_TOWER &&
-                        p.code !== DAMAGED_TOWER &&
-                        !isInfinityStone(p) &&
-                        p.code !== "29039" &&
-                        p.code !== "31037" &&
-                        p.code !== "32065b" &&
-                        p.code !== "32130" &&
-                        p.code !== "16143" &&
-                        p.code !== "16085a" &&
-                        p.code !== "16085b" &&
-                        p.code !== "16108" && (
-                          <span className="environment-counter">
-                            <PremiumToken kind="counter" />
-                            {p.counters}{" "}
-                            {isEbonyMawSpell(p)
-                              ? p.counters === 1
-                                ? "invocation counter"
-                                : "invocation counters"
-                              : p.code === "02006a"
-                                ? "Infamy"
-                                : p.code === "16063"
-                                  ? `Barrage · fires at 4`
-                                  : p.code === "16093"
-                                    ? "Evasion"
+                      {/* Only environments that use counters show them. */}
+                      {(isEbonyMawSpell(p) ||
+                        [
+                          "02006a",
+                          "02006b",
+                          "16063",
+                          "16093",
+                          SANDMAN_CITY_STREETS,
+                        ].includes(p.code)) && (
+                        <span className="environment-counter">
+                          <PremiumToken kind="counter" />
+                          {p.counters}{" "}
+                          {isEbonyMawSpell(p)
+                            ? p.counters === 1
+                              ? "invocation counter"
+                              : "invocation counters"
+                            : p.code === "02006a"
+                              ? "Infamy"
+                              : p.code === "16063"
+                                ? `Barrage · fires at 4`
+                                : p.code === "16093"
+                                  ? "Evasion"
+                                  : p.code === SANDMAN_CITY_STREETS
+                                    ? p.counters === 1
+                                      ? "sand counter"
+                                      : "sand counters"
                                     : "Madness"}
+                        </span>
+                      )}
+                      {p.code === SANDMAN_CITY_STREETS && (
+                        <>
+                          <span className="stat-caption">
+                            Surging Sands adds a counter, then discards that
+                            many encounter cards
                           </span>
-                        )}
+                          {abilityOptions(s, p).map((a) => (
+                            <button
+                              key={a.id}
+                              className="ability-button"
+                              disabled={!canUseAction}
+                              aria-label={a.label}
+                              title={a.label}
+                              onClick={() =>
+                                sendAction({
+                                  type: "ABILITY",
+                                  id: p.id,
+                                  action: a.id,
+                                })
+                              }
+                            >
+                              Exhaust a character · remove sand
+                            </button>
+                          ))}
+                        </>
+                      )}
                       {p.code === "16108" && (
                         <span className="stat-caption">
                           Treachery revealed: the first player may exhaust the
@@ -7031,6 +7123,24 @@ function Tabletop({
                           {a.label}
                         </button>
                       ))}
+                      {/* Down to Earth: Common Criminal's Alter-Ego Action. */}
+                      {p.code === "27131" &&
+                        abilityOptions(s, p).map((a) => (
+                          <button
+                            key={a.id}
+                            className="ability-button"
+                            disabled={!canUseAction}
+                            onClick={() =>
+                              sendAction({
+                                type: "ABILITY",
+                                id: p.id,
+                                action: a.id,
+                              })
+                            }
+                          >
+                            {a.label}
+                          </button>
+                        ))}
                     </div>
                   ))}
                 </div>

@@ -15,6 +15,7 @@ import { WRECKING_CREW_SCRIPT_CODES } from "../src/game/wrecking-crew";
 import { KANG_SCRIPT_CODES } from "../src/game/kang";
 import { HOOD_SCRIPT_CODES } from "../src/game/hood";
 import { HOOD_MODULAR_CODES } from "../src/game/hood-modular";
+import { SANDMAN_SCRIPT_CODES } from "../src/game/sandman";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -45,6 +46,7 @@ const badoonCodes = new Set<string>([
   ...HOOD_SCRIPT_CODES,
   // Armored Guard (Guard, Toughness) was already executable from its keywords.
   ...HOOD_MODULAR_CODES.filter((code) => code !== "24041"),
+  ...SANDMAN_SCRIPT_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -428,7 +430,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(52);
+    expect(MODULES).toHaveLength(54);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "temporal",
@@ -458,9 +460,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2791);
-    expect(coverage.unsupportedFaces).toBe(1760);
-    expect(coverage.dedicatedFaces).toBe(2353);
+    expect(coverage.executableFaces).toBe(2813);
+    expect(coverage.unsupportedFaces).toBe(1738);
+    expect(coverage.dedicatedFaces).toBe(2375);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -654,6 +656,8 @@ describe("complete expansion rules inventory", () => {
         26 -
         // The Hood's nine modular sets; Armored Guard was already native.
         46 -
+        // Sandman, City in Chaos and Down to Earth.
+        22 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -781,7 +785,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(52);
+    expect(coverage.registeredModules).toHaveLength(54);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -965,7 +969,34 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(28);
+    ).toHaveLength(29);
+    expect(
+      inventory.installedRegistryCoverage.registeredScenarios.find(
+        (entry: { id: string }) => entry.id === "sandman",
+      ),
+    ).toMatchObject({
+      codes: ["27061", "27062", "27063"],
+      schemes: ["27064b"],
+      defaultModule: "down_to_earth",
+      moduleCount: 1,
+      defaultModules: ["down_to_earth"],
+      fixedSets: ["city_in_chaos"],
+    });
+    expect(
+      inventory.installedRegistryCoverage.registeredModules
+        .filter((entry: { id: string }) =>
+          ["city_in_chaos", "down_to_earth"].includes(entry.id),
+        )
+        .map(
+          (entry: { faceCodes: string[]; unsupportedFaceCodes: string[] }) => [
+            entry.faceCodes.length,
+            entry.unsupportedFaceCodes.length,
+          ],
+        ),
+    ).toEqual([
+      [4, 0],
+      [5, 0],
+    ]);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "the_hood",
@@ -1139,7 +1170,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(147);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(148);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
