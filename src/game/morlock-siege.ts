@@ -65,6 +65,8 @@ export const NEXT_MODULAR_SETS = [
   "mutant_slayers",
   "nasty_boys",
   "black_tom_cassidy",
+  "extreme_measures",
+  "mutant_insurrection",
 ] as const;
 
 export const KNOCK_KNOCK = "40077b";

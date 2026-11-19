@@ -46,6 +46,11 @@ import {
   SUPER_STRENGTH_CODES,
   TELEPATHY_CODES,
 } from "../src/game/mister-sinister";
+import {
+  EXTREME_MEASURES_CODES,
+  MUTANT_INSURRECTION_CODES,
+  STRYFE_SCRIPT_CODES,
+} from "../src/game/stryfe";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -100,6 +105,9 @@ const badoonCodes = new Set<string>([
   ...FLIGHT_CODES,
   ...SUPER_STRENGTH_CODES,
   ...TELEPATHY_CODES,
+  ...STRYFE_SCRIPT_CODES,
+  ...EXTREME_MEASURES_CODES,
+  ...MUTANT_INSURRECTION_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -483,7 +491,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(73);
+    expect(MODULES).toHaveLength(75);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "temporal",
@@ -513,9 +521,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(3115);
-    expect(coverage.unsupportedFaces).toBe(1436);
-    expect(coverage.dedicatedFaces).toBe(2677);
+    expect(coverage.executableFaces).toBe(3145);
+    expect(coverage.unsupportedFaces).toBe(1406);
+    expect(coverage.dedicatedFaces).toBe(2707);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -741,6 +749,8 @@ describe("complete expansion rules inventory", () => {
         20 -
         // NeXt Evolution: Mister Sinister and his three superpower sets.
         32 -
+        // NeXt Evolution: Stryfe, Extreme Measures and Mutant Insurrection.
+        30 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -761,13 +771,13 @@ describe("complete expansion rules inventory", () => {
       expect(audited.get(code)?.installedRegistry.executable, code).toBe(true);
     expect(coverage.campaignSupport).toEqual([]);
   });
-  it("closes both NeXt Evolution hero sections, Morlock Siege, On the Run, Juggernaut and Mister Sinister while retaining Stryfe and the campaign gaps", () => {
+  it("closes both NeXt Evolution hero sections and all five scenarios while retaining the campaign gaps", () => {
     const next = inventory.installedRegistryCoverage.products.find(
       (pack: { code: string }) => pack.code === "next_evol",
     );
     expect(next).toMatchObject({
       faceCount: 235,
-      executableFaces: 185,
+      executableFaces: 215,
       installedCardClosure: false,
     });
     // Morlock Siege with its Military Grade and Mutant Slayers sets, and On
@@ -798,6 +808,13 @@ describe("complete expansion rules inventory", () => {
       ...TELEPATHY_CODES,
     ]);
     expect(sinisterFaces.size).toBe(32);
+    // Stryfe with the Extreme Measures and Mutant Insurrection sets.
+    const stryfeFaces = new Set<string>([
+      ...STRYFE_SCRIPT_CODES,
+      ...EXTREME_MEASURES_CODES,
+      ...MUTANT_INSURRECTION_CODES,
+    ]);
+    expect(stryfeFaces.size).toBe(30);
     const heroFaces = cards.filter(
       (entry: { pack_code: string; position: number }) =>
         entry.pack_code === "next_evol" && entry.position <= 69,
@@ -826,18 +843,20 @@ describe("complete expansion rules inventory", () => {
             !morlockFaces.has(entry.code) &&
             !onTheRunFaces.has(entry.code) &&
             !juggernautFaces.has(entry.code) &&
-            !sinisterFaces.has(entry.code),
+            !sinisterFaces.has(entry.code) &&
+            !stryfeFaces.has(entry.code),
         )
         .map((entry: { code: string }) => entry.code)
         .sort(),
     );
     expect(next.unsupportedFaceCodes).toEqual(
-      expect.arrayContaining(["40163", "40204"]),
+      expect.arrayContaining(["40190a", "40204"]),
     );
     expect(next.unsupportedFaceCodes).not.toContain("40070a");
     expect(next.unsupportedFaceCodes).not.toContain("40103a");
     expect(next.unsupportedFaceCodes).not.toContain("40118");
     expect(next.unsupportedFaceCodes).not.toContain("40136");
+    expect(next.unsupportedFaceCodes).not.toContain("40163");
     expect(MODULES.map((module) => module.id)).not.toContain("dreadpool");
   });
   it("retains the independent nine-card Inheritors closure beside the complete Spider-Ham pack", () => {
@@ -904,7 +923,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(73);
+    expect(coverage.registeredModules).toHaveLength(75);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -1088,7 +1107,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(40);
+    ).toHaveLength(41);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "venom_goblin",
@@ -1335,7 +1354,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(162);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(163);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

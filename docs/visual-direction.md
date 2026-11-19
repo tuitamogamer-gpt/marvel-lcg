@@ -207,3 +207,7 @@ Juggernaut follows the usual villain stages, so the villain column only adds his
 ## Mister Sinister's superpowers, 2026-11-19
 
 Mister Sinister keeps the usual villain column: the label counts his superpowers and the caption names the traits they give and the threat each status card places. The superpowers are ordinary attachments beside him. The main scheme's one-line note says where its completion leads, the other stage 2 or Sinister Ends, and on Sinister Ends that he attacks Hope Summers, with the threat token raised by that line as for Juggernaut. The Telepathy obligations stay in their player's area with their Alter-Ego Actions, like MojoMania's sitcom obligations.
+
+## Stryfe's hand reading, 2026-11-19
+
+Stryfe's numbers change with the active player's hand, so the villain label shows the ATK he gains against that player and the caption names the count of their most common card type; both update as cards are played or drawn. The main scheme's one-line note gives the threat that player adds after step one, or Left to Your Fate's hand size and cost, with the threat token raised by that line. Stryfe's Grasp and the Living Bomb are ordinary side schemes, and the caption warns while the Living Bomb keeps Stryfe from being defeated.

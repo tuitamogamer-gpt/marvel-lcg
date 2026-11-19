@@ -241,7 +241,7 @@ describe("The Unstoppable Juggernaut: original source", () => {
       module: "black_tom_cassidy",
       fixedSets: ["hope_summers"],
     });
-    expect(MODULES.at(-1)?.id).toBe("black_tom_cassidy");
+    expect(MODULES.at(-3)?.id).toBe("black_tom_cassidy");
     expect(scenarioModules("juggernaut").map((m) => m.id)).toContain(
       "black_tom_cassidy",
     );

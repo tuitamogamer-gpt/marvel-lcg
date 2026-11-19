@@ -65,6 +65,7 @@ import {
 import { warMachineTraits } from "./war-machine.js";
 import { sinisterPlayerPackIdentityModifiers } from "./sinister-player-pack.js";
 import { mysterioHandSize } from "./mysterio.js";
+import { stryfeHandSize, stryfeIdentityPenalty } from "./stryfe.js";
 import { venomGoblinHealth } from "./venom-goblin.js";
 import {
   mojoGenreGlobal,
@@ -1562,6 +1563,24 @@ export const VILLAINS = [
       "Mister Sinister gains a new superpower with each stage of his plan, every status card you land feeds his scheme, and at the end he goes after Hope Summers herself.",
     color: "#4b2d5c",
   },
+  {
+    id: "stryfe",
+    name: "Stryfe",
+    // Stryfe (I) and (II) in Standard, (II) and (III) in Expert; Stryfe's
+    // Grasp holds Hope Summers until it becomes the Living Bomb.
+    codes: ["40163", "40164", "40165"],
+    schemes: ["40166b", "40167b"],
+    module: "extreme_measures",
+    moduleCount: 2,
+    defaultModules: ["extreme_measures", "mutant_insurrection"],
+    fixedSets: ["hope_summers"],
+    difficulty: 4,
+    title: "Uncontrollable Power",
+    location: "In Stryfe's grasp",
+    description:
+      "Stryfe reads your hand: his attacks and his scheme grow with the most common card type you hold, and Hope Summers is trapped in his grasp until it turns into a Living Bomb.",
+    color: "#5a3a2e",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1649,6 +1668,8 @@ export const MODULES = [
   { id: "mutant_slayers", name: "Mutant Slayers", difficulty: 3 },
   { id: "nasty_boys", name: "Nasty Boys", difficulty: 3 },
   { id: "black_tom_cassidy", name: "Black Tom Cassidy", difficulty: 2 },
+  { id: "extreme_measures", name: "Extreme Measures", difficulty: 3 },
+  { id: "mutant_insurrection", name: "Mutant Insurrection", difficulty: 3 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(
@@ -2083,7 +2104,9 @@ export function heroStats(s: GameState) {
       (has(s, "01057") ? 1 : 0) +
       s.player.inPlay.filter((p) => rulesCode(p) === "01028").length * 2 +
       Number(s.flags.lead || 0) +
-      scriptedModifier(s, "attack") +
+      scriptedModifier(s, "attack") -
+      // Psychic Inertia: -1 ATK.
+      stryfeIdentityPenalty(s, s.activePlayerId) +
       hulkStats(s).atk +
       msMarvelStats(s).atk +
       thorStats(s).atk +
@@ -2129,7 +2152,9 @@ export function heroStats(s: GameState) {
       captainPackStats(s).attack +
       mansionAttackModifiers(s, "hero", { isTextBlank }).attack,
     thwart:
-      h.thwart! +
+      h.thwart! -
+      // Psychic Inertia: -1 THW.
+      stryfeIdentityPenalty(s, s.activePlayerId) +
       collectorIdentityStats(s).thwart +
       stormStats(s).thwart +
       hoodModularGlobal(s).thwart +
@@ -2235,7 +2260,8 @@ export function handSize(s: GameState) {
         antManPackHandSize(s) +
         sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).handSize +
         mysterioHandSize(s) +
-        mojoGenreHandSize(s)
+        mojoGenreHandSize(s) +
+        stryfeHandSize(s)
       : heroCard(s).hand_size! +
         scriptedModifier(s, "hand_size") +
         doctorStrangeHandSize(s) +
@@ -2245,7 +2271,8 @@ export function handSize(s: GameState) {
         visionAlterStats(s).handSize +
         sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).handSize +
         mysterioHandSize(s) +
-        mojoGenreHandSize(s);
+        mojoGenreHandSize(s) +
+        stryfeHandSize(s);
   return novaHandSize(s, base + deadpoolHandBonus(s), { isTextBlank });
 }
 /** Printed encounter attachment modifiers apply to their attached enemy.

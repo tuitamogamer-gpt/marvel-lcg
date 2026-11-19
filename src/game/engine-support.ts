@@ -42,6 +42,11 @@ import {
   SUPER_STRENGTH_CODES,
   TELEPATHY_CODES,
 } from "./mister-sinister.js";
+import {
+  EXTREME_MEASURES_CODES,
+  MUTANT_INSURRECTION_CODES,
+  STRYFE_SCRIPT_CODES,
+} from "./stryfe.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -327,6 +332,9 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...FLIGHT_CODES,
   ...SUPER_STRENGTH_CODES,
   ...TELEPATHY_CODES,
+  ...STRYFE_SCRIPT_CODES,
+  ...EXTREME_MEASURES_CODES,
+  ...MUTANT_INSURRECTION_CODES,
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

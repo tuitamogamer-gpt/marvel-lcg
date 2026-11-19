@@ -75,6 +75,9 @@ export const CYCLOPS_SOURCE =
   "https://hallofheroeslcg.com/scott-summers-cyclops/";
 export interface CyclopsPorts {
   queue(s: GameState, ...effects: Effect[]): void;
+  /** Move a card out of play without discarding it (no discard
+   * replacement such as The Collection applies) and return it. */
+  takeFromPlay(s: GameState, id: string): Piece | undefined;
   choose(s: GameState, title: string, text: string, options: Option[]): void;
   enemyTargets(s: GameState, attack: boolean): AntManTarget[];
   schemeTargets(s: GameState, thwart: boolean): AntManTarget[];
@@ -1179,13 +1182,16 @@ export function resolveCyclopsEffect(
         ...s.player.inPlay,
       ].find((p) => p.code === "33003");
       if (p) {
-        if (s.player.inPlay.some((q) => q.id === p.id))
-          ports.discardPiece(s, p.id);
+        // The Visor goes under Lost Visor: it leaves play without being
+        // discarded, so no discard replacement takes it.
+        const moved = s.player.inPlay.some((q) => q.id === p.id)
+          ? ports.takeFromPlay(s, p.id) || p
+          : p;
         for (const z of [s.player.hand, s.player.deck, s.player.discard]) {
           const i = z.findIndex((q) => q.id === p.id);
           if (i >= 0) z.splice(i, 1);
         }
-        (obligation.storedCards ||= []).push(p);
+        (obligation.storedCards ||= []).push(moved);
       }
       ports.shufflePlayerDeck(s, after);
       break;

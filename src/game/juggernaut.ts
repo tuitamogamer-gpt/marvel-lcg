@@ -101,9 +101,10 @@ const over = (s: GameState) => s.phase === "won" || s.phase === "lost";
 const active = (s: GameState, p: Piece) => !isTextBlank(s, p);
 export const juggernaut = (s: GameState) => s.villainId === "juggernaut";
 /** The scenarios that put Hope Summers into play: The Unstoppable
- * Juggernaut and Mister Sinister's Sinister Intent. */
+ * Juggernaut, Mister Sinister's Sinister Intent and Stryfe's Uncontrollable
+ * Power. */
 export const hopeScenario = (s: GameState) =>
-  s.villainId === "juggernaut" || s.villainId === "mister_sinister";
+  ["juggernaut", "mister_sinister", "stryfe"].includes(s.villainId);
 /** The villain in play is a Juggernaut stage with its text active. */
 const juggernautInPlay = (s: GameState) =>
   !!s.villain && STAGES.includes(s.villain.code) && active(s, s.villain);

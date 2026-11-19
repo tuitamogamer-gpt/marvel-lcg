@@ -345,6 +345,16 @@ import {
   momentum,
 } from "./game/juggernaut";
 import {
+  LEFT_TO_YOUR_FATE,
+  LIVING_BOMB,
+  MIND_TRAP,
+  PSYCHIC_INERTIA,
+  SAMURAI,
+  UNCONTROLLABLE_POWER,
+  commonType,
+  stryfe,
+} from "./game/stryfe";
+import {
   AERIAL_BOMBARDMENT,
   IMPERVIOUS,
   OUT_OF_REACH,
@@ -2766,6 +2776,18 @@ export default function App() {
                       While a Marauder minion is engaged with you, the villain
                       schemes instead of attacking you. Mutant Slayers is always
                       included; Military Grade and Nasty Boys are preselected.
+                    </p>
+                  )}
+                  {villain.id === "stryfe" && (
+                    <p className="setting-help">
+                      Stryfe reads your hand: while he attacks you he gets +1
+                      ATK for each card of your most common card type, and his
+                      main scheme gains that much threat from each player after
+                      step one of the villain phase. Stryfe&rsquo;s Grasp holds
+                      Hope Summers until you clear it or defeat Stryfe; then it
+                      becomes the Living Bomb, and Stryfe cannot be defeated
+                      until it is gone. Extreme Measures and Mutant Insurrection
+                      are preselected.
                     </p>
                   )}
                   {villain.id === "mister_sinister" && (
@@ -6254,6 +6276,9 @@ function AttachedCards({
                 AERIAL_BOMBARDMENT,
                 OUT_OF_REACH,
                 IMPERVIOUS,
+                // Stryfe's identity conditions.
+                MIND_TRAP,
+                PSYCHIC_INERTIA,
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -6852,9 +6877,11 @@ function Tabletop({
                                     ? `VILLAIN · ${s.villain.code.endsWith("b") ? "B" : "A"} · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? "CONFIDENT" : "DESPERATE"}`
                                     : juggernaut(s)
                                       ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${momentum(s)} MOMENTUM`
-                                      : misterSinister(s)
-                                        ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${superpowers(s)} ${superpowers(s) === 1 ? "SUPERPOWER" : "SUPERPOWERS"}`
-                                        : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
+                                      : stryfe(s)
+                                        ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · +${commonType(s, s.activePlayerId)} ATK VS YOU`
+                                        : misterSinister(s)
+                                          ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${superpowers(s)} ${superpowers(s) === 1 ? "SUPERPOWER" : "SUPERPOWERS"}`
+                                          : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
                     {s.kang ? (
                       <h2>
@@ -6936,6 +6963,17 @@ function Tabletop({
                         {otrCaptor(s)?.code === CAPTOR_CONFIDENT
                           ? "Hope's Captor · resets instead of being defeated once"
                           : "Desperate · defeat the villain to win"}
+                      </span>
+                    )}
+                    {stryfe(s) && (
+                      <span className="stat-caption">
+                        Your most common card type:{" "}
+                        {commonType(s, s.activePlayerId)}
+                        {(s.sideSchemes || []).some(
+                          (q) => q.code === LIVING_BOMB,
+                        )
+                          ? " · Living Bomb: he cannot be defeated"
+                          : ""}
                       </span>
                     )}
                     {misterSinister(s) && (
@@ -7069,7 +7107,7 @@ function Tabletop({
                   <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
-                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) ? " magog-scheme" : ""}`}
+                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) ? " magog-scheme" : ""}`}
                     style={
                       {
                         "--scheme-actions": mainActionPiece
@@ -7174,6 +7212,17 @@ function Tabletop({
                         {(s.sinister?.visited.length || 0) < 2
                           ? "the other stage 2"
                           : "Sinister Ends"}
+                      </p>
+                    )}
+                    {stryfe(s) && s.scheme.code === UNCONTROLLABLE_POWER && (
+                      <p className="magog-scheme-note">
+                        After step one: +{commonType(s, s.activePlayerId)} from
+                        you
+                      </p>
+                    )}
+                    {stryfe(s) && s.scheme.code === LEFT_TO_YOUR_FATE && (
+                      <p className="magog-scheme-note">
+                        +2 hand size · cards cost 1 more
                       </p>
                     )}
                     {misterSinister(s) && s.scheme.code === SINISTER_ENDS && (
@@ -7856,6 +7905,15 @@ function Tabletop({
                               {p.counters} magnetic{" "}
                               {p.counters === 1 ? "counter" : "counters"} ·
                               discard that many after it activates against you
+                            </span>
+                          )}
+                          {p.code === SAMURAI && p.counters > 0 && (
+                            <span
+                              className="engagement-label"
+                              aria-label={`Charge counters on Samurai: ${p.counters}`}
+                            >
+                              {p.counters} charge{" "}
+                              {p.counters === 1 ? "counter" : "counters"}
                             </span>
                           )}
                           {p.code === SLAB && p.counters > 0 && (

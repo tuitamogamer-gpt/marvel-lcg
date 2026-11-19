@@ -29,6 +29,7 @@ import * as morlock from "./morlock-siege.js";
 import * as otr from "./on-the-run.js";
 import * as jug from "./juggernaut.js";
 import * as sin from "./mister-sinister.js";
+import * as sty from "./stryfe.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -615,7 +616,14 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
     !!(s && typeof p !== "string" && morlock.morlockKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && otr.otrKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && jug.jugKeyword(s, p, name) > 0) ||
-    !!(s && typeof p !== "string" && sin.sinisterKeyword(s, p, name) > 0)
+    !!(s && typeof p !== "string" && sin.sinisterKeyword(s, p, name) > 0) ||
+    !!(
+      s &&
+      typeof p !== "string" &&
+      name === "Toughness" &&
+      s.minions.some((m) => m.id === p.id) &&
+      sty.stryfeMinionToughness(s)
+    )
   );
 }
 function nativeStatusModifiers(s: GameState, p: StatusState) {
@@ -650,7 +658,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     hela.helaKeyword(s, piece, "Stalwart") ||
     magog.magogKeyword(s, piece, "Stalwart") > 0 ||
     !!morlock.morlockStatusModifiers(s, piece).stalwart ||
-    jug.jugKeyword(s, piece, "Stalwart") > 0
+    jug.jugKeyword(s, piece, "Stalwart") > 0 ||
+    sty.stryfeStalwart(s, piece)
       ? { stalwart: true }
       : {}),
     ...(piece.code === "50060" && !isTextBlank(s, piece)
@@ -3425,7 +3434,8 @@ function dealDamage(
       0,
       n -
         sinisterModulars.sinisterModularAttackReduction(s, target) -
-        sin.sinisterAttackReduction(s, target),
+        sin.sinisterAttackReduction(s, target) -
+        sty.stryfeAttackReduction(s, target, damageSourceTiny(s, source)),
     );
   // Titanium Exoskeleton: no more than 2 damage from a single attack.
   if (attack && !traits.noDamageInstance)
@@ -3905,6 +3915,7 @@ function dealDamage(
           s.activePlayerId,
           morlockPorts,
         ),
+        ...sty.stryfeAfterAttack(s, retaliationTarget.id, s.activePlayerId),
       );
   }
   if (attack && original && !["won", "lost"].includes(s.phase)) {
@@ -4173,6 +4184,8 @@ function applyDamage(
     if (!infinite) s.villain.hp -= n;
     track(s, "damageDealt", n);
     log(s, `${card(s.villain).name} takes ${n} damage.`, "good");
+    // Mental Transferal: the attached character takes as much damage.
+    add(s, ...sty.stryfeVillainDamaged(s, target, n));
     if (s.villain.hp <= 0) {
       if (s.flags.waspDeferDefeats) return result;
       advanceVillain(s, source, attack);
@@ -4683,6 +4696,19 @@ function defeatCharacter(
           : controller(s, source)?.id || s.activePlayerId,
       ),
     );
+    // Zero: shuffled back into the encounter deck unless the player who
+    // defeated him holds 3 cards of one type.
+    if (
+      !textWasBlank &&
+      sty.stryfeMinionDefeatReplaced(
+        s,
+        m,
+        source.startsWith("hero:")
+          ? source.slice(5)
+          : controller(s, source)?.id || s.activePlayerId,
+      )
+    )
+      add(s, { type: "stryfe:zero-shuffle", id: m.id });
     if (!textWasBlank)
       add(
         s,
@@ -4807,6 +4833,12 @@ function advanceVillain(
 ) {
   // The Once and Future Kang: no villain is in play during the gaps.
   if (kang.kangVillainAbsent(s)) return;
+  // Living Bomb: Stryfe cannot be defeated.
+  if (sty.stryfeCannotBeDefeated(s)) {
+    s.villain.hp = Math.max(0, s.villain.hp);
+    log(s, "Living Bomb: Stryfe cannot be defeated.", "bad");
+    return;
+  }
   // On the Run: Hope's Captor resets the villain once; then its defeat wins.
   const otrDefeat = otr.otrVillainWouldBeDefeated(s);
   if (otrDefeat === "reset") {
@@ -5232,6 +5264,8 @@ function advanceVillain(
     giveCharacterStatus(s, s.villain, "tough");
   log(s, `${config.name} advances to stage ${s.villain.stage}!`, "bad");
   villainSetup(s);
+  // Stryfe's Grasp flips after Stryfe is defeated.
+  add(s, ...sty.stryfeVillainDefeated(s));
 }
 function villainSetup(s: GameState) {
   add(
@@ -5255,6 +5289,7 @@ function villainSetup(s: GameState) {
     ...mojoVillain.mojoVillainRevealed(s, mojoVillainPorts),
     ...jug.jugVillainRevealed(s),
     ...sin.sinisterVillainRevealed(s),
+    ...sty.stryfeVillainRevealed(s),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -5780,6 +5815,14 @@ function threat(
         }
         return;
       }
+      if (sty.stryfeMainLoses(s)) {
+        endGame(
+          s,
+          false,
+          "Uncontrollable Power is complete. Stryfe's power cannot be stopped.",
+        );
+        return;
+      }
       if (otr.otrMainLoses(s)) {
         endGame(
           s,
@@ -5936,6 +5979,9 @@ function thwart(
       sinisterSix.sixLightCleared(s, p, sinisterSixPorts)
     )
       return removed;
+    // Stryfe's Grasp (Permanent): its last threat flips it to Living Bomb.
+    if (removed > 0 && !p.counters && sty.stryfeGraspCleared(s, p, stryfePorts))
+      return removed;
     if (
       !p.counters &&
       !isPermanent(card(p)) &&
@@ -6062,6 +6108,13 @@ function defeatScheme(
         ...magog.magogSchemeDefeated(s, p),
         ...morlock.morlockSchemeDefeated(s, p),
         ...otr.otrSchemeDefeated(s, p),
+        ...sty.stryfeSchemeDefeated(
+          s,
+          p,
+          source.startsWith("hero:")
+            ? source.slice(5)
+            : controller(s, source)?.id || s.activePlayerId,
+        ),
       ]
     : [];
   const helaFlip = hela.helaSideSchemeDefeated(s);
@@ -6617,6 +6670,7 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
       doctorStrangeCostModifier(s, c) +
       sandman.sandmanCostIncrease(s, c) +
       mojoGenres.mojoGenreCostIncrease(s, c) +
+      sty.stryfeCostIncrease(s, c) +
       scarletWitch.scarletWitchCardCostBonus(s),
   );
 }
@@ -8903,6 +8957,7 @@ export function newGame(config: {
           c.code !== otr.CAPTOR_DESPERATE &&
           // Juggernaut's Helmet and Hope Summers start in play.
           !jug.jugSetupCard(c.code) &&
+          !sty.stryfeSetupCard(c.code) &&
           !(v.id === "magneto" && ["32144b", "32145b"].includes(c.code)) &&
           (c.type_code !== "environment" ||
             (v.id === "absorbing_man" &&
@@ -8954,6 +9009,8 @@ export function newGame(config: {
   if (v.id === "morlock_siege") morlock.morlockSetup(s, morlockPorts);
   if (v.id === "juggernaut")
     jug.jugSetup(s, { makePiece: (s, code) => makePiece(s, code) });
+  if (v.id === "stryfe")
+    jug.hopeSetup(s, { makePiece: (s, code) => makePiece(s, code) });
   if (v.id === "mister_sinister") {
     sin.sinisterSetup(s);
     jug.hopeSetup(s, { makePiece: (s, code) => makePiece(s, code) });
@@ -9832,6 +9889,7 @@ function initialSetup(s: GameState) {
   if (s.villainId === "ultron") setup.push(...eachPlayer(s, E("drone")));
   setup.push(...otr.otrSetupEffects(s));
   setup.push(...sin.sinisterSetupEffects(s));
+  setup.push(...sty.stryfeSetupEffects(s, makePiece));
   // Queue stage setup after scenario setup and before the first turn.
   add(
     s,
@@ -10682,6 +10740,8 @@ function play(
   s.flags.discount = 0;
   track(s, "cardsPlayed", 1);
   log(s, `Play ${c.name}.`, "good");
+  // Stryfe: Mind Alteration and Psionic Amnesia after you play a card.
+  add(s, ...sty.stryfeCardPlayed(s, s.activePlayerId, c));
   s.flags.basicAttack = false;
   s.flags.heroKill = false;
   if (c.type_code === "event") {
@@ -10738,6 +10798,8 @@ function play(
     )
       p.attachedTo = attachedTarget;
     s.player.inPlay.push(p);
+    // Stryfe: Mind Trap and Extreme Measures after a card enters play.
+    add(s, ...sty.stryfeEnteredPlay(s, p, s.activePlayerId));
     cyclops.cyclopsEffectiveLeadership(s, p);
     if (p.code === "36019") p.counters = 3;
     if (p.code === "37013") p.counters = 3;
@@ -11874,6 +11936,7 @@ export function abilityOptions(
     ...morlock.morlockActions(s, p, morlockPorts),
     ...jug.jugActions(s, p, jugPorts),
     ...sin.sinisterActions(s, p, sinPorts),
+    ...sty.stryfeActions(s, p, stryfePorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -16752,6 +16815,66 @@ function damageSourceAerial(s: GameState, source: string | undefined) {
   const c = damageSourceCard(s, source);
   return !!c && (c.traits || "").split(/\.\s*/).includes("Aerial");
 }
+/** The attacker dealing this damage has the Tiny trait. */
+function damageSourceTiny(s: GameState, source: string | undefined) {
+  if (!source) return false;
+  const view =
+    source === "hero"
+      ? s
+      : source.startsWith("hero:")
+        ? seatView(s, source.slice(5))
+        : undefined;
+  if (view)
+    return (heroCard(view).traits || "").split(/\.\s*/).includes("Tiny");
+  const c = damageSourceCard(s, source);
+  return !!c && (c.traits || "").split(/\.\s*/).includes("Tiny");
+}
+const stryfePorts: sty.StryfePorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  shuffle: (s, pieces) => shuffle(s, pieces),
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+  allies: (s, playerId) => friends(seatView(s, playerId)),
+  ownCards: (s, playerId, types) =>
+    seatView(s, playerId)
+      .player.inPlay.filter(
+        (p) => types.includes(card(p).type_code) && !isPermanent(card(p)),
+      )
+      .map((piece) => ({ piece, cost: card(piece).cost || 0 })),
+  returnToHand: (s, id) => msPorts.returnAlly(s, id),
+  discardFromHand: (s, playerId, id) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    if (s.player.hand.some((p) => p.id === id)) discardHand(s, id);
+    activateSeat(s, previous);
+  },
+  drawTo: (s, playerId) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    const n = handSize(s) - s.player.hand.length;
+    if (n > 0) draw(s, n);
+    activateSeat(s, previous);
+  },
+  mill: (s, playerId, n) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    mill(s, n);
+    activateSeat(s, previous);
+  },
+  reveal: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    wreckingCrewPorts.reveal(s, p, playerId);
+  },
+  dealFacedown: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    p.dealtTo = playerId;
+    s.encounter.dealt.push(p);
+  },
+  endGame: (s, won, reason) => endGame(s, won, reason),
+  defeatVillain: (s) => advanceVillain(s),
+};
 const sinPorts: sin.SinisterPorts = {
   ...mutagenPorts,
   log: (s, text, kind) => log(s, text, kind),
@@ -20569,10 +20692,12 @@ function globalMagnetoHeroAttackAllowed(s: GameState, id: string) {
   return magnetoHero.magnetoHeroCanAttack(s, id, "enemy");
 }
 function niAllyTargets(s: GameState, p: Piece, kind: "attack" | "thwart") {
-  return niAllyTargetsRaw(s, p, kind).filter((t) =>
-    kind === "attack"
-      ? magnetoHero.magnetoHeroCanAttack(s, t.id, p.id)
-      : jubilee.jubileeCanRemoveThreat(s, t.id, p.id),
+  return niAllyTargetsRaw(s, p, kind).filter(
+    (t) =>
+      (kind === "attack"
+        ? magnetoHero.magnetoHeroCanAttack(s, t.id, p.id)
+        : jubilee.jubileeCanRemoveThreat(s, t.id, p.id)) &&
+      sty.stryfeHopeTarget(s, p, kind, t.id),
   );
 }
 function niAllyTargetsRaw(s: GameState, p: Piece, kind: "attack" | "thwart") {
@@ -21595,6 +21720,13 @@ const gambitPorts: gambit.GambitPorts = {
   },
 };
 const cyclopsPorts: cyclops.CyclopsPorts = {
+  takeFromPlay: (s, id) => {
+    const owner = find(s, id)?.ownerId || s.activePlayerId;
+    movePieceFromPlay(s, id, false, owner);
+    const view = seatView(s, owner).player;
+    const i = (view.setAside || []).findIndex((q) => q.id === id);
+    return i >= 0 ? view.setAside!.splice(i, 1)[0] : undefined;
+  },
   queue: add,
   choose,
   enemyTargets: (s, attack) => targets(s, "enemy", attack),
@@ -24638,6 +24770,7 @@ function enemyAttack(
       ...mojoGenres.mojoGenreAttackInitiated(s, id, s.attack.originalPlayerId!),
       ...morlock.morlockAttackInitiated(s, id, s.attack.originalPlayerId!),
       ...otr.otrAttackInitiated(s, id, s.attack.originalPlayerId!),
+      ...sty.stryfeAttackInitiated(s, id, s.attack.originalPlayerId!),
     );
   if (!friendlySource)
     add(
@@ -24715,6 +24848,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     otr.otrAttackBonus(s, p) +
     jug.jugAttackBonus(s, p) +
     sin.sinisterStatBonus(s, p, "attack", attackTargetAerial(s)) +
+    sty.stryfeStatBonus(s, p, "attack", originalPlayerId) +
     mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).attack;
   const attachments = enemyAttachmentModifier(s, p.id, "attack");
   const base =
@@ -25130,6 +25264,7 @@ function boostEffects(s: GameState, p: Piece) {
     otr.otrBoost(s, p) ??
     jug.jugBoost(s, p) ??
     sin.sinisterBoost(s, p) ??
+    sty.stryfeBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -25491,7 +25626,8 @@ function enemySCH(s: GameState, p: Piece, playerId: string): number {
     mysterio.mysterioEnemyBonus(s, p) +
     sinisterSix.sixEnemyModifier(s, p, "scheme") +
     kang.kangEnemyStat(s, p, "scheme", playerId) +
-    sin.sinisterStatBonus(s, p, "scheme")
+    sin.sinisterStatBonus(s, p, "scheme") +
+    sty.stryfeStatBonus(s, p, "scheme", playerId)
   );
 }
 export function enemyStats(
@@ -25657,6 +25793,7 @@ function finishScheme(s: GameState) {
       attack: false,
       againstPlayer: true,
     }),
+    ...sty.stryfeActivated(s, id, s.activePlayerId),
     ...spiral.spiralActivated(s, id),
     ...mojoVillain.mojoActivated(s, id, false, 0),
     ...iceman.icemanActivated(s, id),
@@ -26326,6 +26463,8 @@ function finishAttackAfterDamage(
       a.damage > 0 ? target : undefined,
     ),
     ...sin.sinisterAttacked(s, a.attacker),
+    ...sty.stryfeAttacked(s, a.attacker, recipientId),
+    ...sty.stryfeActivated(s, a.attacker, recipientId),
     ...sinisterModulars.sinisterModularActivated(s, {
       enemyId: a.attacker,
       playerId: recipientId,
@@ -27321,6 +27460,9 @@ function reveal(
         ...sin.FLIGHT_CODES,
         ...sin.SUPER_STRENGTH_CODES,
         ...sin.TELEPATHY_CODES,
+        ...sty.STRYFE_SCRIPT_CODES,
+        ...sty.EXTREME_MEASURES_CODES,
+        ...sty.MUTANT_INSURRECTION_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -27556,6 +27698,9 @@ function reveal(
       ...sin.FLIGHT_CODES,
       ...sin.SUPER_STRENGTH_CODES,
       ...sin.TELEPATHY_CODES,
+      ...sty.STRYFE_SCRIPT_CODES,
+      ...sty.EXTREME_MEASURES_CODES,
+      ...sty.MUTANT_INSURRECTION_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -27618,6 +27763,7 @@ function reveal(
       otr.otrReveal(s, p) ??
       jug.jugReveal(s, p) ??
       sin.sinisterReveal(s, p) ??
+      sty.stryfeReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -27719,6 +27865,7 @@ function reveal(
     otr.otrReveal(s, p) ??
     jug.jugReveal(s, p) ??
     sin.sinisterReveal(s, p) ??
+    sty.stryfeReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -29159,6 +29306,7 @@ function resolve(s: GameState, e: Effect) {
           otr.otrReveal(state, piece) ??
           jug.jugReveal(state, piece) ??
           sin.sinisterReveal(state, piece) ??
+          sty.stryfeReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -29316,6 +29464,7 @@ function resolve(s: GameState, e: Effect) {
   if (otr.resolveOnTheRunEffect(s, e, otrPorts)) return;
   if (jug.resolveJuggernautEffect(s, e, jugPorts)) return;
   if (sin.resolveSinisterEffect(s, e, sinPorts)) return;
+  if (sty.resolveStryfeEffect(s, e, stryfePorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -38208,6 +38357,7 @@ function resolve(s: GameState, e: Effect) {
         ...hood.hoodStepOne(s),
         ...venomGoblin.venomGoblinStepOne(s),
         ...morlock.morlockStepOne(s),
+        ...sty.stryfeStepOne(s),
       );
       break;
     case "villainActivate": {
@@ -39043,6 +39193,7 @@ export function dispatch(state: GameState, command: Command): GameState {
         s.flags.heroKill = false;
         if (command.type === "FLIP") flip(s, true, command.target);
         else if (command.type === "BASIC") {
+          sty.stryfeBasicPower(s, command.action, s.activePlayerId);
           if (command.action === "attack")
             need(
               cyclops.cyclopsCanAttack(s),
@@ -39069,6 +39220,8 @@ export function dispatch(state: GameState, command: Command): GameState {
               "You are at full health.",
             );
             s.player.exhausted = true;
+            // Mind Alteration's Response after you recover.
+            add(s, ...sty.stryfeRecovered(s, s.activePlayerId));
             const after = E("basicRecoverResponses", {
               receipt: {
                 token: `recover:${s.nextId++}`,
@@ -39181,6 +39334,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...morlock.morlockActions(s, p, morlockPorts),
               ...jug.jugActions(s, p, jugPorts),
               ...sin.sinisterActions(s, p, sinPorts),
+              ...sty.stryfeActions(s, p, stryfePorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -39313,6 +39467,25 @@ export function dispatch(state: GameState, command: Command): GameState {
                 s,
                 morlock.morlockActionSource(s, command.id)!,
                 morlockPorts,
+              )
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
+            add(s, ...selected!.effects);
+          } else if (
+            sty.stryfeActionSource(s, command.id) &&
+            sty
+              .stryfeActions(
+                s,
+                sty.stryfeActionSource(s, command.id)!,
+                stryfePorts,
+              )
+              .some((o) => !command.action || o.id === command.action)
+          ) {
+            const selected = sty
+              .stryfeActions(
+                s,
+                sty.stryfeActionSource(s, command.id)!,
+                stryfePorts,
               )
               .find((o) => !command.action || o.id === command.action);
             need(selected, "This action needs its printed cost.");
