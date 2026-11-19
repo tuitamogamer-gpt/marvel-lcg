@@ -252,6 +252,11 @@ import {
 import { hoodSetAsideSets } from "./game/hood";
 import { CITY_STREETS as SANDMAN_CITY_STREETS } from "./game/sandman";
 import {
+  BELL_TOWER as VENOM_BELL_TOWER,
+  RINGING_TOWER as VENOM_RINGING_TOWER,
+  identityBoosts as venomIdentityBoosts,
+} from "./game/venom-villain";
+import {
   CREW_KEYS,
   CREW_VILLAINS,
   crewDeckCounts,
@@ -2607,6 +2612,15 @@ export default function App() {
                       deck each time The Hood or his main scheme advances. His
                       Foul Play discards encounter cards and deals you each one
                       that is not from his own set.
+                    </p>
+                  )}
+                  {villain.id === "venom" && (
+                    <p className="setting-help">
+                      Symbiotic Strength is always included. Each attack that
+                      damages Venom leaves a facedown boost card on your
+                      identity, and they all join his next activation against
+                      you. The Bell Tower can soak attacks as chime counters;
+                      once it rings, Venom takes more damage.
                     </p>
                   )}
                   {villain.id === "sandman" && (
@@ -5726,6 +5740,8 @@ function AttachedCards({
                 "24007",
                 "24008",
                 "24009",
+                // Symbiotic Strength: Improvised Weapons.
+                "27164",
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -6697,6 +6713,8 @@ function Tabletop({
                           "16063",
                           "16093",
                           SANDMAN_CITY_STREETS,
+                          VENOM_BELL_TOWER,
+                          VENOM_RINGING_TOWER,
                         ].includes(p.code)) && (
                         <span className="environment-counter">
                           <PremiumToken kind="counter" />
@@ -6715,7 +6733,12 @@ function Tabletop({
                                     ? p.counters === 1
                                       ? "sand counter"
                                       : "sand counters"
-                                    : "Madness"}
+                                    : p.code === VENOM_BELL_TOWER ||
+                                        p.code === VENOM_RINGING_TOWER
+                                      ? p.counters === 1
+                                        ? "chime counter"
+                                        : "chime counters"
+                                      : "Madness"}
                         </span>
                       )}
                       {p.code === SANDMAN_CITY_STREETS && (
@@ -6743,6 +6766,18 @@ function Tabletop({
                             </button>
                           ))}
                         </>
+                      )}
+                      {p.code === VENOM_BELL_TOWER && (
+                        <span className="stat-caption">
+                          Quiet · an attack on Venom may place chime counters
+                          instead of damage; rings at {3 * s.playerCount}
+                        </span>
+                      )}
+                      {p.code === VENOM_RINGING_TOWER && (
+                        <span className="stat-caption">
+                          Ringing · Venom takes +1 damage; counters prevent his
+                          attack damage to identities
+                        </span>
                       )}
                       {p.code === "16108" && (
                         <span className="stat-caption">
@@ -7246,6 +7281,16 @@ function Tabletop({
                     )}
                   </div>
                   <Status piece={s.player} />
+                  {venomIdentityBoosts(s, s.activePlayerId).length > 0 && (
+                    <span className="stat-caption venom-boost-caption">
+                      {venomIdentityBoosts(s, s.activePlayerId).length} facedown
+                      boost card
+                      {venomIdentityBoosts(s, s.activePlayerId).length === 1
+                        ? ""
+                        : "s"}{" "}
+                      · join Venom&rsquo;s next activation against you
+                    </span>
+                  )}
                   {s.heroId === "groot" && (
                     <div className="identity-stats stat-row">
                       <StatToken

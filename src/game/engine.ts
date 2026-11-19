@@ -15,6 +15,7 @@ import * as kang from "./kang.js";
 import * as hood from "./hood.js";
 import * as hoodModular from "./hood-modular.js";
 import * as sandman from "./sandman.js";
+import * as venomVillain from "./venom-villain.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -899,6 +900,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           loki.lokiKeyword(s, p, "Piercing") ||
           kang.kangKeyword(s, p, "Piercing") > 0 ||
           sandman.sandmanKeyword(s, p, "Piercing") > 0 ||
+          venomVillain.venomKeyword(s, p, "Piercing") > 0 ||
           badoon.badoonKeyword(s, p, "Piercing") ||
           ronan.ronanKeyword(s, p, "Piercing") ||
           taskmaster.taskmasterKeyword(s, p, "Piercing") ||
@@ -956,6 +958,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           kang.kangKeyword(s, p, "Overkill") > 0 ||
           hoodModular.hoodModularKeyword(s, p, "Overkill") > 0 ||
           sandman.sandmanKeyword(s, p, "Overkill") > 0 ||
+          venomVillain.venomKeyword(s, p, "Overkill") > 0 ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
             .overkill)
       ),
@@ -2437,6 +2440,7 @@ function check(s: GameState) {
   }
   if (s.kang) kang.kangCheck(s, kangPorts);
   if (s.sandman) add(s, ...sandman.sandmanCheck(s));
+  if (s.venomVillain) venomVillain.venomCheck(s, venomVillainPorts);
   if (collector.collectorLost(s) && !["won", "lost"].includes(s.phase)) {
     endGame(
       s,
@@ -3160,6 +3164,9 @@ function dealDamage(
       attack || traits.damageFromAttack ? source : undefined,
       hoodModularPorts,
     );
+  // The Bell Tower (Ringing): increase all damage Venom takes by 1.
+  if (!traits.noDamageInstance)
+    n = venomVillain.venomIncreaseDamage(s, target, n);
 
   const code = original?.code;
   const originalStage = target === s.villain.id ? s.villain.stage : undefined;
@@ -3239,6 +3246,15 @@ function dealDamage(
   // Jetpack: discard the top encounter card to reduce attack damage.
   if (!replaced && damageFromAttack && n > 0 && original)
     n = hoodModular.hoodModularJetpack(s, target, n, hoodModularPorts);
+  // The Bell Tower (Ringing): chime counters prevent Venom's attack damage.
+  if (!replaced && damageFromAttack && n > 0)
+    n = venomVillain.venomRingingPrevention(
+      s,
+      target,
+      n,
+      source,
+      venomVillainPorts,
+    );
   // Constant reductions precede Tough (RRG1.8 FAQ). Multiple packets of the
   // same attack share one Vibration Resistance allowance.
   if (!replaced && damageFromAttack && n > 0 && original) {
@@ -4808,6 +4824,7 @@ function villainSetup(s: GameState) {
     ...(thanos.thanosReveal(s, s.villain) || []),
     ...hood.hoodVillainRevealed(s),
     ...sandman.sandmanVillainRevealed(s),
+    ...venomVillain.venomVillainRevealed(s),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -6343,6 +6360,14 @@ function attackAction(
       !cyclops.cyclopsCanAttack(s))
   )
     return;
+  if (
+    source === "hero" &&
+    !traits.initiated &&
+    venomVillain.venomWebbedUp(s, s.activePlayerId, venomVillainPorts)
+  ) {
+    s.flags.basicAttack = false;
+    return;
+  }
   if (p.stunned && !traits.initiated) {
     consumeStatus(p, "stunned");
     if (source === "hero") s.flags.basicAttack = false;
@@ -6390,6 +6415,15 @@ function attackAction(
       s,
       target,
       source,
+      s.activePlayerId,
+    ),
+  );
+  add(
+    s,
+    ...venomVillain.venomEnemyAttacked(
+      s,
+      target,
+      result?.actualDamage || 0,
       s.activePlayerId,
     ),
   );
@@ -8205,9 +8239,10 @@ export function newGame(config: {
                           (set) => set === c.set_code,
                         )
                       ? "hood"
-                      : sandman.SANDMAN_MODULAR_SETS.some(
-                            (set) => set === c.set_code,
-                          )
+                      : [
+                            ...sandman.SANDMAN_MODULAR_SETS,
+                            ...venomVillain.VENOM_MODULAR_SETS,
+                          ].some((set) => set === c.set_code)
                         ? "sm"
                         : ["temporal", "anachronauts", "mot"].includes(
                               c.set_code || "",
@@ -8288,6 +8323,7 @@ export function newGame(config: {
               c.pack_code === scenarioPack) ||
             // Setup searches the encounter deck for City Streets.
             (v.id === "sandman" && c.code === sandman.CITY_STREETS) ||
+            (v.id === "venom" && c.code === venomVillain.BELL_TOWER) ||
             selectedModules.includes(c.set_code || ""))) ||
           (v.id !== "kang" &&
             team.some(
@@ -8315,6 +8351,7 @@ export function newGame(config: {
   }
   if (config.expertII && difficulty === "expert") s.expertII = true;
   if (v.id === "sandman") sandman.sandmanSetup(s, sandmanPorts);
+  if (v.id === "venom") venomVillain.venomSetup(s, venomVillainPorts);
   deadpool.deadpoolSetupPool(s, makePiece);
   if (s.deadpool?.initializedPoolSeats.length)
     s.encounter.deck = shuffle(s, s.encounter.deck);
@@ -11164,6 +11201,7 @@ export function abilityOptions(
     ...kang.kangActions(s, p),
     ...hood.hoodActions(s, p),
     ...sandman.sandmanActions(s, p),
+    ...venomVillain.venomActions(s, p),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -15585,6 +15623,18 @@ const sandmanPorts: sandman.SandmanPorts = {
     if (canChangeIdentityForm(s)) flip(s, false);
     activateSeat(s, previous);
   },
+};
+const venomVillainPorts: venomVillain.VenomPorts = {
+  ...mutagenPorts,
+  reveal: (s, p, playerId) => wreckingCrewPorts.reveal(s, p, playerId),
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  log: (s, text, kind) => log(s, text, kind),
+  drawFacedown: (s) => drawEncounter(s),
+  changeForm: (s, playerId) => sandmanPorts.changeForm(s, playerId),
+  payResources: (s, title, resources, after) =>
+    hoodPorts.payResources(s, title, resources, after),
 };
 const kangPorts: kang.KangPorts = {
   ...mutagenPorts,
@@ -23450,6 +23500,14 @@ function prepareAttackBoosts(s: GameState) {
         : 0;
   if (a.isVillain)
     a.pendingBoosts.push(...(s.encounter.storedBoosts || []).splice(0));
+  a.pendingBoosts.push(
+    ...venomVillain.venomActivationBoosts(
+      s,
+      a.attacker,
+      a.originalPlayerId || a.targetPlayerId || s.activePlayerId,
+      venomVillainPorts,
+    ),
+  );
   a.pendingBoosts.push(...(attacker.inheritorBoosts || []).splice(0));
   const n = a.omitNormalBoost
     ? 0
@@ -23723,6 +23781,7 @@ function boostEffects(s: GameState, p: Piece) {
     hood.hoodBoost(s, p) ??
     hoodModular.hoodModularBoost(s, p) ??
     sandman.sandmanBoost(s, p) ??
+    venomVillain.venomBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -24020,6 +24079,14 @@ function enemyScheme(
   const pendingBoosts: Piece[] = [];
   if (id === s.villain.id)
     pendingBoosts.push(...(s.encounter.storedBoosts || []).splice(0));
+  pendingBoosts.push(
+    ...venomVillain.venomActivationBoosts(
+      s,
+      id,
+      s.activePlayerId,
+      venomVillainPorts,
+    ),
+  );
   pendingBoosts.push(...(p.inheritorBoosts || []).splice(0));
   const normal = omitNewBoost
     ? 0
@@ -24141,7 +24208,8 @@ function finishScheme(s: GameState) {
         ? 0
         : enemySCH(s, p, s.activePlayerId) +
           (activation.modifier || 0) +
-          (activation.extraBoostIcons || 0)) +
+          (activation.extraBoostIcons || 0) +
+          venomVillain.venomRetortIcons(s, activation)) +
       activation.boostCodes.reduce(
         (n, code, index) =>
           n + activationBoostValue(s, activation.boostIds[index], code),
@@ -24254,6 +24322,7 @@ function calculateAttack(s: GameState) {
         ) +
         (a.modifier || 0) +
         (a.extraBoostIcons || 0) +
+        venomVillain.venomRetortIcons(s, a) +
         a.boostCodes.reduce(
           (n, code, index) =>
             n + activationBoostValue(s, a.boostIds?.[index] || "", code),
@@ -25782,6 +25851,10 @@ function reveal(
         c.type_code !== "attachment") ||
       (sandman.SANDMAN_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (venomVillain.VENOM_VILLAIN_SCRIPT_CODES.some(
+        (code) => code === p.code,
+      ) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -25985,6 +26058,7 @@ function reveal(
       ...hood.HOOD_SCRIPT_CODES,
       ...hoodModular.HOOD_MODULAR_CODES,
       ...sandman.SANDMAN_SCRIPT_CODES,
+      ...venomVillain.VENOM_VILLAIN_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -26027,6 +26101,7 @@ function reveal(
       hood.hoodReveal(s, p) ??
       hoodModular.hoodModularReveal(s, p) ??
       sandman.sandmanReveal(s, p) ??
+      venomVillain.venomReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -26114,6 +26189,7 @@ function reveal(
     hood.hoodReveal(s, p) ??
     hoodModular.hoodModularReveal(s, p) ??
     sandman.sandmanReveal(s, p) ??
+    venomVillain.venomReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -27518,6 +27594,7 @@ function resolve(s: GameState, e: Effect) {
           hood.hoodReveal(state, piece) ??
           hoodModular.hoodModularReveal(state, piece) ??
           sandman.sandmanReveal(state, piece) ??
+          venomVillain.venomReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -27660,6 +27737,7 @@ function resolve(s: GameState, e: Effect) {
   if (hood.resolveHoodEffect(s, e, hoodPorts)) return;
   if (hoodModular.resolveHoodModularEffect(s, e, hoodModularPorts)) return;
   if (sandman.resolveSandmanEffect(s, e, sandmanPorts)) return;
+  if (venomVillain.resolveVenomEffect(s, e, venomVillainPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -31022,6 +31100,40 @@ function resolve(s: GameState, e: Effect) {
           `${e.spectrumBatchId}:${e.spectrumBatchIndex}`
         ] = e.amount;
         break;
+      }
+      if (e.attack && !e.venomChimeHandled && !e.noDamageInstance) {
+        const initiated = !!(e.attackInitiated || e.attackAlreadyInitiated);
+        const source = e.source || "hero";
+        const attacker = source === "hero" ? s.player : find(s, source);
+        const chime =
+          attacker &&
+          (!attacker.stunned || initiated) &&
+          !(
+            source === "hero" &&
+            !initiated &&
+            venomVillain.venomHasWebbedUp(s, s.activePlayerId)
+          )
+            ? venomVillain.venomChimeAmount(s, e.target, e.amount ?? 0)
+            : 0;
+        if (chime > 0) {
+          choose(
+            s,
+            "Bell Tower",
+            `Place ${chime} chime counter${chime === 1 ? "" : "s"} on the Bell Tower instead of dealing that damage to Venom?`,
+            [
+              option(
+                "chime",
+                `Place ${chime} chime counter${chime === 1 ? "" : "s"} instead`,
+                [E("venomv:chime", { amount: chime })],
+                "Venom takes no damage from this attack.",
+              ),
+              option("damage", "Deal the damage to Venom", [
+                { ...e, venomChimeHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
       }
       if (e.attack) {
         const targetPiece = find(s, e.target);
@@ -36990,6 +37102,7 @@ function run(s: GameState) {
       e.type.startsWith("hood:") ||
       e.type.startsWith("hoodmod:") ||
       e.type.startsWith("sandman:") ||
+      e.type.startsWith("venomv:") ||
       e.type.startsWith("thanos:") ||
       e.type.startsWith("hela:") ||
       e.type.startsWith("loki:") ||
@@ -37376,6 +37489,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...towerDefense.towerDefenseActions(s, p, towerDefensePorts),
               ...wreckingCrew.wreckingCrewActions(s, p, wreckingCrewPorts),
               ...hood.hoodActions(s, p),
+              ...venomVillain.venomActions(s, p),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -37459,6 +37573,15 @@ export function dispatch(state: GameState, command: Command): GameState {
               selected,
               "This Hero Action needs hero form and your once-per-round use.",
             );
+            add(s, ...selected!.effects);
+          } else if (venomVillain.venomActionSource(s, command.id)) {
+            const source = venomVillain.venomActionSource(s, command.id)!;
+            const selected =
+              venomVillain
+                .venomActions(s, source)
+                .find((o) => o.id === command.action) ||
+              venomVillain.venomActions(s, source)[0];
+            need(selected, "This action is not available now.");
             add(s, ...selected!.effects);
           } else if (sandman.sandmanActionSource(s, command.id)) {
             const selected =

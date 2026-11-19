@@ -224,6 +224,8 @@ export interface Attack {
   omitNormalBoost?: boolean;
   noNewBoostCards?: boolean;
   extraBoostIcons?: number;
+  /** Tooth and Nail's boost: this attack gains piercing. */
+  venomPiercing?: boolean;
   afterActivation?: Effect[];
   /** Effects tied to this actual attack, before optional aftermath responses. */
   visionAfterAttack?: Effect[];
@@ -291,6 +293,7 @@ export interface GameState {
   kang?: import("./kang.js").KangState;
   hood?: import("./hood.js").HoodState;
   sandman?: import("./sandman.js").SandmanState;
+  venomVillain?: import("./venom-villain.js").VenomVillainState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */

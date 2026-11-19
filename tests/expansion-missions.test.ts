@@ -47,6 +47,7 @@ import { deckSizeFor } from "../src/game/decks";
 import { seatView } from "../src/game/team";
 import { crewBench, crewStoredPieces } from "../src/game/wrecking-crew";
 import { kangStoredPieces } from "../src/game/kang";
+import { venomStoredPieces } from "../src/game/venom-villain";
 import type { Aspect, Command, GameState, Piece } from "../src/game/types";
 
 const ended = (s: GameState) => ["won", "lost"].includes(s.phase);
@@ -224,6 +225,8 @@ function ownedPieces(s: GameState, originalIds?: Set<string>): Piece[] {
     ...crewStoredPieces(s),
     // Kang: the game areas out of focus and the set-aside scenario cards.
     ...kangStoredPieces(s),
+    // Venom: the facedown boost cards on each identity.
+    ...venomStoredPieces(s),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
     ...(s.attack?.pendingBoosts || []),
@@ -926,10 +929,10 @@ describe("published expansion starters across every supported mission setting", 
         2 *
         VILLAINS.filter((scenario) => scenario.moduleCount !== 0).length,
     );
-    expect(VILLAINS).toHaveLength(29);
-    expect(MODULES).toHaveLength(54);
+    expect(VILLAINS).toHaveLength(30);
+    expect(MODULES).toHaveLength(55);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(159640);
+    expect(missions).toHaveLength(168272);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -941,24 +944,42 @@ describe("published expansion starters across every supported mission setting", 
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
-    // Sinister Motives' Sandman scenario extends the grid, and its City in
-    // Chaos and Down to Earth modular sets join every scenario with modular
-    // sets. Every earlier name and seed stays in place: the 148,408
-    // configurations before them hash identically to the complete grid of
-    // a97d297.
+    // Sinister Motives' Venom scenario extends the grid, and its Symbiotic
+    // Strength set joins every scenario with modular sets. Every earlier
+    // name and seed stays in place: the 159,640 configurations before them
+    // hash identically to the complete grid of 18bbd63.
+    const sandmanGrid = missions.filter(
+      (m) => m.villainId !== "venom" && m.module !== "symbiotic_strength",
+    );
+    expect(sandmanGrid).toHaveLength(159640);
+    expect(
+      createHash("sha256")
+        .update(manifest(sandmanGrid).join("\n"))
+        .digest("hex"),
+    ).toBe("b57ae1d1a7dcb525d03c7bd3c5db5fdc0a2bf09e3a6c83c748f5171a06b014e5");
+    expect(missions.filter((m) => m.villainId === "venom")).toHaveLength(5720);
+    expect(
+      missions.filter(
+        (m) => m.villainId !== "venom" && m.module === "symbiotic_strength",
+      ),
+    ).toHaveLength(2912);
+    // Sandman extended the grid before that, and his City in Chaos and Down
+    // to Earth modular sets joined every scenario with modular sets: the
+    // 148,408 configurations before them hash identically to the complete
+    // grid of a97d297.
     const sinisterSets = ["city_in_chaos", "down_to_earth"];
-    const previous = missions.filter(
+    const previous = sandmanGrid.filter(
       (m) => m.villainId !== "sandman" && !sinisterSets.includes(m.module),
     );
     expect(previous).toHaveLength(148408);
     expect(
       createHash("sha256").update(manifest(previous).join("\n")).digest("hex"),
     ).toBe("c9e4dd470ed71d823f6e04a457ef1e1f8a41b68fae683341a6cdf39da1116290");
-    expect(missions.filter((m) => m.villainId === "sandman")).toHaveLength(
+    expect(sandmanGrid.filter((m) => m.villainId === "sandman")).toHaveLength(
       5616,
     );
     expect(
-      missions.filter(
+      sandmanGrid.filter(
         (m) => m.villainId !== "sandman" && sinisterSets.includes(m.module),
       ),
     ).toHaveLength(5616);
@@ -1002,7 +1023,8 @@ describe("published expansion starters across every supported mission setting", 
       hoodGrid.filter((m) => m.villainId === "the_hood" && !m.variant),
     ).toHaveLength(4472);
     expect(previous.filter((m) => m.variant === "ii")).toHaveLength(2808);
-    expect(missions.filter((m) => m.variant === "ii")).toHaveLength(2912);
+    expect(sandmanGrid.filter((m) => m.variant === "ii")).toHaveLength(2912);
+    expect(missions.filter((m) => m.variant === "ii")).toHaveLength(3016);
     // Kang and the Temporal, Master of Time and Anachronauts modular sets
     // extended the grid before that: the 103,584 configurations before it
     // hash identically to the complete grid of 1600763.
@@ -1415,28 +1437,28 @@ describe("published expansion starters across every supported mission setting", 
     ).toBe("bfd15ff0e1081015f5b01d55beb096051c63af39d842c8342b0a8e70ad1f6b9e");
     const perShard = (keep: (mission: MissionConfig) => boolean) =>
       partitions.map((partition) => partition.filter(keep).length);
-    // A scenario's configurations no longer divide evenly among the 16
-    // shards: each shard runs 350 to 352 of the 5,616 of a scenario with all
-    // 54 modular sets, or 344 or 345 of the 5,512 of a scenario whose fixed
-    // or reserved set leaves 53.
+    // A scenario's configurations do not divide evenly among the 16 shards:
+    // each shard runs 357 or 358 of the 5,720 of a scenario with all 55
+    // modular sets, or 350 to 352 of the 5,616 of a scenario whose fixed or
+    // reserved set leaves 54.
     for (const scenario of VILLAINS.filter((v) => v.moduleCount !== 0)) {
       const counts = perShard(
         (mission) => !mission.variant && mission.villainId === scenario.id,
       );
       const total = heroIds.length * 2 * scenarioModules(scenario.id).length;
-      expect([5616, 5512], scenario.id).toContain(total);
+      expect([5720, 5616], scenario.id).toContain(total);
       expect(
         counts.reduce((sum, count) => sum + count, 0),
         scenario.id,
       ).toBe(total);
       for (const count of counts)
         expect(
-          total === 5616 ? [350, 351, 352] : [344, 345],
+          total === 5720 ? [357, 358] : [350, 351, 352],
           scenario.id,
         ).toContain(count);
     }
     expect(
-      VILLAINS.filter((v) => scenarioModules(v.id).length === 53)
+      VILLAINS.filter((v) => scenarioModules(v.id).length === 54)
         .map((v) => v.id)
         .sort(),
     ).toEqual([
@@ -1446,27 +1468,35 @@ describe("published expansion starters across every supported mission setting", 
       "project_wideawake",
       "sandman",
       "taskmaster",
+      "venom",
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "crossbones",
       ),
     ).toEqual([
-      ...Array(4).fill(344),
-      ...Array(8).fill(345),
-      ...Array(4).fill(344),
+      351, 351, 350, 350, 351, 351, 351, 351, 351, 351, 352, 352, 351, 351, 351,
+      351,
     ]);
     expect(
       perShard((mission) => !mission.variant && mission.villainId === "kang"),
     ).toEqual([
-      351, 351, 350, 350, 351, 351, 351, 351, 351, 351, 352, 352, 351, 351, 351,
-      351,
+      358, 358, 357, 357, 357, 357, 358, 358, 357, 357, 358, 358, 358, 358, 357,
+      357,
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "the_hood",
       ),
     ).toEqual([
+      357, 357, 357, 357, 358, 358, 357, 357, 358, 358, 358, 358, 357, 357, 358,
+      358,
+    ]);
+    expect(
+      perShard(
+        (mission) => !mission.variant && mission.villainId === "sandman",
+      ),
+    ).toEqual([
       ...Array(6).fill(351),
       352,
       352,
@@ -1475,21 +1505,23 @@ describe("published expansion starters across every supported mission setting", 
       350,
     ]);
     expect(
-      perShard(
-        (mission) => !mission.variant && mission.villainId === "sandman",
-      ),
-    ).toEqual([...Array(6).fill(345), ...Array(8).fill(344), 345, 345]);
+      perShard((mission) => !mission.variant && mission.villainId === "venom"),
+    ).toEqual([
+      351, 351, 352, 352, 351, 351, 351, 351, 351, 351, 350, 350, 351, 351, 351,
+      351,
+    ]);
     expect(
       perShard((mission) => mission.villainId === "the_wrecking_crew"),
     ).toEqual([6, 6, 7, 7, 7, 7, 6, 6, 7, 7, 6, 6, 6, 6, 7, 7]);
-    expect(perShard((mission) => mission.variant === "ii")).toEqual(
-      Array(16).fill(182),
-    );
-    expect(new Set(missions.map(key)).size).toBe(159640);
-    expect(new Set(combined.map(key)).size).toBe(159640);
+    expect(perShard((mission) => mission.variant === "ii")).toEqual([
+      ...Array(8).fill(188),
+      ...Array(8).fill(189),
+    ]);
+    expect(new Set(missions.map(key)).size).toBe(168272);
+    expect(new Set(combined.map(key)).size).toBe(168272);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect([9977, 9978]).toContain(partition.length);
+      expect(partition).toHaveLength(10517);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -1497,12 +1529,12 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(191);
-      expect([192, 193]).toContain(Math.max(...perShard));
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(3070);
+      expect(Math.min(...perShard)).toBe(202);
+      expect(Math.max(...perShard)).toBe(203);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(3236);
     }
     expect(selectedMissions).toHaveLength(
-      isSharded ? partitions[Number(shardIndex)].length : 159640,
+      isSharded ? partitions[Number(shardIndex)].length : 168272,
     );
   });
   for (const mission of selectedMissions)

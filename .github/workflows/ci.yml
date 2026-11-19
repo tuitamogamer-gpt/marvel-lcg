@@ -133,6 +133,8 @@ jobs:
             scripts: test:hood
           - group: sandman
             scripts: test:sandman
+          - group: venom-villain
+            scripts: test:venom-villain
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

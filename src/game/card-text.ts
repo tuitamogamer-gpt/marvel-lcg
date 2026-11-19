@@ -33,6 +33,13 @@ export function isTextBlank(
   if (typeof p !== "string" && "treatedAsAlly" in p && p.treatedAsAlly)
     return true;
   const targetId = typeof p !== "string" ? p.id : undefined;
+  // Guard the Bell Tower: the Bell Tower's printed text box is blank.
+  if (
+    targetId &&
+    ["27077a", "27077b"].includes(typeof p === "string" ? p : p.code) &&
+    s.sideSchemes?.some((q) => q.code === "27079")
+  )
+    return true;
   // Panic in the Streets: Location and Persona supports have blank text.
   if (targetId && s.sideSchemes?.some((q) => q.code === "27127")) {
     const support = definitions.get(typeof p === "string" ? p : p.code);

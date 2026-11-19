@@ -1359,6 +1359,20 @@ export const VILLAINS = [
       "Sandman turns the streets into a storm of sand. Every surge of sand buries more of the encounter deck, and each acceleration token it causes falls on the first player.",
     color: "#b08a4e",
   },
+  {
+    id: "venom",
+    name: "Venom",
+    codes: ["27073", "27074", "27075"],
+    schemes: ["27076b"],
+    module: "down_to_earth",
+    fixedSets: ["symbiotic_strength"],
+    difficulty: 3,
+    title: "“Leave Us Alone!”",
+    location: "New York City",
+    description:
+      "Every blow that lands on Venom leaves facedown boost cards on your identity, and all of them strike back the next time he activates against you. Ring the Bell Tower to make the symbiote vulnerable.",
+    color: "#3b3f5c",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1427,6 +1441,7 @@ export const MODULES = [
   // Sinister Motives modular sets.
   { id: "city_in_chaos", name: "City in Chaos", difficulty: 3 },
   { id: "down_to_earth", name: "Down to Earth", difficulty: 2 },
+  { id: "symbiotic_strength", name: "Symbiotic Strength", difficulty: 2 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {

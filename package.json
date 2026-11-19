@@ -79,7 +79,8 @@
     "test:wrecking-crew": "node scripts/wrecking-crew-check.mjs",
     "test:kang": "node scripts/kang-check.mjs",
     "test:hood": "node scripts/hood-check.mjs",
-    "test:sandman": "node scripts/sandman-check.mjs"
+    "test:sandman": "node scripts/sandman-check.mjs",
+    "test:venom-villain": "node scripts/venom-villain-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",
