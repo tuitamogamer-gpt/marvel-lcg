@@ -317,6 +317,18 @@ import {
   characterThreat,
   mojoDiscards,
 } from "./game/mojo";
+import {
+  BOLSTERED_BY_WRATH,
+  INHIBITOR_COLLAR,
+  KNOCK_KNOCK,
+  MUTANT_MASSACRE,
+  PUSHED_TO_THE_LIMIT,
+  ROUTED_A,
+  ROUTED_B,
+  ROUTED_TO_WIN,
+  TITANIUM_EXOSKELETON,
+  morlockRouted,
+} from "./game/morlock-siege";
 import { effectTitle, pacingOf } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
 import type { PaymentSource } from "./game/payment";
@@ -2707,6 +2719,18 @@ export default function App() {
                       your identities and allies, and it moves to the main
                       scheme when a character flips or leaves play. The rulebook
                       uses MojoMania genre sets, preselected in order.
+                    </p>
+                  )}
+                  {villain.id === "morlock_siege" && (
+                    <p className="setting-help">
+                      Seven Marauders are shuffled into a villain deck and only
+                      the top one is in play. Rout three of them to win: each
+                      defeated Marauder goes under Routed and the next one
+                      activates against each of you at once. After three knock
+                      counters or a completed first scheme, the Morlocks join
+                      you and take the enemies&rsquo; attacks; lose them all and
+                      the Mutant Massacre is complete. Military Grade and Mutant
+                      Slayers are preselected.
                     </p>
                   )}
                   {villain.id === "magog" && (
@@ -6150,9 +6174,14 @@ function AttachedCards({
                 "27150",
                 "27151",
                 "27152",
-                // Spiral's Swords; Mojo's Major Domo.
+                // Spiral's Swords; Mojo's Major Domo; Morlock Siege and
+                // Military Grade.
                 "39018",
                 MAJOR_DOMO,
+                BOLSTERED_BY_WRATH,
+                PUSHED_TO_THE_LIMIT,
+                TITANIUM_EXOSKELETON,
+                INHIBITOR_COLLAR,
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -6517,7 +6546,9 @@ function Tabletop({
                               ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
                               : s.spiral
                                 ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
-                                : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                                : s.morlockSiege
+                                  ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
+                                  : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
             <span
@@ -6739,7 +6770,9 @@ function Tabletop({
                               ? `VILLAIN · ${s.villain.code === "39001b" ? "B" : "A"}`
                               : s.spiral
                                 ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${spiralCornered(s) ? "CORNERED" : "ESCAPED"}`
-                                : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
+                                : s.morlockSiege
+                                  ? `VILLAIN · ${s.villain.code.endsWith("b") ? "B" : "A"} · ${morlockRouted(s)} OF ${ROUTED_TO_WIN} ROUTED`
+                                  : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
                     {s.kang ? (
                       <h2>
@@ -6814,6 +6847,13 @@ function Tabletop({
                       <span className="stat-caption">
                         Cannot be defeated · resets to {10 * s.playerCount} hit
                         points and wows The Challengers
+                      </span>
+                    )}
+                    {s.morlockSiege && (
+                      <span className="stat-caption">
+                        {s.morlockSiege.villainDeck.length} Marauder
+                        {s.morlockSiege.villainDeck.length === 1 ? "" : "s"} in
+                        the villain deck · each one routed brings the next
                       </span>
                     )}
                     {s.mojo && mojoDiscards(s) > 0 && (
@@ -6924,7 +6964,7 @@ function Tabletop({
                   <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
-                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) ? " magog-scheme" : ""}`}
+                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege ? " magog-scheme" : ""}`}
                     style={
                       {
                         "--scheme-actions": mainActionPiece
@@ -7003,6 +7043,19 @@ function Tabletop({
                     {magogScenario(s) && (
                       <p className="magog-scheme-note">
                         Completed: The Champion +{2 * s.playerCount}
+                      </p>
+                    )}
+                    {s.morlockSiege && s.scheme.code === KNOCK_KNOCK && (
+                      <p
+                        className="magog-scheme-note"
+                        aria-label={`Knock, Knock: ${s.morlockSiege.knocks} of 3 knock counters`}
+                      >
+                        {s.morlockSiege.knocks} of 3 knock counters
+                      </p>
+                    )}
+                    {s.morlockSiege && s.scheme.code === MUTANT_MASSACRE && (
+                      <p className="magog-scheme-note">
+                        Lose with no Morlock in play
                       </p>
                     )}
                     {mainActionPiece &&
@@ -7158,17 +7211,19 @@ function Tabletop({
                                 ? "ENVIRONMENT · DAMAGED"
                                 : isInfinityStone(p)
                                   ? "INFINITY STONE"
-                                  : p.code === WHEEL_SPINNING
-                                    ? "ENVIRONMENT · SPINNING"
-                                    : p.code === WHEEL_STOPPED
-                                      ? "ENVIRONMENT · STOPPED"
-                                      : MOJO_GENRE_SHOW_CAPTIONS[p.code]
-                                        ? "SETTING · SHOW"
-                                        : Object.values(
-                                              MANHATTAN_FLIPPED,
-                                            ).includes(p.code)
-                                          ? "ENVIRONMENT · SYMBIOTE"
-                                          : "ENVIRONMENT"}
+                                  : p.code === ROUTED_A || p.code === ROUTED_B
+                                    ? `ENVIRONMENT · ${morlockRouted(s)} ROUTED`
+                                    : p.code === WHEEL_SPINNING
+                                      ? "ENVIRONMENT · SPINNING"
+                                      : p.code === WHEEL_STOPPED
+                                        ? "ENVIRONMENT · STOPPED"
+                                        : MOJO_GENRE_SHOW_CAPTIONS[p.code]
+                                          ? "SETTING · SHOW"
+                                          : Object.values(
+                                                MANHATTAN_FLIPPED,
+                                              ).includes(p.code)
+                                            ? "ENVIRONMENT · SYMBIOTE"
+                                            : "ENVIRONMENT"}
                         </span>
                         <strong>{card(p).name}</strong>
                         {MOJO_GENRE_SHOW_CAPTIONS[p.code] && (
@@ -7181,6 +7236,15 @@ function Tabletop({
                           <span className="stat-caption">
                             Infested · a second Symbiote environment loses the
                             game
+                          </span>
+                        )}
+                        {(p.code === ROUTED_A || p.code === ROUTED_B) && (
+                          <span className="stat-caption">
+                            {morlockRouted(s)} of {ROUTED_TO_WIN} Marauders
+                            routed · the next one activates against each player
+                            {p.code === ROUTED_B
+                              ? ` · villain retaliate ${morlockRouted(s)}`
+                              : ""}
                           </span>
                         )}
                         {p.code === WHEEL_SPINNING && (

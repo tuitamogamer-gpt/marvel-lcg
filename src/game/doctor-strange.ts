@@ -1,6 +1,10 @@
 import { icemanSchemeIcon } from "./iceman.js";
 import { rulesCode } from "./rules-code.js";
-import { eventPlaySources, isTextBlank } from "./card-text.js";
+import {
+  eventPlaySources,
+  identityTextBlank,
+  isTextBlank,
+} from "./card-text.js";
 import { defenseEventSources } from "./card-text.js";
 import { printedCardMetadata } from "./printed-card-metadata.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
@@ -520,7 +524,7 @@ export function doctorStrangeAbilityOptions(
   ports?: Pick<DoctorStrangePorts, "heroMaxHP" | "canReadyIdentity">,
 ): Option[] {
   if (id === "identity") {
-    if (!active(s)) return [];
+    if (!active(s) || identityTextBlank(s)) return [];
     const top = doctorStrangeTopInvocation(s);
     if (s.player.form === "alter")
       return top && !s.flags.dsNaturalTalent

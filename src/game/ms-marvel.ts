@@ -1,5 +1,9 @@
 import { printedCardMetadata } from "./printed-card-metadata.js";
-import { defenseEventSources, isTextBlank } from "./card-text.js";
+import {
+  defenseEventSources,
+  identityTextBlank,
+  isTextBlank,
+} from "./card-text.js";
 import importedCards from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { uniqueConflict } from "./unique.js";
@@ -362,6 +366,7 @@ export function msMarvelCardEntered(s: GameState, p: Piece): Effect[] {
 export function msMarvelAbilityOptions(s: GameState, id: string): Option[] {
   if (id === "identity")
     return active(s) &&
+      !identityTextBlank(s) &&
       s.player.form === "alter" &&
       s.flags.msTeenSpiritRound !== s.round &&
       s.player.deck.length > 0

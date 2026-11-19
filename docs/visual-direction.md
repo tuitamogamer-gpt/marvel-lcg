@@ -191,3 +191,7 @@ Across the Mojoverse reuses the table's existing places. Spiral's label adds her
 ## Threat on characters, 2026-11-19
 
 MojoMania is the first scenario that puts threat on the heroes' own characters, so the threat token already used for schemes marks them too. An identity with threat gets a THREAT token beneath its stats, with a one-line reminder that flipping moves it; each seat in the team strip shows the same number beside its hit points and hand size. An ally carries its threat on a token at the card's lower left, opposite its hit points, and a minion lists its threat beneath its name like other counted minions. The Wheel of Genres keeps an ordinary environment column whose label reads SPINNING or STOPPED, with a caption counting the set-aside sets or announcing the next set. Paparazzi, an obligation that stays in play, shows its threat with the threat token instead of a generic counter.
+
+## Morlock Siege's villain deck, 2026-11-19
+
+Morlock Siege keeps one villain on the table at a time, so the villain column stays as it is: its label adds the Marauder's side and how many of the three needed are routed, and the caption counts the facedown villain deck. Routed is an ordinary environment column whose label repeats the routed count and whose caption names what the next Marauder does. Knock, Knock carries its knock counters on the one-line note under the main scheme that MaGog introduced, and Mutant Massacre uses the same line for its loss condition. The Morlocks are ordinary allies at the table, outside the ally count shown above them.

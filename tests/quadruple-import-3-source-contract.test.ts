@@ -263,7 +263,10 @@ describe("batch three: independent immutable source contract", () => {
     }
     expect(faces).toBe(171);
     expect(physical).toBe(230);
-    for (const code of ["40070a", "40103a", "40190a", "40204"])
+    // Morlock Siege is native since its own import; the other boxed
+    // scenarios and the campaign are not claimed here.
+    expect(hasExecutableScript("40070a")).toBe(true);
+    for (const code of ["40103a", "40190a", "40204"])
       expect(hasExecutableScript(code), code).toBe(false);
   });
 

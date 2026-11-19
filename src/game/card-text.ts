@@ -37,6 +37,15 @@ export function uncancelableText(
     printed = printed.replace(/In expert mode, this card gains[^.]*\./gi, "");
   return /cannot be cancel(?:ed|led)/i.test(printed);
 }
+/** The active player's identity, in its current form, has a blank printed
+ * text box (Inhibitor Collar, Memories of Armageddon...). */
+export function identityTextBlank(s: GameState): boolean {
+  const form = s.player.form === "hero" ? "hero" : "alter_ego";
+  const identity = [...definitions.values()].find(
+    (c) => c.set_code === s.heroId && c.type_code === form,
+  );
+  return !!identity && isTextBlank(s, identity.code);
+}
 export function isTextBlank(
   s: GameState,
   p: (Pick<Piece, "code"> & { id?: string }) | string,
@@ -110,6 +119,24 @@ export function isTextBlank(
     )
       return true;
   }
+  // Inhibitor Collar blanks the printed text box of the identity it is
+  // attached to.
+  const collarIdentity = definitions.get(printedCode);
+  const collarSeat = ["hero", "alter_ego"].includes(
+    collarIdentity?.type_code || "",
+  )
+    ? s.players.find((seat) => seat.heroId === collarIdentity?.set_code)
+    : undefined;
+  if (
+    collarSeat &&
+    s.attachments.some(
+      (a) =>
+        a.code === "40092" &&
+        a.attachedTo === `hero:${collarSeat.id}` &&
+        !isTextBlank(s, a),
+    )
+  )
+    return true;
   const dpIdentity = definitions.get(printedCode);
   const dpSeat = ["hero", "alter_ego"].includes(dpIdentity?.type_code || "")
     ? s.players.find((seat) => seat.heroId === dpIdentity?.set_code)

@@ -1,5 +1,9 @@
 import { rulesCode } from "./rules-code.js";
-import { eventPlaySources, isTextBlank } from "./card-text.js";
+import {
+  eventPlaySources,
+  identityTextBlank,
+  isTextBlank,
+} from "./card-text.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import { consumeStatus } from "./keywords.js";
@@ -370,6 +374,7 @@ export function thorCardEntered(s: GameState, p: Piece): Effect[] {
 export function thorAbilityOptions(s: GameState, id: string): Option[] {
   if (id === "identity")
     return active(s) &&
+      !identityTextBlank(s) &&
       s.player.form === "alter" &&
       s.flags.thorWorthyRound !== s.round
       ? [

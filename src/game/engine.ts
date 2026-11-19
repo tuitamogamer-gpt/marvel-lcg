@@ -25,6 +25,7 @@ import * as mojoGenres from "./mojo-genres.js";
 import * as magog from "./magog.js";
 import * as spiral from "./spiral.js";
 import * as mojoVillain from "./mojo.js";
+import * as morlock from "./morlock-siege.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -607,7 +608,8 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
       typeof p !== "string" &&
       venomGoblin.venomGoblinKeyword(s, p, name)
     ) ||
-    !!(s && typeof p !== "string" && mojoGenres.mojoGenreKeyword(s, p, name))
+    !!(s && typeof p !== "string" && mojoGenres.mojoGenreKeyword(s, p, name)) ||
+    !!(s && typeof p !== "string" && morlock.morlockKeyword(s, p, name) > 0)
   );
 }
 function nativeStatusModifiers(s: GameState, p: StatusState) {
@@ -640,7 +642,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     nebulaVillain.nebulaVillainKeyword(s, piece, "Stalwart") ||
     ronan.ronanKeyword(s, piece, "Stalwart") ||
     hela.helaKeyword(s, piece, "Stalwart") ||
-    magog.magogKeyword(s, piece, "Stalwart") > 0
+    magog.magogKeyword(s, piece, "Stalwart") > 0 ||
+    !!morlock.morlockStatusModifiers(s, piece).stalwart
       ? { stalwart: true }
       : {}),
     ...(piece.code === "50060" && !isTextBlank(s, piece)
@@ -652,6 +655,9 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
       : {}),
     ...(hood.hoodSteady(s, piece) ? { steady: true } : {}),
     ...(hoodModular.hoodModularSteady(s) ? { steady: true } : {}),
+    ...(morlock.morlockStatusModifiers(s, piece).steady
+      ? { steady: true }
+      : {}),
   };
 }
 function giveCharacterStatus(
@@ -1071,7 +1077,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         hoodModular.hoodModularGlobal(s).retaliate +
         sinisterModulars.sinisterModularKeyword(s, p, "Retaliate") +
         magog.magogKeyword(s, p, "Retaliate") +
-        mojoVillain.mojoKeyword(s, p, "Retaliate")
+        mojoVillain.mojoKeyword(s, p, "Retaliate") +
+        morlock.morlockKeyword(s, p, "Retaliate")
     : Math.max(intrinsic, grantedValue);
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
@@ -1321,6 +1328,7 @@ export function allyCount(s: GameState) {
       // again, so its own leave interrupt can finish.
       !p.pendingDefeat &&
       !(p.code === mojoVillain.LONGSHOT && !isTextBlank(s, p)) &&
+      !morlock.morlockAllyExcluded(s, p) &&
       !antPack.antManPackAllyExcluded(s, p) &&
       !magnetoHero.magnetoHeroNewModifiers(s, p, captainPackHasTrait)
         .excluded &&
@@ -1797,6 +1805,9 @@ function movePieceFromPlay(
   if (removedSource && redSkull.redSkullLocked(s, removedSource)) return;
   if (removedSource?.mojoThreat)
     add(s, ...mojoVillain.mojoCharacterThreatLeaves(s, removedSource.id));
+  // Mutant Massacre: the players lose with no Morlock ally left in play.
+  if (removedSource?.code === morlock.MORLOCK && s.morlockSiege)
+    add(s, { type: "msg:check" });
   // These actual cards were attached from a hand, never put into play.
   // Retain the marker before Electro leaves so legacy saves also bypass all
   // leave-play interrupts and printed player-card effects during cleanup.
@@ -2055,6 +2066,9 @@ function movePieceFromPlay(
   } else if (["32088b", "32172b"].includes(p.code) && !victory)
     s.removed.push(resetPiece(p));
   else if (p.code === "32172b" && victory)
+    (s.victoryDisplay ||= []).push(resetPiece(p));
+  // Morlock: Victory -1.
+  else if (p.code === morlock.MORLOCK && victory)
     (s.victoryDisplay ||= []).push(resetPiece(p));
   else if (isPlayerSideScheme(p) && victory)
     (s.victoryDisplay ||= []).push(resetPiece(p));
@@ -2793,6 +2807,7 @@ function check(s: GameState) {
     // MojoMania: the defeated identity leaves play, so its threat moves to
     // the main scheme.
     add(s, ...mojoVillain.mojoCharacterThreatLeaves(s, `hero:${seat.id}`));
+    if (s.morlockSiege) add(s, { type: "msg:check" });
     if (s.firstPlayerId === seat.id) {
       s.firstPlayerId = next.id;
       sabretooth.sabretoothFirstPlayerChanged(s);
@@ -3379,6 +3394,9 @@ function dealDamage(
       0,
       n - sinisterModulars.sinisterModularAttackReduction(s, target),
     );
+  // Titanium Exoskeleton: no more than 2 damage from a single attack.
+  if (attack && !traits.noDamageInstance)
+    n = morlock.morlockAttackCap(s, target, n);
 
   const code = original?.code;
   const originalStage = target === s.villain.id ? s.villain.stage : undefined;
@@ -3814,6 +3832,7 @@ function dealDamage(
           ) +
           magog.magogKeyword(s, retaliationTarget, "Retaliate") +
           mojoVillain.mojoKeyword(s, retaliationTarget, "Retaliate") +
+          morlock.morlockKeyword(s, retaliationTarget, "Retaliate") +
           (retaliationTarget.id === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -3840,6 +3859,17 @@ function dealDamage(
           mandatory: true,
           afterAttack: true,
         }),
+      );
+    // Heavy Armament: Hero Response after you attack the attached enemy.
+    if (sourceIsIdentity)
+      add(
+        s,
+        ...morlock.morlockAfterAttack(
+          s,
+          retaliationTarget.id,
+          s.activePlayerId,
+          morlockPorts,
+        ),
       );
   }
   if (attack && original && !["won", "lost"].includes(s.phase)) {
@@ -4522,6 +4552,9 @@ function defeatCharacter(
     movePieceFromPlay(s, m.id, true);
   else if (minion && hela.helaVictoryMinion(m) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
+  // Morlock: Victory -1.
+  else if (!minion && morlock.morlockVictoryAlly(s, m) && !textWasBlank)
+    movePieceFromPlay(s, m.id, false, undefined, true);
   else discardPiece(s, m.id);
   if (!textWasBlank)
     add(s, ...deadpool.deadpoolDefeated(s, m, source, allyController));
@@ -4698,6 +4731,10 @@ function defeatCharacter(
   add(s, ...receipts.flatMap((r) => valkyrie.valkyrieEnemyDefeated(s, r)));
   return true;
 }
+/** Basic thwarts against a scheme with assault use ATK instead of THW. */
+function schemeAssault(s: GameState, id: string) {
+  return x23.x23Assault(s, id) || morlock.morlockAssault(s, id);
+}
 function advanceVillain(
   s: GameState,
   source = "",
@@ -4831,6 +4868,11 @@ function advanceVillain(
         { isTextBlank },
       ),
     );
+    return;
+  }
+  // Morlock Siege: the defeated villain goes under Routed.
+  if (s.morlockSiege) {
+    morlock.morlockVillainDefeated(s, morlockPorts);
     return;
   }
   // The Sinister Six: a defeated villain is set aside.
@@ -5661,7 +5703,9 @@ function threat(
               ? mysterio
                   .mysterioMainAdvanced(s)
                   .map((e) => ({ ...e, actorId: s.firstPlayerId }))
-              : eachPlayer(s, E("drone"))),
+              : s.villainId === "morlock_siege"
+                ? morlock.morlockMainAdvanced(s)
+                : eachPlayer(s, E("drone"))),
       );
     }
   } else {
@@ -5903,6 +5947,7 @@ function defeatScheme(
         ...kang.kangSchemeDefeated(s, p, s.activePlayerId),
         ...sandman.sandmanSchemeDefeated(s, p),
         ...magog.magogSchemeDefeated(s, p),
+        ...morlock.morlockSchemeDefeated(s, p),
       ]
     : [];
   const helaFlip = hela.helaSideSchemeDefeated(s);
@@ -8667,45 +8712,50 @@ export function newGame(config: {
                                 (set) => set === c.set_code,
                               )
                             ? "mojo"
-                            : ["temporal", "anachronauts", "mot"].includes(
-                                  c.set_code || "",
+                            : morlock.NEXT_MODULAR_SETS.some(
+                                  (set) => set === c.set_code,
                                 )
-                              ? "toafk"
-                              : c.set_code === "exodus"
-                                ? "gambit"
-                                : c.set_code === "sauron"
-                                  ? "iceman"
-                                  : c.set_code === "crazy_gang"
-                                    ? "ncrawler"
-                                    : c.set_code === "hellfire"
-                                      ? "magneto"
-                                      : c.set_code === "arcade"
-                                        ? "jubilee"
-                                        : c.set_code === "reavers"
-                                          ? "rogue"
-                                          : c.set_code === "deathstrike"
-                                            ? "wolv"
-                                            : c.set_code === "shadow_king"
-                                              ? "storm"
-                                              : c.set_code ===
-                                                  "ironspider_sinister"
-                                                ? "spdr"
-                                                : c.set_code === "inheritors"
-                                                  ? "spiderham"
-                                                  : c.set_code === "zzzax"
-                                                    ? "ironheart"
-                                                    : c.set_code === "armadillo"
-                                                      ? "nova"
-                                                      : [
-                                                            "goblin_gimmicks",
-                                                            "a_mess_of_things",
-                                                            "power_drain",
-                                                            "running_interference",
-                                                          ].includes(
-                                                            c.set_code || "",
-                                                          )
-                                                        ? "gob"
-                                                        : "core")) ||
+                              ? "next_evol"
+                              : ["temporal", "anachronauts", "mot"].includes(
+                                    c.set_code || "",
+                                  )
+                                ? "toafk"
+                                : c.set_code === "exodus"
+                                  ? "gambit"
+                                  : c.set_code === "sauron"
+                                    ? "iceman"
+                                    : c.set_code === "crazy_gang"
+                                      ? "ncrawler"
+                                      : c.set_code === "hellfire"
+                                        ? "magneto"
+                                        : c.set_code === "arcade"
+                                          ? "jubilee"
+                                          : c.set_code === "reavers"
+                                            ? "rogue"
+                                            : c.set_code === "deathstrike"
+                                              ? "wolv"
+                                              : c.set_code === "shadow_king"
+                                                ? "storm"
+                                                : c.set_code ===
+                                                    "ironspider_sinister"
+                                                  ? "spdr"
+                                                  : c.set_code === "inheritors"
+                                                    ? "spiderham"
+                                                    : c.set_code === "zzzax"
+                                                      ? "ironheart"
+                                                      : c.set_code ===
+                                                          "armadillo"
+                                                        ? "nova"
+                                                        : [
+                                                              "goblin_gimmicks",
+                                                              "a_mess_of_things",
+                                                              "power_drain",
+                                                              "running_interference",
+                                                            ].includes(
+                                                              c.set_code || "",
+                                                            )
+                                                          ? "gob"
+                                                          : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -8782,6 +8832,7 @@ export function newGame(config: {
   if (v.id === "spiral") spiral.spiralSetup(s, spiralPorts);
   if (v.id === "mojo")
     mojoVillain.mojoSetup(s, mojoVillainPorts, selectedModules);
+  if (v.id === "morlock_siege") morlock.morlockSetup(s, morlockPorts);
   deadpool.deadpoolSetupPool(s, makePiece);
   if (s.deadpool?.initializedPoolSeats.length)
     s.encounter.deck = shuffle(s, s.encounter.deck);
@@ -11686,6 +11737,7 @@ export function abilityOptions(
     ...mojoGenres.mojoGenreActions(s, p, mojoGenrePorts),
     ...spiral.spiralActions(s, p, spiralPorts),
     ...mojoVillain.mojoActions(s, p, mojoVillainPorts),
+    ...morlock.morlockActions(s, p, morlockPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -13923,7 +13975,7 @@ const waspPorts: wasp.WaspPorts = {
   select,
   cardCost: (s, p) => cardCost(s, card(p), p),
   heroStat: (s, power) => heroStats(s)[power],
-  basicThwartUsesAttack: x23.x23Assault,
+  basicThwartUsesAttack: schemeAssault,
   basicThwartMayUseAttack: (s, target) =>
     s.sideSchemes.some(
       (p) => p.id === target && p.code === "04139" && !isTextBlank(s, p),
@@ -15629,8 +15681,10 @@ const msPorts: MsMarvelPorts = {
   },
   returnAlly: (s, id) => {
     const p = find(s, id);
-    need(p, "The ally is no longer in play.");
-    if (p!.id === sabretooth.sabretoothKelly(s)?.id || p!.code === "32088b") {
+    // An ally that has already left play during the ability (for example
+    // discarded by an enemy's interrupt) is not returned.
+    if (!p) return;
+    if (p.id === sabretooth.sabretoothKelly(s)?.id || p.code === "32088b") {
       movePieceFromPlay(s, id, false);
       if (p && !s.flags.nickDiscardingPreparation) {
         const owner = p.ownerId || s.activePlayerId;
@@ -16377,6 +16431,100 @@ const mojoVillainPorts: mojoVillain.MojoPorts = {
     target.startsWith("hero:")
       ? heroCard(seatView(s, target.slice(5))).name
       : card(find(s, target) || target).name,
+};
+const morlockPorts: morlock.MorlockPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  makePiece: (s, code) => makePiece(s, code),
+  shuffle: (s, pieces) => shuffle(s, pieces),
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  endGame: (s, won, reason) => endGame(s, won, reason),
+  resetPiece: (p) => resetPiece(p),
+  retireVillain: (s, villain) => {
+    mansionAttackEndDepartedActivation(s, villain.id);
+    iceman.icemanEnemyLeft(s, villain.id);
+    for (const a of [...allInPlay(s), ...s.attachments])
+      if (a.attachedTo === villain.id && !isPermanent(card(a)))
+        discardPiece(s, a.id);
+    wideawake.projectWideawakeEnemyLeftPlay(s, villain.id);
+  },
+  installVillain: (s, p) => {
+    Object.assign(p, resetPiece(p));
+    const hp = card(p).health! * s.playerCount;
+    s.villain = Object.assign(p, {
+      hp,
+      maxHp: hp,
+      stage: s.difficulty === "expert" ? 2 : 1,
+    });
+    syncStatuses(s.villain, card(s.villain));
+    if (keyword(p, "Toughness", s)) giveCharacterStatus(s, p, "tough");
+  },
+  advanceMain: (s) => {
+    discardMainAttachments(s);
+    const v = VILLAINS.find((v) => v.id === s.villainId)!;
+    s.scheme.index++;
+    s.scheme.code = v.schemes[s.scheme.index];
+    s.scheme.threat =
+      (card(s.scheme.code).base_threat || 0) *
+      (card(s.scheme.code).base_threat_fixed ? 1 : s.playerCount);
+    log(s, `The main scheme advances: ${card(s.scheme.code).name}.`, "bad");
+  },
+  allyEntered: (s, p) => {
+    const owner = controller(s, p.id)?.id;
+    const previous = s.activePlayerId;
+    if (owner) activateSeat(s, owner);
+    allyEnter(s, p);
+    if (owner) activateSeat(s, previous);
+  },
+  allies: (s, playerId) => friends(seatView(s, playerId)),
+  characterStat: (s, playerId, target, stat) => {
+    const view = seatView(s, playerId);
+    if (target.startsWith("hero:"))
+      return view.player.form === "hero" ? heroStats(view)[stat] : 0;
+    const p = view.player.inPlay.find((q) => q.id === target);
+    return p ? allyStat(view, p, stat) : 0;
+  },
+  canStatus: (s, target, status) =>
+    target === s.villain.id
+      ? giveStatus(
+          structuredClone(s.villain),
+          card(s.villain),
+          status,
+          nativeStatusModifiers(s, s.villain),
+        )
+      : dsPorts.canAddStatus(s, target, status),
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  controlledCards: (s, playerId) =>
+    seatView(s, playerId).player.inPlay.filter(
+      (p) => card(p).faction_code !== "encounter" && !isPermanent(card(p)),
+    ),
+  reveal: (s, p, playerId) => wreckingCrewPorts.reveal(s, p, playerId),
+  enemyStat: (s, p, stat) => enemyStats(s, p)[stat],
+  remainingHp: (s, p) =>
+    p.id === s.villain.id ? s.villain.hp : pieceHP(s, p) - p.damage,
+  characterTraitsCount: (s, traits) => {
+    const has = (c: Card) =>
+      traits.some((t) =>
+        (c.traits || "").split(/\.\s*/).some((x) => x.trim() === t),
+      );
+    const identities = s.players
+      .filter((seat) => !seat.eliminated)
+      .map((seat) => heroCard(seatView(s, seat)));
+    return (
+      identities.filter(has).length +
+      [
+        s.villain,
+        ...s.minions,
+        ...s.players.flatMap((seat) => friends(seatView(s, seat))),
+      ].filter((p) => has(card(p))).length
+    );
+  },
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+  removeStatus: (s, id, status) => {
+    const p = id === s.villain.id ? s.villain : find(s, id);
+    if (p) consumeStatus(p, status);
+  },
 };
 const kreeFanaticPorts: kreeFanatic.KreeFanaticPorts = {
   ...mutagenPorts,
@@ -18125,7 +18273,10 @@ const wideawakePorts: wideawake.ProjectWideawakePorts = {
 /** Cancel the departed physical villain's activation, including saved nested
  * continuations. A different Brotherhood member never inherits that attack. */
 function mansionAttackEndDepartedActivation(s: GameState, villainId: string) {
-  const cancelled = (s.mansionAttack!.cancelledActivations ||= []);
+  // Morlock Siege's Routed retires villains the same way, without a list.
+  const cancelled = s.mansionAttack
+    ? (s.mansionAttack.cancelledActivations ||= [])
+    : [];
   const clean = (activation: GameState["attack"] | GameState["scheming"]) => {
     if (!activation) return false;
     const callback = activation.activationAfter;
@@ -23950,6 +24101,37 @@ function enemyAttack(
       }
     }
   }
+  // Morlock: when an enemy attacks you, it attacks a Morlock you control
+  // instead.
+  if (!friendlySource && !originalTarget) {
+    const morlocks = morlock.morlockAttackRedirect(s, s.activePlayerId);
+    if (morlocks.length === 1) originalTarget = morlocks[0].id;
+    else if (morlocks.length > 1) {
+      choose(
+        s,
+        "Morlock",
+        `${card(p).name} attacks a Morlock you control instead. Choose the Morlock.`,
+        morlocks.map((m) =>
+          option(
+            m.id,
+            card(m).name,
+            [
+              E("enemyAttack", {
+                id,
+                extra,
+                activation,
+                originalTarget: m.id,
+                actorId: s.activePlayerId,
+              }),
+            ],
+            undefined,
+            m.code,
+          ),
+        ),
+      );
+      return;
+    }
+  }
   if (!friendlySource && !originalTarget && nickFury.nickFuryStealth(s)) {
     enemyScheme(s, id, extra, {
       ...activation,
@@ -24125,6 +24307,7 @@ function enemyAttack(
       s,
       ...crossbones.crossbonesAttackStarted(s, id, s.attack.originalPlayerId!),
       ...mojoGenres.mojoGenreAttackInitiated(s, id, s.attack.originalPlayerId!),
+      ...morlock.morlockAttackInitiated(s, id, s.attack.originalPlayerId!),
     );
   if (!friendlySource)
     add(
@@ -24328,7 +24511,9 @@ function prepareAttackBoosts(s: GameState) {
   a.pendingBoosts.push(...(attacker.inheritorBoosts || []).splice(0));
   const n = a.omitNormalBoost
     ? 0
-    : normal + mutagenAdditionalBoosts(s, a.attacker);
+    : normal +
+      mutagenAdditionalBoosts(s, a.attacker) +
+      morlock.morlockAdditionalBoosts(s);
   for (let i = 0; i < n; i++) {
     const p = drawEncounter(s);
     if (p) a.pendingBoosts.push(p);
@@ -24608,6 +24793,7 @@ function boostEffects(s: GameState, p: Piece) {
     magog.magogBoost(s, p) ??
     spiral.spiralBoost(s, p) ??
     mojoVillain.mojoBoost(s, p) ??
+    morlock.morlockBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -26767,6 +26953,12 @@ function reveal(
       (mojoVillain.MOJO_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       mojoVillain.LONGSHOT_CODES.some((code) => code === p.code) ||
+      ([
+        ...morlock.MORLOCK_SIEGE_SCRIPT_CODES,
+        ...morlock.MILITARY_GRADE_CODES,
+        ...morlock.MUTANT_SLAYERS_CODES,
+      ].some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -26985,6 +27177,9 @@ function reveal(
       ...spiral.SPIRAL_SCRIPT_CODES,
       ...mojoVillain.MOJO_SCRIPT_CODES,
       ...mojoVillain.LONGSHOT_CODES,
+      ...morlock.MORLOCK_SIEGE_SCRIPT_CODES,
+      ...morlock.MILITARY_GRADE_CODES,
+      ...morlock.MUTANT_SLAYERS_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -27039,6 +27234,7 @@ function reveal(
       magog.magogReveal(s, p) ??
       spiral.spiralReveal(s, p) ??
       mojoVillain.mojoReveal(s, p) ??
+      morlock.morlockReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -27136,6 +27332,7 @@ function reveal(
     magog.magogReveal(s, p) ??
     spiral.spiralReveal(s, p) ??
     mojoVillain.mojoReveal(s, p) ??
+    morlock.morlockReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -28572,6 +28769,7 @@ function resolve(s: GameState, e: Effect) {
           magog.magogReveal(state, piece) ??
           spiral.spiralReveal(state, piece) ??
           mojoVillain.mojoReveal(state, piece) ??
+          morlock.morlockReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -28725,6 +28923,7 @@ function resolve(s: GameState, e: Effect) {
   if (magog.resolveMagogEffect(s, e, magogPorts)) return;
   if (spiral.resolveSpiralEffect(s, e, spiralPorts)) return;
   if (mojoVillain.resolveMojoEffect(s, e, mojoVillainPorts)) return;
+  if (morlock.resolveMorlockEffect(s, e, morlockPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -32590,7 +32789,7 @@ function resolve(s: GameState, e: Effect) {
         );
         break;
       }
-      if (e.basic && !e.redHouseAttack && !x23.x23Assault(s, e.target))
+      if (e.basic && !e.redHouseAttack && !schemeAssault(s, e.target))
         e.amount += jubilee.jubileeGenerationBonus(
           s,
           "hero",
@@ -32598,7 +32797,7 @@ function resolve(s: GameState, e: Effect) {
           jubileePorts,
         );
       if (e.additional) s.flags.additionalThwartPacket = true;
-      if (e.basic && !e.x23AssaultHandled && x23.x23Assault(s, e.target)) {
+      if (e.basic && !e.x23AssaultHandled && schemeAssault(s, e.target)) {
         e.amount =
           e.amount -
           (e.basicStatAmount ?? heroStats(s).thwart) +
@@ -33405,7 +33604,7 @@ function resolve(s: GameState, e: Effect) {
         ]);
         break;
       }
-      if (!attack && !e.x23AssaultHandled && x23.x23Assault(s, e.target)) {
+      if (!attack && !e.x23AssaultHandled && schemeAssault(s, e.target)) {
         e.amount =
           (e.amount ?? allyStat(s, p, "thwart")) -
           allyStat(s, p, "thwart") +
@@ -37614,6 +37813,7 @@ function resolve(s: GameState, e: Effect) {
         ...wreckingCrew.wreckingCrewStepOne(s),
         ...hood.hoodStepOne(s),
         ...venomGoblin.venomGoblinStepOne(s),
+        ...morlock.morlockStepOne(s),
       );
       break;
     case "villainActivate": {
@@ -38584,6 +38784,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...mojoGenres.mojoGenreActions(s, p, mojoGenrePorts),
               ...spiral.spiralActions(s, p, spiralPorts),
               ...mojoVillain.mojoActions(s, p, mojoVillainPorts),
+              ...morlock.morlockActions(s, p, morlockPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -38700,6 +38901,25 @@ export function dispatch(state: GameState, command: Command): GameState {
               selected,
               "This First Player Action needs the first player and the ready Milano.",
             );
+            add(s, ...selected!.effects);
+          } else if (
+            morlock.morlockActionSource(s, command.id) &&
+            morlock
+              .morlockActions(
+                s,
+                morlock.morlockActionSource(s, command.id)!,
+                morlockPorts,
+              )
+              .some((o) => !command.action || o.id === command.action)
+          ) {
+            const selected = morlock
+              .morlockActions(
+                s,
+                morlock.morlockActionSource(s, command.id)!,
+                morlockPorts,
+              )
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
             add(s, ...selected!.effects);
           } else if (mojoVillain.mojoActionSource(s, command.id)) {
             const selected = mojoVillain

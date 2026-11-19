@@ -26,6 +26,11 @@ import { MOJO_GENRE_SCRIPT_CODES } from "../src/game/mojo-genres";
 import { MAGOG_SCRIPT_CODES } from "../src/game/magog";
 import { SPIRAL_SCRIPT_CODES } from "../src/game/spiral";
 import { LONGSHOT_CODES, MOJO_SCRIPT_CODES } from "../src/game/mojo";
+import {
+  MILITARY_GRADE_CODES,
+  MORLOCK_SIEGE_SCRIPT_CODES,
+  MUTANT_SLAYERS_CODES,
+} from "../src/game/morlock-siege";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -68,6 +73,9 @@ const badoonCodes = new Set<string>([
   ...SPIRAL_SCRIPT_CODES,
   ...MOJO_SCRIPT_CODES,
   ...LONGSHOT_CODES,
+  ...MORLOCK_SIEGE_SCRIPT_CODES,
+  ...MILITARY_GRADE_CODES,
+  ...MUTANT_SLAYERS_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -451,7 +459,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(69);
+    expect(MODULES).toHaveLength(71);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "temporal",
@@ -481,9 +489,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(3002);
-    expect(coverage.unsupportedFaces).toBe(1549);
-    expect(coverage.dedicatedFaces).toBe(2564);
+    expect(coverage.executableFaces).toBe(3045);
+    expect(coverage.unsupportedFaces).toBe(1506);
+    expect(coverage.dedicatedFaces).toBe(2607);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -701,6 +709,8 @@ describe("complete expansion rules inventory", () => {
         14 -
         // MojoMania: Mojo and Longshot.
         16 -
+        // NeXt Evolution: Morlock Siege, Military Grade and Mutant Slayers.
+        43 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -721,15 +731,22 @@ describe("complete expansion rules inventory", () => {
       expect(audited.get(code)?.installedRegistry.executable, code).toBe(true);
     expect(coverage.campaignSupport).toEqual([]);
   });
-  it("closes both NeXt Evolution hero sections while retaining the boxed scenario and campaign gaps", () => {
+  it("closes both NeXt Evolution hero sections and Morlock Siege while retaining the other boxed scenarios and campaign gaps", () => {
     const next = inventory.installedRegistryCoverage.products.find(
       (pack: { code: string }) => pack.code === "next_evol",
     );
     expect(next).toMatchObject({
       faceCount: 235,
-      executableFaces: 72,
+      executableFaces: 115,
       installedCardClosure: false,
     });
+    // Morlock Siege with its Military Grade and Mutant Slayers sets.
+    const morlockFaces = new Set<string>([
+      ...MORLOCK_SIEGE_SCRIPT_CODES,
+      ...MILITARY_GRADE_CODES,
+      ...MUTANT_SLAYERS_CODES,
+    ]);
+    expect(morlockFaces.size).toBe(43);
     const heroFaces = cards.filter(
       (entry: { pack_code: string; position: number }) =>
         entry.pack_code === "next_evol" && entry.position <= 69,
@@ -754,14 +771,16 @@ describe("complete expansion rules inventory", () => {
           (entry: { pack_code: string; position: number; code: string }) =>
             entry.pack_code === "next_evol" &&
             entry.position > 69 &&
-            entry.code !== "40196",
+            entry.code !== "40196" &&
+            !morlockFaces.has(entry.code),
         )
         .map((entry: { code: string }) => entry.code)
         .sort(),
     );
     expect(next.unsupportedFaceCodes).toEqual(
-      expect.arrayContaining(["40070a", "40204"]),
+      expect.arrayContaining(["40103a", "40204"]),
     );
+    expect(next.unsupportedFaceCodes).not.toContain("40070a");
     expect(MODULES.map((module) => module.id)).not.toContain("dreadpool");
   });
   it("retains the independent nine-card Inheritors closure beside the complete Spider-Ham pack", () => {
@@ -828,7 +847,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(69);
+    expect(coverage.registeredModules).toHaveLength(71);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -1012,7 +1031,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(36);
+    ).toHaveLength(37);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "venom_goblin",
@@ -1259,7 +1278,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(158);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(159);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

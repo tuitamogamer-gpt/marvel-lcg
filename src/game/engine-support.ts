@@ -25,6 +25,11 @@ import { MOJO_GENRE_SCRIPT_CODES } from "./mojo-genres.js";
 import { MAGOG_SCRIPT_CODES } from "./magog.js";
 import { SPIRAL_SCRIPT_CODES } from "./spiral.js";
 import { LONGSHOT_CODES, MOJO_SCRIPT_CODES } from "./mojo.js";
+import {
+  MILITARY_GRADE_CODES,
+  MORLOCK_SIEGE_SCRIPT_CODES,
+  MUTANT_SLAYERS_CODES,
+} from "./morlock-siege.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -298,6 +303,9 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...SPIRAL_SCRIPT_CODES,
   ...MOJO_SCRIPT_CODES,
   ...LONGSHOT_CODES,
+  ...MORLOCK_SIEGE_SCRIPT_CODES,
+  ...MILITARY_GRADE_CODES,
+  ...MUTANT_SLAYERS_CODES,
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

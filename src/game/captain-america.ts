@@ -1,4 +1,8 @@
-import { defenseEventSources, isTextBlank } from "./card-text.js";
+import {
+  defenseEventSources,
+  identityTextBlank,
+  isTextBlank,
+} from "./card-text.js";
 import { printedCardMetadata } from "./printed-card-metadata.js";
 import { goblinIdentityLocked } from "./goblin-modules.js";
 import type {
@@ -122,6 +126,7 @@ export function captainPhaseEnded(s: GameState) {
 
 export function captainAbilityOptions(s: GameState, id: string): Option[] {
   if (!active(s)) return [];
+  if (id === "identity" && identityTextBlank(s)) return [];
   if (id === "identity")
     return s.player.form === "hero" &&
       s.player.exhausted &&

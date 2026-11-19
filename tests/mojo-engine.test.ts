@@ -217,7 +217,9 @@ describe("MojoMania: original source", () => {
     expect([1, 2, 3, 4].map((n) => scenarioModuleCount(mojo, n))).toEqual([
       2, 3, 4, 5,
     ]);
-    expect(MODULES.at(-1)).toMatchObject({ id: "longshot", name: "Longshot" });
+    expect(MODULES.find((m) => m.id === "longshot")).toMatchObject({
+      name: "Longshot",
+    });
   });
 
   it("sets aside one modular set plus one per player and brings one in", () => {

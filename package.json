@@ -89,7 +89,8 @@
     "test:mojo-genres": "node scripts/mojo-genres-check.mjs",
     "test:magog": "node scripts/magog-check.mjs",
     "test:spiral": "node scripts/spiral-check.mjs",
-    "test:mojo": "node scripts/mojo-check.mjs"
+    "test:mojo": "node scripts/mojo-check.mjs",
+    "test:morlock": "node scripts/morlock-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

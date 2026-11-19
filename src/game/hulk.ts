@@ -1,5 +1,5 @@
 import catalog from "../data/catalog-cards.json" with { type: "json" };
-import { isTextBlank } from "./card-text.js";
+import { identityTextBlank, isTextBlank } from "./card-text.js";
 import type {
   Card,
   Effect,
@@ -127,6 +127,7 @@ export function hulkTurnEnds(s: GameState): Effect[] {
 export function hulkAbilityOptions(s: GameState, id: string): Option[] {
   return active(s) &&
     id === "identity" &&
+    !identityTextBlank(s) &&
     s.player.form === "alter" &&
     s.flags.hulkResearchRound !== s.round
     ? [

@@ -314,6 +314,9 @@ export interface GameState {
   spiral?: import("./spiral.js").SpiralState;
   /** MojoMania: the set-aside modular sets. */
   mojo?: import("./mojo.js").MojoState;
+  /** Morlock Siege: the villain deck, the villains under Routed, the
+   * set-aside Morlocks and Hide!, and the knock counters. */
+  morlockSiege?: import("./morlock-siege.js").MorlockSiegeState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */

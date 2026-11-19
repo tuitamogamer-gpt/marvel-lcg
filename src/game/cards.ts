@@ -1478,6 +1478,31 @@ export const VILLAINS = [
       "Mojo piles threat onto your heroes and allies and keeps the Wheel of Genres spinning. Every flip or fallen ally hands that threat to his main scheme, and when the wheel runs out of genres, the show is over.",
     color: "#8a2f6b",
   },
+  {
+    id: "morlock_siege",
+    name: "Marauders",
+    // A shuffled villain deck of seven Marauders: side A in Standard, side B
+    // in Expert. Rout three of them to win.
+    codes: [
+      "40070a",
+      "40071a",
+      "40072a",
+      "40073a",
+      "40074a",
+      "40075a",
+      "40076a",
+    ],
+    schemes: ["40077b", "40078b"],
+    module: "military_grade",
+    moduleCount: 2,
+    defaultModules: ["military_grade", "mutant_slayers"],
+    difficulty: 3,
+    title: "Morlock Siege",
+    location: "The Morlock Tunnels",
+    description:
+      "Mister Sinister's Marauders storm the tunnels beneath New York. Hold the line with the Morlocks and rout three of the killers before the massacre is complete.",
+    color: "#4f5d3a",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1561,6 +1586,8 @@ export const MODULES = [
   { id: "sci-fi", name: "Sci-Fi", difficulty: 3 },
   { id: "sitcom", name: "Sitcom", difficulty: 3 },
   { id: "longshot", name: "Longshot", difficulty: 1 },
+  { id: "military_grade", name: "Military Grade", difficulty: 2 },
+  { id: "mutant_slayers", name: "Mutant Slayers", difficulty: 3 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(
@@ -1984,7 +2011,14 @@ export function heroStats(s: GameState) {
           (p) =>
             p.code === "22030" && p.attachedTo === `hero:${s.activePlayerId}`,
         )
-        .reduce((n, p) => n + (card(p).attack || 0), 0) +
+        .reduce((n, p) => n + (card(p).attack || 0), 0) -
+      // Inhibitor Collar: -1 ATK.
+      s.attachments.filter(
+        (p) =>
+          p.code === "40092" &&
+          p.attachedTo === `hero:${s.activePlayerId}` &&
+          !isTextBlank(s, p),
+      ).length +
       (has(s, "01057") ? 1 : 0) +
       s.player.inPlay.filter((p) => rulesCode(p) === "01028").length * 2 +
       Number(s.flags.lead || 0) +
