@@ -371,6 +371,18 @@ import {
   horsemenVillains,
 } from "./game/four-horsemen";
 import {
+  ABYSS,
+  AGE_OF_APOCALYPSE,
+  CITADEL_NEXT,
+  apocalypse,
+  apocalypseCaption,
+  apocalypseCitadel,
+  apocalypseRoman,
+  apocalypseStage,
+  apocalypseThwartLocked,
+  noLongerWorthy,
+} from "./game/apocalypse";
+import {
   AERIAL_BOMBARDMENT,
   IMPERVIOUS,
   OUT_OF_REACH,
@@ -2804,6 +2816,19 @@ export default function App() {
                       becomes the Living Bomb, and Stryfe cannot be defeated
                       until it is gone. Extreme Measures and Mutant Insurrection
                       are preselected.
+                    </p>
+                  )}
+                  {villain.id === "apocalypse" && (
+                    <p className="setting-help">
+                      Each time The Age of Apocalypse is completed, its threat
+                      is removed and a stronger Apocalypse rises; the scheme
+                      completes at his printed hit points per player, and once
+                      Apocalypse (IV) completes it you lose. At 0 hit points he
+                      heals and the scheme loses that much threat instead. Clear
+                      Heart of the Empire, The Towering Citadel and The
+                      Tyrant&rsquo;s Throne, each locked while a Prelate is in
+                      play, to attach No Longer Worthy; then defeat him to win.
+                      Dark Riders and Infinites are preselected.
                     </p>
                   )}
                   {villain.id === "four_horsemen" && (
@@ -6763,21 +6788,25 @@ function Tabletop({
                       ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
                       : s.horsemen
                         ? `Bring all four Horsemen to 0 · ${horsemenVillains(s).filter((v) => !horsemanStanding(s, v)).length} of 4 at 0`
-                        : s.sinisterSix
-                          ? "Escape: clear the Light at the End"
-                          : s.wreckingCrew
-                            ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
-                            : s.kang
-                              ? kangObjective(s)
-                              : magogScenario(s)
-                                ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
-                                : s.spiral
-                                  ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
-                                  : s.morlockSiege
-                                    ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
-                                    : onTheRun(s)
-                                      ? `Defeat ${card(s.villain).name} twice · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? 0 : 1} of 2`
-                                      : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                        : apocalypse(s)
+                          ? noLongerWorthy(s)
+                            ? "Defeat Apocalypse · No Longer Worthy"
+                            : `Storm the citadel · ${apocalypseCitadel(s)} of 3 cleared`
+                          : s.sinisterSix
+                            ? "Escape: clear the Light at the End"
+                            : s.wreckingCrew
+                              ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
+                              : s.kang
+                                ? kangObjective(s)
+                                : magogScenario(s)
+                                  ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
+                                  : s.spiral
+                                    ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
+                                    : s.morlockSiege
+                                      ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
+                                      : onTheRun(s)
+                                        ? `Defeat ${card(s.villain).name} twice · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? 0 : 1} of 2`
+                                        : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
             <span
@@ -7017,9 +7046,11 @@ function Tabletop({
                                         ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · +${commonType(s, s.activePlayerId)} ATK VS YOU`
                                         : unus(s)
                                           ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · GENE POOL ${genePoolThreat(s)}`
-                                          : misterSinister(s)
-                                            ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${superpowers(s)} ${superpowers(s) === 1 ? "SUPERPOWER" : "SUPERPOWERS"}`
-                                            : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
+                                          : apocalypse(s)
+                                            ? `VILLAIN · STAGE ${apocalypseRoman(apocalypseStage(s))} · ${noLongerWorthy(s) ? "NO LONGER WORTHY" : "REGENERATES"}`
+                                            : misterSinister(s)
+                                              ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${superpowers(s)} ${superpowers(s) === 1 ? "SUPERPOWER" : "SUPERPOWERS"}`
+                                              : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
                     {s.kang ? (
                       <h2>
@@ -7116,6 +7147,11 @@ function Tabletop({
                     )}
                     {unus(s) && (
                       <span className="stat-caption">{unusCaption(s)}</span>
+                    )}
+                    {apocalypse(s) && (
+                      <span className="stat-caption">
+                        {apocalypseCaption(s)}
+                      </span>
                     )}
                     {misterSinister(s) && (
                       <span className="stat-caption">
@@ -7248,7 +7284,7 @@ function Tabletop({
                   <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
-                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen ? " magog-scheme" : ""}`}
+                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen || apocalypse(s) ? " magog-scheme" : ""}`}
                     style={
                       {
                         "--scheme-actions": mainActionPiece
@@ -7371,6 +7407,13 @@ function Tabletop({
                         Active:{" "}
                         {card(horsemanVillain(s, s.horsemen.active)!).name} ·
                         moves on after each activation
+                      </p>
+                    )}
+                    {apocalypse(s) && s.scheme.code === AGE_OF_APOCALYPSE && (
+                      <p className="magog-scheme-note">
+                        {apocalypseStage(s) < 4
+                          ? `Completed: Apocalypse ${apocalypseRoman(apocalypseStage(s) + 1)} rises`
+                          : "Completed: you lose"}
                       </p>
                     )}
                     {unus(s) && s.scheme.code === HUNTING_GENE_TRAITORS && (
@@ -7834,6 +7877,14 @@ function Tabletop({
                           Damage to Mojo removes threat here instead
                         </span>
                       )}
+                      {apocalypseThwartLocked(s, p.id) && (
+                        <span className="scheme-lock">Locked by a Prelate</span>
+                      )}
+                      {s.apocalypse && CITADEL_NEXT[p.code] && (
+                        <span className="stat-caption">
+                          Clear it: a Prelate · then {CITADEL_NEXT[p.code]}
+                        </span>
+                      )}
                       {p.code === GENE_POOL && (
                         <span className="stat-caption">
                           Permanent ·{" "}
@@ -8077,6 +8128,16 @@ function Tabletop({
                                 Gene Pool: {soldierGains(s).join(" · ")}
                               </span>
                             )}
+                          {p.code === ABYSS && !!p.storedCards?.length && (
+                            <span
+                              className="engagement-label"
+                              aria-label={`Abyss: ${p.storedCards.length} facedown ${p.storedCards.length === 1 ? "card" : "cards"}, +${2 * p.storedCards.length} hit points`}
+                            >
+                              {p.storedCards.length} facedown{" "}
+                              {p.storedCards.length === 1 ? "card" : "cards"} ·
+                              +{2 * p.storedCards.length} hit points
+                            </span>
+                          )}
                           {p.code === SAMURAI && p.counters > 0 && (
                             <span
                               className="engagement-label"

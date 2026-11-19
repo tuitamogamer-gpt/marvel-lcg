@@ -194,7 +194,7 @@ describe("Four Horsemen: original source", () => {
       moduleCount: 2,
       defaultModules: ["dystopian_nightmare", "hounds"],
     });
-    expect(MODULES.at(-1)?.id).toBe("hounds");
+    expect(MODULES.at(-2)?.id).toBe("hounds");
     expect(scenarioModules("four_horsemen")).toHaveLength(MODULES.length);
   });
 

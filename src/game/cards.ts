@@ -67,6 +67,7 @@ import { sinisterPlayerPackIdentityModifiers } from "./sinister-player-pack.js";
 import { mysterioHandSize } from "./mysterio.js";
 import { stryfeHandSize, stryfeIdentityPenalty } from "./stryfe.js";
 import { unusHealth } from "./unus.js";
+import { apocalypseHealth } from "./apocalypse.js";
 import { venomGoblinHealth } from "./venom-goblin.js";
 import {
   mojoGenreGlobal,
@@ -1617,6 +1618,24 @@ export const VILLAINS = [
       "War, Famine, Pestilence and Death ride together. Only the Horseman with the active counter activates, and none of them falls while another still has hit points.",
     color: "#6b3a3a",
   },
+  {
+    id: "apocalypse",
+    name: "Apocalypse",
+    // Apocalypse (II) in Standard, (III) in Expert; each completed main
+    // scheme reveals the next one, up to (IV).
+    codes: ["45101b", "45102a", "45102b"],
+    schemes: ["45103b"],
+    module: "dark_riders",
+    moduleCount: 2,
+    defaultModules: ["dark_riders", "infinites"],
+    fixedSets: ["prelates"],
+    difficulty: 5,
+    title: "The Age of Apocalypse",
+    location: "Apocalypse's citadel",
+    description:
+      "Apocalypse heals instead of falling and grows stronger each time his scheme is completed, until you fight through his citadel and prove him No Longer Worthy.",
+    color: "#4a3a6b",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1709,6 +1728,7 @@ export const MODULES = [
   { id: "infinites", name: "Infinites", difficulty: 3 },
   { id: "dystopian_nightmare", name: "Dystopian Nightmare", difficulty: 2 },
   { id: "hounds", name: "Hounds", difficulty: 3 },
+  { id: "dark_riders", name: "Dark Riders", difficulty: 3 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(
@@ -2382,6 +2402,7 @@ export function pieceHP(s: GameState, p: Piece) {
     captainPackModifiers(textActiveState(s), p.id).hp +
     venomGoblinHealth(s, p) +
     mojoGenreHealth(s, p) +
-    unusHealth(s, p)
+    unusHealth(s, p) +
+    apocalypseHealth(s, p)
   );
 }

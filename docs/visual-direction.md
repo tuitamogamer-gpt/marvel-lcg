@@ -219,3 +219,7 @@ Unus grows with the threat on Gene Pool, so the villain label carries that threa
 ## The Four Horsemen's row, 2026-11-19
 
 The four Horsemen share the villain row used for The Sinister Six and The Wrecking Crew. The active one is outlined and says he holds the active counter, and each Horseman at 0 hit points says he falls once all four are at 0. The objective counts the Horsemen at 0, and the main scheme's one-line note names the active Horseman.
+
+## Apocalypse and his citadel, 2026-11-19
+
+Apocalypse's label carries his stage, I to IV, and whether he still regenerates or is No Longer Worthy; the caption gives the threat The Age of Apocalypse loses when he would be defeated, or says when he can be hurt. The objective counts the citadel schemes cleared until No Longer Worthy is attached, then asks for his defeat. The main scheme's one-line note names the Apocalypse its completion reveals, or the loss at stage IV. Each citadel scheme carries a lock line, like Hela's, while a Prelate is in play, and a caption with what clearing it leads to; Abyss's engagement line counts his facedown cards and the hit points they give him.

@@ -239,7 +239,7 @@ describe("Stryfe: original source", () => {
       codes: ["40163", "40164", "40165"],
       defaultModules: ["extreme_measures", "mutant_insurrection"],
     });
-    expect(MODULES.slice(-5, -3).map((m) => m.id)).toEqual([
+    expect(MODULES.slice(-6, -4).map((m) => m.id)).toEqual([
       "extreme_measures",
       "mutant_insurrection",
     ]);
@@ -390,6 +390,15 @@ describe("Stryfe encounter cards", () => {
     expect(scheme.counters).toBeGreaterThanOrEqual(
       card("40189").base_threat! + 2,
     );
+  });
+
+  it("Mutant Insurrection gives each minion entering play toughness", () => {
+    let s = started("standard", 1, "rhino", ["mutant_insurrection"]);
+    const scheme = take(s, "40189");
+    scheme.counters = 5;
+    s.sideSchemes.push(scheme);
+    s = settle(resolveEncounter(reveal(reload(s), "40185")));
+    expect(s.minions.find((m) => m.code === "40185")?.tough).toBe(true);
   });
 
   it("Thumbelina returns your highest-cost upgrade to your hand", () => {

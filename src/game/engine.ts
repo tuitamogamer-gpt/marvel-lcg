@@ -32,6 +32,7 @@ import * as sin from "./mister-sinister.js";
 import * as sty from "./stryfe.js";
 import * as unus from "./unus.js";
 import * as horsemen from "./four-horsemen.js";
+import * as apoc from "./apocalypse.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -625,6 +626,7 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
       typeof p !== "string" &&
       horsemen.horsemenKeyword(s, p, name) > 0
     ) ||
+    !!(s && typeof p !== "string" && apoc.apocalypseKeyword(s, p, name) > 0) ||
     !!(
       s &&
       typeof p !== "string" &&
@@ -668,7 +670,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     !!morlock.morlockStatusModifiers(s, piece).stalwart ||
     jug.jugKeyword(s, piece, "Stalwart") > 0 ||
     sty.stryfeStalwart(s, piece) ||
-    unus.unusKeyword(s, piece, "Stalwart") > 0
+    unus.unusKeyword(s, piece, "Stalwart") > 0 ||
+    apoc.apocalypseKeyword(s, piece, "Stalwart") > 0
       ? { stalwart: true }
       : {}),
     ...(piece.code === "50060" && !isTextBlank(s, piece)
@@ -1114,7 +1117,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         jug.jugKeyword(s, p, "Retaliate") +
         sin.sinisterKeyword(s, p, "Retaliate") +
         unus.unusKeyword(s, p, "Retaliate") +
-        horsemen.horsemenKeyword(s, p, "Retaliate")
+        horsemen.horsemenKeyword(s, p, "Retaliate") +
+        apoc.apocalypseKeyword(s, p, "Retaliate")
     : Math.max(intrinsic, grantedValue);
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
@@ -2944,6 +2948,10 @@ export function schemeLimit(s: GameState) {
     ).length *
       4;
   if (mansionLimit !== undefined) return mansionLimit + surveillance;
+  // The Age of Apocalypse: X per player, X being Apocalypse's printed hit
+  // point numeral.
+  const apocalypseLimit = apoc.apocalypseMainLimit(s);
+  if (apocalypseLimit !== undefined) return apocalypseLimit + surveillance;
   if (value) return value.threshold + surveillance;
   return (
     (card(s.scheme.code).threat || 0) *
@@ -3435,6 +3443,7 @@ function dealDamage(
     (mojoGenres.mojoGenreVillainImmune(s, target) ||
       spiral.spiralVillainImmune(s, target) ||
       jug.jugImmune(s, target) ||
+      apoc.apocalypseImmune(s, target) ||
       sin.sinisterImmune(s, target, {
         aerial: damageSourceAerial(s, source),
         ranged:
@@ -3903,6 +3912,7 @@ function dealDamage(
           sin.sinisterKeyword(s, retaliationTarget, "Retaliate") +
           unus.unusKeyword(s, retaliationTarget, "Retaliate") +
           horsemen.horsemenKeyword(s, retaliationTarget, "Retaliate") +
+          apoc.apocalypseKeyword(s, retaliationTarget, "Retaliate") +
           (retaliationTarget.id === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -4621,6 +4631,15 @@ function defeatCharacter(
   const bounty = minion ? mojoGenres.mojoGenreDeadOrAlive(s, m) : [];
   // Genetic Experiments leaves play with its minion: read it first.
   const geneticExperiments = minion ? unus.unusMinionDefeating(s, m) : [];
+  // Abyss: his facedown cards go to their owners' discard piles.
+  if (minion && m.storedCards?.length && m.code === apoc.ABYSS)
+    for (const q of m.storedCards.splice(0)) {
+      const owner = s.players.find(
+        (seat) => seat.id === q.ownerId && !seat.eliminated,
+      );
+      if (owner) seatView(s, owner).player.discard.push(q);
+      else s.removed.push(q);
+    }
   // Toad 2.0's cards return to their owners' hands instead of leaving with it.
   const underToad = minion ? mojoGenres.mojoGenreToadDefeated(s, m) : [];
   const name = card(m).name;
@@ -4655,6 +4674,9 @@ function defeatCharacter(
   )
     movePieceFromPlay(s, m.id, true);
   else if (minion && hela.helaVictoryMinion(m) && !textWasBlank)
+    movePieceFromPlay(s, m.id, false, undefined, true);
+  // The Prelates: Victory 3.
+  else if (minion && apoc.apocalypseVictoryMinion(m) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
   // Morlock: Victory -1.
   else if (!minion && morlock.morlockVictoryAlly(s, m) && !textWasBlank)
@@ -4904,6 +4926,27 @@ function advanceVillain(
       s,
       true,
       "Hela is defeated. Odin is free and Hel releases the All-Father.",
+    );
+    return;
+  }
+  // Apocalypse: with No Longer Worthy his defeat wins; otherwise The Age
+  // of Apocalypse discards his attachments, heals him and loses X threat.
+  const apocalypseDefeat = apoc.apocalypseWouldBeDefeated(s);
+  if (apocalypseDefeat === "won") {
+    endGame(s, true, "Apocalypse is No Longer Worthy. His age is over.");
+    return;
+  }
+  if (apocalypseDefeat === "reset") {
+    for (const a of [...s.attachments].filter(
+      (q) => q.attachedTo === s.villain.id,
+    ))
+      discardPiece(s, a.id);
+    s.villain.hp = s.villain.maxHp;
+    s.scheme.threat = Math.max(0, s.scheme.threat - apoc.apocalypseX(s));
+    log(
+      s,
+      `Apocalypse would be defeated: his attachments are discarded, he heals and The Age of Apocalypse loses ${apoc.apocalypseX(s)} threat.`,
+      "good",
     );
     return;
   }
@@ -5864,6 +5907,22 @@ function threat(
         }
         return;
       }
+      const apocalypseNext = apoc.apocalypseMainCompleted(s);
+      if (apocalypseNext) {
+        if (!s.pendingMainCompletion) {
+          s.pendingMainCompletion = true;
+          add(s, ...apocalypseNext, E("clearMainCompletion"));
+        }
+        return;
+      }
+      if (apoc.apocalypseMainLoses(s)) {
+        endGame(
+          s,
+          false,
+          "The Age of Apocalypse is complete. Apocalypse rules unopposed.",
+        );
+        return;
+      }
       if (sty.stryfeMainLoses(s)) {
         endGame(
           s,
@@ -5970,6 +6029,7 @@ function thwart(
     ebonyMaw.ebonyMawSchemeLocked(s, target) ||
     hela.helaSchemeLocked(s, target) ||
     wreckingCrew.wreckingCrewThwartLocked(s, target) ||
+    apoc.apocalypseThwartLocked(s, target) ||
     !gamora.gamoraCanRemoveThreat(s, target) ||
     venom.venomSchemeLocked(s, target) ||
     warlock.warlockSchemeLocked(s, target)
@@ -6178,6 +6238,7 @@ function defeatScheme(
             ? source.slice(5)
             : controller(s, source)?.id || s.activePlayerId,
         ),
+        ...apoc.apocalypseSchemeDefeated(s, p),
       ]
     : [];
   const helaFlip = hela.helaSideSchemeDefeated(s);
@@ -6538,6 +6599,7 @@ export function targets(
               !venom.venomSchemeLocked(s, p.id) &&
               !warlock.warlockSchemeLocked(s, p.id) &&
               (!thwarting || !wreckingCrew.wreckingCrewThwartLocked(s, p.id)) &&
+              !apoc.apocalypseThwartLocked(s, p.id) &&
               (!thwarting || !sandman.sandmanCannotThwart(s, p.id)) &&
               (!thwarting || !mojoGenres.mojoGenreThwartLocked(s, p.id)) &&
               (!thwarting ||
@@ -8956,6 +9018,7 @@ export function newGame(config: {
                               : [
                                     ...unus.AOA_MODULAR_SETS,
                                     ...horsemen.HORSEMEN_MODULAR_SETS,
+                                    ...apoc.APOCALYPSE_MODULAR_SETS,
                                   ].some((set) => set === c.set_code)
                                 ? "aoa"
                                 : ["temporal", "anachronauts", "mot"].includes(
@@ -9036,6 +9099,8 @@ export function newGame(config: {
           !sty.stryfeSetupCard(c.code) &&
           // Gene Pool (Setup) begins the game in play.
           !unus.unusSetupCard(c.code) &&
+          // The citadel's side schemes and the Prelates start set aside.
+          !apoc.apocalypseSetupCard(c.code) &&
           !(v.id === "magneto" && ["32144b", "32145b"].includes(c.code)) &&
           (c.type_code !== "environment" ||
             (v.id === "absorbing_man" &&
@@ -9100,6 +9165,8 @@ export function newGame(config: {
       installVillain: (s, p) => morlockPorts.installVillain(s, p),
       pick: (s, n) => Math.floor(random(s) * n),
     });
+  if (v.id === "apocalypse")
+    apoc.apocalypseSetup(s, { makePiece: (s, code) => makePiece(s, code) });
   // Gene Pool (Setup) begins the game in play with the Infinites set.
   if (
     v.fixedSets?.includes("infinites") ||
@@ -9988,6 +10055,7 @@ function initialSetup(s: GameState) {
   setup.push(...sty.stryfeSetupEffects(s, makePiece));
   setup.push(...unus.unusSetupEffects(s));
   setup.push(...horsemen.horsemenSetupEffects(s));
+  setup.push(...apoc.apocalypseSetupEffects(s));
   // Queue stage setup after scenario setup and before the first turn.
   add(
     s,
@@ -16932,6 +17000,38 @@ function damageSourceTiny(s: GameState, source: string | undefined) {
   const c = damageSourceCard(s, source);
   return !!c && (c.traits || "").split(/\.\s*/).includes("Tiny");
 }
+const apocalypsePorts: apoc.ApocalypsePorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  pick: (s, n) => Math.floor(random(s) * n),
+  reveal: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    wreckingCrewPorts.reveal(s, p, playerId);
+  },
+  discardEncounter: (s, n) => {
+    for (let i = 0; i < n; i++) {
+      const { piece, emptied } = mutagenPorts.discardTop(s);
+      if (!piece || emptied) break;
+    }
+  },
+  upgrades: (s, playerId) =>
+    seatView(s, playerId).player.inPlay.filter(
+      (p) => card(p).type_code === "upgrade" && !isPermanent(card(p)),
+    ),
+  characters: (s, playerId) => [
+    `hero:${playerId}`,
+    ...friends(seatView(s, playerId)).map((p) => p.id),
+  ],
+  allies: (s, playerId) => friends(seatView(s, playerId)),
+  thwart: (s, id) => {
+    const p = find(s, id);
+    return p ? allyStat(s, p, "thwart") : 0;
+  },
+  takeTop: (s, playerId) => seatView(s, playerId).player.deck.shift(),
+  heal: (s, target, n) => {
+    heal(s, target, n, "encounter");
+  },
+};
 const horsemenPorts: horsemen.HorsemenPorts = {
   ...mutagenPorts,
   log: (s, text, kind) => log(s, text, kind),
@@ -20047,6 +20147,10 @@ function minionEntered(s: GameState, p: Piece) {
   }
   const underlying = p.droneCard;
   Object.assign(p, resetPiece(p, true));
+  // Toughness gained in play (Mutant Insurrection, The Dark Riders): the
+  // printed keyword is already set by the reset.
+  if (!p.tough && keyword(p, "Toughness", s))
+    giveCharacterStatus(s, p, "tough");
   if (s.sideSchemes.some((q) => q.code === "04108" && !isTextBlank(s, q)))
     giveCharacterStatus(s, p, "tough");
   if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
@@ -20088,6 +20192,7 @@ function minionEntered(s: GameState, p: Piece) {
     ...rogue.rogueMinionEntered(s, p),
     ...acolytes.acolytesEngaged(s, p),
     ...otr.otrEngaged(s, p),
+    ...apoc.apocalypseEngaged(s, p),
     ...ironspider.ironspiderSinisterEngagementResponses(s, p),
     ...spiderHam.spiderHamMinionEngaged(s, p),
     E("valkPackEngagementWindow", { id: p.id }),
@@ -22808,6 +22913,7 @@ const nightcrawlerEncounterPorts: nightcrawlerEncounter.NightcrawlerEncounterPor
           ...rogue.rogueMinionEngaged(s, p),
           ...acolytes.acolytesEngaged(s, p),
           ...otr.otrEngaged(s, p),
+          ...apoc.apocalypseEngaged(s, p),
           ...ironspider.ironspiderSinisterEngagementResponses(s, p),
           ...spiderHam.spiderHamMinionEngaged(s, p),
           E("valkPackEngagementWindow", { id: p.id }),
@@ -24938,6 +25044,7 @@ function enemyAttack(
       ...otr.otrAttackInitiated(s, id, s.attack.originalPlayerId!),
       ...sty.stryfeAttackInitiated(s, id, s.attack.originalPlayerId!),
       ...horsemen.horsemenAttackInitiated(s, id),
+      ...apoc.apocalypseAttackInitiated(s, id, s.attack.originalPlayerId!),
     );
   if (!friendlySource)
     add(
@@ -25434,6 +25541,7 @@ function boostEffects(s: GameState, p: Piece) {
     sty.stryfeBoost(s, p) ??
     unus.unusBoost(s, p) ??
     horsemen.horsemenBoost(s, p) ??
+    apoc.apocalypseBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -25911,6 +26019,8 @@ function finishScheme(s: GameState) {
     ...jug.jugSchemed(s, id),
     ...unus.unusSchemed(s, id),
     ...horsemen.horsemenActivated(s, id),
+    ...apoc.apocalypseSchemed(s, id),
+    ...apoc.apocalypseActivated(s, id, s.activePlayerId),
     ...hood
       .hoodAfterActivation(s, {
         token: (activation.id ||= `scheme${s.nextId++}`),
@@ -26638,6 +26748,17 @@ function finishAttackAfterDamage(
     ...horsemen.horsemenAttacked(s, a.attacker, recipientId),
     ...horsemen.horsemenAttackEnded(s, a.attacker),
     ...horsemen.horsemenActivated(s, a.attacker),
+    ...apoc.apocalypseAttacked(
+      s,
+      a.attacker,
+      recipientId,
+      target !== "hero" &&
+        !target.startsWith("hero:") &&
+        before > 0 &&
+        a.gmwReturnedDefender !== target &&
+        !find(s, target),
+    ),
+    ...apoc.apocalypseActivated(s, a.attacker, recipientId),
     ...sty.stryfeActivated(s, a.attacker, recipientId),
     ...sinisterModulars.sinisterModularActivated(s, {
       enemyId: a.attacker,
@@ -27658,6 +27779,9 @@ function reveal(
         ...unus.DYSTOPIAN_NIGHTMARE_CODES,
         ...horsemen.FOUR_HORSEMEN_SCRIPT_CODES,
         ...horsemen.HOUNDS_CODES,
+        ...apoc.APOCALYPSE_SCRIPT_CODES,
+        ...apoc.PRELATE_CODES,
+        ...apoc.DARK_RIDERS_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -27902,6 +28026,9 @@ function reveal(
       ...unus.DYSTOPIAN_NIGHTMARE_CODES,
       ...horsemen.FOUR_HORSEMEN_SCRIPT_CODES,
       ...horsemen.HOUNDS_CODES,
+      ...apoc.APOCALYPSE_SCRIPT_CODES,
+      ...apoc.PRELATE_CODES,
+      ...apoc.DARK_RIDERS_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -27971,6 +28098,7 @@ function reveal(
       sty.stryfeReveal(s, p) ??
       unus.unusReveal(s, p) ??
       horsemen.horsemenReveal(s, p) ??
+      apoc.apocalypseReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -28075,6 +28203,7 @@ function reveal(
     sty.stryfeReveal(s, p) ??
     unus.unusReveal(s, p) ??
     horsemen.horsemenReveal(s, p) ??
+    apoc.apocalypseReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -29539,6 +29668,7 @@ function resolve(s: GameState, e: Effect) {
           sty.stryfeReveal(state, piece) ??
           unus.unusReveal(state, piece) ??
           horsemen.horsemenReveal(state, piece) ??
+          apoc.apocalypseReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -29699,6 +29829,7 @@ function resolve(s: GameState, e: Effect) {
   if (sty.resolveStryfeEffect(s, e, stryfePorts)) return;
   if (unus.resolveUnusEffect(s, e, unusPorts)) return;
   if (horsemen.resolveHorsemenEffect(s, e, horsemenPorts)) return;
+  if (apoc.resolveApocalypseEffect(s, e, apocalypsePorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
