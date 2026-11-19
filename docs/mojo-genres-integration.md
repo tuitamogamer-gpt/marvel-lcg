@@ -1,6 +1,6 @@
 # MojoMania genre sets
 
-MojoMania's six genre modular sets are playable: Crime, Fantasy and Western, imported first, and Horror, Sci-Fi and Sitcom. Each can be chosen as the modular set of every scenario that uses modular sets. The box's three scenarios and its Longshot card follow in later imports.
+MojoMania's six genre modular sets are playable: Crime, Fantasy and Western, imported first, and Horror, Sci-Fi and Sitcom. Each can be chosen as the modular set of every scenario that uses modular sets. The box's first scenario, [MaGog's Melee in the Mojo-seum](magog-integration.md), is playable too; its other two scenarios and its Longshot card follow in later imports.
 
 ## Original source and scope
 

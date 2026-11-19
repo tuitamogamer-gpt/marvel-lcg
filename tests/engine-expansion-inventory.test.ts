@@ -23,6 +23,7 @@ import { VENOM_GOBLIN_SCRIPT_CODES } from "../src/game/venom-goblin";
 import { SINISTER_MODULAR_SCRIPT_CODES } from "../src/game/sinister-modulars";
 import { KREE_FANATIC_SCRIPT_CODES } from "../src/game/kree-fanatic";
 import { MOJO_GENRE_SCRIPT_CODES } from "../src/game/mojo-genres";
+import { MAGOG_SCRIPT_CODES } from "../src/game/magog";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -61,6 +62,7 @@ const badoonCodes = new Set<string>([
   ...SINISTER_MODULAR_SCRIPT_CODES,
   ...KREE_FANATIC_SCRIPT_CODES,
   ...MOJO_GENRE_SCRIPT_CODES,
+  ...MAGOG_SCRIPT_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -474,9 +476,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2957);
-    expect(coverage.unsupportedFaces).toBe(1594);
-    expect(coverage.dedicatedFaces).toBe(2519);
+    expect(coverage.executableFaces).toBe(2972);
+    expect(coverage.unsupportedFaces).toBe(1579);
+    expect(coverage.dedicatedFaces).toBe(2534);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -688,6 +690,8 @@ describe("complete expansion rules inventory", () => {
         17 -
         // MojoMania's Horror, Sci-Fi and Sitcom genre sets.
         19 -
+        // Melee in the Mojo-seum: MaGog.
+        15 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -999,7 +1003,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(33);
+    ).toHaveLength(34);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "venom_goblin",
@@ -1246,7 +1250,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(155);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(156);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

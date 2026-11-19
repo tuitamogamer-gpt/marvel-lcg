@@ -879,3 +879,92 @@ h3 {
   color: #c8d2cc;
   overflow-wrap: anywhere;
 }
+/* Melee in the Mojo-seum: each crowd's ratings counters toward 10 per
+ * player, with the Cheering flip marked at half way. */
+.app .physical-table .ratings-meter {
+  position: relative;
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #ffffff1f;
+}
+.app .physical-table .ratings-meter::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: #ffffff8c;
+  content: "";
+}
+.app .physical-table .ratings-meter > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #5fb88a, #e9d36b);
+}
+.app .physical-table .ratings-meter.champion > i {
+  background: linear-gradient(90deg, #e9b65b, #d9473c);
+}
+/* Both crowds share one column of the scheme lane. */
+.app .physical-table .scheme-area > .scenario-environment.magog-crowds {
+  flex: 0 1 114px;
+  gap: 5px;
+  min-width: 108px;
+  padding: 5px 6px;
+}
+@media (min-width: 1000px) {
+  .app .physical-table .scheme-area > .scenario-environment.magog-crowds {
+    flex: 0 0 114px;
+  }
+}
+.app .physical-table .magog-crowds .crowd-row {
+  display: flex;
+  flex-direction: row;
+  gap: 5px;
+  align-items: flex-start;
+  width: 100%;
+}
+.app .physical-table .magog-crowds .crowd-row > .environment-card {
+  flex: 0 0 26px;
+  align-self: flex-start;
+  width: 26px;
+}
+.app .physical-table .magog-crowds .crowd-row > div {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.app .physical-table .magog-crowds .small-label {
+  font-size: 7px;
+}
+.app .physical-table .magog-crowds strong {
+  font-size: 10px;
+  line-height: 1.1;
+}
+.app .physical-table .magog-crowds .environment-counter {
+  font-size: 9px;
+}
+.app .physical-table .magog-crowds .environment-counter .premium-token {
+  width: 13px;
+  height: 13px;
+}
+.app .physical-table .magog-crowds .stat-caption {
+  font-size: 7px;
+  line-height: 1.2;
+}
+/* Melee in the Mojo-seum's one-line completion note sits below the threat
+ * line: the threat token, anchored to the bottom, rises by that line. */
+.app .physical-table .main-scheme.magog-scheme > .stat-token {
+  bottom: 38px;
+}
+/* On the narrowest phones the crowds wrap below the main scheme instead of
+ * scrolling out of the lane. */
+@media (max-width: 420px) {
+  .app .physical-table .scheme-area:has(> .magog-crowds) {
+    flex-wrap: wrap;
+  }
+}

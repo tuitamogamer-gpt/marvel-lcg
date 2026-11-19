@@ -288,6 +288,18 @@ import {
   mojoGenreKeyword,
   mojoGenreLooksUpRule,
 } from "./game/mojo-genres";
+import {
+  THE_CHALLENGERS,
+  THE_CHALLENGERS_CHEERING,
+  THE_CHAMPION,
+  THE_CHAMPION_CHEERING,
+  magogCheering,
+  magogCrowd,
+  magogFinishAt,
+  magogFlipAt,
+  magogRatings,
+  magogScenario,
+} from "./game/magog";
 import { effectTitle, pacingOf } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
 import type { PaymentSource } from "./game/payment";
@@ -2649,6 +2661,18 @@ export default function App() {
                       the one with the glider counter. A completed main scheme
                       becomes a Symbiote environment, and a second one loses the
                       game.
+                    </p>
+                  )}
+                  {villain.id === "magog" && (
+                    <p className="setting-help">
+                      MaGog cannot be defeated: each time he would be, his hit
+                      points reset, The Challengers gain ratings counters and
+                      each player is dealt an encounter card. At 5 ratings
+                      counters per player a crowd flips to its Cheering side; at
+                      10 per player there, The Challengers win you the game and
+                      The Champion loses it. A completed main scheme only wows
+                      The Champion. The rulebook adds one random MojoMania genre
+                      set; Crime is preselected.
                     </p>
                   )}
                   {villain.id === "sinister_six" && (
@@ -5663,6 +5687,75 @@ function CrewVillains({
   );
 }
 /** Tower Defense: both main schemes, Focused Defense on the active one. */
+const MAGOG_CROWDS = [
+  THE_CHAMPION,
+  THE_CHAMPION_CHEERING,
+  THE_CHALLENGERS,
+  THE_CHALLENGERS_CHEERING,
+];
+/** Melee in the Mojo-seum: The Challengers and The Champion together, each
+ * with its ratings counters toward its flip and the end of the game. */
+function MagogCrowds({
+  game: s,
+  inspect,
+}: {
+  game: GameState;
+  inspect: (c: Inspect) => void;
+}) {
+  return (
+    <div
+      className="scenario-environment magog-crowds"
+      role="group"
+      aria-label="Ratings war"
+    >
+      <span className="small-label">RATINGS WAR</span>
+      {(["challengers", "champion"] as const).map((side) => {
+        const p = magogCrowd(s, side);
+        if (!p) return null;
+        const cheering = magogCheering(s, side);
+        const counters = `${p.counters} ratings ${p.counters === 1 ? "counter" : "counters"}`;
+        return (
+          <div className={`crowd-row ${side}`} key={p.id}>
+            <button
+              className="environment-card"
+              onClick={() => inspect({ code: p.code, piece: p })}
+              aria-label={`Inspect ${card(p).name}`}
+            >
+              <CardImage code={p.code} />
+            </button>
+            <div>
+              <span className="small-label">
+                {cheering ? "CHEERING" : "BOOING"}
+              </span>
+              <strong>{card(p).name}</strong>
+              <span
+                className="environment-counter"
+                aria-label={`${card(p).name}: ${counters}`}
+              >
+                <PremiumToken kind="counter" />
+                {p.counters} {p.counters === 1 ? "rating" : "ratings"}
+              </span>
+              <span className={`ratings-meter ${side}`} aria-hidden="true">
+                <i
+                  style={{
+                    width: `${Math.min(100, (100 * p.counters) / magogFinishAt(s))}%`,
+                  }}
+                />
+              </span>
+              <span className="stat-caption">
+                {!cheering
+                  ? `Flips at ${magogFlipAt(s)}`
+                  : side === "champion"
+                    ? `You lose at ${magogFinishAt(s)}`
+                    : `You win at ${magogFinishAt(s)}`}
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 function TowerMainSchemes({
   game: s,
   inspect,
@@ -6358,19 +6451,33 @@ function Tabletop({
                           ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
                           : s.kang
                             ? kangObjective(s)
-                            : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                            : magogScenario(s)
+                              ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
+                              : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
-            <span className={threatCritical ? "danger" : ""}>
+            <span
+              className={
+                (
+                  magogScenario(s)
+                    ? magogCheering(s, "champion")
+                    : threatCritical
+                )
+                  ? "danger"
+                  : ""
+              }
+            >
               <Target size={18} />
               <b>
-                {s.villainId === "project_wideawake"
-                  ? `Keep captured cards below ${3 + s.playerCount}`
-                  : s.venomGoblin
-                    ? `${s.venomGoblin.flipped.length} of 2 districts infested`
-                    : hasThreatLimit
-                      ? `Keep threat below ${threatLimit}`
-                      : "No main-scheme threat limit"}
+                {magogScenario(s)
+                  ? `The Champion · ${magogRatings(s, "champion")} of ${magogFinishAt(s)} ratings`
+                  : s.villainId === "project_wideawake"
+                    ? `Keep captured cards below ${3 + s.playerCount}`
+                    : s.venomGoblin
+                      ? `${s.venomGoblin.flipped.length} of 2 districts infested`
+                      : hasThreatLimit
+                        ? `Keep threat below ${threatLimit}`
+                        : "No main-scheme threat limit"}
               </b>
             </span>
           </div>
@@ -6553,7 +6660,9 @@ function Tabletop({
                           ? `VILLAIN · ${s.difficulty === "expert" ? "B1" : "A1"}${escapeWounded(s) ? " · WOUNDED" : ""}`
                           : s.hela
                             ? `VILLAIN · ${s.difficulty === "expert" ? "B" : "A"} · ${helaWounded(s) ? "WOUNDED" : "MYSTIC"}`
-                            : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
+                            : magogScenario(s)
+                              ? `VILLAIN · ${s.villain.code === "39001b" ? "B" : "A"}`
+                              : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
                     {s.kang ? (
                       <h2>
@@ -6606,6 +6715,12 @@ function Tabletop({
                     {escapeWounded(s) && (
                       <span className="stat-caption" role="status">
                         Wounded · cannot be defeated until the round ends
+                      </span>
+                    )}
+                    {magogScenario(s) && (
+                      <span className="stat-caption">
+                        Cannot be defeated · resets to {10 * s.playerCount} hit
+                        points and wows The Challengers
                       </span>
                     )}
                     {helaWounded(s) && (
@@ -6709,7 +6824,7 @@ function Tabletop({
                   <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
-                    className={`main-scheme ${threatCritical ? "critical" : ""}`}
+                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) ? " magog-scheme" : ""}`}
                     style={
                       {
                         "--scheme-actions": mainActionPiece
@@ -6785,6 +6900,11 @@ function Tabletop({
                         )}{" "}
                       threat each villain phase
                     </p>
+                    {magogScenario(s) && (
+                      <p className="magog-scheme-note">
+                        Completed: The Champion +{2 * s.playerCount}
+                      </p>
+                    )}
                     {mainActionPiece &&
                       abilityOptions(s, mainActionPiece).length > 0 && (
                         <div className="in-play-actions">
@@ -6906,137 +7026,191 @@ function Tabletop({
                     </div>
                   </div>
                 )}
-                {(s.environments || []).map((p) => (
-                  <div
-                    className={`scenario-environment${p.code === AVENGERS_TOWER || p.code === DAMAGED_TOWER ? " tower-strip" : ""}`}
-                    key={p.id}
-                  >
-                    <button
-                      className="environment-card"
-                      onClick={() => inspect({ code: p.code, piece: p })}
-                      aria-label={`Inspect ${card(p).name}`}
+                {magogScenario(s) && <MagogCrowds game={s} inspect={inspect} />}
+                {(s.environments || [])
+                  .filter((p) => !MAGOG_CROWDS.includes(p.code))
+                  .map((p) => (
+                    <div
+                      className={`scenario-environment${p.code === AVENGERS_TOWER || p.code === DAMAGED_TOWER ? " tower-strip" : ""}`}
+                      key={p.id}
                     >
-                      <CardImage code={p.code} />
-                    </button>
-                    <div>
-                      <span
-                        className="small-label"
-                        aria-label={
-                          p.playAreaOf
-                            ? `Spell in ${heroOf(s, p.playAreaOf)}'s play area`
-                            : undefined
-                        }
+                      <button
+                        className="environment-card"
+                        onClick={() => inspect({ code: p.code, piece: p })}
+                        aria-label={`Inspect ${card(p).name}`}
                       >
-                        {p.playAreaOf
-                          ? `SPELL · ${heroOf(s, p.playAreaOf).toUpperCase()}`
-                          : p.code === AVENGERS_TOWER
-                            ? "ENVIRONMENT · STRONGHOLD"
-                            : p.code === DAMAGED_TOWER
-                              ? "ENVIRONMENT · DAMAGED"
-                              : isInfinityStone(p)
-                                ? "INFINITY STONE"
-                                : MOJO_GENRE_SHOW_CAPTIONS[p.code]
-                                  ? "SETTING · SHOW"
-                                  : Object.values(MANHATTAN_FLIPPED).includes(
-                                        p.code,
-                                      )
-                                    ? "ENVIRONMENT · SYMBIOTE"
-                                    : "ENVIRONMENT"}
-                      </span>
-                      <strong>{card(p).name}</strong>
-                      {MOJO_GENRE_SHOW_CAPTIONS[p.code] && (
-                        <span className="stat-caption">
-                          {MOJO_GENRE_SHOW_CAPTIONS[p.code]} · another Setting
-                          discards it
+                        <CardImage code={p.code} />
+                      </button>
+                      <div>
+                        <span
+                          className="small-label"
+                          aria-label={
+                            p.playAreaOf
+                              ? `Spell in ${heroOf(s, p.playAreaOf)}'s play area`
+                              : undefined
+                          }
+                        >
+                          {p.playAreaOf
+                            ? `SPELL · ${heroOf(s, p.playAreaOf).toUpperCase()}`
+                            : p.code === AVENGERS_TOWER
+                              ? "ENVIRONMENT · STRONGHOLD"
+                              : p.code === DAMAGED_TOWER
+                                ? "ENVIRONMENT · DAMAGED"
+                                : isInfinityStone(p)
+                                  ? "INFINITY STONE"
+                                  : MOJO_GENRE_SHOW_CAPTIONS[p.code]
+                                    ? "SETTING · SHOW"
+                                    : Object.values(MANHATTAN_FLIPPED).includes(
+                                          p.code,
+                                        )
+                                      ? "ENVIRONMENT · SYMBIOTE"
+                                      : "ENVIRONMENT"}
                         </span>
-                      )}
-                      {Object.values(MANHATTAN_FLIPPED).includes(p.code) && (
-                        <span className="stat-caption">
-                          Infested · a second Symbiote environment loses the
-                          game
-                        </span>
-                      )}
-                      {(p.code === AVENGERS_TOWER ||
-                        p.code === DAMAGED_TOWER) && (
-                        <>
-                          <span
-                            className="environment-counter tower-damage"
-                            aria-label={`Avengers Tower damage: ${p.damage} of ${towerDefenseTowerLimit(s)}`}
-                          >
-                            <PremiumToken kind="health" />
-                            {p.damage} / {towerDefenseTowerLimit(s)} damage
-                          </span>
-                          <span className="tower-meter" aria-hidden="true">
-                            <i
-                              style={{
-                                width: `${Math.min(100, (100 * p.damage) / towerDefenseTowerLimit(s))}%`,
-                              }}
-                            />
-                          </span>
-                          <span
-                            className="stat-caption"
-                            role={
-                              p.code === DAMAGED_TOWER ? "status" : undefined
-                            }
-                          >
-                            {p.code === AVENGERS_TOWER
-                              ? `Flips to its Damaged side at ${towerDefenseTowerLimit(s)} damage`
-                              : `The players lose at ${towerDefenseTowerLimit(s)} damage`}
-                          </span>
-                        </>
-                      )}
-                      {isInfinityStone(p) && (
-                        <span className="stat-caption">
-                          Its Special resolves when {s.loki ? "Loki" : "Thanos"}{" "}
-                          next activates against a player
-                        </span>
-                      )}
-                      {/* Only environments that use counters show them. */}
-                      {(isEbonyMawSpell(p) ||
-                        [
-                          "02006a",
-                          "02006b",
-                          "16063",
-                          "16093",
-                          SANDMAN_CITY_STREETS,
-                          VENOM_BELL_TOWER,
-                          VENOM_RINGING_TOWER,
-                        ].includes(p.code)) && (
-                        <span className="environment-counter">
-                          <PremiumToken kind="counter" />
-                          {p.counters}{" "}
-                          {isEbonyMawSpell(p)
-                            ? p.counters === 1
-                              ? "invocation counter"
-                              : "invocation counters"
-                            : p.code === "02006a"
-                              ? "Infamy"
-                              : p.code === "16063"
-                                ? `Barrage · fires at 4`
-                                : p.code === "16093"
-                                  ? "Evasion"
-                                  : p.code === SANDMAN_CITY_STREETS
-                                    ? p.counters === 1
-                                      ? "sand counter"
-                                      : "sand counters"
-                                    : p.code === VENOM_BELL_TOWER ||
-                                        p.code === VENOM_RINGING_TOWER
-                                      ? p.counters === 1
-                                        ? "chime counter"
-                                        : "chime counters"
-                                      : "Madness"}
-                        </span>
-                      )}
-                      {p.code === SANDMAN_CITY_STREETS && (
-                        <>
+                        <strong>{card(p).name}</strong>
+                        {MOJO_GENRE_SHOW_CAPTIONS[p.code] && (
                           <span className="stat-caption">
-                            Surging Sands adds a counter, then discards that
-                            many encounter cards
+                            {MOJO_GENRE_SHOW_CAPTIONS[p.code]} · another Setting
+                            discards it
                           </span>
-                          {abilityOptions(s, p).map((a) => (
+                        )}
+                        {Object.values(MANHATTAN_FLIPPED).includes(p.code) && (
+                          <span className="stat-caption">
+                            Infested · a second Symbiote environment loses the
+                            game
+                          </span>
+                        )}
+                        {(p.code === AVENGERS_TOWER ||
+                          p.code === DAMAGED_TOWER) && (
+                          <>
+                            <span
+                              className="environment-counter tower-damage"
+                              aria-label={`Avengers Tower damage: ${p.damage} of ${towerDefenseTowerLimit(s)}`}
+                            >
+                              <PremiumToken kind="health" />
+                              {p.damage} / {towerDefenseTowerLimit(s)} damage
+                            </span>
+                            <span className="tower-meter" aria-hidden="true">
+                              <i
+                                style={{
+                                  width: `${Math.min(100, (100 * p.damage) / towerDefenseTowerLimit(s))}%`,
+                                }}
+                              />
+                            </span>
+                            <span
+                              className="stat-caption"
+                              role={
+                                p.code === DAMAGED_TOWER ? "status" : undefined
+                              }
+                            >
+                              {p.code === AVENGERS_TOWER
+                                ? `Flips to its Damaged side at ${towerDefenseTowerLimit(s)} damage`
+                                : `The players lose at ${towerDefenseTowerLimit(s)} damage`}
+                            </span>
+                          </>
+                        )}
+                        {isInfinityStone(p) && (
+                          <span className="stat-caption">
+                            Its Special resolves when{" "}
+                            {s.loki ? "Loki" : "Thanos"} next activates against
+                            a player
+                          </span>
+                        )}
+                        {/* Only environments that use counters show them. */}
+                        {(isEbonyMawSpell(p) ||
+                          [
+                            "02006a",
+                            "02006b",
+                            "16063",
+                            "16093",
+                            SANDMAN_CITY_STREETS,
+                            VENOM_BELL_TOWER,
+                            VENOM_RINGING_TOWER,
+                          ].includes(p.code)) && (
+                          <span className="environment-counter">
+                            <PremiumToken kind="counter" />
+                            {p.counters}{" "}
+                            {isEbonyMawSpell(p)
+                              ? p.counters === 1
+                                ? "invocation counter"
+                                : "invocation counters"
+                              : p.code === "02006a"
+                                ? "Infamy"
+                                : p.code === "16063"
+                                  ? `Barrage · fires at 4`
+                                  : p.code === "16093"
+                                    ? "Evasion"
+                                    : p.code === SANDMAN_CITY_STREETS
+                                      ? p.counters === 1
+                                        ? "sand counter"
+                                        : "sand counters"
+                                      : p.code === VENOM_BELL_TOWER ||
+                                          p.code === VENOM_RINGING_TOWER
+                                        ? p.counters === 1
+                                          ? "chime counter"
+                                          : "chime counters"
+                                        : "Madness"}
+                          </span>
+                        )}
+                        {p.code === SANDMAN_CITY_STREETS && (
+                          <>
+                            <span className="stat-caption">
+                              Surging Sands adds a counter, then discards that
+                              many encounter cards
+                            </span>
+                            {abilityOptions(s, p).map((a) => (
+                              <button
+                                key={a.id}
+                                className="ability-button"
+                                disabled={!canUseAction}
+                                aria-label={a.label}
+                                title={a.label}
+                                onClick={() =>
+                                  sendAction({
+                                    type: "ABILITY",
+                                    id: p.id,
+                                    action: a.id,
+                                  })
+                                }
+                              >
+                                Exhaust a character · remove sand
+                              </button>
+                            ))}
+                          </>
+                        )}
+                        {p.code === VENOM_BELL_TOWER && (
+                          <span className="stat-caption">
+                            Quiet · an attack on Venom may place chime counters
+                            instead of damage; rings at {3 * s.playerCount}
+                          </span>
+                        )}
+                        {p.code === VENOM_RINGING_TOWER && (
+                          <span className="stat-caption">
+                            Ringing · Venom takes +1 damage; counters prevent
+                            his attack damage to identities
+                          </span>
+                        )}
+                        {p.code === "16108" && (
+                          <span className="stat-caption">
+                            Treachery revealed: the first player may exhaust the
+                            Milano and spend 1 resource to cancel its When
+                            Revealed
+                          </span>
+                        )}
+                        {p.code === "16085b" && (
+                          <span className="stat-caption">
+                            Villain phase: exhaust the Milano or take indirect
+                            damage
+                          </span>
+                        )}
+                        {(p.code === "29039" ||
+                          p.code === "31037" ||
+                          p.code === "32065b" ||
+                          p.code === "16143" ||
+                          p.code === "16085a" ||
+                          p.code === "16093") &&
+                          abilityOptions(s, p).map((a) => (
                             <button
                               key={a.id}
-                              className="ability-button"
                               disabled={!canUseAction}
                               aria-label={a.label}
                               title={a.label}
@@ -7048,70 +7222,20 @@ function Tabletop({
                                 })
                               }
                             >
-                              Exhaust a character · remove sand
+                              {p.code === "32065b"
+                                ? a.label
+                                : p.code === "16143"
+                                  ? "Discard with the Milano"
+                                  : p.code === "16085a"
+                                    ? "This way? · remove 5 threat"
+                                    : p.code === "16093"
+                                      ? `Thrusters · remove ${a.id.slice(-1)}`
+                                      : "Remove"}
                             </button>
                           ))}
-                        </>
-                      )}
-                      {p.code === VENOM_BELL_TOWER && (
-                        <span className="stat-caption">
-                          Quiet · an attack on Venom may place chime counters
-                          instead of damage; rings at {3 * s.playerCount}
-                        </span>
-                      )}
-                      {p.code === VENOM_RINGING_TOWER && (
-                        <span className="stat-caption">
-                          Ringing · Venom takes +1 damage; counters prevent his
-                          attack damage to identities
-                        </span>
-                      )}
-                      {p.code === "16108" && (
-                        <span className="stat-caption">
-                          Treachery revealed: the first player may exhaust the
-                          Milano and spend 1 resource to cancel its When
-                          Revealed
-                        </span>
-                      )}
-                      {p.code === "16085b" && (
-                        <span className="stat-caption">
-                          Villain phase: exhaust the Milano or take indirect
-                          damage
-                        </span>
-                      )}
-                      {(p.code === "29039" ||
-                        p.code === "31037" ||
-                        p.code === "32065b" ||
-                        p.code === "16143" ||
-                        p.code === "16085a" ||
-                        p.code === "16093") &&
-                        abilityOptions(s, p).map((a) => (
-                          <button
-                            key={a.id}
-                            disabled={!canUseAction}
-                            aria-label={a.label}
-                            title={a.label}
-                            onClick={() =>
-                              sendAction({
-                                type: "ABILITY",
-                                id: p.id,
-                                action: a.id,
-                              })
-                            }
-                          >
-                            {p.code === "32065b"
-                              ? a.label
-                              : p.code === "16143"
-                                ? "Discard with the Milano"
-                                : p.code === "16085a"
-                                  ? "This way? · remove 5 threat"
-                                  : p.code === "16093"
-                                    ? `Thrusters · remove ${a.id.slice(-1)}`
-                                    : "Remove"}
-                          </button>
-                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
                 {s.sideSchemes.map((p) => (
                   <div
                     className="table-side-scheme"

@@ -1423,6 +1423,20 @@ export const VILLAINS = [
       "Venom Goblin's glider hunts over three Manhattan main schemes at once, and each one gathers threat on its own. Let two districts fall to the symbiote and the city is lost.",
     color: "#3d2a52",
   },
+  {
+    id: "magog",
+    name: "MaGog",
+    codes: ["39001a", "39001b"],
+    schemes: ["39002b"],
+    // The rulebook adds one random MojoMania genre set.
+    module: "crime",
+    difficulty: 3,
+    title: "Melee in the Mojo-seum",
+    location: "Mojoworld",
+    description:
+      "MaGog never stays down: every knockout resets him and wows the crowd. Win the ratings war as The Challengers before The Champion's fans cheer him to victory again.",
+    color: "#7a3b1f",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },

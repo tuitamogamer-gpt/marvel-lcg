@@ -86,7 +86,8 @@
     "test:venom-goblin": "node scripts/venom-goblin-check.mjs",
     "test:sinister-modulars": "node scripts/sinister-modulars-check.mjs",
     "test:kree-fanatic": "node scripts/kree-fanatic-check.mjs",
-    "test:mojo-genres": "node scripts/mojo-genres-check.mjs"
+    "test:mojo-genres": "node scripts/mojo-genres-check.mjs",
+    "test:magog": "node scripts/magog-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

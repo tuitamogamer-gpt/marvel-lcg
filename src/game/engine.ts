@@ -22,6 +22,7 @@ import * as venomGoblin from "./venom-goblin.js";
 import * as sinisterModulars from "./sinister-modulars.js";
 import * as kreeFanatic from "./kree-fanatic.js";
 import * as mojoGenres from "./mojo-genres.js";
+import * as magog from "./magog.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -635,7 +636,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     badoon.badoonKeyword(s, piece, "Stalwart") ||
     nebulaVillain.nebulaVillainKeyword(s, piece, "Stalwart") ||
     ronan.ronanKeyword(s, piece, "Stalwart") ||
-    hela.helaKeyword(s, piece, "Stalwart")
+    hela.helaKeyword(s, piece, "Stalwart") ||
+    magog.magogKeyword(s, piece, "Stalwart") > 0
       ? { stalwart: true }
       : {}),
     ...(piece.code === "50060" && !isTextBlank(s, piece)
@@ -766,6 +768,7 @@ function syncNebulaIdentityStatuses(s: GameState) {
       nebulaVillain.nebulaVillainKeyword(s, p, "Stalwart") ||
       ronan.ronanKeyword(s, p, "Stalwart") ||
       hela.helaKeyword(s, p, "Stalwart") ||
+      magog.magogKeyword(s, p, "Stalwart") > 0 ||
       s.villainId === "mansion_attack"
     ) {
       const modifiers = nativeStatusModifiers(s, p);
@@ -937,7 +940,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           badoon.badoonKeyword(s, p, "Stalwart") ||
           nebulaVillain.nebulaVillainKeyword(s, p, "Stalwart") ||
           ronan.ronanKeyword(s, p, "Stalwart") ||
-          hela.helaKeyword(s, p, "Stalwart")),
+          hela.helaKeyword(s, p, "Stalwart") ||
+          magog.magogKeyword(s, p, "Stalwart") > 0),
     ),
     Number(
       name === "Quickstrike" &&
@@ -1050,7 +1054,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         mansionKeywords.retaliate +
         hoodModular.hoodModularKeyword(s, p, "Retaliate") +
         hoodModular.hoodModularGlobal(s).retaliate +
-        sinisterModulars.sinisterModularKeyword(s, p, "Retaliate")
+        sinisterModulars.sinisterModularKeyword(s, p, "Retaliate") +
+        magog.magogKeyword(s, p, "Retaliate")
     : Math.max(intrinsic, grantedValue);
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
@@ -3774,6 +3779,7 @@ function dealDamage(
             retaliationTarget,
             "Retaliate",
           ) +
+          magog.magogKeyword(s, retaliationTarget, "Retaliate") +
           (retaliationTarget.id === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -4527,6 +4533,7 @@ function defeatCharacter(
     if (!textWasBlank)
       add(s, ...hoodModular.hoodModularMinionDefeated(s, m, m.engagedWith));
     if (!textWasBlank) add(s, ...sandman.sandmanMinionDefeated(s, m));
+    if (!textWasBlank) add(s, ...magog.magogMinionDefeated(s, m));
     add(s, ...kreeFanatic.kreeFanaticMinionDefeated(s, m));
     add(s, ...bounty, ...underToad);
     add(
@@ -4659,6 +4666,18 @@ function advanceVillain(
 ) {
   // The Once and Future Kang: no villain is in play during the gaps.
   if (kang.kangVillainAbsent(s)) return;
+  // Melee in the Mojo-seum: MaGog's hit points reset instead of his defeat.
+  const magogReset = magog.magogVillainWouldBeDefeated(s);
+  if (magogReset) {
+    if (magogReset.length)
+      log(
+        s,
+        `${card(s.villain).name}'s hit points reset instead of being defeated.`,
+        "bad",
+      );
+    add(s, ...magogReset);
+    return;
+  }
   // Hela: Odin's Torment flips her to her Wounded side instead of being
   // defeated while Odin is its Captive; the Wounded side cannot be defeated.
   const helaDefeat = hela.helaVillainWouldBeDefeated(s, helaPorts);
@@ -5193,6 +5212,18 @@ function threat(
         ),
       );
     if (schemeLimit(s) > 0 && s.scheme.threat >= schemeLimit(s)) {
+      // Melee in the Mojo-seum: ratings counters on The Champion and all of
+      // its threat removed instead.
+      const melee = magog.magogMainWouldComplete(s);
+      if (melee) {
+        log(
+          s,
+          `${card(s.scheme.code).name} would be completed: The Champion's crowd roars and all of its threat is removed instead.`,
+          "bad",
+        );
+        add(s, ...melee);
+        return;
+      }
       // Kang: stages 1B and 4B lose; each stage 3B combines its area.
       if (s.kang) {
         kang.kangMainCompleted(s, kangPorts);
@@ -5798,6 +5829,7 @@ function defeatScheme(
         ...loki.lokiSchemeDefeated(s, p),
         ...kang.kangSchemeDefeated(s, p, s.activePlayerId),
         ...sandman.sandmanSchemeDefeated(s, p),
+        ...magog.magogSchemeDefeated(s, p),
       ]
     : [];
   const helaFlip = hela.helaSideSchemeDefeated(s);
@@ -8669,6 +8701,7 @@ export function newGame(config: {
   if (v.id === "venom") venomVillain.venomSetup(s, venomVillainPorts);
   if (v.id === "mysterio") mysterio.mysterioSetup(s, mysterioPorts);
   if (v.id === "venom_goblin") venomGoblin.venomGoblinSetup(s);
+  if (v.id === "magog") magog.magogSetup(s, magogPorts);
   deadpool.deadpoolSetupPool(s, makePiece);
   if (s.deadpool?.initializedPoolSeats.length)
     s.encounter.deck = shuffle(s, s.encounter.deck);
@@ -16205,6 +16238,14 @@ const mojoGenrePorts: mojoGenres.MojoGenrePorts = {
     if (i >= 0) (host.captured ||= []).push(zone.splice(i, 1)[0]);
   },
   reveal: (s, p, playerId) => wreckingCrewPorts.reveal(s, p, playerId),
+};
+const magogPorts: magog.MagogPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  makePiece: (s, code) => makePiece(s, code),
+  endGame: (s, won, reason) => endGame(s, won, reason),
+  revealBoostCard: (s, p) => warlockPorts.revealBoostCard(s, p),
 };
 const kreeFanaticPorts: kreeFanatic.KreeFanaticPorts = {
   ...mutagenPorts,
@@ -24421,6 +24462,7 @@ function boostEffects(s: GameState, p: Piece) {
     sinisterModulars.sinisterModularBoost(s, p) ??
     kreeFanatic.kreeFanaticBoost(s, p) ??
     mojoGenres.mojoGenreBoost(s, p) ??
+    magog.magogBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -25593,6 +25635,7 @@ function finishAttackAfterDamage(
       againstPlayer: true,
       damagedTarget: a.damage > 0 ? target : undefined,
     }),
+    ...magog.magogAttacked(s, a.attacker, a.damage > 0),
     ...sinisterModulars.sinisterModularActivated(s, {
       enemyId: a.attacker,
       playerId: recipientId,
@@ -26011,6 +26054,8 @@ function finishAttackAfterDamage(
             attackedPlayerId: recipientId,
             damagePlaced: a.damagePlaced || 0,
             threatPlaced: 0,
+            defendedByHero: target === "hero" && a.defender !== "none",
+            damageToHero: a.identityDamage || 0,
           },
         ]
       : []),
@@ -26566,6 +26611,8 @@ function reveal(
         c.type_code !== "attachment") ||
       (mojoGenres.MOJO_GENRE_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (magog.MAGOG_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -26779,6 +26826,7 @@ function reveal(
       ...sinisterModulars.SINISTER_MODULAR_SCRIPT_CODES,
       ...kreeFanatic.KREE_FANATIC_SCRIPT_CODES,
       ...mojoGenres.MOJO_GENRE_SCRIPT_CODES,
+      ...magog.MAGOG_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -26830,6 +26878,7 @@ function reveal(
       sinisterModulars.sinisterModularReveal(s, p) ??
       kreeFanatic.kreeFanaticReveal(s, p) ??
       mojoGenres.mojoGenreReveal(s, p) ??
+      magog.magogReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -26924,6 +26973,7 @@ function reveal(
     sinisterModulars.sinisterModularReveal(s, p) ??
     kreeFanatic.kreeFanaticReveal(s, p) ??
     mojoGenres.mojoGenreReveal(s, p) ??
+    magog.magogReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -28357,6 +28407,7 @@ function resolve(s: GameState, e: Effect) {
           sinisterModulars.sinisterModularReveal(state, piece) ??
           kreeFanatic.kreeFanaticReveal(state, piece) ??
           mojoGenres.mojoGenreReveal(state, piece) ??
+          magog.magogReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -28507,6 +28558,7 @@ function resolve(s: GameState, e: Effect) {
     return;
   if (kreeFanatic.resolveKreeFanaticEffect(s, e, kreeFanaticPorts)) return;
   if (mojoGenres.resolveMojoGenreEffect(s, e, mojoGenrePorts)) return;
+  if (magog.resolveMagogEffect(s, e, magogPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -34629,6 +34681,7 @@ function resolve(s: GameState, e: Effect) {
           againstPlayer: false,
           damagedTarget: a.damage > 0 ? a.originalTarget : undefined,
         }),
+        ...magog.magogAttacked(s, a.attacker, a.damage > 0),
         ...(a.completionRecorded && a.attackerSnapshot
           ? spectrum.spectrumEnemyActivated(
               s,
