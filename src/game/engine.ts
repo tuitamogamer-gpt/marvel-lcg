@@ -20,6 +20,7 @@ import * as mysterio from "./mysterio.js";
 import * as sinisterSix from "./sinister-six.js";
 import * as venomGoblin from "./venom-goblin.js";
 import * as sinisterModulars from "./sinister-modulars.js";
+import * as kreeFanatic from "./kree-fanatic.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -661,6 +662,12 @@ function giveCharacterStatus(
     (kind === "confused" && magnetic?.cannotConfuse)
   )
     return false;
+  if (
+    kind === "stunned" &&
+    "code" in p &&
+    kreeFanatic.kreeFanaticCannotStun(s, p as Piece)
+  )
+    return false;
   const changed = giveStatus(
     p,
     c,
@@ -976,6 +983,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           sandman.sandmanKeyword(s, p, "Overkill") > 0 ||
           venomVillain.venomKeyword(s, p, "Overkill") > 0 ||
           sinisterModulars.sinisterModularKeyword(s, p, "Overkill") > 0 ||
+          kreeFanatic.kreeFanaticOverkill(s, p.id) ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
             .overkill)
       ),
@@ -2969,6 +2977,8 @@ function recordMilesEnemyAttackDefeat(
   source: string,
   enemyAttack: boolean,
 ) {
+  if (enemyAttack)
+    add(s, ...kreeFanatic.kreeFanaticCharacterDefeated(s, source));
   const after = s.attack?.activationAfter;
   if (enemyAttack && after?.milesAttackToken && source === s.attack?.attacker)
     seatView(s, after.actorId || s.activePlayerId).flags[
@@ -4438,6 +4448,7 @@ function defeatCharacter(
     if (!textWasBlank)
       add(s, ...hoodModular.hoodModularMinionDefeated(s, m, m.engagedWith));
     if (!textWasBlank) add(s, ...sandman.sandmanMinionDefeated(s, m));
+    add(s, ...kreeFanatic.kreeFanaticMinionDefeated(s, m));
     if (!textWasBlank)
       add(
         s,
@@ -8438,44 +8449,49 @@ export function newGame(config: {
                             ...sinisterModulars.SINISTER_MODULAR_SETS,
                           ].some((set) => set === c.set_code)
                         ? "sm"
-                        : ["temporal", "anachronauts", "mot"].includes(
-                              c.set_code || "",
+                        : kreeFanatic.KREE_FANATIC_MODULAR_SETS.some(
+                              (set) => set === c.set_code,
                             )
-                          ? "toafk"
-                          : c.set_code === "exodus"
-                            ? "gambit"
-                            : c.set_code === "sauron"
-                              ? "iceman"
-                              : c.set_code === "crazy_gang"
-                                ? "ncrawler"
-                                : c.set_code === "hellfire"
-                                  ? "magneto"
-                                  : c.set_code === "arcade"
-                                    ? "jubilee"
-                                    : c.set_code === "reavers"
-                                      ? "rogue"
-                                      : c.set_code === "deathstrike"
-                                        ? "wolv"
-                                        : c.set_code === "shadow_king"
-                                          ? "storm"
-                                          : c.set_code === "ironspider_sinister"
-                                            ? "spdr"
-                                            : c.set_code === "inheritors"
-                                              ? "spiderham"
-                                              : c.set_code === "zzzax"
-                                                ? "ironheart"
-                                                : c.set_code === "armadillo"
-                                                  ? "nova"
-                                                  : [
-                                                        "goblin_gimmicks",
-                                                        "a_mess_of_things",
-                                                        "power_drain",
-                                                        "running_interference",
-                                                      ].includes(
-                                                        c.set_code || "",
-                                                      )
-                                                    ? "gob"
-                                                    : "core")) ||
+                          ? "ron"
+                          : ["temporal", "anachronauts", "mot"].includes(
+                                c.set_code || "",
+                              )
+                            ? "toafk"
+                            : c.set_code === "exodus"
+                              ? "gambit"
+                              : c.set_code === "sauron"
+                                ? "iceman"
+                                : c.set_code === "crazy_gang"
+                                  ? "ncrawler"
+                                  : c.set_code === "hellfire"
+                                    ? "magneto"
+                                    : c.set_code === "arcade"
+                                      ? "jubilee"
+                                      : c.set_code === "reavers"
+                                        ? "rogue"
+                                        : c.set_code === "deathstrike"
+                                          ? "wolv"
+                                          : c.set_code === "shadow_king"
+                                            ? "storm"
+                                            : c.set_code ===
+                                                "ironspider_sinister"
+                                              ? "spdr"
+                                              : c.set_code === "inheritors"
+                                                ? "spiderham"
+                                                : c.set_code === "zzzax"
+                                                  ? "ironheart"
+                                                  : c.set_code === "armadillo"
+                                                    ? "nova"
+                                                    : [
+                                                          "goblin_gimmicks",
+                                                          "a_mess_of_things",
+                                                          "power_drain",
+                                                          "running_interference",
+                                                        ].includes(
+                                                          c.set_code || "",
+                                                        )
+                                                      ? "gob"
+                                                      : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -15982,6 +15998,20 @@ const sinisterModularPorts: sinisterModulars.SinisterModularPorts = {
       ? !!seatView(s, playerId).player.stunned
       : !!find(s, target)?.stunned,
   heroHp: (s, playerId) => seatView(s, playerId).player.hp,
+};
+const kreeFanaticPorts: kreeFanatic.KreeFanaticPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  remainingHp: (s, playerId) => seatView(s, playerId).player.hp,
+  dealPiece: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    p.dealtTo = playerId;
+    s.encounter.dealt.push(p);
+  },
+  heroName: (s, playerId) =>
+    HEROES.find(
+      (h) => h.id === s.players.find((seat) => seat.id === playerId)?.heroId,
+    )?.name || playerId,
 };
 const mysterioPorts: mysterio.MysterioPorts = {
   ...mutagenPorts,
@@ -24178,6 +24208,7 @@ function boostEffects(s: GameState, p: Piece) {
     sinisterSix.sixBoost(s, p) ??
     venomGoblin.venomGoblinBoost(s, p) ??
     sinisterModulars.sinisterModularBoost(s, p) ??
+    kreeFanatic.kreeFanaticBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -24732,6 +24763,12 @@ function calculateAttack(s: GameState) {
         (a.modifier || 0) +
         (a.extraBoostIcons || 0) +
         venomVillain.venomRetortIcons(s, a) +
+        (attackTargetsEnemy(s, a)
+          ? 0
+          : kreeFanatic.kreeFanaticAttackBonus(
+              s,
+              a.originalPlayerId || a.targetPlayerId || s.activePlayerId,
+            )) +
         a.boostCodes.reduce(
           (n, code, index) =>
             n + activationBoostValue(s, a.boostIds?.[index] || "", code),
@@ -26298,6 +26335,8 @@ function reveal(
         (code) => code === p.code,
       ) &&
         c.type_code !== "attachment") ||
+      (kreeFanatic.KREE_FANATIC_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -26506,6 +26545,7 @@ function reveal(
       ...sinisterSix.SINISTER_SIX_SCRIPT_CODES,
       ...venomGoblin.VENOM_GOBLIN_SCRIPT_CODES,
       ...sinisterModulars.SINISTER_MODULAR_SCRIPT_CODES,
+      ...kreeFanatic.KREE_FANATIC_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -26555,6 +26595,7 @@ function reveal(
       sinisterSix.sixReveal(s, p) ??
       venomGoblin.venomGoblinReveal(s, p) ??
       sinisterModulars.sinisterModularReveal(s, p) ??
+      kreeFanatic.kreeFanaticReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -26647,6 +26688,7 @@ function reveal(
     sinisterSix.sixReveal(s, p) ??
     venomGoblin.venomGoblinReveal(s, p) ??
     sinisterModulars.sinisterModularReveal(s, p) ??
+    kreeFanatic.kreeFanaticReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -28078,6 +28120,7 @@ function resolve(s: GameState, e: Effect) {
           sinisterSix.sixReveal(state, piece) ??
           venomGoblin.venomGoblinReveal(state, piece) ??
           sinisterModulars.sinisterModularReveal(state, piece) ??
+          kreeFanatic.kreeFanaticReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -28226,6 +28269,7 @@ function resolve(s: GameState, e: Effect) {
   if (venomGoblin.resolveVenomGoblinEffect(s, e, venomGoblinPorts)) return;
   if (sinisterModulars.resolveSinisterModularEffect(s, e, sinisterModularPorts))
     return;
+  if (kreeFanatic.resolveKreeFanaticEffect(s, e, kreeFanaticPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -36974,6 +37018,7 @@ function resolve(s: GameState, e: Effect) {
             ...escape.escapeVillainPhaseInterrupts(s),
             ...nebulaVillain.nebulaVillainPhaseInterrupts(s),
             ...hood.hoodVillainPhaseInterrupts(s),
+            ...kreeFanatic.kreeFanaticVillainPhaseInterrupts(s),
             ...(s.environments || [])
               .filter((p) => p.code === "29039" && !isTextBlank(s, p))
               .map((p) =>
@@ -37624,6 +37669,7 @@ function run(s: GameState) {
       e.type.startsWith("six:") ||
       e.type.startsWith("vgob:") ||
       e.type.startsWith("smod:") ||
+      e.type.startsWith("kfan:") ||
       e.type.startsWith("thanos:") ||
       e.type.startsWith("hela:") ||
       e.type.startsWith("loki:") ||

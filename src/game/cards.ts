@@ -1493,6 +1493,7 @@ export const MODULES = [
   { id: "goblin_gear", name: "Goblin Gear", difficulty: 3 },
   { id: "osborn_tech", name: "Osborn Tech", difficulty: 3 },
   { id: "sinister_assault", name: "Sinister Assault", difficulty: 4 },
+  { id: "kree_fanatic", name: "Kree Fanatic", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {

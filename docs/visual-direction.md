@@ -167,3 +167,7 @@ Venom Goblin reuses the two-scheme layout of Tower Defense for three Manhattan m
 ## Osborn Tech and Sinister Assault, 2026-11-19
 
 The two modular sets bring no new table furniture. Osborn Tech's gadgets sit in the villain's attachment row like every other villain attachment, and each Hero Action button names its whole price before the result, for example "Take 3 indirect damage · discard Kinetic Armor", because each one is a trade the player weighs rather than a free removal. Sinister Assault's six villains arrive as elite minions in the ordinary minion row with their own artwork, so a familiar face in that row reads as a minion, not as a second villain.
+
+## Kree Fanatic, 2026-11-19
+
+Kree Fanatic adds no new table furniture either: The Accused sits with the identity it accuses, Ronan the Accuser in the minion row with his toughness status, and Judge, Jury, Executioner with the side schemes. When Ronan changes targets at the start of the villain phase, the mission log says so and his "Engaged with" line names the hero he now hunts.

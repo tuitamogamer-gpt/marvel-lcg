@@ -232,6 +232,11 @@ export interface Attack {
   mysterioCollusion?: boolean;
   /** Symbiotic Monstrosity's boost: this attack deals indirect damage. */
   vgobIndirect?: boolean;
+  /** Bring the Hammer Down's boost: a defeat deals the first player a card. */
+  kfanHammer?: boolean;
+  kfanHammerDealt?: boolean;
+  /** You Dare Oppose Me?'s boost: this attack gains overkill. */
+  kfanOverkill?: boolean;
   afterActivation?: Effect[];
   /** Effects tied to this actual attack, before optional aftermath responses. */
   visionAfterAttack?: Effect[];

@@ -663,3 +663,9 @@ Original prompt: I want to create fully playable and scripted Marvel Champions L
 - Native rules cover Osborn Tech's six surging Tech attachments with their constant abilities (overkill and piercing, retaliate 1, attack damage reduction, no defense) and Hero Actions, and Sinister Assault's six villainous elite minions with their Forced Responses after activating, attacking, damaging or engaging. Armadillo and Tracking Display share one defense restriction.
 - The source matrix grows to 199,160 configurations (6,448 new cases, 3,224 for each set) in sixteen shards of 12,447 or 12,448; all 192,712 previous names and seeds are retained by manifest hash. The inventory records 2,916 executable, 2,478 dedicated and 1,635 unsupported faces, thirty-three scenarios and sixty-one modular sets, and pins 153 source files.
 - The mission sweep found Kraven the Hunter offering Permanent cards to discard; only cards that can leave play are offered now.
+
+## Kree Fanatic — 2026-11-19
+
+- Made the free Kree Fanatic modular set playable natively, 5 faces on 7 physical cards in `src/game/kree-fanatic.ts`; it can be chosen in every scenario with modular sets.
+- Native rules cover Ronan the Accuser as an elite minion who cannot be stunned and engages the hero with the fewest hit points when the villain phase begins, Judge, Jury, Executioner's threat after an enemy attack defeats a friendly character, The Accused's +1 ATK and its discard when Ronan is defeated, Bring the Hammer Down's activation or surge, You Dare Oppose Me?'s discards dealt facedown, and every boost.
+- The source matrix grows to 202,384 configurations (3,224 new cases) in sixteen shards of 12,649; all 199,160 previous names and seeds are retained by manifest hash. The inventory records 2,921 executable, 2,483 dedicated and 1,630 unsupported faces, thirty-three scenarios and sixty-two modular sets, and pins 154 source files.

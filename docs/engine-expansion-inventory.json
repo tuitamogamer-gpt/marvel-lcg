@@ -222756,8 +222756,8 @@
       },
       "installedRegistry": {
         "code": "90001",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -222795,8 +222795,8 @@
       },
       "installedRegistry": {
         "code": "90002",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -222839,8 +222839,8 @@
       },
       "installedRegistry": {
         "code": "90003",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -222878,8 +222878,8 @@
       },
       "installedRegistry": {
         "code": "90004",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     },
@@ -222921,8 +222921,8 @@
       },
       "installedRegistry": {
         "code": "90005",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     }
@@ -263976,15 +263976,15 @@
     "src/data/catalog-decks.json": "6d75a9c883223b59a9b9d950696de7b6876f8921ffe025d40e352495c1a2b886",
     "src/data/core-player.json": "451c26f5ca50fd7b9c4bfc167675a23031b411c291bc546ad011c608603bbfa2",
     "src/data/core-encounter.json": "db9ec82bf2b9aa6b00bc813bc6b64aac3d0237996e3393f47d8dbd3645ddd2da",
-    "src/game/engine.ts": "fb325a8f9b42e103de15a70cd5163c22bd77ada5b8f32408b509636649e24aaf",
+    "src/game/engine.ts": "392b5e68c9bb68827ceb42d1351a54ad512537f5f7d3ed1be36a236e1819102d",
     "src/data/catalog-provenance.json": "8dddd4de54508b44039d4cf196a98550503486efdaf2ac9771de55992a77b7e4",
     "src/game/scripts/compiler.ts": "33feb608b78cc98fa23bfca85926b8213dd82b4a056d419fa459e6bef5363e87",
     "src/game/scripts/runtime.ts": "60ed7040b44d97589d6eb3e0583e6153680757c1de50fe8788c5dd48d1c355ac",
     "src/game/scripts/types.ts": "7c911c5060b6d6945391256137de71ac00a4adb75b5765040b7a6f0a71dbe2fc",
     "src/game/script-registry.ts": "6914c40870648556608434bd91e7ba4570f9f7c522037b97b082cd9bac33aeb3",
     "src/game/keywords.ts": "23c0b1b3ec10b57906f5412b8f5dc29039600a03c15d14c538a9246dfac2c4dc",
-    "src/game/engine-support.ts": "1578901b76e9de430ce17079bcbeac963e2c69db91b6172551b58ee6e9976773",
-    "src/game/cards.ts": "09e71738e68b06039e2987afa8e573cb800a3eb8d52405317e2ae9174cba828a",
+    "src/game/engine-support.ts": "a8218a8defb7bc2eb766998c2861da217d0866aad19525b1c401cf412c710da5",
+    "src/game/cards.ts": "e2dce9ab6e6443429c885fdd65851bfacc7bc5f1995627c180c4985c7130b217",
     "src/game/catalog.ts": "ba1475c5bcebc37b7da34da94ff272044c5a1b27e5b3646ca1ef8ab314318012",
     "src/game/combat.ts": "bb9c574ac2821ce2a7e0f111c03351d6557eed8e6e73b640a5a9e2b6227ad3e0",
     "src/game/presentation.ts": "a5eb46d7c758350a8c5f63139425d4d4a31dfd7370b1ad9cadb781b3892bc721",
@@ -264028,6 +264028,7 @@
     "src/game/sinister-six.ts": "e124f4fe7456a52ebdddaf9474df25a5677deea1a85d80d022f56e66f60c6f5e",
     "src/game/venom-goblin.ts": "0fa0b0b10bc4ffdf93e543d9bb9e955d0b0c466583fa8eac20fc93bde22642ce",
     "src/game/sinister-modulars.ts": "fad54aac2e0758df1165db0d4cafc26895ec863edddc45af391353b2d6b4b53d",
+    "src/game/kree-fanatic.ts": "2117ff7e5d96926f161e2ad4e8e3298cbf0afcc919bc3bf9986cd11a5a3475d5",
     "src/game/reveal-window.ts": "33941f948c63a1e17da531bfe8e2c291426a513556324d28f301455892ef7026",
     "src/game/black-widow.ts": "96238d58d465e37f13bb0c970ca96fc436f2bfc8aa52f1c379f2ea00c8570295",
     "src/game/doctor-strange.ts": "323002bc0b91de7acb91a9968b5db35512fa8a2e5cdf882896aca960edf94e68",
@@ -264112,7 +264113,7 @@
     "src/game/printed-card-metadata.ts": "2311d8bebcbf6c933163faf211529b24613422bf3278ad15445429d7b0163186",
     "src/game/card-text.ts": "6003584242c7138b48df33eedae89b115761f52a8237f05c3a37011e27724d80",
     "src/game/expansion-errata.ts": "d124735cd27d82fd1419ffd4ba3ff47e131f4783bc77a2c01ffe799db2109c80",
-    "src/game/types.ts": "b05cb69f6a6bfba39436301d8b3db0a449e784580a9393feb80db49828cf95eb",
+    "src/game/types.ts": "0776f874d2cddeec9c1797d52e6d5dd9358c696f89967daae430245180f2f152",
     "src/game/payment.ts": "de4824200f5c8ef04566c6a2ae2ed4babcfce5d609db949cb2572ccb34734686",
     "src/game/team.ts": "803468b2b4e49ce3c33aa0fdb61627012d5377ebcc243fb961f06899ad9d1d55",
     "src/game/review.ts": "0c131b5afe780a9cd3db05199c7ffc46653cfb39abcb29c147cdc15d1acfca28",
@@ -288745,9 +288746,9 @@
   },
   "installedRegistryCoverage": {
     "total": 4551,
-    "executableFaces": 2916,
-    "unsupportedFaces": 1635,
-    "dedicatedFaces": 2478,
+    "executableFaces": 2921,
+    "unsupportedFaces": 1630,
+    "dedicatedFaces": 2483,
     "dedicatedCodes": [
       "02001a",
       "02001b",
@@ -291226,7 +291227,12 @@
       "50060",
       "50061",
       "50062",
-      "50063"
+      "50063",
+      "90001",
+      "90002",
+      "90003",
+      "90004",
+      "90005"
     ],
     "registeredHeroIds": [
       "angel",
@@ -291353,6 +291359,7 @@
       "hydra_patrol",
       "inheritors",
       "ironspider_sinister",
+      "kree_fanatic",
       "kree_militant",
       "legions_of_hel",
       "legions_of_hydra",
@@ -292283,6 +292290,21 @@
           "27163"
         ],
         "faceCount": 6,
+        "unsupportedFaceCodes": [],
+        "installedCardClosure": true,
+        "automationCertification": "registration_closure_only_requires_rules_and_native_integration_evidence"
+      },
+      {
+        "id": "kree_fanatic",
+        "name": "Kree Fanatic",
+        "faceCodes": [
+          "90001",
+          "90002",
+          "90003",
+          "90004",
+          "90005"
+        ],
+        "faceCount": 5,
         "unsupportedFaceCodes": [],
         "installedCardClosure": true,
         "automationCertification": "registration_closure_only_requires_rules_and_native_integration_evidence"
@@ -293327,15 +293349,9 @@
         "code": "ron",
         "name": "Ronan Modular Set",
         "faceCount": 5,
-        "executableFaces": 0,
-        "unsupportedFaceCodes": [
-          "90001",
-          "90002",
-          "90003",
-          "90004",
-          "90005"
-        ],
-        "installedCardClosure": false,
+        "executableFaces": 5,
+        "unsupportedFaceCodes": [],
+        "installedCardClosure": true,
         "automationCertification": "registration_closure_only_requires_rules_and_native_integration_evidence"
       },
       {
@@ -322747,32 +322763,32 @@
       },
       {
         "code": "90001",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "90002",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "90003",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "90004",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       },
       {
         "code": "90005",
-        "executable": false,
-        "mechanism": "unsupported",
+        "executable": true,
+        "mechanism": "dedicated-module",
         "compilerStatus": "unsupported"
       }
     ]

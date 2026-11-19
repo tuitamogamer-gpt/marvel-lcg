@@ -143,6 +143,8 @@ jobs:
             scripts: test:venom-goblin
           - group: sinister-modulars
             scripts: test:sinister-modulars
+          - group: kree-fanatic
+            scripts: test:kree-fanatic
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules
