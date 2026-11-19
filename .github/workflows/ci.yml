@@ -127,6 +127,8 @@ jobs:
             scripts: test:loki
           - group: wrecking-crew
             scripts: test:wrecking-crew
+          - group: kang
+            scripts: test:kang
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

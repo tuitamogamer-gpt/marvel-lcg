@@ -11,6 +11,7 @@ import { THANOS_SCRIPT_CODES } from "./thanos.js";
 import { HELA_SCRIPT_CODES } from "./hela.js";
 import { LOKI_SCRIPT_CODES } from "./loki.js";
 import { WRECKING_CREW_SCRIPT_CODES } from "./wrecking-crew.js";
+import { KANG_SCRIPT_CODES } from "./kang.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -269,6 +270,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...HELA_SCRIPT_CODES,
   ...LOKI_SCRIPT_CODES,
   ...WRECKING_CREW_SCRIPT_CODES,
+  ...KANG_SCRIPT_CODES,
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

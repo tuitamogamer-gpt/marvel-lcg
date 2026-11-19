@@ -242,6 +242,12 @@ import {
 } from "./game/hela";
 import { lokiDamageProhibited, lokiVictories } from "./game/loki";
 import {
+  kangAreaOf,
+  kangAreaView,
+  kangDamageProhibited,
+  kangVillainAbsent,
+} from "./game/kang";
+import {
   CREW_KEYS,
   CREW_VILLAINS,
   crewDeckCounts,
@@ -5173,6 +5179,104 @@ function TowerVillains({
 }
 /** The Wrecking Crew: four villains, the active one lit, each with his
  * side scheme's threat and his own encounter deck. */
+/** Every Kang shares the title: the subtitle names this version. */
+function KangName({ name }: { name: string }) {
+  const m = /^(.*?) \((.*)\)$/.exec(name);
+  if (!m) return <>{name.toUpperCase()}</>;
+  return (
+    <>
+      {m[1].toUpperCase()}{" "}
+      <span className="villain-subtitle">({m[2].toUpperCase()})</span>
+    </>
+  );
+}
+/** Kang: the stage, the villain gaps and the other game areas. */
+function kangObjective(s: GameState) {
+  const k = s.kang!;
+  if (k.stage === 1)
+    return k.advancing
+      ? "Kang (I) is defeated · stage 2 at the end of the phase"
+      : "Defeat Kang (I)";
+  if (k.stage === 3)
+    return kangVillainAbsent(s)
+      ? "Join another game area at the end of the phase"
+      : `Defeat ${card(s.villain).name} in your game area`;
+  return "Defeat Kang (III)";
+}
+function KangTimeline({ game: s }: { game: GameState }) {
+  const k = s.kang!;
+  const mine = kangAreaOf(s, s.activePlayerId);
+  const others = (k.areas || []).filter((a) => a !== mine);
+  const absent = kangVillainAbsent(s);
+  const prohibited = absent ? undefined : kangDamageProhibited(s, s.villain.id);
+  return (
+    <div className="kang-timeline" role="group" aria-label="Kang's timeline">
+      <span className="stat-caption kang-stage">
+        {k.stage === 1
+          ? "Stage 1 · Kang's Arrival"
+          : k.stage === 3
+            ? `Stage 3 · ${k.areas!.length} separate game area${k.areas!.length === 1 ? "" : "s"}`
+            : "Stage 4 · Kang's Wrath"}
+      </span>
+      {absent && (
+        <span className="stat-caption" role="status">
+          {k.stage === 1
+            ? "Defeated · no villain in play until the main scheme advances at the end of the phase"
+            : "Defeated · this game area joins another at the end of the phase"}
+        </span>
+      )}
+      {prohibited && (
+        <span className="stat-caption" role="status">
+          {prohibited}
+        </span>
+      )}
+      {k.stage === 3 && (
+        <span
+          className="stat-caption"
+          aria-label={`Kang's Dominion facedown under Kang's Wrath: ${k.underWrath.length}; acceleration tokens on The Master of Time: ${s.encounter.acceleration}`}
+        >
+          Dominions under Kang's Wrath · {k.underWrath.length} · acceleration on
+          The Master of Time · {s.encounter.acceleration}
+        </span>
+      )}
+      {others.map((a) => {
+        const v = kangAreaView(s, a);
+        const scheme = card(v.scheme.code);
+        const limit =
+          (scheme.threat || 0) * (scheme.threat_fixed ? 1 : s.playerCount);
+        const heroes = a.players
+          .map((id) => heroCard(seatView(s, id)).name)
+          .join(" & ");
+        return (
+          <div
+            className="kang-area"
+            key={a.id}
+            role="group"
+            aria-label={`${heroes}'s game area: ${a.villainGone ? "Kang defeated" : `${card(v.villain).name}, ${v.villain.hp} of ${v.villain.maxHp} hit points`}; ${scheme.name}, ${v.scheme.threat} of ${limit} threat`}
+          >
+            <b>{heroes}</b>
+            <span>
+              {a.villainGone
+                ? "Kang defeated"
+                : `${card(v.villain).name} · ${v.villain.hp}/${v.villain.maxHp}`}
+            </span>
+            <span>
+              {scheme.name} · {v.scheme.threat}/{limit}
+              {a.leaving ? " · leaving" : ""}
+            </span>
+            {(v.sideSchemes.length > 0 || v.minions.length > 0) && (
+              <span>
+                {v.sideSchemes.length} side scheme
+                {v.sideSchemes.length === 1 ? "" : "s"} · {v.minions.length}{" "}
+                minion{v.minions.length === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 function CrewVillains({
   game: s,
   inspect,
@@ -5852,7 +5956,9 @@ function Tabletop({
                       ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
                       : s.wreckingCrew
                         ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
-                        : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                        : s.kang
+                          ? kangObjective(s)
+                          : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
             <span className={threatCritical ? "danger" : ""}>
@@ -5994,8 +6100,9 @@ function Tabletop({
                 <Skull size={17} weight="fill" /> VILLAIN PLAY AREA
               </span>
               <span>
-                {s.playerCount} {s.playerCount === 1 ? "HERO" : "HEROES"} ·
-                SHARED PLAY AREA
+                {s.kang?.areas && s.playerCount > 1
+                  ? `YOUR GAME AREA · ${s.kang.areas.length} SEPARATE AREA${s.kang.areas.length === 1 ? "" : "S"}`
+                  : `${s.playerCount} ${s.playerCount === 1 ? "HERO" : "HEROES"} · SHARED PLAY AREA`}
               </span>
             </div>
             <section className="opposition">
@@ -6042,16 +6149,22 @@ function Tabletop({
                     </span>
                     <h2
                       className={
-                        Math.max(
-                          ...card(s.villain)
-                            .name.split(/\s+/)
-                            .map((word) => word.length),
-                        ) >= 9 || card(s.villain).name.length >= 15
-                          ? "villain-name-long"
-                          : undefined
+                        s.kang
+                          ? undefined
+                          : Math.max(
+                                ...card(s.villain)
+                                  .name.split(/\s+/)
+                                  .map((word) => word.length),
+                              ) >= 9 || card(s.villain).name.length >= 15
+                            ? "villain-name-long"
+                            : undefined
                       }
                     >
-                      {card(s.villain).name.toUpperCase()}
+                      {s.kang ? (
+                        <KangName name={card(s.villain).name} />
+                      ) : (
+                        card(s.villain).name.toUpperCase()
+                      )}
                     </h2>
                     <HealthDial
                       value={s.villain.hp}
@@ -6117,6 +6230,7 @@ function Tabletop({
                         Cannot take damage while a side scheme is in play
                       </span>
                     )}
+                    {s.kang && <KangTimeline game={s} />}
                     {s.magneto &&
                       magnetoDamageCap(s, { isTextBlank }) !== undefined && (
                         <span
@@ -6241,7 +6355,7 @@ function Tabletop({
                     <p>
                       +
                       {escalation(s) +
-                        s.encounter.acceleration +
+                        (s.kang?.areas ? 0 : s.encounter.acceleration) +
                         s.sideSchemes.reduce(
                           (n, p) =>
                             n +

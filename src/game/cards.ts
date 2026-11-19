@@ -1306,6 +1306,19 @@ export const VILLAINS = [
       "Wrecker, Thunderball, Piledriver and Bulldozer break out of Ryker's Island together. Only the villain with the active counter activates and deals the encounter cards, from his own deck; defeat all four before the breakout is complete.",
     color: "#6b5a3a",
   },
+  {
+    id: "kang",
+    name: "Kang",
+    codes: ["11001", "11034"],
+    schemes: ["11007b"],
+    module: "temporal",
+    difficulty: 4,
+    title: "The Once and Future Kang",
+    location: "Across time",
+    description:
+      "Kang the Conqueror arrives to claim the present. Defeat him and he scatters the heroes through time: each hero faces a different Kang alone in their own game area, then all return for Kang's Wrath.",
+    color: "#4b3f86",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1358,6 +1371,9 @@ export const MODULES = [
   { id: "legions_of_hel", name: "Legions of Hel", difficulty: 2 },
   { id: "frost_giants", name: "Frost Giants", difficulty: 3 },
   { id: "enchantress", name: "Enchantress", difficulty: 3 },
+  { id: "temporal", name: "Temporal", difficulty: 2 },
+  { id: "mot", name: "Master of Time", difficulty: 3 },
+  { id: "anachronauts", name: "Anachronauts", difficulty: 4 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {

@@ -11,6 +11,12 @@ export function syncSeat(s: GameState) {
     seat.flags = s.flags;
   }
 }
+const seatHooks: ((s: GameState) => void)[] = [];
+/** Scenarios with separate game areas make the active seat's area native
+ * (The Once and Future Kang). Registered by the scenario module. */
+export function onSeatActivated(hook: (s: GameState) => void) {
+  seatHooks.push(hook);
+}
 export function activateSeat(s: GameState, id: string) {
   syncSeat(s);
   const seat = s.players.find((p) => p.id === id);
@@ -20,6 +26,7 @@ export function activateSeat(s: GameState, id: string) {
   s.flags = seat.flags;
   s.heroId = seat.heroId;
   s.aspect = seat.aspect;
+  for (const hook of seatHooks) hook(s);
 }
 export function seatView(s: GameState, seat: PlayerSeat | string): GameState {
   const p =

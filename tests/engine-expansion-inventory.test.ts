@@ -12,6 +12,7 @@ import { THANOS_SCRIPT_CODES } from "../src/game/thanos";
 import { HELA_SCRIPT_CODES } from "../src/game/hela";
 import { LOKI_SCRIPT_CODES } from "../src/game/loki";
 import { WRECKING_CREW_SCRIPT_CODES } from "../src/game/wrecking-crew";
+import { KANG_SCRIPT_CODES } from "../src/game/kang";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -38,6 +39,7 @@ const badoonCodes = new Set<string>([
   ...HELA_SCRIPT_CODES,
   ...LOKI_SCRIPT_CODES,
   ...WRECKING_CREW_SCRIPT_CODES,
+  ...KANG_SCRIPT_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -421,9 +423,12 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(40);
+    expect(MODULES).toHaveLength(43);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
+        "temporal",
+        "mot",
+        "anachronauts",
         "black_order",
         "armies_of_titan",
         "children_of_thanos",
@@ -448,9 +453,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2661);
-    expect(coverage.unsupportedFaces).toBe(1890);
-    expect(coverage.dedicatedFaces).toBe(2222);
+    expect(coverage.executableFaces).toBe(2719);
+    expect(coverage.unsupportedFaces).toBe(1832);
+    expect(coverage.dedicatedFaces).toBe(2280);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -638,6 +643,8 @@ describe("complete expansion rules inventory", () => {
         21 -
         // The Wrecking Crew.
         60 -
+        // The Once and Future Kang, Temporal, Master of Time, Anachronauts.
+        58 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -765,7 +772,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(40);
+    expect(coverage.registeredModules).toHaveLength(43);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -949,7 +956,18 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(26);
+    ).toHaveLength(27);
+    expect(
+      inventory.installedRegistryCoverage.registeredScenarios.find(
+        (entry: { id: string }) => entry.id === "kang",
+      ),
+    ).toMatchObject({
+      codes: ["11001", "11034"],
+      schemes: ["11007b"],
+      defaultModule: "temporal",
+      moduleCount: 1,
+      defaultModules: ["temporal"],
+    });
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "the_wrecking_crew",
@@ -1102,7 +1120,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(144);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(145);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

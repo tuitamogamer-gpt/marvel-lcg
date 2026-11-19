@@ -46,6 +46,7 @@ import {
 import { deckSizeFor } from "../src/game/decks";
 import { seatView } from "../src/game/team";
 import { crewBench, crewStoredPieces } from "../src/game/wrecking-crew";
+import { kangStoredPieces } from "../src/game/kang";
 import type { Aspect, Command, GameState, Piece } from "../src/game/types";
 
 const ended = (s: GameState) => ["won", "lost"].includes(s.phase);
@@ -194,6 +195,8 @@ function ownedPieces(s: GameState, originalIds?: Set<string>): Piece[] {
     ...(s.escape?.setAside || []),
     // The Wrecking Crew: the encounter decks of the villains not active.
     ...crewStoredPieces(s),
+    // Kang: the game areas out of focus and the set-aside scenario cards.
+    ...kangStoredPieces(s),
     ...((s.encounter as GameState["encounter"] & { setAside?: Piece[] })
       .setAside || []),
     ...(s.attack?.pendingBoosts || []),
@@ -249,6 +252,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       "hela",
       "loki",
       "the_wrecking_crew",
+      "kang",
     ].includes(s.villainId)
   )
     return [];
@@ -311,6 +315,9 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
     // The Wrecking Crew: the villains out of focus and the encounter decks
     // of the villains who are not active.
     ...(s.wreckingCrew ? [...crewBench(s), ...crewStoredPieces(s)] : []),
+    // Kang: the main schemes, the set-aside villains and Kang's Dominions,
+    // and the game areas out of focus.
+    ...kangStoredPieces(s),
     // Loki: the set-aside Lokis and the Infinity Stone deck.
     ...(s.loki
       ? [...s.loki.setAside, ...s.loki.stoneDeck, ...s.loki.stoneDiscard]
@@ -564,13 +571,17 @@ function runMission(config: (typeof missions)[number]) {
                                       ? "loki"
                                       : s.villainId === "the_wrecking_crew"
                                         ? "the_wrecking_crew"
-                                        : undefined;
+                                        : s.villainId === "kang"
+                                          ? "kang"
+                                          : undefined;
   // The Wrecking Crew's cards span five sets: every card of its pack.
   const scenarioSources = scenarioSet
     ? scenarioPhysicalPieces(s).filter((p) =>
         scenarioSet === "the_wrecking_crew"
           ? card(p).pack_code === "twc"
-          : card(p).set_code === scenarioSet,
+          : scenarioSet === "kang"
+            ? ["kang", "exp_kang"].includes(card(p).set_code || "")
+            : card(p).set_code === scenarioSet,
       )
     : [];
   const scenarioIds = scenarioSources.map((p) => p.id).sort();
@@ -613,7 +624,9 @@ function runMission(config: (typeof missions)[number]) {
                                       ? 20
                                       : scenarioSet === "the_wrecking_crew"
                                         ? 68
-                                        : 29;
+                                        : scenarioSet === "kang"
+                                          ? 43
+                                          : 29;
     expect(
       scenarioSources,
       "All selected original scenario cards begin in physical zones",
@@ -671,7 +684,9 @@ function runMission(config: (typeof missions)[number]) {
       const actual = scenarioPhysicalPieces(s).filter((p) =>
         scenarioSet === "the_wrecking_crew"
           ? card(p).pack_code === "twc"
-          : card(p).set_code === scenarioSet,
+          : scenarioSet === "kang"
+            ? ["kang", "exp_kang"].includes(card(p).set_code || "")
+            : card(p).set_code === scenarioSet,
       );
       expect(
         actual.map((p) => p.id).sort(),
@@ -815,10 +830,12 @@ function runMission(config: (typeof missions)[number]) {
         ((!!targets(s, "scheme").length && heroStats(s).thwart > 0) ||
           s.player.confused);
       const urgent = s.scheme.threat >= 3 || !!s.sideSchemes.length;
+      // Kang leaves no villain in play between his stages.
       const canAttack =
         visionCanAttack(s) &&
         cyclopsCanAttack(s) &&
-        !valkyrieCannotBasicAttack(s);
+        !valkyrieCannotBasicAttack(s) &&
+        (s.player.stunned || !!targets(s, "enemy", true).length);
       if (!canAttack && !canThwart) return;
       act({
         type: "BASIC",
@@ -860,10 +877,10 @@ describe("published expansion starters across every supported mission setting", 
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(26);
-    expect(MODULES).toHaveLength(40);
+    expect(VILLAINS).toHaveLength(27);
+    expect(MODULES).toHaveLength(43);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(103584);
+    expect(missions).toHaveLength(115856);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -874,10 +891,30 @@ describe("published expansion starters across every supported mission setting", 
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
-    // The Wrecking Crew extends the grid without a modular set. Every earlier
-    // name and seed stays in place: the 103,480 configurations before this
-    // import hash identically to the complete grid of e629ea5.
-    const lokiGrid = missions.filter(
+    // Kang and the Temporal, Master of Time and Anachronauts modular sets
+    // extend the grid. Every earlier name and seed stays in place: the
+    // 103,584 configurations before this import hash identically to the
+    // complete grid of 1600763.
+    const kangModules = ["temporal", "mot", "anachronauts"];
+    const wreckingCrewGrid = missions.filter(
+      (m) => m.villainId !== "kang" && !kangModules.includes(m.module),
+    );
+    expect(wreckingCrewGrid).toHaveLength(103584);
+    expect(
+      createHash("sha256")
+        .update(manifest(wreckingCrewGrid).join("\n"))
+        .digest("hex"),
+    ).toBe("92358309e714ce98ef71ae1f6d24c5890c553c1a9c894f956c9ec9effcadd2db");
+    expect(missions.filter((m) => m.villainId === "kang")).toHaveLength(4472);
+    expect(
+      missions.filter(
+        (m) => m.villainId !== "kang" && kangModules.includes(m.module),
+      ),
+    ).toHaveLength(7800);
+    // The Wrecking Crew extended the grid without a modular set before that:
+    // the 103,480 configurations before it hash identically to the complete
+    // grid of e629ea5.
+    const lokiGrid = wreckingCrewGrid.filter(
       (m) => m.villainId !== "the_wrecking_crew",
     );
     expect(lokiGrid).toHaveLength(103480);
@@ -885,7 +922,7 @@ describe("published expansion starters across every supported mission setting", 
       createHash("sha256").update(manifest(lokiGrid).join("\n")).digest("hex"),
     ).toBe("f5056c423f3a2507660763a872f07deadb77d998b7a16b10903488eee3da1c38");
     expect(
-      missions.filter((m) => m.villainId === "the_wrecking_crew"),
+      wreckingCrewGrid.filter((m) => m.villainId === "the_wrecking_crew"),
     ).toHaveLength(104);
     expect(
       missions
@@ -902,10 +939,15 @@ describe("published expansion starters across every supported mission setting", 
     expect(
       createHash("sha256").update(manifest(helaGrid).join("\n")).digest("hex"),
     ).toBe("4e157440ea9add58490a34a901f3244224eca3e271392dfdfad01711af777822");
-    expect(missions.filter((m) => m.villainId === "loki")).toHaveLength(4160);
+    expect(wreckingCrewGrid.filter((m) => m.villainId === "loki")).toHaveLength(
+      4160,
+    );
     expect(
       missions.filter(
-        (m) => m.module === "enchantress" && m.villainId !== "loki",
+        (m) =>
+          m.module === "enchantress" &&
+          m.villainId !== "loki" &&
+          m.villainId !== "kang",
       ),
     ).toHaveLength(2496);
     // Hela and the Legions of Hel and Frost Giants modular sets extended the
@@ -1266,9 +1308,9 @@ describe("published expansion starters across every supported mission setting", 
           partition.filter((mission) => mission.villainId === "crossbones")
             .length,
       ),
-      // Each hero's block of 1,992 configurations now starts on the same
-      // shard, so Crossbones's 78 configurations per hero fall unevenly.
-    ).toEqual([468, 468, 520, 520, 520, 520, 520, 520]);
+      // Each hero's block of 2,228 configurations starts on shard 0 or 4,
+      // so the larger scenarios fall in two alternating sizes.
+    ).toEqual([546, 546, 546, 546, 546, 546, 546, 546]);
     expect(
       partitions.map(
         (partition) =>
@@ -1276,7 +1318,7 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "brotherhood_of_badoon",
           ).length,
       ),
-    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
+    ).toEqual([572, 572, 546, 546, 572, 572, 546, 546]);
     expect(
       partitions.map(
         (partition) =>
@@ -1284,7 +1326,7 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "infiltrate_the_museum",
           ).length,
       ),
-    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
+    ).toEqual([546, 546, 572, 572, 546, 546, 572, 572]);
     expect(
       partitions.map(
         (partition) =>
@@ -1292,51 +1334,51 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "escape_the_museum",
           ).length,
       ),
-    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
+    ).toEqual([572, 572, 546, 546, 572, 572, 546, 546]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "nebula").length,
       ),
-    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
+    ).toEqual([546, 546, 572, 572, 546, 546, 572, 572]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "ronan").length,
       ),
-    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
+    ).toEqual([572, 572, 546, 546, 572, 572, 546, 546]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "ebony_maw")
             .length,
       ),
-    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
+    ).toEqual([546, 546, 572, 572, 546, 546, 572, 572]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "tower_defense")
             .length,
       ),
-    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
+    ).toEqual([572, 572, 546, 546, 572, 572, 546, 546]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "thanos").length,
       ),
-    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
+    ).toEqual([546, 546, 572, 572, 546, 546, 572, 572]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "hela").length,
       ),
-    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
+    ).toEqual([572, 572, 546, 546, 572, 572, 546, 546]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter((mission) => mission.villainId === "loki").length,
       ),
-    ).toEqual([520, 520, 520, 520, 520, 520, 520, 520]);
+    ).toEqual([546, 546, 572, 572, 546, 546, 572, 572]);
     expect(
       partitions.map(
         (partition) =>
@@ -1344,12 +1386,18 @@ describe("published expansion starters across every supported mission setting", 
             (mission) => mission.villainId === "the_wrecking_crew",
           ).length,
       ),
-    ).toEqual([0, 0, 0, 0, 0, 0, 52, 52]);
-    expect(new Set(missions.map(key)).size).toBe(103584);
-    expect(new Set(combined.map(key)).size).toBe(103584);
+    ).toEqual([26, 26, 0, 0, 26, 26, 0, 0]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter((mission) => mission.villainId === "kang").length,
+      ),
+    ).toEqual([546, 546, 572, 572, 546, 546, 572, 572]);
+    expect(new Set(missions.map(key)).size).toBe(115856);
+    expect(new Set(combined.map(key)).size).toBe(115856);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(12948);
+      expect(partition).toHaveLength(14482);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -1357,11 +1405,11 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(249);
-      expect(Math.max(...perShard)).toBe(249);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(1992);
+      expect(Math.min(...perShard)).toBe(278);
+      expect(Math.max(...perShard)).toBe(279);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(2228);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 12948 : 103584);
+    expect(selectedMissions).toHaveLength(isSharded ? 14482 : 115856);
   });
   for (const mission of selectedMissions)
     it(

@@ -288,6 +288,7 @@ export interface GameState {
   /** The Wrecking Crew: the villains out of focus, the active counter and
    * the encounter decks of the villains who are not active. */
   wreckingCrew?: import("./wrecking-crew.js").WreckingCrewState;
+  kang?: import("./kang.js").KangState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */
