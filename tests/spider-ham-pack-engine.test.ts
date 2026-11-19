@@ -972,6 +972,23 @@ describe("Spider-Ham original source player pool through native dispatch", () =>
       true,
     );
   });
+  it("Web of Life's response window does not open after the support itself left play", () => {
+    let s = base("ghost_spider");
+    const web = control(s, "30023");
+    // A forced response (Unbreakable Thread) discarded the support after the
+    // Web-Warrior ally left play, before this optional window opened.
+    s.player.inPlay = s.player.inPlay.filter((p) => p.id !== web.id);
+    s.player.discard.push(web);
+    s = native(s, {
+      type: "optional",
+      title: "Web of Life and Destiny",
+      sourceId: web.id,
+      actorId: "p1",
+      effects: [{ type: "draw", amount: 1, actorId: "p1" }],
+    });
+    expect(s.prompt).toBeNull();
+    expect(s.player.hand).toHaveLength(0);
+  });
   it("Web of Life triggers when SP//dr actually leaves for a return to its owner's hand", () => {
     let s = base();
     control(s, "30023");

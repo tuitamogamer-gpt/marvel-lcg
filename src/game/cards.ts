@@ -1,4 +1,5 @@
 import { zolaHealth } from "./zola.js";
+import { hoodModularGlobal, hoodModularHealth } from "./hood-modular.js";
 import { nickFuryAerial } from "./nick-fury.js";
 import { bishopAllyHP, bishopCharacterBonus } from "./bishop.js";
 import { nightcrawlerStats } from "./nightcrawler.js";
@@ -1324,16 +1325,18 @@ export const VILLAINS = [
     name: "The Hood",
     codes: ["24001", "24002", "24003"],
     schemes: ["24004b", "24005b", "24006b"],
-    module: "bomb_scare",
+    module: "streets_of_mayhem",
     moduleCount: 7,
+    // The rules insert's sets ranked 1-7 by difficulty, for a lower-difficulty
+    // game (ranks 2-8 for moderate and 3-9 for higher difficulty).
     defaultModules: [
-      "bomb_scare",
-      "masters_of_evil",
-      "under_attack",
-      "legions_of_hydra",
-      "the_doomsday_chair",
-      "goblin_gimmicks",
-      "a_mess_of_things",
+      "streets_of_mayhem",
+      "brothers_grimm",
+      "ransacked_armory",
+      "state_of_emergency",
+      "beasty_boys",
+      "mister_hyde",
+      "sinister_syndicate",
     ],
     difficulty: 3,
     title: "Making Connections",
@@ -1397,6 +1400,16 @@ export const MODULES = [
   { id: "temporal", name: "Temporal", difficulty: 2 },
   { id: "mot", name: "Master of Time", difficulty: 3 },
   { id: "anachronauts", name: "Anachronauts", difficulty: 4 },
+  // The Hood scenario pack's nine modular sets.
+  { id: "beasty_boys", name: "Beasty Boys", difficulty: 3 },
+  { id: "brothers_grimm", name: "Brothers Grimm", difficulty: 2 },
+  { id: "crossfire_crew", name: "Crossfire's Crew", difficulty: 4 },
+  { id: "mister_hyde", name: "Mister Hyde", difficulty: 3 },
+  { id: "ransacked_armory", name: "Ransacked Armory", difficulty: 2 },
+  { id: "sinister_syndicate", name: "Sinister Syndicate", difficulty: 4 },
+  { id: "state_of_emergency", name: "State of Emergency", difficulty: 3 },
+  { id: "streets_of_mayhem", name: "Streets of Mayhem", difficulty: 1 },
+  { id: "wrecking_crew_modular", name: "Wrecking Crew", difficulty: 5 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -1804,6 +1817,7 @@ export function heroStats(s: GameState) {
       h.attack! +
       collectorIdentityStats(s).attack +
       stormGlobal(s).attack +
+      hoodModularGlobal(s).attack +
       s.attachments
         .filter(
           (p) =>
@@ -1862,6 +1876,7 @@ export function heroStats(s: GameState) {
       h.thwart! +
       collectorIdentityStats(s).thwart +
       stormStats(s).thwart +
+      hoodModularGlobal(s).thwart +
       (has(s, "01065") ? 1 : 0) +
       Number(s.flags.lead || 0) +
       captainStats(s).thw +
@@ -1990,6 +2005,7 @@ export function enemyAttachmentModifier(
 export function pieceHP(s: GameState, p: Piece) {
   return (
     zolaHealth(s, p) +
+    hoodModularHealth(s, p) +
     jubileeEnemyHealth(s, p) +
     magnetoHeroNewModifiers(s, p, captainPackHasTrait).health +
     (p.code === "drone"

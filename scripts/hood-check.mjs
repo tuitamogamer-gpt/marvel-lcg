@@ -28,8 +28,9 @@ await build({
       "export const definition=p=>card(p);",
       "export const payment=s=>{const p=s.prompt;return paymentSources(s,p.card?.id,p.paymentTarget,p.handOnly,p.alliance);};",
       "export function fixture(kind){",
-      " const rhino=kind==='formidable';",
-      " let s=newGame({heroId:'spider_man',aspect:'justice',villainId:rhino?'rhino':'the_hood',difficulty:'standard',seed:24001,pacing:'expert',heroes:[{heroId:'spider_man',aspect:'justice'}],...(rhino?{standardII:true}:{})});",
+      " const modular={setting:'streets_of_mayhem',armory:'ransacked_armory',fear:'crossfire_crew'}[kind];",
+      " const rhino=kind==='formidable'||!!modular;",
+      " let s=newGame({heroId:'spider_man',aspect:'justice',villainId:rhino?'rhino':'the_hood',difficulty:'standard',seed:24001,pacing:'expert',heroes:[{heroId:'spider_man',aspect:'justice'}],...(kind==='formidable'?{standardII:true}:{}),...(modular?{module:modular}:{})});",
       " function command(c){s=dispatch(s,c);if(s.error)throw Error(s.error);}",
       " function settle(){for(let n=0;n<200;n++){",
       "  if(s.review){command({type:'PROCEED'});continue;}",
@@ -47,6 +48,9 @@ await build({
       " else if(kind==='dominance'){const d=take('24007');d.attachedTo='hero:p1';s.attachments.push(d);s.player.form='alter';result.id=d.id;result.threat=s.scheme.threat;}",
       " else if(kind==='mantle'){const m=take('24008');m.attachedTo=s.villain.id;s.attachments.push(m);const pick=k=>{const i=s.player.deck.findIndex(p=>card(p)['resource_'+k]&&!card(p).resource_wild);return s.player.deck.splice(i,1)[0];};const paid=[pick('energy'),pick('mental'),pick('physical')];s.player.hand.push(...paid);result.id=m.id;result.paid=paid.map(p=>p.id);}",
       " else if(kind==='formidable'){result.code=s.environments[0]?.code;}",
+      " else if(kind==='setting'){const p=take('24060');result.id=p.id;s.encounter.deck.unshift(take('01186'));delete s.encounter.knownTop;native([{type:'reveal',piece:p,actorId:'p1'}]);}",
+      " else if(kind==='armory'){const g=take('24041');g.engagedWith='p1';s.minions.push(g);const p=take('24037');result.id=p.id;result.guard=g.id;native([{type:'reveal',piece:p,actorId:'p1'}]);}",
+      " else if(kind==='fear'){const f=take('24027');f.engagedWith='p1';s.minions.push(f);s.player.exhausted=true;const i=s.player.deck.findIndex(p=>card(p).resource_mental&&!card(p).resource_wild);const m=s.player.deck.splice(i,1)[0];s.player.hand.push(m);result.paid=[m.id];native([{type:'ready',target:'hero',actorId:'p1'}]);}",
       " else throw Error('Unknown fixture '+kind);",
       " syncSeat(s);return{state:s,...result};",
       "}",
@@ -160,7 +164,9 @@ async function settle(stop = () => false) {
       s.prompt.options.find((o) =>
         /^(pass|skip|continue|none|resolve|take|allow|no|done)$/.test(o.id),
       ) ||
-      (s.prompt.options.length === 1 || s.prompt.title === "Forced responses"
+      (s.prompt.options.length === 1 ||
+      s.prompt.title === "Forced responses" ||
+      /ability order/.test(s.prompt.title)
         ? s.prompt.options[0]
         : undefined);
     assert.ok(o, "Unhandled native prompt: " + JSON.stringify(s.prompt));
@@ -266,10 +272,23 @@ try {
         .locator(".villain-tabs")
         .getByRole("button", { name: "The Hood", exact: true })
         .click();
+      // The rules insert's sets ranked 1-7 are the default seven.
+      const ranked = [
+        "streets_of_mayhem",
+        "brothers_grimm",
+        "ransacked_armory",
+        "state_of_emergency",
+        "beasty_boys",
+        "mister_hyde",
+        "sinister_syndicate",
+      ];
       for (let i = 1; i <= 7; i++)
-        await page
-          .getByRole("combobox", { name: "Modular encounter " + i })
-          .waitFor();
+        assert.equal(
+          await page
+            .getByRole("combobox", { name: "Modular encounter " + i })
+            .inputValue(),
+          ranked[i - 1],
+        );
       await page.getByText(/Choose seven modular sets/).waitFor();
       await page
         .locator(".setting-line")
@@ -370,6 +389,71 @@ try {
       .waitFor({ state: "attached" });
     await artwork(["24049a"]);
     await audit("formidable-foe", width);
+    checks.push({ ...current });
+
+    // The Hood scenario pack's modular sets in an ordinary scenario.
+    current = { kind: "streets-of-mayhem", width };
+    f = fixture("setting");
+    owned = originals(f.state);
+    await open(width, f.state);
+    await page
+      .getByRole("button", { name: "Resolve original effect", exact: true })
+      .click();
+    s = await settle();
+    assert.ok(
+      s.environments.some((p) => p.id === f.id),
+      "Back-Alley Enclave is the Setting in play",
+    );
+    // The revealed card was held by the native effect, not in a zone.
+    assert.deepEqual(originals(s), [...owned, f.id + ":24060"].sort());
+    await artwork(["24060"]);
+    await resumeExact();
+    await audit("streets-of-mayhem", width);
+    checks.push({ ...current, exactReload: true });
+
+    current = { kind: "ransacked-armory", width };
+    f = fixture("armory");
+    await open(width, f.state);
+    await page
+      .getByRole("button", { name: "Resolve original effect", exact: true })
+      .click();
+    s = await settle();
+    assert.equal(
+      s.attachments.find((p) => p.id === f.id)?.attachedTo,
+      f.guard,
+      "Flamethrower attaches to the minion with the most hit points",
+    );
+    await artwork(["24037", "24041"]);
+    await audit("ransacked-armory", width);
+    checks.push({ ...current });
+
+    current = { kind: "mister-fear", width };
+    f = fixture("fear");
+    await open(width, f.state);
+    await page
+      .getByRole("button", { name: "Resolve original effect", exact: true })
+      .click();
+    s = await saved();
+    assert.equal(s.prompt?.kind, "payment", "Mister Fear's mental resource");
+    for (const id of f.paid) {
+      const state = await saved();
+      const sources = payment(state);
+      const source = sources.find((p) => p.id === id);
+      assert.ok(source, "Original payment source " + id);
+      const index = sources
+        .filter((p) => p.kind === source.kind)
+        .findIndex((p) => p.id === id);
+      await page
+        .locator(`.payment-source-group.${source.kind}-sources .payment-source`)
+        .nth(index)
+        .click();
+    }
+    await page
+      .getByRole("button", { name: "Confirm payment", exact: true })
+      .click();
+    s = await settle();
+    assert.equal(s.player.exhausted, false, "the hero readies after paying");
+    await audit("mister-fear", width);
     checks.push({ ...current });
   }
   assert.deepEqual(errors, []);

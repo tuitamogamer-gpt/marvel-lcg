@@ -13,6 +13,7 @@ import * as loki from "./loki.js";
 import * as wreckingCrew from "./wrecking-crew.js";
 import * as kang from "./kang.js";
 import * as hood from "./hood.js";
+import * as hoodModular from "./hood-modular.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -593,7 +594,9 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
 function nativeStatusModifiers(s: GameState, p: StatusState) {
   if (
     !("code" in p) &&
-    (magik.magikStats(s).steady || magnetoHero.magnetoHeroStats(s).steady)
+    (magik.magikStats(s).steady ||
+      magnetoHero.magnetoHeroStats(s).steady ||
+      hoodModular.hoodModularSteady(s))
   )
     return { steady: true };
   if (!("code" in p))
@@ -628,6 +631,7 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
       ? { steady: true }
       : {}),
     ...(hood.hoodSteady(s, piece) ? { steady: true } : {}),
+    ...(hoodModular.hoodModularSteady(s) ? { steady: true } : {}),
   };
 }
 function giveCharacterStatus(
@@ -671,7 +675,8 @@ function giveCharacterStatus(
             }) ||
             mansionAttack.mansionAttackModifiers(identity, "hero", {
               isTextBlank,
-            }).steady,
+            }).steady ||
+            hoodModular.hoodModularSteady(s),
         }
       : nativeStatusModifiers(s, p),
   );
@@ -824,6 +829,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           rogue.rogueModifiers(s).retaliate +
           phoenix.phoenixSuit(s).retaliate +
           storm.stormGlobal(s).retaliate +
+          hoodModular.hoodModularGlobal(s).retaliate +
           captainStats(s).retaliate +
           mansionAttack.mansionAttackModifiers(s, "hero", { isTextBlank })
             .retaliate +
@@ -923,6 +929,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           towerDefense.towerDefenseKeyword(s, p, "Ranged") > 0 ||
           badoon.badoonKeyword(s, p, "Ranged") ||
           taskmaster.taskmasterKeyword(s, p, "Ranged") ||
+          hoodModular.hoodModularKeyword(s, p, "Ranged") > 0 ||
           granted.ranged ||
           (s.attack?.attacker === p.id && s.attack.experimentalWeaponsRanged) ||
           (s.attack?.attacker === p.id && s.attack.redSkullModulesRanged) ||
@@ -945,6 +952,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           towerDefense.towerDefenseKeyword(s, p, "Overkill") > 0 ||
           wreckingCrew.wreckingCrewKeyword(s, p, "Overkill") > 0 ||
           kang.kangKeyword(s, p, "Overkill") > 0 ||
+          hoodModular.hoodModularKeyword(s, p, "Overkill") > 0 ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
             .overkill)
       ),
@@ -973,7 +981,9 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         taskmaster.taskmasterKeyword(s, p, "Retaliate") +
         experimentalWeapons.experimentalWeaponsRetaliate(s, p.id) +
         nebulaVillain.nebulaVillainKeyword(s, p, "Retaliate") +
-        mansionKeywords.retaliate
+        mansionKeywords.retaliate +
+        hoodModular.hoodModularKeyword(s, p, "Retaliate") +
+        hoodModular.hoodModularGlobal(s).retaliate
     : Math.max(intrinsic, grantedValue);
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
@@ -3137,6 +3147,15 @@ function dealDamage(
     n +=
       cyclops.cyclopsAttackModifiers(s, target).damage +
       magnetoHero.magnetoHeroAttackBonus(s, target);
+  // Beast Mode and Controller increase damage a friendly character takes.
+  if (!traits.noDamageInstance)
+    n = hoodModular.hoodModularIncreaseDamage(
+      s,
+      target,
+      n,
+      attack || traits.damageFromAttack ? source : undefined,
+      hoodModularPorts,
+    );
 
   const code = original?.code;
   const originalStage = target === s.villain.id ? s.villain.stage : undefined;
@@ -3183,6 +3202,17 @@ function dealDamage(
       replaced = { actualDamage: 0, excessDamage: 0, damageDealt: 0 };
     }
   }
+  // Self-Experimentation: a Brute enemy's damage removes threat instead.
+  if (!replaced && n > 0) {
+    const experiment = hoodModular.hoodModularReplaceDamage(s, target, n);
+    if (experiment) {
+      add(s, ...experiment);
+      replaced = { actualDamage: 0, excessDamage: 0, damageDealt: 0 };
+    }
+  }
+  // Jetpack: discard the top encounter card to reduce attack damage.
+  if (!replaced && damageFromAttack && n > 0 && original)
+    n = hoodModular.hoodModularJetpack(s, target, n, hoodModularPorts);
   // Constant reductions precede Tough (RRG1.8 FAQ). Multiple packets of the
   // same attack share one Vibration Resistance allowance.
   if (!replaced && damageFromAttack && n > 0 && original) {
@@ -3465,6 +3495,8 @@ function dealDamage(
           taskmaster.taskmasterKeyword(s, retaliationTarget, "Retaliate") +
           towerDefense.towerDefenseKeyword(s, retaliationTarget, "Retaliate") +
           hood.hoodKeyword(s, retaliationTarget, "Retaliate") +
+          hoodModular.hoodModularKeyword(s, retaliationTarget, "Retaliate") +
+          hoodModular.hoodModularGlobal(s).retaliate +
           thanos.thanosRetaliate(s, retaliationTarget) +
           nebulaVillain.nebulaVillainKeyword(
             s,
@@ -4238,6 +4270,8 @@ function defeatCharacter(
     delete s.flags[`ironspiderExcess:${m.id}`];
     if (!textWasBlank)
       add(s, ...ironspider.ironspiderSinisterDefeatResponses(s, m, excess));
+    if (!textWasBlank)
+      add(s, ...hoodModular.hoodModularMinionDefeated(s, m, m.engagedWith));
     if (!textWasBlank)
       add(
         s,
@@ -6319,6 +6353,15 @@ function attackAction(
     traits,
   );
   if (result) add(s, ...magnetoHero.magnetoHeroEnemyAttacked(s, target));
+  add(
+    s,
+    ...hoodModular.hoodModularEnemyAttacked(
+      s,
+      target,
+      source,
+      s.activePlayerId,
+    ),
+  );
   if (source === "hero" && s.currentEventId && result)
     s.flags[`shadowcatAttackPerformed:${s.currentEventId}`] = true;
   if (
@@ -8127,42 +8170,46 @@ export function newGame(config: {
                       c.set_code === "frost_giants" ||
                       c.set_code === "enchantress"
                     ? "mts"
-                    : ["temporal", "anachronauts", "mot"].includes(
-                          c.set_code || "",
+                    : hoodModular.HOOD_MODULAR_SETS.some(
+                          (set) => set === c.set_code,
                         )
-                      ? "toafk"
-                      : c.set_code === "exodus"
-                        ? "gambit"
-                        : c.set_code === "sauron"
-                          ? "iceman"
-                          : c.set_code === "crazy_gang"
-                            ? "ncrawler"
-                            : c.set_code === "hellfire"
-                              ? "magneto"
-                              : c.set_code === "arcade"
-                                ? "jubilee"
-                                : c.set_code === "reavers"
-                                  ? "rogue"
-                                  : c.set_code === "deathstrike"
-                                    ? "wolv"
-                                    : c.set_code === "shadow_king"
-                                      ? "storm"
-                                      : c.set_code === "ironspider_sinister"
-                                        ? "spdr"
-                                        : c.set_code === "inheritors"
-                                          ? "spiderham"
-                                          : c.set_code === "zzzax"
-                                            ? "ironheart"
-                                            : c.set_code === "armadillo"
-                                              ? "nova"
-                                              : [
-                                                    "goblin_gimmicks",
-                                                    "a_mess_of_things",
-                                                    "power_drain",
-                                                    "running_interference",
-                                                  ].includes(c.set_code || "")
-                                                ? "gob"
-                                                : "core")) ||
+                      ? "hood"
+                      : ["temporal", "anachronauts", "mot"].includes(
+                            c.set_code || "",
+                          )
+                        ? "toafk"
+                        : c.set_code === "exodus"
+                          ? "gambit"
+                          : c.set_code === "sauron"
+                            ? "iceman"
+                            : c.set_code === "crazy_gang"
+                              ? "ncrawler"
+                              : c.set_code === "hellfire"
+                                ? "magneto"
+                                : c.set_code === "arcade"
+                                  ? "jubilee"
+                                  : c.set_code === "reavers"
+                                    ? "rogue"
+                                    : c.set_code === "deathstrike"
+                                      ? "wolv"
+                                      : c.set_code === "shadow_king"
+                                        ? "storm"
+                                        : c.set_code === "ironspider_sinister"
+                                          ? "spdr"
+                                          : c.set_code === "inheritors"
+                                            ? "spiderham"
+                                            : c.set_code === "zzzax"
+                                              ? "ironheart"
+                                              : c.set_code === "armadillo"
+                                                ? "nova"
+                                                : [
+                                                      "goblin_gimmicks",
+                                                      "a_mess_of_things",
+                                                      "power_drain",
+                                                      "running_interference",
+                                                    ].includes(c.set_code || "")
+                                                  ? "gob"
+                                                  : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -11243,6 +11290,7 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
     gambit.gambitAllyBonus(s, p, kind) +
     cyclops.cyclopsCharacterModifiers(s, p.id)[kind] +
     (kind === "attack" ? storm.stormGlobal(s).attack : 0) +
+    hoodModular.hoodModularGlobal(s)[kind] +
     (p.code === "31003" && !isTextBlank(s, p) ? p.counters : 0) +
     (noir ? noir[kind] - (card(p)[kind] || 0) : 0) +
     (card(p)[kind] || 0) +
@@ -15404,6 +15452,63 @@ const hoodPorts: hood.HoodPorts = {
       resources as Resource[],
       undefined,
       true,
+    ),
+};
+const hoodModularPorts: hoodModular.HoodModularPorts = {
+  ...hoodPorts,
+  remainingHP: (s, p) => Math.max(0, pieceHP(s, p) - p.damage),
+  attackOf: (s, id) => {
+    if (id.startsWith("hero:")) {
+      const view = seatView(s, id.slice(5));
+      return view.player.form === "hero" ? heroStats(view).attack : 0;
+    }
+    const p = find(s, id);
+    return p && card(p).type_code === "ally" ? allyStat(s, p, "attack") : 0;
+  },
+  indirect: (s, playerId, amount, sourceId, title) =>
+    add(
+      s,
+      E("indirect", {
+        actorId: playerId,
+        amount,
+        source: sourceId,
+        sourceTitle: title,
+        zzzaxBatchId: `hood-indirect:${s.nextId++}`,
+        zzzaxBatchOwner: playerId,
+      }),
+    ),
+  randomDiscard: (s, playerId) => {
+    wreckingCrewPorts.randomDiscard(s, playerId);
+  },
+  discardHandCard: (s, playerId, id) =>
+    kangPorts.discardHandCard(s, playerId, id),
+  giveTough: (s, p) => giveCharacterStatus(s, p, "tough"),
+  discardPlayerTop: (s, playerId) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    const result = discardNativePlayerTop(s);
+    activateSeat(s, previous);
+    return result;
+  },
+  enterMinion: (s, p, playerId) => mutagenPorts.putMinion(s, p, playerId),
+  attackCharacter: (s, enemyId, playerId, targetId, modifier, after) => {
+    activateSeat(s, playerId);
+    enemyAttack(
+      s,
+      enemyId,
+      undefined,
+      { enemyId, playerId, kind: "attack", modifier, after },
+      targetId === "hero" ? undefined : targetId,
+    );
+  },
+  resolveWhenRevealed: (s, p, playerId) =>
+    add(
+      s,
+      E("repeatWhenRevealed", {
+        piece: p,
+        whenRevealedOnly: true,
+        actorId: playerId,
+      }),
     ),
 };
 const kangPorts: kang.KangPorts = {
@@ -22865,6 +22970,48 @@ function enemyAttack(
     canceled();
     return;
   }
+  if (!friendlySource && !originalTarget) {
+    const redirect = hoodModular.hoodModularAttackRedirect(
+      s,
+      id,
+      originalTarget,
+      s.activePlayerId,
+      hoodModularPorts,
+    );
+    if (redirect?.length) {
+      const resume = (c: { playerId: string; target: string }) =>
+        E("enemyAttack", {
+          id,
+          extra,
+          activation: activation
+            ? { ...activation, playerId: c.playerId }
+            : undefined,
+          originalTarget: c.target,
+          actorId: c.playerId,
+        });
+      if (redirect.length === 1 && redirect[0].playerId === s.activePlayerId)
+        originalTarget = redirect[0].target;
+      else {
+        if (redirect.length === 1) add(s, resume(redirect[0]));
+        else
+          choose(
+            s,
+            card(p).name,
+            "Crossfire attacks the friendly character with the fewest remaining hit points. Choose among the tied characters.",
+            redirect.map((c) =>
+              option(
+                `${c.playerId}:${c.target}`,
+                c.target === "hero"
+                  ? heroCard(seatView(s, c.playerId)).name
+                  : card(find(s, c.target)!).name,
+                [resume(c)],
+              ),
+            ),
+          );
+        return;
+      }
+    }
+  }
   if (!friendlySource && !originalTarget && nickFury.nickFuryStealth(s)) {
     enemyScheme(s, id, extra, {
       ...activation,
@@ -23062,6 +23209,16 @@ function enemyAttack(
       ...thanos.thanosActivationInitiated(s, id),
       ...kang.kangAttackInitiated(s, id, s.attack.originalPlayerId!),
       ...hood.hoodAttackInitiated(s, id),
+      ...hoodModular.hoodModularAttackInitiated(
+        s,
+        id,
+        s.attack.originalPlayerId!,
+      ),
+      ...hoodModular.hoodModularActivationInitiated(
+        s,
+        id,
+        s.attack.originalPlayerId!,
+      ),
     );
   if (!friendlySource) {
     const strategist = redSkull.redSkullActivation(s, id);
@@ -23124,6 +23281,8 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
   return (
     base +
     storm.stormGlobal(s).attack +
+    hoodModular.hoodModularGlobal(s).attack +
+    hoodModular.hoodModularEnemyAttack(s, p) +
     (s.attack?.attacker === p.id
       ? storm.stormFreezeModifier(
           s,
@@ -23486,6 +23645,7 @@ function boostEffects(s: GameState, p: Piece) {
     wreckingCrew.wreckingCrewBoost(s, p) ??
     kang.kangBoost(s, p) ??
     hood.hoodBoost(s, p) ??
+    hoodModular.hoodModularBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -23816,6 +23976,7 @@ function enemyScheme(
     ...ronan.ronanActivationInitiated(s, id, s.activePlayerId),
     ...ebonyMaw.ebonyMawActivationInitiated(s, id, s.activePlayerId),
     ...thanos.thanosActivationInitiated(s, id),
+    ...hoodModular.hoodModularActivationInitiated(s, id, s.activePlayerId),
     ...masterMold.masterMoldBeforeScheme(s, moldReceipt, { isTextBlank }),
     E(pendingBoosts.length ? "revealSchemeBoost" : "finishScheme"),
   );
@@ -23948,6 +24109,13 @@ function finishScheme(s: GameState) {
     ...wreckingCrew.wreckingCrewSchemed(s, id),
     ...hood
       .hoodAfterActivation(s, {
+        token: (activation.id ||= `scheme${s.nextId++}`),
+        attackerId: id,
+        playerId: s.activePlayerId,
+      })
+      .flatMap((response) => response.effects),
+    ...hoodModular
+      .hoodModularAfterActivation(s, {
         token: (activation.id ||= `scheme${s.nextId++}`),
         attackerId: id,
         playerId: s.activePlayerId,
@@ -24180,7 +24348,8 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
     damage > 0 &&
     (angel.angelIndirectAttack(s, p) ||
       iceman.icemanPyroIndirect(s, p) ||
-      collector.collectorIndirectAttack(s, p))
+      collector.collectorIndirectAttack(s, p) ||
+      hoodModular.hoodModularIndirectAttack(s, p.id))
   ) {
     add(
       s,
@@ -24189,13 +24358,16 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
         source: a.attacker,
         sourceTitle: collector.collectorIndirectAttack(s, p)
           ? "Starshark"
-          : "Hook, Line, and Sinker",
+          : hoodModular.hoodModularIndirectAttack(s, p.id)
+            ? "Flamethrower"
+            : "Hook, Line, and Sinker",
         zzzaxBatchId: `angel-attack:${s.nextId++}`,
         zzzaxBatchOwner: s.activePlayerId,
         attackDamage: true,
         exhaustDamaged:
           !iceman.icemanPyroIndirect(s, p) &&
-          !collector.collectorIndirectAttack(s, p),
+          !collector.collectorIndirectAttack(s, p) &&
+          !hoodModular.hoodModularIndirectAttack(s, p.id),
         zzzaxAfter: E("ironspiderAttackComplete", {
           attack: structuredClone(a),
           target,
@@ -24310,8 +24482,9 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
       .sabretoothAttackDefeatReceipt;
   if (
     (a.overkill || !!sourceKeyword(s, a.attacker, "Overkill")) &&
-    !!a.defender &&
-    a.defender !== "none" &&
+    ((!!a.defender && a.defender !== "none") ||
+      // An attack against one specific ally, such as Crossfire's.
+      (!!a.originalTarget && a.originalTarget === target)) &&
     target !== "hero" &&
     damage > before &&
     !wasTough
@@ -24522,7 +24695,8 @@ function finishAttackAfterDamage(
       ? target === "hero"
         ? s.player.form === "hero"
           ? sourceKeyword(s, "hero", "Retaliate")
-          : storm.stormGlobal(s).retaliate
+          : storm.stormGlobal(s).retaliate +
+            hoodModular.hoodModularGlobal(s).retaliate
         : sourceKeyword(s, target, "Retaliate")
       : 0;
   if (a.isVillain) {
@@ -24815,6 +24989,36 @@ function finishAttackAfterDamage(
             attackerId: a.attacker,
             playerId: a.originalPlayerId || recipientId,
           }),
+          ...hoodModular.hoodModularAfterActivation(s, {
+            token: a.id!,
+            attackerId: a.attacker,
+            playerId: a.originalPlayerId || recipientId,
+          }),
+          ...hoodModular.hoodModularAttackResponses(
+            s,
+            {
+              token: a.id!,
+              attackerId: a.attacker,
+              attackerCode: a.attackerSnapshot?.code || p?.code || "",
+              playerId: recipientId,
+              damagedIds: [
+                ...(target !== "hero" &&
+                !target.startsWith("hero:") &&
+                (a.damage || 0) > 0
+                  ? [target]
+                  : []),
+                ...((a.identityDamage || 0) > 0 ||
+                (target === "hero" && (a.damage || 0) > 0)
+                  ? [`hero:${recipientId}`]
+                  : []),
+              ],
+              identityDamaged:
+                (a.identityDamage || 0) > 0 ||
+                (target === "hero" && (a.damage || 0) > 0),
+              textBlank: !p || isTextBlank(s, p),
+            },
+            hoodModularPorts,
+          ),
           ...kang.kangAttackResponses(s, {
             token: a.id!,
             attackerId: a.attacker,
@@ -24976,6 +25180,7 @@ function reveal(
   repeat = false,
   fromEncounterDeck = false,
   savedKnifeSurge?: number,
+  whenRevealedOnly = false,
 ) {
   if (s.flags[`spiderHamCanceledReveal:${p.id}`]) {
     delete s.flags[`spiderHamCanceledReveal:${p.id}`];
@@ -25486,6 +25691,8 @@ function reveal(
         c.type_code !== "attachment") ||
       (hood.HOOD_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (hoodModular.HOOD_MODULAR_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -25684,6 +25891,7 @@ function reveal(
       ...wreckingCrew.WRECKING_CREW_SCRIPT_CODES,
       ...kang.KANG_SCRIPT_CODES,
       ...hood.HOOD_SCRIPT_CODES,
+      ...hoodModular.HOOD_MODULAR_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -25724,6 +25932,7 @@ function reveal(
       wreckingCrew.wreckingCrewReveal(s, p) ??
       kang.kangReveal(s, p) ??
       hood.hoodReveal(s, p) ??
+      hoodModular.hoodModularReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -25775,7 +25984,9 @@ function reveal(
     !c.text?.includes("When Revealed")
   )
     return;
-  const incite = scaledKeyword(c, "Incite", s.playerCount);
+  const incite = whenRevealedOnly
+    ? 0
+    : scaledKeyword(c, "Incite", s.playerCount);
   if (incite) add(s, E("threat", { target: "main", amount: incite }));
   const ds = doctorStrangeEncounterReveal(s, p);
   const milesReveal = miles.milesEncounterReveal(s, p);
@@ -25807,6 +26018,7 @@ function reveal(
     wreckingCrew.wreckingCrewReveal(s, p) ??
     kang.kangReveal(s, p) ??
     hood.hoodReveal(s, p) ??
+    hoodModular.hoodModularReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -26004,7 +26216,9 @@ function reveal(
     if (risky !== null) add(s, ...risky);
     if (mutagen !== null) add(s, ...mutagen);
     if (ds !== null) add(s, ...ds);
-    const hinder = scaledKeyword(c, "Hinder", s.playerCount);
+    const hinder = whenRevealedOnly
+      ? 0
+      : scaledKeyword(c, "Hinder", s.playerCount);
     if (hinder) add(s, E("threat", { target: p.id, amount: hinder }));
     if (
       ["01107", "01109", "01125", "01126", "01161", "01171", "01176"].includes(
@@ -27207,6 +27421,7 @@ function resolve(s: GameState, e: Effect) {
           wreckingCrew.wreckingCrewReveal(state, piece) ??
           kang.kangReveal(state, piece) ??
           hood.hoodReveal(state, piece) ??
+          hoodModular.hoodModularReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -27347,6 +27562,7 @@ function resolve(s: GameState, e: Effect) {
   if (wreckingCrew.resolveWreckingCrewEffect(s, e, wreckingCrewPorts)) return;
   if (kang.resolveKangEffect(s, e, kangPorts)) return;
   if (hood.resolveHoodEffect(s, e, hoodPorts)) return;
+  if (hoodModular.resolveHoodModularEffect(s, e, hoodModularPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -29330,7 +29546,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "repeatWhenRevealed":
-      reveal(s, e.piece, true, true);
+      reveal(s, e.piece, true, true, false, undefined, !!e.whenRevealedOnly);
       break;
     case "treacheryText":
       treachery(s, e.piece);
@@ -30308,6 +30524,13 @@ function resolve(s: GameState, e: Effect) {
         );
         e.wolverineBonusApplied = true;
       }
+      if (e.attack) {
+        const demon = hoodModular.hoodModularSpeedDemon(s, e);
+        if (demon) {
+          add(s, ...demon);
+          break;
+        }
+      }
       if (e.attack && shadowcatNativeIgnoreWindow(s, e, "attack")) break;
       if (e.basic && !e.colossusRageHandled) {
         const next = { ...e, colossusRageHandled: true };
@@ -31254,16 +31477,24 @@ function resolve(s: GameState, e: Effect) {
     case "flip":
       flip(s, e.counts ?? false, e.target, !!e.magikHandled);
       break;
-    case "ready":
+    case "ready": {
       e.target ||= e.id;
       if (e.target?.startsWith("hero:")) {
         add(s, { ...e, target: "hero", actorId: e.target.slice(5) });
-      } else if (e.target === "hero") readyIdentity(s);
+        break;
+      }
+      const fear = hoodModular.hoodModularReadyCost(s, e, hoodModularPorts);
+      if (fear) {
+        add(s, ...fear);
+        break;
+      }
+      if (e.target === "hero") readyIdentity(s);
       else {
         const p = find(s, e.target);
         if (p && canReadyPiece(s, p)) p.exhausted = false;
       }
       break;
+    }
     case "discardHand":
       discardHand(s, e.id);
       break;
@@ -31640,6 +31871,8 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "optional":
+      // A response whose source card has left play is no longer available.
+      if (e.sourceId && !find(s, e.sourceId)) break;
       if (
         deadpool.deadpoolTriggeredBlocked(
           e.abilityControllerId ? seatView(s, e.abilityControllerId) : s,
@@ -36078,7 +36311,7 @@ function resolve(s: GameState, e: Effect) {
       }
       log(
         s,
-        `Place ${escalation(s)} threat for ${s.playerCount} starting hero(es), plus ${(e.kangArea ? 0 : s.encounter.acceleration) + hood.hoodAcceleration(s) + inheritorsAcceleration(s) + s.sideSchemes.reduce((n, p) => n + iceman.icemanSchemeIcon(s, p, "scheme_acceleration") + ironheart.ironheartSchemeIcons(s, p, { isTextBlank }).acceleration + Number(p.accelerationTokens || 0), 0)} acceleration.`,
+        `Place ${escalation(s)} threat for ${s.playerCount} starting hero(es), plus ${(e.kangArea ? 0 : s.encounter.acceleration) + hood.hoodAcceleration(s) + hoodModular.hoodModularAcceleration(s) + inheritorsAcceleration(s) + s.sideSchemes.reduce((n, p) => n + iceman.icemanSchemeIcon(s, p, "scheme_acceleration") + ironheart.ironheartSchemeIcons(s, p, { isTextBlank }).acceleration + Number(p.accelerationTokens || 0), 0)} acceleration.`,
         "bad",
       );
       add(
@@ -36089,6 +36322,7 @@ function resolve(s: GameState, e: Effect) {
             escalation(s) +
             (e.kangArea ? 0 : s.encounter.acceleration) +
             hood.hoodAcceleration(s) +
+            hoodModular.hoodModularAcceleration(s) +
             inheritorsAcceleration(s) +
             angel.angelAcceleration(s) +
             s.attachments.filter(
@@ -36657,6 +36891,7 @@ function run(s: GameState) {
       e.type.startsWith("crew:") ||
       e.type.startsWith("kang:") ||
       e.type.startsWith("hood:") ||
+      e.type.startsWith("hoodmod:") ||
       e.type.startsWith("thanos:") ||
       e.type.startsWith("hela:") ||
       e.type.startsWith("loki:") ||

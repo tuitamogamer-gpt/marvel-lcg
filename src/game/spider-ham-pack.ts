@@ -232,6 +232,7 @@ function trigger(
     E("optional", {
       title,
       image: p.code,
+      sourceId: p.id,
       actorId: owner.id,
       effects: [{ ...effect, actorId: owner.id }],
     }),
