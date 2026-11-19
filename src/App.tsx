@@ -336,6 +336,14 @@ import {
   onTheRun,
   otrCaptor,
 } from "./game/on-the-run";
+import {
+  EXPOSED,
+  HEAD_OF_STEAM,
+  HELMET,
+  jugHelmet,
+  juggernaut,
+  momentum,
+} from "./game/juggernaut";
 import { effectTitle, pacingOf } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
 import type { PaymentSource } from "./game/payment";
@@ -2748,6 +2756,16 @@ export default function App() {
                       While a Marauder minion is engaged with you, the villain
                       schemes instead of attacking you. Mutant Slayers is always
                       included; Military Grade and Nasty Boys are preselected.
+                    </p>
+                  )}
+                  {villain.id === "juggernaut" && (
+                    <p className="setting-help">
+                      Juggernaut gets +1 ATK for each momentum counter, and his
+                      Helmet keeps him stalwart until you spend 3 resources of
+                      one type to knock it off. His main scheme never ends the
+                      game: when completed it resets and he attacks each player.
+                      Hope Summers fights beside the first player, and you lose
+                      if she leaves play. Black Tom Cassidy is preselected.
                     </p>
                   )}
                   {villain.id === "magog" && (
@@ -6083,6 +6101,11 @@ function AttachedCards({
                 {p.counters} ATK
               </small>
             )}
+            {p.code === HEAD_OF_STEAM && (
+              <small aria-label={`Head of Steam: retaliate ${momentum(game)}`}>
+                retaliate {momentum(game)}
+              </small>
+            )}
             {p.code === HIDDEN_IN_THE_CLUTTER && (
               <small
                 aria-label={`Hidden in the Clutter damage: ${p.damage || 0} of 3`}
@@ -6206,6 +6229,8 @@ function AttachedCards({
                 PUSHED_TO_THE_LIMIT,
                 TITANIUM_EXOSKELETON,
                 INHIBITOR_COLLAR,
+                // Juggernaut's Helmet.
+                HELMET,
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -6596,9 +6621,11 @@ function Tabletop({
                     ? `Keep captured cards below ${3 + s.playerCount}`
                     : s.venomGoblin
                       ? `${s.venomGoblin.flipped.length} of 2 districts infested`
-                      : hasThreatLimit
-                        ? `Keep threat below ${threatLimit}`
-                        : "No main-scheme threat limit"}
+                      : juggernaut(s)
+                        ? "Keep Hope Summers in play"
+                        : hasThreatLimit
+                          ? `Keep threat below ${threatLimit}`
+                          : "No main-scheme threat limit"}
               </b>
             </span>
           </div>
@@ -6800,7 +6827,9 @@ function Tabletop({
                                   ? `VILLAIN · ${s.villain.code.endsWith("b") ? "B" : "A"} · ${morlockRouted(s)} OF ${ROUTED_TO_WIN} ROUTED`
                                   : onTheRun(s)
                                     ? `VILLAIN · ${s.villain.code.endsWith("b") ? "B" : "A"} · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? "CONFIDENT" : "DESPERATE"}`
-                                    : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
+                                    : juggernaut(s)
+                                      ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${momentum(s)} MOMENTUM`
+                                      : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
                     {s.kang ? (
                       <h2>
@@ -6882,6 +6911,14 @@ function Tabletop({
                         {otrCaptor(s)?.code === CAPTOR_CONFIDENT
                           ? "Hope's Captor · resets instead of being defeated once"
                           : "Desperate · defeat the villain to win"}
+                      </span>
+                    )}
+                    {juggernaut(s) && (
+                      <span className="stat-caption">
+                        +{momentum(s)} ATK from momentum ·{" "}
+                        {jugHelmet(s)?.code === EXPOSED
+                          ? "Exposed: +1 damage from cards with a mental resource"
+                          : "Helmet: stalwart, overkill"}
                       </span>
                     )}
                     {s.morlockSiege && (
@@ -6999,7 +7036,7 @@ function Tabletop({
                   <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
-                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege ? " magog-scheme" : ""}`}
+                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) ? " magog-scheme" : ""}`}
                     style={
                       {
                         "--scheme-actions": mainActionPiece
@@ -7091,6 +7128,11 @@ function Tabletop({
                     {s.morlockSiege && s.scheme.code === MUTANT_MASSACRE && (
                       <p className="magog-scheme-note">
                         Lose with no Morlock in play
+                      </p>
+                    )}
+                    {juggernaut(s) && (
+                      <p className="magog-scheme-note">
+                        Completed: Juggernaut charges
                       </p>
                     )}
                     {mainActionPiece &&

@@ -199,3 +199,7 @@ Morlock Siege keeps one villain on the table at a time, so the villain column st
 ## On the Run's Hope's Captor, 2026-11-19
 
 On the Run has one villain and one way to win, so the villain column keeps its usual shape. Its label adds the Marauder's side and the Captor's side, Confident or Desperate, and the caption says what the Captor does next. The objective counts the defeats out of two. Hope's Captor is an ordinary attachment beside the villain. Hidden in the Clutter shows its damage out of 3 the way Crossbones' Armor does, and Slab's growth counters use the engagement line under a minion that Mojo's threat introduced.
+
+## Juggernaut's momentum, 2026-11-19
+
+Juggernaut follows the usual villain stages, so the villain column only adds his momentum: the label counts the momentum counters and the caption gives the ATK they add and the Helmet's side. The main scheme carries a one-line note that completing it makes him charge, with the threat token raised by that line as for MaGog and Morlock Siege. Because his scheme never loses the game, the objective bar shows "Keep Hope Summers in play" in place of the threat limit. Head of Steam shows its retaliate value on the attachment, and Hope Summers is an ordinary ally outside the ally count.

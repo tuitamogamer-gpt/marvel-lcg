@@ -1529,6 +1529,22 @@ export const VILLAINS = [
       "A Marauder has taken Hope and her captor will not stay down. Beat the villain twice, through a wall of Marauder minions, before they get away.",
     color: "#3d5566",
   },
+  {
+    id: "juggernaut",
+    name: "Juggernaut",
+    // Juggernaut (I) and (II) in Standard, (II) and (III) in Expert; Hope
+    // Summers fights beside the first player.
+    codes: ["40118", "40119", "40120"],
+    schemes: ["40121b"],
+    module: "black_tom_cassidy",
+    fixedSets: ["hope_summers"],
+    difficulty: 3,
+    title: "The Unstoppable Juggernaut",
+    location: "In Juggernaut's path",
+    description:
+      "Nothing stops the Juggernaut. Every charge builds his momentum, his scheme only sends him crashing through every hero in turn, and Hope Summers must stay in the fight.",
+    color: "#7a3b2a",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1615,6 +1631,7 @@ export const MODULES = [
   { id: "military_grade", name: "Military Grade", difficulty: 2 },
   { id: "mutant_slayers", name: "Mutant Slayers", difficulty: 3 },
   { id: "nasty_boys", name: "Nasty Boys", difficulty: 3 },
+  { id: "black_tom_cassidy", name: "Black Tom Cassidy", difficulty: 2 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(

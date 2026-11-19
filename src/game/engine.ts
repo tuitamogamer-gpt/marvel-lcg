@@ -27,6 +27,7 @@ import * as spiral from "./spiral.js";
 import * as mojoVillain from "./mojo.js";
 import * as morlock from "./morlock-siege.js";
 import * as otr from "./on-the-run.js";
+import * as jug from "./juggernaut.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -611,7 +612,8 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
     ) ||
     !!(s && typeof p !== "string" && mojoGenres.mojoGenreKeyword(s, p, name)) ||
     !!(s && typeof p !== "string" && morlock.morlockKeyword(s, p, name) > 0) ||
-    !!(s && typeof p !== "string" && otr.otrKeyword(s, p, name) > 0)
+    !!(s && typeof p !== "string" && otr.otrKeyword(s, p, name) > 0) ||
+    !!(s && typeof p !== "string" && jug.jugKeyword(s, p, name) > 0)
   );
 }
 function nativeStatusModifiers(s: GameState, p: StatusState) {
@@ -645,7 +647,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     ronan.ronanKeyword(s, piece, "Stalwart") ||
     hela.helaKeyword(s, piece, "Stalwart") ||
     magog.magogKeyword(s, piece, "Stalwart") > 0 ||
-    !!morlock.morlockStatusModifiers(s, piece).stalwart
+    !!morlock.morlockStatusModifiers(s, piece).stalwart ||
+    jug.jugKeyword(s, piece, "Stalwart") > 0
       ? { stalwart: true }
       : {}),
     ...(piece.code === "50060" && !isTextBlank(s, piece)
@@ -814,6 +817,7 @@ function canReadyPiece(s: GameState, p: Piece) {
     nova.novaCanReadyPiece(s, p, { isTextBlank }) &&
     !mysterio.mysterioReadyBlocked(s, p) &&
     !ebonyMaw.ebonyMawRestrained(s, p.id) &&
+    !jug.jugCannotReady(s, p) &&
     hela.helaCanReadyPiece(s, p)
   );
 }
@@ -1081,7 +1085,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         sinisterModulars.sinisterModularKeyword(s, p, "Retaliate") +
         magog.magogKeyword(s, p, "Retaliate") +
         mojoVillain.mojoKeyword(s, p, "Retaliate") +
-        morlock.morlockKeyword(s, p, "Retaliate")
+        morlock.morlockKeyword(s, p, "Retaliate") +
+        jug.jugKeyword(s, p, "Retaliate")
     : Math.max(intrinsic, grantedValue);
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
@@ -1332,6 +1337,7 @@ export function allyCount(s: GameState) {
       !p.pendingDefeat &&
       !(p.code === mojoVillain.LONGSHOT && !isTextBlank(s, p)) &&
       !morlock.morlockAllyExcluded(s, p) &&
+      !jug.jugAllyExcluded(s, p) &&
       !antPack.antManPackAllyExcluded(s, p) &&
       !magnetoHero.magnetoHeroNewModifiers(s, p, captainPackHasTrait)
         .excluded &&
@@ -1811,6 +1817,9 @@ function movePieceFromPlay(
   // Mutant Massacre: the players lose with no Morlock ally left in play.
   if (removedSource?.code === morlock.MORLOCK && s.morlockSiege)
     add(s, { type: "msg:check" });
+  // The Unstoppable Juggernaut: the players lose if Hope Summers leaves play.
+  if (removedSource?.code === jug.HOPE_SUMMERS && jug.juggernaut(s))
+    add(s, { type: "jug:check" });
   // These actual cards were attached from a hand, never put into play.
   // Retain the marker before Electro leaves so legacy saves also bypass all
   // leave-play interrupts and printed player-card effects during cleanup.
@@ -2811,6 +2820,7 @@ function check(s: GameState) {
     // the main scheme.
     add(s, ...mojoVillain.mojoCharacterThreatLeaves(s, `hero:${seat.id}`));
     if (s.morlockSiege) add(s, { type: "msg:check" });
+    if (jug.juggernaut(s)) add(s, { type: "jug:check" });
     if (s.firstPlayerId === seat.id) {
       s.firstPlayerId = next.id;
       sabretooth.sabretoothFirstPlayerChanged(s);
@@ -3383,9 +3393,14 @@ function dealDamage(
   if (
     !traits.noDamageInstance &&
     (mojoGenres.mojoGenreVillainImmune(s, target) ||
-      spiral.spiralVillainImmune(s, target))
+      spiral.spiralVillainImmune(s, target) ||
+      jug.jugImmune(s, target))
   )
     n = 0;
+  // Juggernaut Exposed: 1 more damage from a card with a printed mental
+  // resource.
+  if (!traits.noDamageInstance)
+    n = jug.jugDamage(s, target, n, damageSourceCard(s, source));
   if (!traits.noDamageInstance && isCharacterTarget(s, target))
     n = mojoGenres.mojoGenreDamage(s, target, n, damageSourceCard(s, source), {
       attack,
@@ -3836,6 +3851,7 @@ function dealDamage(
           magog.magogKeyword(s, retaliationTarget, "Retaliate") +
           mojoVillain.mojoKeyword(s, retaliationTarget, "Retaliate") +
           morlock.morlockKeyword(s, retaliationTarget, "Retaliate") +
+          jug.jugKeyword(s, retaliationTarget, "Retaliate") +
           (retaliationTarget.id === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -5206,6 +5222,7 @@ function villainSetup(s: GameState) {
     ...venomGoblin.venomGoblinVillainRevealed(s, s.villain.code),
     ...spiral.spiralVillainRevealed(s),
     ...mojoVillain.mojoVillainRevealed(s, mojoVillainPorts),
+    ...jug.jugVillainRevealed(s),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -5704,6 +5721,21 @@ function threat(
           false,
           "Odin's Torment is complete. The All-Father is lost to Hel.",
         );
+        return;
+      }
+      // The Unstoppable Juggernaut: instead of completing, the scheme
+      // resets and Juggernaut charges each player.
+      const juggernautCharge = jug.jugMainCompleted(s);
+      if (juggernautCharge) {
+        if (!s.pendingMainCompletion) {
+          s.pendingMainCompletion = true;
+          log(
+            s,
+            "The Unstoppable Juggernaut would be completed: its threat is removed and Juggernaut charges.",
+            "bad",
+          );
+          add(s, ...juggernautCharge, E("clearMainCompletion"));
+        }
         return;
       }
       if (otr.otrMainLoses(s)) {
@@ -8827,6 +8859,8 @@ export function newGame(config: {
           // Hope's Captor is attached to the villain during setup.
           c.code !== otr.CAPTOR_CONFIDENT &&
           c.code !== otr.CAPTOR_DESPERATE &&
+          // Juggernaut's Helmet and Hope Summers start in play.
+          !jug.jugSetupCard(c.code) &&
           !(v.id === "magneto" && ["32144b", "32145b"].includes(c.code)) &&
           (c.type_code !== "environment" ||
             (v.id === "absorbing_man" &&
@@ -8876,6 +8910,8 @@ export function newGame(config: {
   if (v.id === "mojo")
     mojoVillain.mojoSetup(s, mojoVillainPorts, selectedModules);
   if (v.id === "morlock_siege") morlock.morlockSetup(s, morlockPorts);
+  if (v.id === "juggernaut")
+    jug.jugSetup(s, { makePiece: (s, code) => makePiece(s, code) });
   if (v.id === "on_the_run")
     otr.otrSetup(s, {
       shuffle: (s, pieces) => shuffle(s, pieces),
@@ -11789,6 +11825,7 @@ export function abilityOptions(
     ...spiral.spiralActions(s, p, spiralPorts),
     ...mojoVillain.mojoActions(s, p, mojoVillainPorts),
     ...morlock.morlockActions(s, p, morlockPorts),
+    ...jug.jugActions(s, p, jugPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -11961,6 +11998,10 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
     mojoGenres.mojoGenreGlobal(s)[kind] +
     (p.code === "31003" && !isTextBlank(s, p) ? p.counters : 0) +
     (noir ? noir[kind] - (card(p)[kind] || 0) : 0) +
+    // Hope Summers' base ATK and THW are those of her controller's hero.
+    jug.jugHopeBase(s, p, kind, (playerId) =>
+      heroStats(seatView(s, playerId)),
+    ) +
     (card(p)[kind] || 0) +
     phoenixBonus[kind] +
     (kind === "attack"
@@ -16607,6 +16648,36 @@ const otrPorts: otr.OnTheRunPorts = {
     p.id === s.villain.id ? s.villain.hp : pieceHP(s, p) - p.damage,
   heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
   canStatus: (s, target, status) => morlockPorts.canStatus(s, target, status),
+  endGame: (s, won, reason) => endGame(s, won, reason),
+};
+const jugPorts: jug.JuggernautPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  shuffle: (s, pieces) => shuffle(s, pieces),
+  findCode: (s, code, discardToo) =>
+    [...s.encounter.deck, ...(discardToo ? s.encounter.discard : [])].filter(
+      (p) => p.code === code,
+    ),
+  reveal: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    wreckingCrewPorts.reveal(s, p, playerId);
+  },
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  enemyStat: (s, p, stat) => enemyStats(s, p)[stat],
+  remainingHp: (s, p) =>
+    p.id === s.villain.id ? s.villain.hp : pieceHP(s, p) - p.damage,
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+  canStatus: (s, target, status) => morlockPorts.canStatus(s, target, status),
+  allies: (s, playerId) => friends(seatView(s, playerId)),
+  ownCards: (s, playerId) =>
+    seatView(s, playerId)
+      .player.inPlay.filter(
+        (p) =>
+          ["upgrade", "support"].includes(card(p).type_code) &&
+          !isPermanent(card(p)),
+      )
+      .map((piece) => ({ piece, cost: card(piece).cost || 0 })),
   endGame: (s, won, reason) => endGame(s, won, reason),
 };
 const kreeFanaticPorts: kreeFanatic.KreeFanaticPorts = {
@@ -24484,6 +24555,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     nebulaVillain.nebulaEnemyAttack(s, p) +
     spiral.spiralAttackBonus(s, p) +
     otr.otrAttackBonus(s, p) +
+    jug.jugAttackBonus(s, p) +
     mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).attack;
   const attachments = enemyAttachmentModifier(s, p.id, "attack");
   const base =
@@ -24897,6 +24969,7 @@ function boostEffects(s: GameState, p: Piece) {
     mojoVillain.mojoBoost(s, p) ??
     morlock.morlockBoost(s, p) ??
     otr.otrBoost(s, p) ??
+    jug.jugBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -25369,6 +25442,7 @@ function finishScheme(s: GameState) {
     ...badoon.badoonSchemed(s, id),
     ...hela.helaSchemed(s, id),
     ...wreckingCrew.wreckingCrewSchemed(s, id),
+    ...jug.jugSchemed(s, id),
     ...hood
       .hoodAfterActivation(s, {
         token: (activation.id ||= `scheme${s.nextId++}`),
@@ -26080,6 +26154,14 @@ function finishAttackAfterDamage(
       a.defender === "hero",
       a.damage || 0,
       recipientId,
+    ),
+    ...jug.jugAttacked(
+      s,
+      a.attacker,
+      a.defender,
+      a.damage || 0,
+      recipientId,
+      a.damage > 0 ? target : undefined,
     ),
     ...sinisterModulars.sinisterModularActivated(s, {
       enemyId: a.attacker,
@@ -27069,6 +27151,9 @@ function reveal(
         ...morlock.MUTANT_SLAYERS_CODES,
         ...otr.ON_THE_RUN_SCRIPT_CODES,
         ...otr.NASTY_BOYS_CODES,
+        ...jug.JUGGERNAUT_SCRIPT_CODES,
+        ...jug.HOPE_SUMMERS_CODES,
+        ...jug.BLACK_TOM_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -27294,6 +27379,9 @@ function reveal(
       ...morlock.MUTANT_SLAYERS_CODES,
       ...otr.ON_THE_RUN_SCRIPT_CODES,
       ...otr.NASTY_BOYS_CODES,
+      ...jug.JUGGERNAUT_SCRIPT_CODES,
+      ...jug.HOPE_SUMMERS_CODES,
+      ...jug.BLACK_TOM_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -27314,9 +27402,13 @@ function reveal(
     const window = beginRevealWindow(
       s,
       p,
-      venomGoblin.venomGoblinGainsSurge(s, p) && !printedKeyword(c, "Surge")
-        ? { ...c, text: `Surge.\n${c.text || ""}` }
-        : c,
+      jug.jugRevealCard(
+        s,
+        p,
+        venomGoblin.venomGoblinGainsSurge(s, p) && !printedKeyword(c, "Surge")
+          ? { ...c, text: `Surge.\n${c.text || ""}` }
+          : c,
+      ),
       s.activePlayerId,
       1 + goblinWhenRevealedCopies(s),
     );
@@ -27350,6 +27442,7 @@ function reveal(
       mojoVillain.mojoReveal(s, p) ??
       morlock.morlockReveal(s, p) ??
       otr.otrReveal(s, p) ??
+      jug.jugReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -27449,6 +27542,7 @@ function reveal(
     mojoVillain.mojoReveal(s, p) ??
     morlock.morlockReveal(s, p) ??
     otr.otrReveal(s, p) ??
+    jug.jugReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -28887,6 +28981,7 @@ function resolve(s: GameState, e: Effect) {
           mojoVillain.mojoReveal(state, piece) ??
           morlock.morlockReveal(state, piece) ??
           otr.otrReveal(state, piece) ??
+          jug.jugReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -29042,6 +29137,7 @@ function resolve(s: GameState, e: Effect) {
   if (mojoVillain.resolveMojoEffect(s, e, mojoVillainPorts)) return;
   if (morlock.resolveMorlockEffect(s, e, morlockPorts)) return;
   if (otr.resolveOnTheRunEffect(s, e, otrPorts)) return;
+  if (jug.resolveJuggernautEffect(s, e, jugPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -37658,6 +37754,8 @@ function resolve(s: GameState, e: Effect) {
         ].includes(s.villainId)
       )
         villainSetup(s);
+      // Juggernaut (I) also resolves its When Revealed ability at setup.
+      else if (jug.juggernaut(s)) villainSetup(s);
       break;
     case "wolverinePlayerPhase":
       add(
@@ -38903,6 +39001,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...spiral.spiralActions(s, p, spiralPorts),
               ...mojoVillain.mojoActions(s, p, mojoVillainPorts),
               ...morlock.morlockActions(s, p, morlockPorts),
+              ...jug.jugActions(s, p, jugPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -39036,6 +39135,17 @@ export function dispatch(state: GameState, command: Command): GameState {
                 morlock.morlockActionSource(s, command.id)!,
                 morlockPorts,
               )
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
+            add(s, ...selected!.effects);
+          } else if (
+            jug.jugActionSource(s, command.id) &&
+            jug
+              .jugActions(s, jug.jugActionSource(s, command.id)!, jugPorts)
+              .some((o) => !command.action || o.id === command.action)
+          ) {
+            const selected = jug
+              .jugActions(s, jug.jugActionSource(s, command.id)!, jugPorts)
               .find((o) => !command.action || o.id === command.action);
             need(selected, "This action needs its printed cost.");
             add(s, ...selected!.effects);
