@@ -29,10 +29,20 @@ export function isPrintedTraitsBlank(s: GameState, p: Piece | undefined) {
 export function isTextBlank(
   s: GameState,
   p: (Pick<Piece, "code"> & { id?: string }) | string,
+  options: { ignoreInducedPanic?: boolean } = {},
 ) {
   if (typeof p !== "string" && "treatedAsAlly" in p && p.treatedAsAlly)
     return true;
   const targetId = typeof p !== "string" ? p.id : undefined;
+  // Induced Panic: its player's hero printed text box is treated as blank.
+  if (
+    !options.ignoreInducedPanic &&
+    definitions.get(typeof p === "string" ? p : p.code)?.type_code === "hero" &&
+    s.attachments?.some(
+      (a) => a.code === "27153" && a.attachedTo === `hero:${s.activePlayerId}`,
+    )
+  )
+    return true;
   // Guard the Bell Tower: the Bell Tower's printed text box is blank.
   if (
     targetId &&

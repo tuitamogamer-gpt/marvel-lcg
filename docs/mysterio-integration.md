@@ -1,0 +1,37 @@
+# Sinister Motives: Mysterio, Personal Nightmare and Whispers of Paranoia
+
+This import adds the third scenario of the Sinister Motives campaign expansion: Mysterio, with the Personal Nightmare encounter set that the scenario always uses and its recommended modular set, Whispers of Paranoia. Personal Nightmare and Whispers of Paranoia can also be chosen as the modular set of every other scenario that uses modular sets.
+
+## Original source and scope
+
+`src/game/mysterio.ts` registers 21 original faces on 27 physical cards. The Mysterio set has 12 faces: Mysterio (I), (II) and (III), both sides of Maze of Mirrors and of Edge of Reality, Humongous Hallucination, Masterful Mirage (2), Shifting Apparition (4), Déjà Vu (2) and Fearmonger (2), eleven encounter cards in all. Personal Nightmare has Induced Panic, Evil Doppelgänger (2), Fool's Paradise, Weakness from Within and Deepest Fears (2), seven cards. Whispers of Paranoia has Delusion of Collusion (2), Manipulated Mind, Old Grudge and Analysis Paralysis, five cards. The imported catalog, original source decks and artwork remain unchanged.
+
+Standard uses Mysterio (I) and (II), Expert Mysterio (II) and (III), as Maze of Mirrors states. The encounter deck holds the Mysterio, Personal Nightmare and Standard sets and one modular set, Whispers of Paranoia unless another is chosen.
+
+## Native rules
+
+- **Setup (Maze of Mirrors 1A):** a Shifting Apparition from the encounter deck engages each player, then the encounter deck is shuffled. Maze of Mirrors (1B) starts with 2 threat per player and advances at 8 per player to Edge of Reality, whose 2A side shuffles the top 2 encounter cards into each player's deck; Edge of Reality (2B) starts with 3 threat per player, and completing it at 9 per player loses the game.
+- **Encounter cards in your deck:** while either main scheme is in play, an encounter card you would draw or discard from your deck is dealt to you facedown instead, and you draw 1 card. Encounter cards dealt this way are revealed with your other encounter cards in the villain phase.
+- **The villain:** after an Illusion boost card resolves during Mysterio's activation, Mysterio (I) puts it in your discard pile (Seeds of Fear), Mysterio (II) on the bottom of your deck (Creeping Fear) and Mysterio (III) on top of it (Bound by Fear). Mysterio (II) shuffles the top encounter card into each player's deck when revealed, also at Expert setup; Mysterio (III) discards the top 5 cards of each player's deck.
+- **Mysterio encounter cards:** Humongous Hallucination attaches to Mysterio; a Hero Action spending 1 resource shuffles the top 2 encounter cards into your deck and discards it. Masterful Mirage attaches to Mysterio; damage you would deal to him discards the top 4 cards of your deck and Masterful Mirage instead, and as a boost during his own activation it gives him an additional boost card. Shifting Apparition (guard) shuffles the top encounter card into the defeating player's deck when defeated with excess damage. Déjà Vu (peril) deals you 1 damage or places 1 threat on the main scheme, then is shuffled into a player's deck; as a boost it is revealed. Fearmonger (surge) discards your hand and draws up to your hand size; as a boost you spend 2 mental resources or are dealt it facedown.
+- **Personal Nightmare:** Induced Panic attaches to your identity and keeps you from resolving the triggered abilities in your hero's printed text box, while its actions stay usable; its Alter-Ego Action discards a random identity-specific card from your hand to discard it. Evil Doppelgänger gets +1 ATK and +1 SCH for each identity-specific card in the engaged player's hand; as a boost you draw 3 cards and discard 3 at random. Fool's Paradise (victory 1) gives each identity +2 hand size. Weakness from Within enters with 1 more threat for each card in your hand. Deepest Fears (peril) discards as many cards from your deck as you have in hand, then places 1 threat on the main scheme if one of them was identity-specific, or deals you 1 damage.
+- **Whispers of Paranoia:** Delusion of Collusion attaches to your identity and keeps you from readying allies and Persona supports; its Alter-Ego Action discards one of them to discard it, and as a boost an ally defeated by the attack deals its controller indirect damage equal to its printed cost. Manipulated Mind attaches to your lowest-cost ally, which becomes a minion with blank text (SCH equal to its printed THW) engaged with you, or gains surge without an ally; the ally returns to you if Manipulated Mind leaves play. Old Grudge finds your nemesis minion in the encounter deck, its discard pile or the set-aside area, reveals it and attaches to it (+1 hit point); as a boost it deals 1 damage to each character you control. Analysis Paralysis reveals your nemesis side scheme the same way and gets additional threat equal to that side scheme's threat.
+
+## Interface
+
+- Mission setup notes that Personal Nightmare is always included and preselects Whispers of Paranoia as Mysterio's modular set.
+- Encounter cards dealt from a player's deck join the player's facedown encounter cards on the table. Humongous Hallucination's Hero Action appears in Mysterio's attachment row, and Induced Panic's and Delusion of Collusion's Alter-Ego Actions on the identity they are attached to. A manipulated ally appears in the minion row with its own artwork.
+
+## Coverage boundaries
+
+- Induced Panic treats the hero's printed text box as blank for every check except the hero's actions, so passive and constant text is suppressed along with the triggered abilities.
+- An encounter card that a discard cost would take from the top of a deck is dealt by Maze of Mirrors instead and still counts toward that cost, so the event or spell resolves.
+- Peril is not enforced: other players may still respond while a player resolves Déjà Vu or Deepest Fears.
+- An encounter card that reaches a player's hand without being drawn from the deck, or a deck search that skips it, is not dealt by Maze of Mirrors.
+- The executable registry contains 2,853 faces, including 2,415 dedicated faces, with 1,698 imported faces still unsupported. There are 57 playable identities, thirty-one scenarios and fifty-seven modular sets. The inventory pins 150 source files.
+
+The configured source matrix contains 180,232 cases in sixteen disjoint shards of 11,264 or 11,265; CI runs the sixteen shards in parallel. This import adds 11,960 cases: 5,824 for Mysterio (52 expansion starter identities × two difficulties × his 56 selectable modular sets), 104 for Mysterio with Standard II and Expert II, and 6,032 for Personal Nightmare and Whispers of Paranoia in the 29 other scenarios with modular sets. Manifest hashes retain all 168,272 previous mission names and seeds, checked against the complete grid of `49a76f5`.
+
+The mission sweep found Scarlet Witch's Agatha Harkness holding the two looked-at cards outside the deck while the player ordered them for its bottom; they now stay on top of the deck until each is placed on the bottom. It also found discard costs, Induced Panic and Masterful Mirage's boost during a minion's activation, all covered above.
+
+Rules references: Maze of Mirrors, Edge of Reality and the original card texts, [Rules Reference 1.8](https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf) (Encounter Cards in Player Decks, Boost, Guard, Peril, Surge, Victory, Nemesis, Blank, Excess Damage).

@@ -64,6 +64,7 @@ import {
 } from "./vision.js";
 import { warMachineTraits } from "./war-machine.js";
 import { sinisterPlayerPackIdentityModifiers } from "./sinister-player-pack.js";
+import { mysterioHandSize } from "./mysterio.js";
 import { novaHandSize, novaTraits } from "./nova.js";
 import {
   ironheartIdentityCode,
@@ -1373,6 +1374,20 @@ export const VILLAINS = [
       "Every blow that lands on Venom leaves facedown boost cards on your identity, and all of them strike back the next time he activates against you. Ring the Bell Tower to make the symbiote vulnerable.",
     color: "#3b3f5c",
   },
+  {
+    id: "mysterio",
+    name: "Mysterio",
+    codes: ["27084", "27085", "27086"],
+    schemes: ["27087b", "27088b"],
+    module: "whispers_of_paranoia",
+    fixedSets: ["personal_nightmare"],
+    difficulty: 3,
+    title: "Maze of Mirrors",
+    location: "New York City",
+    description:
+      "Mysterio's illusions seep into your own deck. Encounter cards shuffled among your cards are dealt to you when you draw them, and his Illusion boosts return to haunt you.",
+    color: "#4a6b5d",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1442,6 +1457,8 @@ export const MODULES = [
   { id: "city_in_chaos", name: "City in Chaos", difficulty: 3 },
   { id: "down_to_earth", name: "Down to Earth", difficulty: 2 },
   { id: "symbiotic_strength", name: "Symbiotic Strength", difficulty: 2 },
+  { id: "personal_nightmare", name: "Personal Nightmare", difficulty: 3 },
+  { id: "whispers_of_paranoia", name: "Whispers of Paranoia", difficulty: 2 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -2008,7 +2025,8 @@ export function handSize(s: GameState) {
         spiderWomanHandSize(s) +
         starLordHandSizeBonus(s) +
         antManPackHandSize(s) +
-        sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).handSize
+        sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).handSize +
+        mysterioHandSize(s)
       : heroCard(s).hand_size! +
         scriptedModifier(s, "hand_size") +
         doctorStrangeHandSize(s) +
@@ -2016,7 +2034,8 @@ export function handSize(s: GameState) {
         starLordHandSizeBonus(s) +
         antManPackHandSize(s) +
         visionAlterStats(s).handSize +
-        sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).handSize;
+        sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).handSize +
+        mysterioHandSize(s);
   return novaHandSize(s, base + deadpoolHandBonus(s), { isTextBlank });
 }
 /** Printed encounter attachment modifiers apply to their attached enemy.

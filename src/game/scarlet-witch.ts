@@ -85,6 +85,11 @@ function nextEvolution(s: GameState, ports: ScarletWitchPorts): number {
   ).length;
 }
 /** The native host supplies its text-active view for prospective legality. */
+/** Agatha Harkness: move one looked-at card from the deck to its bottom. */
+function agathaToBottom(s: GameState, id: string) {
+  const i = s.player.deck.findIndex((p) => p.id === id);
+  if (i >= 0) s.player.deck.push(s.player.deck.splice(i, 1)[0]);
+}
 export function scarletWitchBoostIconBonus(s: GameState): number {
   return s.sideSchemes.filter((p) => p.code === "15024" && !isTextBlank(s, p))
     .length;
@@ -691,43 +696,79 @@ export function resolveScarletWitchEffect(
           ids.every((id, index) => s.player.deck[index]?.id === id),
         "Agatha Harkness's looked-at cards have changed.",
       );
-      const pieces = s.player.deck.splice(0, ids.length);
-      s.player.hand.push(
-        pieces.splice(
-          pieces.findIndex((p) => p.id === e.id),
-          1,
-        )[0],
+      const index = s.player.deck.findIndex((p) => p.id === e.id);
+      s.player.hand.push(s.player.deck.splice(index, 1)[0]);
+      // The other looked-at cards stay on top of the deck until each one is
+      // placed on the bottom.
+      ports.queue(
+        s,
+        W("agatha-bottom", { ids: ids.filter((id) => id !== e.id) }),
       );
-      ports.queue(s, W("agatha-bottom", { pieces }));
       break;
     }
     case "scw:agatha-bottom": {
-      const pieces = e.pieces as Piece[];
-      if (pieces.length === 1) s.player.deck.push(pieces[0]);
-      else if (pieces.length)
+      if (e.pieces) {
+        // A save from before the cards stayed in the deck.
+        const pieces = e.pieces as Piece[];
+        if (pieces.length === 1) s.player.deck.push(pieces[0]);
+        else if (pieces.length)
+          ports.choose(
+            s,
+            "Agatha Harkness",
+            "Choose the card to place next on the bottom of your deck.",
+            pieces.map((p) =>
+              option(
+                p.id,
+                definition(p).name,
+                [W("agatha-order", { pieces, id: p.id })],
+                p.code,
+              ),
+            ),
+          );
+        break;
+      }
+      const ids = (e.ids as string[]).filter((id) =>
+        s.player.deck.some((p) => p.id === id),
+      );
+      if (ids.length === 1) agathaToBottom(s, ids[0]);
+      else if (ids.length)
         ports.choose(
           s,
           "Agatha Harkness",
           "Choose the card to place next on the bottom of your deck.",
-          pieces.map((p) =>
-            option(
-              p.id,
+          ids.map((id) => {
+            const p = s.player.deck.find((q) => q.id === id)!;
+            return option(
+              id,
               definition(p).name,
-              [W("agatha-order", { pieces, id: p.id })],
+              [W("agatha-order", { ids, id })],
               p.code,
-            ),
-          ),
+            );
+          }),
         );
       break;
     }
     case "scw:agatha-order": {
-      const pieces = e.pieces as Piece[],
-        p = pieces.find((p) => p.id === e.id);
-      need(p, "Choose an actual looked-at Agatha Harkness card.");
-      s.player.deck.push(p!);
+      if (e.pieces) {
+        const pieces = e.pieces as Piece[],
+          p = pieces.find((p) => p.id === e.id);
+        need(p, "Choose an actual looked-at Agatha Harkness card.");
+        s.player.deck.push(p!);
+        ports.queue(
+          s,
+          W("agatha-bottom", { pieces: pieces.filter((p) => p.id !== e.id) }),
+        );
+        break;
+      }
+      const ids = e.ids as string[];
+      need(
+        ids.includes(e.id) && s.player.deck.some((p) => p.id === e.id),
+        "Choose an actual looked-at Agatha Harkness card.",
+      );
+      agathaToBottom(s, e.id);
       ports.queue(
         s,
-        W("agatha-bottom", { pieces: pieces.filter((p) => p.id !== e.id) }),
+        W("agatha-bottom", { ids: ids.filter((id) => id !== e.id) }),
       );
       break;
     }

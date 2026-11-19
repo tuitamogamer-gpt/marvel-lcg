@@ -2614,6 +2614,15 @@ export default function App() {
                       that is not from his own set.
                     </p>
                   )}
+                  {villain.id === "mysterio" && (
+                    <p className="setting-help">
+                      Personal Nightmare is always included. Mysterio shuffles
+                      encounter cards into your deck; when you would draw or
+                      discard one, it is dealt to you facedown and you draw
+                      another card. His Illusion boosts end up among your own
+                      cards.
+                    </p>
+                  )}
                   {villain.id === "venom" && (
                     <p className="setting-help">
                       Symbiotic Strength is always included. Each attack that
@@ -5742,6 +5751,11 @@ function AttachedCards({
                 "24009",
                 // Symbiotic Strength: Improvised Weapons.
                 "27164",
+                // Mysterio: Humongous Hallucination, Induced Panic and
+                // Delusion of Collusion.
+                "27089",
+                "27153",
+                "27170",
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),

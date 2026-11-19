@@ -290,11 +290,12 @@ describe("Sinister shared registration, printings and identity limits", () => {
     expect(rulesCode("27013")).toBe("27013");
     expect(rulesCode("27050")).toBe("27050");
     // The box's scenarios are registered by their own modules: Sandman by
-    // src/game/sandman.ts and Venom by src/game/venom-villain.ts, while
-    // Mysterio and the later scenarios stay outside.
+    // src/game/sandman.ts, Venom by src/game/venom-villain.ts and Mysterio by
+    // src/game/mysterio.ts, while the Sinister Six and later stay outside.
     expect(EXPLICIT_CARD_SCRIPTS.has("27061")).toBe(true);
     expect(EXPLICIT_CARD_SCRIPTS.has("27073")).toBe(true);
-    expect(EXPLICIT_CARD_SCRIPTS.has("27084")).toBe(false);
+    expect(EXPLICIT_CARD_SCRIPTS.has("27084")).toBe(true);
+    expect(EXPLICIT_CARD_SCRIPTS.has("27094")).toBe(false);
   });
   it("matches all sixteen printed fields across seven supplementary Core pairs and Web-Shooter", () => {
     const fields: (keyof Card)[] = [

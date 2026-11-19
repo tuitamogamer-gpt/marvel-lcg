@@ -16,6 +16,7 @@ import * as hood from "./hood.js";
 import * as hoodModular from "./hood-modular.js";
 import * as sandman from "./sandman.js";
 import * as venomVillain from "./venom-villain.js";
+import * as mysterio from "./mysterio.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -772,6 +773,7 @@ function canReadyIdentity(s: GameState) {
 function canReadyPiece(s: GameState, p: Piece) {
   return (
     nova.novaCanReadyPiece(s, p, { isTextBlank }) &&
+    !mysterio.mysterioReadyBlocked(s, p) &&
     !ebonyMaw.ebonyMawRestrained(s, p.id) &&
     hela.helaCanReadyPiece(s, p)
   );
@@ -1516,9 +1518,18 @@ function draw(s: GameState, n: number): boolean {
   mystiqueNativeSeedHands(s);
   let count = 0;
   let interrupted = false;
+  let mazeDealt = 0;
   for (let i = 0; i < n; i++) {
     const queuedBefore = s.queue.length;
     const p = takePlayer(s);
+    // Maze of Mirrors: an encounter card is dealt facedown instead, and
+    // the player draws 1 card.
+    if (p && mazeDealt < 40 && mysterio.mysterioIntercepts(s, p)) {
+      mazeDealt++;
+      dealMysterioFacedown(s, p);
+      i--;
+      continue;
+    }
     if (p) {
       s.player.hand.push(p);
       count++;
@@ -1563,6 +1574,14 @@ function mill(s: GameState, n: number) {
     if (p) {
       revealHidden(s);
       a.push(p);
+      // Maze of Mirrors: an encounter card is dealt facedown instead of
+      // being discarded, and the player draws 1 card. It still counts
+      // toward a discard cost.
+      if (mysterio.mysterioIntercepts(s, p)) {
+        dealMysterioFacedown(s, p);
+        draw(s, 1);
+        continue;
+      }
       if (mystique.mystiqueDiscardFromPlayerZone(p, "deck"))
         s.encounter.discard.push(p);
       else s.player.discard.push(p);
@@ -1571,6 +1590,16 @@ function mill(s: GameState, n: number) {
   recyclePlayer(s);
   add(s, ...domino.dominoDiscardedTop(s, a));
   return a;
+}
+/** Maze of Mirrors: the encounter card is dealt facedown to its player. */
+function dealMysterioFacedown(s: GameState, p: Piece) {
+  p.dealtTo = s.activePlayerId;
+  s.encounter.dealt.push(p);
+  log(
+    s,
+    "Maze of Mirrors: an encounter card from your deck is dealt to you facedown.",
+    "bad",
+  );
 }
 function recycleEncounter(s: GameState) {
   redSkull.redSkullSync(s, shuffle);
@@ -2101,6 +2130,25 @@ function nativeIdentityDamageSource(s: GameState, source: string) {
 function syncValkyrieConvertedCards(s: GameState) {
   phoenix.phoenixSyncControlled(s);
   for (const p of [...s.minions]) {
+    // Manipulated Mind: the ally is a minion while it is attached.
+    if (p.mysterioManipulated) {
+      if (
+        s.attachments.some((a) => a.code === "27171" && a.attachedTo === p.id)
+      ) {
+        p.treatedAsMinion = true;
+        continue;
+      }
+      delete p.mysterioManipulated;
+      delete p.treatedAsMinion;
+      s.minions.splice(s.minions.indexOf(p), 1);
+      const owner = s.players.find(
+        (seat) => seat.id === (p.ownerId || p.engagedWith) && !seat.eliminated,
+      );
+      delete p.engagedWith;
+      if (owner) seatView(s, owner).player.inPlay.push(p);
+      else s.removed.push(p);
+      continue;
+    }
     if (p.helaUndead) {
       // Fallen Warrior: the ally is an Undead minion while it is attached.
       if (hela.helaFallenAttached(s, p)) {
@@ -2919,6 +2967,15 @@ function recordZeroToleranceAllyDefeat(
     attack.magnetoAllyDefeated = true;
     add(
       s,
+      ...mysterio.mysterioAllyDefeated(
+        s,
+        p,
+        p.ownerId || s.activePlayerId,
+        Number(card(p).cost || 0),
+      ),
+    );
+    add(
+      s,
       ...(attack.magnetoAllyDefeatBoostIds || []).flatMap((sourceId) =>
         magneto.magnetoBoostAllyDefeated(s, {
           attackId: attack.id!,
@@ -3232,6 +3289,28 @@ function dealDamage(
     );
     if (sand) {
       add(s, ...sand);
+      replaced = { actualDamage: 0, excessDamage: 0, damageDealt: 0 };
+    }
+  }
+  // Masterful Mirage: damage a player would deal to Mysterio is replaced.
+  if (!replaced && n > 0) {
+    const mirage = mysterio.mysterioDamageReplacement(
+      s,
+      target,
+      n,
+      source === "hero" ||
+        source.startsWith("hero:") ||
+        !!controller(s, source) ||
+        s.players.some((seat) => {
+          const player = seatView(s, seat).player;
+          return [...player.hand, ...player.discard].some(
+            (q) => q.id === source,
+          );
+        }),
+      mysterioPorts,
+    );
+    if (mirage) {
+      add(s, ...mirage);
       replaced = { actualDamage: 0, excessDamage: 0, damageDealt: 0 };
     }
   }
@@ -4318,6 +4397,18 @@ function defeatCharacter(
     if (!textWasBlank)
       add(
         s,
+        ...mysterio.mysterioMinionDefeated(
+          s,
+          m,
+          excess,
+          source.startsWith("hero:")
+            ? source.slice(5)
+            : controller(s, source)?.id || s.activePlayerId,
+        ),
+      );
+    if (!textWasBlank)
+      add(
+        s,
         ...hood.hoodMinionDefeated(
           s,
           m,
@@ -4825,6 +4916,7 @@ function villainSetup(s: GameState) {
     ...hood.hoodVillainRevealed(s),
     ...sandman.sandmanVillainRevealed(s),
     ...venomVillain.venomVillainRevealed(s),
+    ...mysterio.mysterioVillainRevealed(s),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -5312,7 +5404,11 @@ function threat(
         s,
         ...(s.villainId === "klaw"
           ? [E("findMinion", { actorId: s.firstPlayerId })]
-          : eachPlayer(s, E("drone"))),
+          : s.villainId === "mysterio"
+            ? mysterio
+                .mysterioMainAdvanced(s)
+                .map((e) => ({ ...e, actorId: s.firstPlayerId }))
+            : eachPlayer(s, E("drone"))),
       );
     }
   } else {
@@ -8242,6 +8338,7 @@ export function newGame(config: {
                       : [
                             ...sandman.SANDMAN_MODULAR_SETS,
                             ...venomVillain.VENOM_MODULAR_SETS,
+                            ...mysterio.MYSTERIO_MODULAR_SETS,
                           ].some((set) => set === c.set_code)
                         ? "sm"
                         : ["temporal", "anachronauts", "mot"].includes(
@@ -8352,6 +8449,7 @@ export function newGame(config: {
   if (config.expertII && difficulty === "expert") s.expertII = true;
   if (v.id === "sandman") sandman.sandmanSetup(s, sandmanPorts);
   if (v.id === "venom") venomVillain.venomSetup(s, venomVillainPorts);
+  if (v.id === "mysterio") mysterio.mysterioSetup(s, mysterioPorts);
   deadpool.deadpoolSetupPool(s, makePiece);
   if (s.deadpool?.initializedPoolSeats.length)
     s.encounter.deck = shuffle(s, s.encounter.deck);
@@ -11202,6 +11300,7 @@ export function abilityOptions(
     ...hood.hoodActions(s, p),
     ...sandman.sandmanActions(s, p),
     ...venomVillain.venomActions(s, p),
+    ...mysterio.mysterioActions(s, p),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -11440,7 +11539,8 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
 function ability(s: GameState, id: string, action = "special") {
   if (["identity", "hero"].includes(id) && action !== "game-history")
     need(
-      !isTextBlank(s, heroCard(s)),
+      // Induced Panic forbids only triggered abilities, not actions.
+      !isTextBlank(s, heroCard(s), { ignoreInducedPanic: true }),
       "This identity’s printed text box is blank.",
     );
   need(
@@ -15471,6 +15571,42 @@ const wreckingCrewPorts: wreckingCrew.WreckingCrewPorts = {
 /** Put the player's nemesis minion into play engaged with them from the
  * encounter deck, its discard pile or the set-aside area. Returns true when
  * the set-aside minion that Shadow of the Past would reveal entered play. */
+/** Old Grudge and Analysis Paralysis: the player's nemesis card of this
+ * type from the encounter deck, its discard pile or the set-aside area. */
+function takeNemesisCard(
+  s: GameState,
+  playerId: string,
+  type: "minion" | "side_scheme",
+): Piece | undefined {
+  const view = seatView(s, playerId);
+  const set = `${view.heroId}_nemesis`;
+  const match = (p: Piece) =>
+    card(p).type_code === type && card(p).set_code === set;
+  for (const zone of [s.encounter.deck, s.encounter.discard]) {
+    const i = zone.findIndex(match);
+    if (i >= 0) {
+      revealHidden(s);
+      return zone.splice(i, 1)[0];
+    }
+  }
+  const reserve = view.player.setAside || [];
+  const stored = reserve.find(match);
+  if (stored) {
+    view.player.setAside = reserve.filter((p) => p !== stored);
+    return stored;
+  }
+  const flag = type === "minion" ? "nemesisMinionOut" : "nemesisSchemeOut";
+  if (view.flags.nemesis || view.flags[flag]) return undefined;
+  const printed = CATALOG_CARDS.find(
+    (c) =>
+      c.set_code === set &&
+      c.pack_code === heroCard(view).pack_code &&
+      c.type_code === type,
+  );
+  if (!printed) return undefined;
+  view.flags[flag] = true;
+  return makePiece(s, printed.code);
+}
 function putNemesisMinion(s: GameState, playerId: string): boolean {
   const view = seatView(s, playerId);
   const set = `${view.heroId}_nemesis`;
@@ -15623,6 +15759,35 @@ const sandmanPorts: sandman.SandmanPorts = {
     if (canChangeIdentityForm(s)) flip(s, false);
     activateSeat(s, previous);
   },
+};
+const mysterioPorts: mysterio.MysterioPorts = {
+  ...mutagenPorts,
+  reveal: (s, p, playerId) => wreckingCrewPorts.reveal(s, p, playerId),
+  log: (s, text, kind) => log(s, text, kind),
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  drawEncounterTop: (s) => drawEncounter(s),
+  shuffleIntoPlayerDeck: (s, playerId, p) => {
+    removeEncounterInstance(s, p.id);
+    const view = seatView(s, playerId);
+    view.player.deck.push(resetPiece(p));
+    view.player.deck = shuffle(s, view.player.deck);
+  },
+  millPlayer: (s, playerId, count) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    const discarded = mill(s, count);
+    activateSeat(s, previous);
+    return discarded;
+  },
+  discardHandCard: (s, playerId, id) =>
+    kangPorts.discardHandCard(s, playerId, id),
+  randomDiscard: (s, playerId) => hoodModularPorts.randomDiscard(s, playerId),
+  handSize: (s, playerId) => handSize(seatView(s, playerId)),
+  takeNemesis: (s, playerId, type) => takeNemesisCard(s, playerId, type),
+  allies: (s, playerId) => friends(seatView(s, playerId)),
+  cost: (p) => Number(card(p).cost || 0),
+  pick: (s, n) => Math.floor(random(s) * n),
 };
 const venomVillainPorts: venomVillain.VenomPorts = {
   ...mutagenPorts,
@@ -23379,6 +23544,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     inheritors.inheritorsModifiers(s, p).attack +
     escape.escapeVillainStat(s, p) +
     hela.helaVillainStat(s, p) +
+    mysterio.mysterioEnemyBonus(s, p) +
     wreckingCrew.wreckingCrewAttackBonus(s, p) +
     kang.kangEnemyStat(s, p, "attack", originalPlayerId) +
     nebulaVillain.nebulaEnemyAttack(s, p) +
@@ -23782,6 +23948,7 @@ function boostEffects(s: GameState, p: Piece) {
     hoodModular.hoodModularBoost(s, p) ??
     sandman.sandmanBoost(s, p) ??
     venomVillain.venomBoost(s, p) ??
+    mysterio.mysterioBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -24140,6 +24307,7 @@ function enemySCH(s: GameState, p: Piece, playerId: string): number {
     iceman.icemanEnemyModifier(s, p.id) +
     escape.escapeVillainStat(s, p) +
     hela.helaVillainStat(s, p) +
+    mysterio.mysterioEnemyBonus(s, p) +
     kang.kangEnemyStat(s, p, "scheme", playerId)
   );
 }
@@ -25855,6 +26023,8 @@ function reveal(
         (code) => code === p.code,
       ) &&
         c.type_code !== "attachment") ||
+      (mysterio.MYSTERIO_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -26059,6 +26229,7 @@ function reveal(
       ...hoodModular.HOOD_MODULAR_CODES,
       ...sandman.SANDMAN_SCRIPT_CODES,
       ...venomVillain.VENOM_VILLAIN_SCRIPT_CODES,
+      ...mysterio.MYSTERIO_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -26102,6 +26273,7 @@ function reveal(
       hoodModular.hoodModularReveal(s, p) ??
       sandman.sandmanReveal(s, p) ??
       venomVillain.venomReveal(s, p) ??
+      mysterio.mysterioReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -26190,6 +26362,7 @@ function reveal(
     hoodModular.hoodModularReveal(s, p) ??
     sandman.sandmanReveal(s, p) ??
     venomVillain.venomReveal(s, p) ??
+    mysterio.mysterioReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -27595,6 +27768,7 @@ function resolve(s: GameState, e: Effect) {
           hoodModular.hoodModularReveal(state, piece) ??
           sandman.sandmanReveal(state, piece) ??
           venomVillain.venomReveal(state, piece) ??
+          mysterio.mysterioReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -27738,6 +27912,7 @@ function resolve(s: GameState, e: Effect) {
   if (hoodModular.resolveHoodModularEffect(s, e, hoodModularPorts)) return;
   if (sandman.resolveSandmanEffect(s, e, sandmanPorts)) return;
   if (venomVillain.resolveVenomEffect(s, e, venomVillainPorts)) return;
+  if (mysterio.resolveMysterioEffect(s, e, mysterioPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -34573,7 +34748,10 @@ function resolve(s: GameState, e: Effect) {
       if (s.boostCancellations) delete s.boostCancellations[e.id];
       if (s.attack?.targetPlayerId && !e.scheme)
         activateSeat(s, s.attack.targetPlayerId);
-      if (!(s.scheming || s.attack)?.retainedBoostIds?.includes(e.id))
+      if (
+        !(s.scheming || s.attack)?.retainedBoostIds?.includes(e.id) &&
+        !mysterio.mysterioIllusionBoost(s, e.id)
+      )
         finishResolution(s, e.id);
       if (e.legacy) break;
       if (e.scheme && s.scheming)
@@ -37103,6 +37281,7 @@ function run(s: GameState) {
       e.type.startsWith("hoodmod:") ||
       e.type.startsWith("sandman:") ||
       e.type.startsWith("venomv:") ||
+      e.type.startsWith("mysterio:") ||
       e.type.startsWith("thanos:") ||
       e.type.startsWith("hela:") ||
       e.type.startsWith("loki:") ||
@@ -37490,6 +37669,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...wreckingCrew.wreckingCrewActions(s, p, wreckingCrewPorts),
               ...hood.hoodActions(s, p),
               ...venomVillain.venomActions(s, p),
+              ...mysterio.mysterioActions(s, p),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),

@@ -82,6 +82,8 @@ export interface Piece {
   playerSideSchemeController?: string;
   /** Beguiled changes the actual ally's current type without changing its face. */
   treatedAsMinion?: boolean;
+  /** Manipulated Mind: this ally is treated as a minion. */
+  mysterioManipulated?: boolean;
   /** Mind Control changes the same physical minion into a blank Controlled ally. */
   treatedAsAlly?: boolean;
   /** Possessed turns this physical ally into a Controlled minion. */
@@ -226,6 +228,8 @@ export interface Attack {
   extraBoostIcons?: number;
   /** Tooth and Nail's boost: this attack gains piercing. */
   venomPiercing?: boolean;
+  /** Delusion of Collusion's boost: allies defeated by this attack hurt. */
+  mysterioCollusion?: boolean;
   afterActivation?: Effect[];
   /** Effects tied to this actual attack, before optional aftermath responses. */
   visionAfterAttack?: Effect[];
@@ -294,6 +298,7 @@ export interface GameState {
   hood?: import("./hood.js").HoodState;
   sandman?: import("./sandman.js").SandmanState;
   venomVillain?: import("./venom-villain.js").VenomVillainState;
+  mysterio?: import("./mysterio.js").MysterioState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */

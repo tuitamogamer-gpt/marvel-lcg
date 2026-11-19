@@ -135,6 +135,8 @@ jobs:
             scripts: test:sandman
           - group: venom-villain
             scripts: test:venom-villain
+          - group: mysterio
+            scripts: test:mysterio
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules
