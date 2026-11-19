@@ -139,6 +139,8 @@ jobs:
             scripts: test:mysterio
           - group: sinister-six
             scripts: test:sinister-six
+          - group: venom-goblin
+            scripts: test:venom-goblin
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

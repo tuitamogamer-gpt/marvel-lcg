@@ -65,6 +65,7 @@ import {
 import { warMachineTraits } from "./war-machine.js";
 import { sinisterPlayerPackIdentityModifiers } from "./sinister-player-pack.js";
 import { mysterioHandSize } from "./mysterio.js";
+import { venomGoblinHealth } from "./venom-goblin.js";
 import { novaHandSize, novaTraits } from "./nova.js";
 import {
   ironheartIdentityCode,
@@ -1403,6 +1404,20 @@ export const VILLAINS = [
       "Six villains take turns with the active counter, and every defeated one waits to ambush you again. You can only win by escaping: clear the Light at the End, then outrun the Chase.",
     color: "#2f4b3c",
   },
+  {
+    id: "venom_goblin",
+    name: "Venom Goblin",
+    codes: ["27113", "27114", "27115"],
+    schemes: ["27118a"],
+    module: "goblin_gear",
+    fixedSets: ["symbiotic_strength"],
+    difficulty: 4,
+    title: "Skies Over New York",
+    location: "Manhattan",
+    description:
+      "Venom Goblin's glider hunts over three Manhattan main schemes at once, and each one gathers threat on its own. Let two districts fall to the symbiote and the city is lost.",
+    color: "#3d2a52",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1475,6 +1490,7 @@ export const MODULES = [
   { id: "personal_nightmare", name: "Personal Nightmare", difficulty: 3 },
   { id: "whispers_of_paranoia", name: "Whispers of Paranoia", difficulty: 2 },
   { id: "guerrilla_tactics", name: "Guerrilla Tactics", difficulty: 2 },
+  { id: "goblin_gear", name: "Goblin Gear", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {
@@ -2119,6 +2135,7 @@ export function pieceHP(s: GameState, p: Piece) {
     gamoraPackAllyHP(s, p) +
     nebulaPackModifiers(s, p.id).health +
     novaIronheartCharacterModifiers(s, p.id).health +
-    captainPackModifiers(textActiveState(s), p.id).hp
+    captainPackModifiers(textActiveState(s), p.id).hp +
+    venomGoblinHealth(s, p)
   );
 }

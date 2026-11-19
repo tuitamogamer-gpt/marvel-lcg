@@ -18,6 +18,7 @@ import * as sandman from "./sandman.js";
 import * as venomVillain from "./venom-villain.js";
 import * as mysterio from "./mysterio.js";
 import * as sinisterSix from "./sinister-six.js";
+import * as venomGoblin from "./venom-goblin.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -593,7 +594,8 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
       name === "Patrol" &&
       mgPack.mutantGenesisPlayerPackMinionModifiers(s, p, { isTextBlank })
         .patrol
-    )
+    ) ||
+    !!(s && typeof p !== "string" && venomGoblin.venomGoblinKeyword(s, p, name))
   );
 }
 function nativeStatusModifiers(s: GameState, p: StatusState) {
@@ -4941,6 +4943,7 @@ function villainSetup(s: GameState) {
     ...sandman.sandmanVillainRevealed(s),
     ...venomVillain.venomVillainRevealed(s),
     ...mysterio.mysterioVillainRevealed(s),
+    ...venomGoblin.venomGoblinVillainRevealed(s, s.villain.code),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -4977,6 +4980,14 @@ function threat(
       towerDefense.otherTowerKey(s.towerDefense.focus),
       () => threat(s, "main", n, skipInterrupt),
     );
+    return;
+  }
+  const vgThreatKey = venomGoblin.vgTargetKey(target);
+  if (vgThreatKey) {
+    if (venomGoblin.vgScheme(s, vgThreatKey))
+      venomGoblin.withVgFocus(s, vgThreatKey, () =>
+        threat(s, "main", n, skipInterrupt),
+      );
     return;
   }
   if (!skipInterrupt) {
@@ -5061,6 +5072,11 @@ function threat(
       // Kang: stages 1B and 4B lose; each stage 3B combines its area.
       if (s.kang) {
         kang.kangMainCompleted(s, kangPorts);
+        return;
+      }
+      // Venom Goblin: a completed Manhattan main scheme flips.
+      if (s.venomGoblin) {
+        venomGoblin.venomGoblinMainCompleted(s, venomGoblinPorts);
         return;
       }
       if (s.villainId === "mansion_attack") {
@@ -5461,6 +5477,13 @@ function thwart(
       towerDefense.otherTowerKey(s.towerDefense.focus),
       () => thwart(s, "main", n, ignoreCrisis, source),
     );
+  const vgThwartKey = venomGoblin.vgTargetKey(target);
+  if (vgThwartKey)
+    return venomGoblin.vgScheme(s, vgThwartKey)
+      ? venomGoblin.withVgFocus(s, vgThwartKey, () =>
+          thwart(s, "main", n, ignoreCrisis, source),
+        )
+      : 0;
   if (
     !magik.magikCanRemoveThreat(s, target) ||
     !cable.cableCanRemoveThreat(s, target, source) ||
@@ -5970,6 +5993,7 @@ export function targets(
                   ]
                 : []),
               ...towerDefense.towerDefenseSchemeTarget(s),
+              ...venomGoblin.vgSchemeTargets(s, !!thwarting),
             ]
           : []),
         ...s.sideSchemes
@@ -6089,7 +6113,9 @@ function scriptContext(
           ? s.scheme.threat > 0
           : id === towerDefense.TOWER_OTHER_MAIN
             ? towerDefense.towerDefenseOtherThreat(s) > 0
-            : !!target && (target as Piece).counters > 0;
+            : venomGoblin.vgTargetKey(id)
+              ? venomGoblin.vgTargetThreat(s, id!) > 0
+              : !!target && (target as Piece).counters > 0;
       if (node.op === "status") {
         if (!target) return false;
         const definition = id?.startsWith("hero")
@@ -8385,6 +8411,7 @@ export function newGame(config: {
                             ...venomVillain.VENOM_MODULAR_SETS,
                             ...mysterio.MYSTERIO_MODULAR_SETS,
                             ...sinisterSix.SINISTER_SIX_MODULAR_SETS,
+                            ...venomGoblin.VENOM_GOBLIN_MODULAR_SETS,
                           ].some((set) => set === c.set_code)
                         ? "sm"
                         : ["temporal", "anachronauts", "mot"].includes(
@@ -8496,6 +8523,7 @@ export function newGame(config: {
   if (v.id === "sandman") sandman.sandmanSetup(s, sandmanPorts);
   if (v.id === "venom") venomVillain.venomSetup(s, venomVillainPorts);
   if (v.id === "mysterio") mysterio.mysterioSetup(s, mysterioPorts);
+  if (v.id === "venom_goblin") venomGoblin.venomGoblinSetup(s);
   deadpool.deadpoolSetupPool(s, makePiece);
   if (s.deadpool?.initializedPoolSeats.length)
     s.encounter.deck = shuffle(s, s.encounter.deck);
@@ -11385,6 +11413,7 @@ export function abilityOptions(
     ...sandman.sandmanActions(s, p),
     ...venomVillain.venomActions(s, p),
     ...mysterio.mysterioActions(s, p),
+    ...venomGoblin.venomGoblinActions(s, p),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -13449,7 +13478,7 @@ const swPorts: SpiderWomanPorts = {
       const otherMain =
         packet.target === towerDefense.TOWER_OTHER_MAIN
           ? s.towerDefense?.other.scheme
-          : undefined;
+          : venomGoblin.vgBenchScheme(s, packet.target);
       const available =
         packet.target === "main"
           ? s.scheme.threat
@@ -13673,7 +13702,9 @@ const waspPorts: wasp.WaspPorts = {
           ? s.scheme.threat
           : p.target === towerDefense.TOWER_OTHER_MAIN
             ? towerDefense.towerDefenseOtherThreat(s)
-            : s.sideSchemes.find((x) => x.id === p.target)?.counters || 0,
+            : venomGoblin.vgTargetKey(p.target)
+              ? venomGoblin.vgTargetThreat(s, p.target)
+              : s.sideSchemes.find((x) => x.id === p.target)?.counters || 0,
     }));
     const queuedBefore = s.queue.length;
     swPorts.thwartDistribution(s, packets);
@@ -13685,7 +13716,9 @@ const waspPorts: wasp.WaspPorts = {
           ? s.scheme.threat
           : p.target === towerDefense.TOWER_OTHER_MAIN
             ? towerDefense.towerDefenseOtherThreat(s)
-            : s.sideSchemes.find((x) => x.id === p.target)?.counters || 0) ===
+            : venomGoblin.vgTargetKey(p.target)
+              ? venomGoblin.vgTargetThreat(s, p.target)
+              : s.sideSchemes.find((x) => x.id === p.target)?.counters || 0) ===
           0,
     );
     add(
@@ -15872,6 +15905,28 @@ const sinisterSixPorts: sinisterSix.SinisterSixPorts = {
       ? enemyATK(s, p, s.activePlayerId)
       : enemySCH(s, p, s.activePlayerId),
 };
+const venomGoblinPorts: venomGoblin.VenomGoblinPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  makePiece: (s, code) => makePiece(s, code),
+  reveal: (s, p, playerId) => wreckingCrewPorts.reveal(s, p, playerId),
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  millPlayer: (s, playerId, count) => {
+    mysterioPorts.millPlayer(s, playerId, count);
+  },
+  discardHandCard: (s, playerId, id) =>
+    kangPorts.discardHandCard(s, playerId, id),
+  lose: (s, reason) => endGame(s, false, reason),
+  controlled: (s, playerId) => seatView(s, playerId).player.inPlay,
+  exhaust: (s, id) => {
+    const p = find(s, id);
+    if (p) p.exhausted = true;
+  },
+  cost: (p) => Number(card(p).cost || 0),
+  payResources: (s, title, resources, after) =>
+    hoodPorts.payResources(s, title, resources, after),
+};
 const mysterioPorts: mysterio.MysterioPorts = {
   ...mutagenPorts,
   reveal: (s, p, playerId) => wreckingCrewPorts.reveal(s, p, playerId),
@@ -16546,7 +16601,7 @@ const phoenixPorts: phoenix.PhoenixPorts = {
     const otherMain =
       from === towerDefense.TOWER_OTHER_MAIN
         ? s.towerDefense?.other.scheme
-        : undefined;
+        : venomGoblin.vgBenchScheme(s, from);
     const amount = Math.min(
       n,
       from === "main"
@@ -24064,6 +24119,7 @@ function boostEffects(s: GameState, p: Piece) {
     venomVillain.venomBoost(s, p) ??
     mysterio.mysterioBoost(s, p) ??
     sinisterSix.sixBoost(s, p) ??
+    venomGoblin.venomGoblinBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -24572,6 +24628,12 @@ function finishScheme(s: GameState) {
       ? [E("heal", { target: p.id, amount: p.damage })]
       : []),
     ...antMan.antManEnemyActivated(s, id),
+    ...venomGoblin.venomGoblinActivated(s, id, s.activePlayerId),
+    ...venomGoblin.goblinGearEffects(s, {
+      attackerId: id,
+      playerId: s.activePlayerId,
+      attack: false,
+    }),
     ...iceman.icemanActivated(s, id),
     ...mariaHill.mariaHillActivation(s, id),
     ...armadillo.armadilloActivationResponses(s, id).flatMap((r) => r.effects),
@@ -24780,7 +24842,8 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
       iceman.icemanPyroIndirect(s, p) ||
       collector.collectorIndirectAttack(s, p) ||
       hoodModular.hoodModularIndirectAttack(s, p.id) ||
-      sandman.sandmanIndirectAttack(s, p.id))
+      sandman.sandmanIndirectAttack(s, p.id) ||
+      venomGoblin.venomGoblinIndirectAttack(s, p.id))
   ) {
     add(
       s,
@@ -24793,7 +24856,9 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
             ? "Flamethrower"
             : sandman.sandmanIndirectAttack(s, p.id)
               ? "Sand Blast"
-              : "Hook, Line, and Sinker",
+              : venomGoblin.venomGoblinIndirectAttack(s, p.id)
+                ? "Symbiotic Monstrosity"
+                : "Hook, Line, and Sinker",
         zzzaxBatchId: `angel-attack:${s.nextId++}`,
         zzzaxBatchOwner: s.activePlayerId,
         attackDamage: true,
@@ -24801,7 +24866,8 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
           !iceman.icemanPyroIndirect(s, p) &&
           !collector.collectorIndirectAttack(s, p) &&
           !hoodModular.hoodModularIndirectAttack(s, p.id) &&
-          !sandman.sandmanIndirectAttack(s, p.id),
+          !sandman.sandmanIndirectAttack(s, p.id) &&
+          !venomGoblin.venomGoblinIndirectAttack(s, p.id),
         zzzaxAfter: E("ironspiderAttackComplete", {
           attack: structuredClone(a),
           target,
@@ -25195,6 +25261,12 @@ function finishAttackAfterDamage(
     ...iceman.icemanActivated(s, a.attacker),
     ...mariaHill.mariaHillActivation(s, a.attacker),
     ...iceman.icemanAfterAttack(s, a.id),
+    ...venomGoblin.venomGoblinActivated(s, a.attacker, recipientId),
+    ...venomGoblin.goblinGearEffects(s, {
+      attackerId: a.attacker,
+      playerId: recipientId,
+      attack: true,
+    }),
     ...(a.afterActivation || []),
     ...(a.visionAfterAttack || []),
     ...(a.attackDamageReceipts
@@ -26149,6 +26221,8 @@ function reveal(
         c.type_code !== "attachment") ||
       (sinisterSix.SINISTER_SIX_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (venomGoblin.VENOM_GOBLIN_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -26355,6 +26429,7 @@ function reveal(
       ...venomVillain.VENOM_VILLAIN_SCRIPT_CODES,
       ...mysterio.MYSTERIO_SCRIPT_CODES,
       ...sinisterSix.SINISTER_SIX_SCRIPT_CODES,
+      ...venomGoblin.VENOM_GOBLIN_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -26375,7 +26450,9 @@ function reveal(
     const window = beginRevealWindow(
       s,
       p,
-      c,
+      venomGoblin.venomGoblinGainsSurge(s, p) && !printedKeyword(c, "Surge")
+        ? { ...c, text: `Surge.\n${c.text || ""}` }
+        : c,
       s.activePlayerId,
       1 + goblinWhenRevealedCopies(s),
     );
@@ -26400,6 +26477,7 @@ function reveal(
       venomVillain.venomReveal(s, p) ??
       mysterio.mysterioReveal(s, p) ??
       sinisterSix.sixReveal(s, p) ??
+      venomGoblin.venomGoblinReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -26490,6 +26568,7 @@ function reveal(
     venomVillain.venomReveal(s, p) ??
     mysterio.mysterioReveal(s, p) ??
     sinisterSix.sixReveal(s, p) ??
+    venomGoblin.venomGoblinReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -26783,7 +26862,8 @@ function reveal(
     }
     treachery(s, p);
   }
-  if (keyword(p, "Surge")) add(s, E("surge", { sourceCode: p.code }));
+  if (keyword(p, "Surge") || venomGoblin.venomGoblinGainsSurge(s, p))
+    add(s, E("surge", { sourceCode: p.code }));
 }
 function obligation(s: GameState, p: Piece) {
   if (p.code === "48026") {
@@ -27918,6 +27998,7 @@ function resolve(s: GameState, e: Effect) {
           venomVillain.venomReveal(state, piece) ??
           mysterio.mysterioReveal(state, piece) ??
           sinisterSix.sixReveal(state, piece) ??
+          venomGoblin.venomGoblinReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -28063,6 +28144,7 @@ function resolve(s: GameState, e: Effect) {
   if (venomVillain.resolveVenomEffect(s, e, venomVillainPorts)) return;
   if (mysterio.resolveMysterioEffect(s, e, mysterioPorts)) return;
   if (sinisterSix.resolveSinisterSixEffect(s, e, sinisterSixPorts)) return;
+  if (venomGoblin.resolveVenomGoblinEffect(s, e, venomGoblinPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -34135,6 +34217,16 @@ function resolve(s: GameState, e: Effect) {
         ...iceman.icemanActivated(s, a.attacker),
         ...mariaHill.mariaHillActivation(s, a.attacker),
         ...iceman.icemanAfterAttack(s, a.id),
+        ...venomGoblin.venomGoblinActivated(
+          s,
+          a.attacker,
+          a.targetPlayerId || s.activePlayerId,
+        ),
+        ...venomGoblin.goblinGearEffects(s, {
+          attackerId: a.attacker,
+          playerId: a.targetPlayerId || s.activePlayerId,
+          attack: true,
+        }),
         ...(a.completionRecorded && a.attackerSnapshot
           ? spectrum.spectrumEnemyActivated(
               s,
@@ -36896,6 +36988,7 @@ function resolve(s: GameState, e: Effect) {
         ...(e.towerSecond ? [] : towerDefense.towerDefenseStepOne(s)),
         ...wreckingCrew.wreckingCrewStepOne(s),
         ...hood.hoodStepOne(s),
+        ...venomGoblin.venomGoblinStepOne(s),
       );
       break;
     case "villainActivate": {
@@ -37443,6 +37536,7 @@ function run(s: GameState) {
       e.type.startsWith("venomv:") ||
       e.type.startsWith("mysterio:") ||
       e.type.startsWith("six:") ||
+      e.type.startsWith("vgob:") ||
       e.type.startsWith("thanos:") ||
       e.type.startsWith("hela:") ||
       e.type.startsWith("loki:") ||
@@ -37831,6 +37925,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...hood.hoodActions(s, p),
               ...venomVillain.venomActions(s, p),
               ...mysterio.mysterioActions(s, p),
+              ...venomGoblin.venomGoblinActions(s, p),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),

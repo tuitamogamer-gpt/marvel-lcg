@@ -275,6 +275,12 @@ import {
   towerVillain,
   type TowerKey,
 } from "./game/tower-defense";
+import {
+  GLIDER_KEYS,
+  MANHATTAN_FLIPPED,
+  vgScheme,
+  vgSchemeLimit,
+} from "./game/venom-goblin";
 import { effectTitle, pacingOf } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
 import type { PaymentSource } from "./game/payment";
@@ -2613,6 +2619,15 @@ export default function App() {
                       deck each time The Hood or his main scheme advances. His
                       Foul Play discards encounter cards and deals you each one
                       that is not from his own set.
+                    </p>
+                  )}
+                  {villain.id === "venom_goblin" && (
+                    <p className="setting-help">
+                      Symbiotic Strength is always included. Three Manhattan
+                      main schemes gather threat at once; encounter cards affect
+                      the one with the glider counter. A completed main scheme
+                      becomes a Symbiote environment, and a second one loses the
+                      game.
                     </p>
                   )}
                   {villain.id === "sinister_six" && (
@@ -5722,6 +5737,83 @@ function TowerMainSchemes({
     </>
   );
 }
+/** Venom Goblin: the Manhattan main schemes still in play and the glider
+ * counter. Completed ones are shown with the environments. */
+function VenomGoblinMainSchemes({
+  game: s,
+  inspect,
+}: {
+  game: GameState;
+  inspect: (c: Inspect) => void;
+}) {
+  const st = s.venomGoblin!;
+  const sideAcceleration = s.sideSchemes.reduce(
+    (n, p) =>
+      n + (card(p).scheme_acceleration || 0) + (p.accelerationTokens || 0),
+    0,
+  );
+  return (
+    <>
+      {GLIDER_KEYS.filter((key) => !st.flipped.includes(key)).map((key) => {
+        const scheme = vgScheme(s, key)!;
+        const c = card(scheme.code);
+        const limit = vgSchemeLimit(s, key);
+        const glider = st.glider === key;
+        const escalation =
+          (c.escalation_threat || 0) *
+          (c.escalation_threat_fixed ? 1 : s.playerCount);
+        return (
+          <div
+            className={`main-scheme tower-main${glider ? " focused" : ""}${scheme.threat >= limit - 2 ? " critical" : ""}`}
+            key={key}
+            role="group"
+            aria-label={glider ? `${c.name}, with the glider counter` : c.name}
+          >
+            <div className="scheme-heading">
+              <span className="small-label">{key.toUpperCase()}</span>
+              <span
+                className={`scheme-stage${glider ? " tower-focus-chip vg-glider-chip" : ""}`}
+              >
+                {glider ? "GLIDER" : "MAIN"}
+              </span>
+            </div>
+            <button
+              onClick={() => inspect({ code: scheme.code })}
+              className="scheme-card"
+              aria-label={`Inspect ${c.name}`}
+            >
+              <CardImage code={scheme.code} />
+            </button>
+            <StatToken
+              kind="threat"
+              value={scheme.threat}
+              max={limit}
+              label={`${c.name} threat`}
+            />
+            <div className="threat-track">
+              {Array.from({ length: limit }, (_, i) => (
+                <i className={i < scheme.threat ? "filled" : ""} key={i} />
+              ))}
+            </div>
+            <p
+              title={
+                glider
+                  ? "Encounter cards that affect the main scheme affect this one."
+                  : "This main scheme gathers its own threat each villain phase."
+              }
+            >
+              +
+              {escalation +
+                scheme.acceleration +
+                (glider ? sideAcceleration : 0)}{" "}
+              threat each villain phase
+            </p>
+          </div>
+        );
+      })}
+    </>
+  );
+}
 function AttachedCards({
   game,
   host,
@@ -5770,6 +5862,13 @@ function AttachedCards({
             {p.code === "04065" && (
               <small aria-label={`Crossbones' Armor damage: ${p.damage} of 5`}>
                 {p.damage}/5 damage
+              </small>
+            )}
+            {["27137", "27138", "27139"].includes(p.code) && (
+              <small
+                aria-label={`${card(p).name}: ${p.counters} bomb counters`}
+              >
+                {p.counters} {p.counters === 1 ? "bomb" : "bombs"}
               </small>
             )}
             {game.playerCount > 1 && p.ownerId && (
@@ -5857,6 +5956,9 @@ function AttachedCards({
                 "27089",
                 "27153",
                 "27170",
+                // Venom Goblin: We Are One; Goblin Gear: Advanced Glider.
+                "27120",
+                "27136",
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -6225,9 +6327,11 @@ function Tabletop({
               <b>
                 {s.villainId === "project_wideawake"
                   ? `Keep captured cards below ${3 + s.playerCount}`
-                  : hasThreatLimit
-                    ? `Keep threat below ${threatLimit}`
-                    : "No main-scheme threat limit"}
+                  : s.venomGoblin
+                    ? `${s.venomGoblin.flipped.length} of 2 districts infested`
+                    : hasThreatLimit
+                      ? `Keep threat below ${threatLimit}`
+                      : "No main-scheme threat limit"}
               </b>
             </span>
           </div>
@@ -6562,6 +6666,8 @@ function Tabletop({
               >
                 {s.towerDefense ? (
                   <TowerMainSchemes game={s} inspect={inspect} />
+                ) : s.venomGoblin ? (
+                  <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
                     className={`main-scheme ${threatCritical ? "critical" : ""}`}
@@ -6790,9 +6896,19 @@ function Tabletop({
                               ? "ENVIRONMENT · DAMAGED"
                               : isInfinityStone(p)
                                 ? "INFINITY STONE"
-                                : "ENVIRONMENT"}
+                                : Object.values(MANHATTAN_FLIPPED).includes(
+                                      p.code,
+                                    )
+                                  ? "ENVIRONMENT · SYMBIOTE"
+                                  : "ENVIRONMENT"}
                       </span>
                       <strong>{card(p).name}</strong>
+                      {Object.values(MANHATTAN_FLIPPED).includes(p.code) && (
+                        <span className="stat-caption">
+                          Infested · a second Symbiote environment loses the
+                          game
+                        </span>
+                      )}
                       {(p.code === AVENGERS_TOWER ||
                         p.code === DAMAGED_TOWER) && (
                         <>

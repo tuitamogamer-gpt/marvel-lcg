@@ -638,6 +638,13 @@ h3 {
   width: auto;
   min-width: 0;
 }
+/* Narrow main schemes side by side wrap their caption onto two lines; the
+   threat token sits higher so that it stays clear of the caption. */
+@media (max-width: 420px) {
+  .app .physical-table .scheme-area > .tower-main > .stat-token {
+    bottom: 34px;
+  }
+}
 .app .physical-table .scheme-area > .tower-main.focused {
   border-radius: 7px;
   outline: 1px solid #e9b65b8c;
@@ -654,6 +661,10 @@ h3 {
   font-weight: 800;
   letter-spacing: 0.4px;
   cursor: pointer;
+}
+/* Venom Goblin's glider counter is a marker, not a button. */
+.app .physical-table .vg-glider-chip {
+  cursor: default;
 }
 .app .physical-table .scheme-area > .scenario-environment.tower-strip {
   display: flex;

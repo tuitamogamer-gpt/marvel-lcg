@@ -230,6 +230,8 @@ export interface Attack {
   venomPiercing?: boolean;
   /** Delusion of Collusion's boost: allies defeated by this attack hurt. */
   mysterioCollusion?: boolean;
+  /** Symbiotic Monstrosity's boost: this attack deals indirect damage. */
+  vgobIndirect?: boolean;
   afterActivation?: Effect[];
   /** Effects tied to this actual attack, before optional aftermath responses. */
   visionAfterAttack?: Effect[];
@@ -300,6 +302,7 @@ export interface GameState {
   venomVillain?: import("./venom-villain.js").VenomVillainState;
   mysterio?: import("./mysterio.js").MysterioState;
   sinisterSix?: import("./sinister-six.js").SinisterSixState;
+  venomGoblin?: import("./venom-goblin.js").VenomGoblinState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */
