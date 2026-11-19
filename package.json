@@ -77,7 +77,8 @@
     "test:hela": "node scripts/hela-check.mjs",
     "test:loki": "node scripts/loki-check.mjs",
     "test:wrecking-crew": "node scripts/wrecking-crew-check.mjs",
-    "test:kang": "node scripts/kang-check.mjs"
+    "test:kang": "node scripts/kang-check.mjs",
+    "test:hood": "node scripts/hood-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

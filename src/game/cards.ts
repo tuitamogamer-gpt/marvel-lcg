@@ -1319,6 +1319,29 @@ export const VILLAINS = [
       "Kang the Conqueror arrives to claim the present. Defeat him and he scatters the heroes through time: each hero faces a different Kang alone in their own game area, then all return for Kang's Wrath.",
     color: "#4b3f86",
   },
+  {
+    id: "the_hood",
+    name: "The Hood",
+    codes: ["24001", "24002", "24003"],
+    schemes: ["24004b", "24005b", "24006b"],
+    module: "bomb_scare",
+    moduleCount: 7,
+    defaultModules: [
+      "bomb_scare",
+      "masters_of_evil",
+      "under_attack",
+      "legions_of_hydra",
+      "the_doomsday_chair",
+      "goblin_gimmicks",
+      "a_mess_of_things",
+    ],
+    difficulty: 3,
+    title: "Making Connections",
+    location: "New York City",
+    description:
+      "The Hood unites the city's criminals under his banner. Seven modular sets wait set aside and join the encounter deck one by one as his empire grows, and his Foul Play keeps dealing the heroes the cards he discards.",
+    color: "#5b2a3a",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },

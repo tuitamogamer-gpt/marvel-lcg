@@ -247,6 +247,7 @@ import {
   kangDamageProhibited,
   kangVillainAbsent,
 } from "./game/kang";
+import { hoodSetAsideSets } from "./game/hood";
 import {
   CREW_KEYS,
   CREW_VILLAINS,
@@ -1072,6 +1073,8 @@ export default function App() {
   const [logOpen, setLogOpen] = useState(true);
   const [pacing, setPacingState] = useState<Pacing>(readPacing);
   const [heroic, setHeroic] = useState(0);
+  // The Hood scenario pack's Standard II and Expert II encounter sets.
+  const [alternativeSets, setAlternativeSets] = useState(false);
   const recommendedSenatorDamage =
     heroic > 0 ? 3 : difficulty === "expert" ? 2 : 1;
   const resolvedCaptureAllocation = team.map((_, index) =>
@@ -1412,6 +1415,8 @@ export default function App() {
                   guided: true,
                   pacing,
                   heroic: game.heroic || 0,
+                  standardII: game.standardII,
+                  expertII: game.expertII,
                   seed: sameSeed ? game.startSeed || undefined : undefined,
                 }
               : {
@@ -1436,6 +1441,9 @@ export default function App() {
                     : {}),
                   pacing,
                   heroic,
+                  ...(alternativeSets && villain.moduleCount !== 0
+                    ? { standardII: true, expertII: true }
+                    : {}),
                   seed: parseSeed(seedText),
                 },
         ),
@@ -2457,6 +2465,32 @@ export default function App() {
                     ? "Villain stages II → III. Includes the Expert encounter set."
                     : "Villain stages I → II. Recommended for your first mission."}
                 </p>
+                {villain.moduleCount !== 0 && (
+                  <>
+                    <div className="setting-line">
+                      <span>Encounter sets</span>
+                      <div className="segmented">
+                        {[false, true].map((ii) => (
+                          <button
+                            key={String(ii)}
+                            className={alternativeSets === ii ? "selected" : ""}
+                            aria-pressed={alternativeSets === ii}
+                            onClick={() => setAlternativeSets(ii)}
+                          >
+                            {ii ? "Standard II" : "Original"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {alternativeSets && (
+                      <p className="setting-help">
+                        Standard II replaces the core Standard set and puts
+                        Formidable Foe into play; in Expert, Expert II replaces
+                        the Expert set. Both are harder than the originals.
+                      </p>
+                    )}
+                  </>
+                )}
                 <div className="setting-line tempo-line">
                   <span>Tempo</span>
                   <div className="segmented">
@@ -2563,6 +2597,15 @@ export default function App() {
                       </select>
                     </label>
                   ))}
+                  {villain.id === "the_hood" && (
+                    <p className="setting-help">
+                      Choose seven modular sets. One starts in the encounter
+                      deck and the others wait set aside; another one joins the
+                      deck each time The Hood or his main scheme advances. His
+                      Foul Play discards encounter cards and deals you each one
+                      that is not from his own set.
+                    </p>
+                  )}
                   {villain.id === "the_wrecking_crew" && (
                     <p className="setting-help">
                       No modular sets: Wrecker, Thunderball, Piledriver and
@@ -5614,6 +5657,10 @@ function AttachedCards({
                 "07036",
                 "07049",
                 "07050",
+                // The Hood: Established Dominance, his Mantle and Pistol.
+                "24007",
+                "24008",
+                "24009",
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -5907,9 +5954,23 @@ function Tabletop({
             <>
               {" "}
               <span>·</span>{" "}
-              {(s.modules || [s.module])
-                .map((id) => MODULES.find((m) => m.id === id)?.name)
-                .join(" + ")}
+              {(s.modules || [s.module]).length > 3
+                ? `${(s.modules || []).length} modular sets`
+                : (s.modules || [s.module])
+                    .map((id) => MODULES.find((m) => m.id === id)?.name)
+                    .join(" + ")}
+            </>
+          ) : null}
+          {s.standardII ? (
+            <>
+              {" "}
+              <span>·</span> Standard II
+            </>
+          ) : null}
+          {s.expertII ? (
+            <>
+              {" "}
+              <span>·</span> Expert II
             </>
           ) : null}
           {s.heroic ? (
@@ -6231,6 +6292,17 @@ function Tabletop({
                       </span>
                     )}
                     {s.kang && <KangTimeline game={s} />}
+                    {s.hood && (
+                      <span
+                        className="stat-caption"
+                        aria-label={`Modular encounter sets set aside: ${hoodSetAsideSets(s).length}`}
+                      >
+                        {hoodSetAsideSets(s).length} modular set
+                        {hoodSetAsideSets(s).length === 1 ? "" : "s"} set aside
+                        · one joins the deck when The Hood or the main scheme
+                        advances
+                      </span>
+                    )}
                     {s.magneto &&
                       magnetoDamageCap(s, { isTextBlank }) !== undefined && (
                         <span

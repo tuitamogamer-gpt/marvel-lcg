@@ -13,6 +13,7 @@ import { HELA_SCRIPT_CODES } from "../src/game/hela";
 import { LOKI_SCRIPT_CODES } from "../src/game/loki";
 import { WRECKING_CREW_SCRIPT_CODES } from "../src/game/wrecking-crew";
 import { KANG_SCRIPT_CODES } from "../src/game/kang";
+import { HOOD_SCRIPT_CODES } from "../src/game/hood";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -40,6 +41,7 @@ const badoonCodes = new Set<string>([
   ...LOKI_SCRIPT_CODES,
   ...WRECKING_CREW_SCRIPT_CODES,
   ...KANG_SCRIPT_CODES,
+  ...HOOD_SCRIPT_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -453,9 +455,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2719);
-    expect(coverage.unsupportedFaces).toBe(1832);
-    expect(coverage.dedicatedFaces).toBe(2280);
+    expect(coverage.executableFaces).toBe(2745);
+    expect(coverage.unsupportedFaces).toBe(1806);
+    expect(coverage.dedicatedFaces).toBe(2306);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -645,6 +647,8 @@ describe("complete expansion rules inventory", () => {
         60 -
         // The Once and Future Kang, Temporal, Master of Time, Anachronauts.
         58 -
+        // The Hood, Standard II and Expert II.
+        26 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -956,7 +960,17 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(27);
+    ).toHaveLength(28);
+    expect(
+      inventory.installedRegistryCoverage.registeredScenarios.find(
+        (entry: { id: string }) => entry.id === "the_hood",
+      ),
+    ).toMatchObject({
+      codes: ["24001", "24002", "24003"],
+      schemes: ["24004b", "24005b", "24006b"],
+      defaultModule: "bomb_scare",
+      moduleCount: 7,
+    });
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "kang",
@@ -1120,7 +1134,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(145);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(146);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

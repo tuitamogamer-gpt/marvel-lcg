@@ -117,7 +117,16 @@ const heroIds = [
   "maria_hill",
   "nick_fury",
 ];
-const missions = heroIds.flatMap((heroId, hi) =>
+interface MissionConfig {
+  heroId: string;
+  villainId: string;
+  difficulty: "standard" | "expert";
+  module: string;
+  seed: number;
+  /** The Hood scenario pack's Standard II and Expert II encounter sets. */
+  variant?: "ii";
+}
+const grid: MissionConfig[] = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
     (["standard", "expert"] as const).flatMap((difficulty, di) =>
       // The Wrecking Crew uses no modular sets: one configuration.
@@ -134,6 +143,22 @@ const missions = heroIds.flatMap((heroId, hi) =>
     ),
   ),
 );
+// Standard II replaces the core Standard set (and Expert II the Expert set
+// in Expert) in every scenario that uses them, with its recommended module.
+const alternativeSets: MissionConfig[] = heroIds.flatMap((heroId, hi) =>
+  VILLAINS.filter((scenario) => scenario.moduleCount !== 0).flatMap(
+    (scenario, vi) =>
+      (["standard", "expert"] as const).map((difficulty, di) => ({
+        heroId,
+        villainId: scenario.id,
+        difficulty,
+        module: scenario.module,
+        seed: 600000 + hi * 1000 + vi * 10 + di,
+        variant: "ii" as const,
+      })),
+  ),
+);
+const missions = [...grid, ...alternativeSets];
 
 // Build the complete grid before partitioning so every existing configuration
 // keeps the original global hero/scenario/module indexes and seeded shuffle.
@@ -253,6 +278,7 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
       "loki",
       "the_wrecking_crew",
       "kang",
+      "the_hood",
     ].includes(s.villainId)
   )
     return [];
@@ -318,6 +344,16 @@ function scenarioPhysicalPieces(s: GameState): Piece[] {
     // Kang: the main schemes, the set-aside villains and Kang's Dominions,
     // and the game areas out of focus.
     ...kangStoredPieces(s),
+    // The Hood: the main scheme cards, the next villain and the set-aside
+    // modular sets.
+    ...(s.hood
+      ? [
+          s.hood.currentMain,
+          ...s.hood.mainDeck,
+          ...s.hood.villainDeck,
+          ...s.hood.setAside,
+        ]
+      : []),
     // Loki: the set-aside Lokis and the Infinity Stone deck.
     ...(s.loki
       ? [...s.loki.setAside, ...s.loki.stoneDeck, ...s.loki.stoneDiscard]
@@ -457,11 +493,13 @@ function runMission(config: (typeof missions)[number]) {
     expect(codes).toHaveLength(physicalSourceCounts[hero.id]);
     expect(deckSizeFor(codes)).toBe(hero.id === "rogue" ? 41 : 40);
   }
+  const { variant, ...setup } = config;
   let s = newGame({
-    ...config,
+    ...setup,
     aspect,
     pacing: "expert",
     heroes: [{ heroId: hero.id, aspect, deckCards: codes }],
+    ...(variant === "ii" ? { standardII: true, expertII: true } : {}),
   });
   const initial = [
     ...s.player.hand,
@@ -573,7 +611,9 @@ function runMission(config: (typeof missions)[number]) {
                                         ? "the_wrecking_crew"
                                         : s.villainId === "kang"
                                           ? "kang"
-                                          : undefined;
+                                          : s.villainId === "the_hood"
+                                            ? "the_hood"
+                                            : undefined;
   // The Wrecking Crew's cards span five sets: every card of its pack.
   const scenarioSources = scenarioSet
     ? scenarioPhysicalPieces(s).filter((p) =>
@@ -626,7 +666,9 @@ function runMission(config: (typeof missions)[number]) {
                                         ? 68
                                         : scenarioSet === "kang"
                                           ? 43
-                                          : 29;
+                                          : scenarioSet === "the_hood"
+                                            ? 15
+                                            : 29;
     expect(
       scenarioSources,
       "All selected original scenario cards begin in physical zones",
@@ -865,7 +907,7 @@ function runMission(config: (typeof missions)[number]) {
 
 describe("published expansion starters across every supported mission setting", () => {
   it("covers every imported expansion hero, scenario, difficulty and supported encounter module", () => {
-    expect(missions).toHaveLength(
+    expect(grid).toHaveLength(
       heroIds.length *
         2 *
         VILLAINS.reduce(
@@ -877,10 +919,15 @@ describe("published expansion starters across every supported mission setting", 
           0,
         ),
     );
-    expect(VILLAINS).toHaveLength(27);
+    expect(alternativeSets).toHaveLength(
+      heroIds.length *
+        2 *
+        VILLAINS.filter((scenario) => scenario.moduleCount !== 0).length,
+    );
+    expect(VILLAINS).toHaveLength(28);
     expect(MODULES).toHaveLength(43);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(115856);
+    expect(missions).toHaveLength(123136);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -888,15 +935,30 @@ describe("published expansion starters across every supported mission setting", 
         mission.villainId,
         mission.difficulty,
         mission.module,
+        ...(mission.variant ? [mission.variant] : []),
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
+    // The Hood extends the grid, and Standard II and Expert II add one
+    // configuration per hero, scenario and difficulty. Every earlier name and
+    // seed stays in place: the 115,856 configurations before this import
+    // hash identically to the complete grid of 6574234.
+    const kangGrid = missions.filter(
+      (m) => m.villainId !== "the_hood" && !m.variant,
+    );
+    expect(kangGrid).toHaveLength(115856);
+    expect(
+      createHash("sha256").update(manifest(kangGrid).join("\n")).digest("hex"),
+    ).toBe("78e1e0e682eef6f38dfb5407b3edfc61d248f919087accf37a185e99caf4a092");
+    expect(
+      missions.filter((m) => m.villainId === "the_hood" && !m.variant),
+    ).toHaveLength(4472);
+    expect(missions.filter((m) => m.variant === "ii")).toHaveLength(2808);
     // Kang and the Temporal, Master of Time and Anachronauts modular sets
-    // extend the grid. Every earlier name and seed stays in place: the
-    // 103,584 configurations before this import hash identically to the
-    // complete grid of 1600763.
+    // extended the grid before that: the 103,584 configurations before it
+    // hash identically to the complete grid of 1600763.
     const kangModules = ["temporal", "mot", "anachronauts"];
-    const wreckingCrewGrid = missions.filter(
+    const wreckingCrewGrid = kangGrid.filter(
       (m) => m.villainId !== "kang" && !kangModules.includes(m.module),
     );
     expect(wreckingCrewGrid).toHaveLength(103584);
@@ -905,9 +967,9 @@ describe("published expansion starters across every supported mission setting", 
         .update(manifest(wreckingCrewGrid).join("\n"))
         .digest("hex"),
     ).toBe("92358309e714ce98ef71ae1f6d24c5890c553c1a9c894f956c9ec9effcadd2db");
-    expect(missions.filter((m) => m.villainId === "kang")).toHaveLength(4472);
+    expect(kangGrid.filter((m) => m.villainId === "kang")).toHaveLength(4472);
     expect(
-      missions.filter(
+      kangGrid.filter(
         (m) => m.villainId !== "kang" && kangModules.includes(m.module),
       ),
     ).toHaveLength(7800);
@@ -925,7 +987,7 @@ describe("published expansion starters across every supported mission setting", 
       wreckingCrewGrid.filter((m) => m.villainId === "the_wrecking_crew"),
     ).toHaveLength(104);
     expect(
-      missions
+      grid
         .filter((m) => m.villainId === "the_wrecking_crew")
         .every((m) => m.module === "none"),
     ).toBe(true);
@@ -943,7 +1005,7 @@ describe("published expansion starters across every supported mission setting", 
       4160,
     );
     expect(
-      missions.filter(
+      kangGrid.filter(
         (m) =>
           m.module === "enchantress" &&
           m.villainId !== "loki" &&
@@ -1305,99 +1367,133 @@ describe("published expansion starters across every supported mission setting", 
     expect(
       partitions.map(
         (partition) =>
-          partition.filter((mission) => mission.villainId === "crossbones")
-            .length,
+          partition.filter(
+            (mission) => !mission.variant && mission.villainId === "crossbones",
+          ).length,
       ),
-      // Each hero's block of 2,228 configurations starts on shard 0 or 4,
-      // so the larger scenarios fall in two alternating sizes.
+      // Each hero's block of 2,314 configurations shifts by two shards, so
+      // the scenarios spread evenly; Crossbones has 78 cases per hero.
     ).toEqual([546, 546, 546, 546, 546, 546, 546, 546]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter(
-            (mission) => mission.villainId === "brotherhood_of_badoon",
+            (mission) =>
+              !mission.variant && mission.villainId === "brotherhood_of_badoon",
           ).length,
       ),
-    ).toEqual([572, 572, 546, 546, 572, 572, 546, 546]);
+    ).toEqual([559, 559, 559, 559, 559, 559, 559, 559]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter(
-            (mission) => mission.villainId === "infiltrate_the_museum",
+            (mission) =>
+              !mission.variant && mission.villainId === "infiltrate_the_museum",
           ).length,
       ),
-    ).toEqual([546, 546, 572, 572, 546, 546, 572, 572]);
+    ).toEqual([559, 559, 559, 559, 559, 559, 559, 559]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter(
-            (mission) => mission.villainId === "escape_the_museum",
+            (mission) =>
+              !mission.variant && mission.villainId === "escape_the_museum",
           ).length,
       ),
-    ).toEqual([572, 572, 546, 546, 572, 572, 546, 546]);
-    expect(
-      partitions.map(
-        (partition) =>
-          partition.filter((mission) => mission.villainId === "nebula").length,
-      ),
-    ).toEqual([546, 546, 572, 572, 546, 546, 572, 572]);
-    expect(
-      partitions.map(
-        (partition) =>
-          partition.filter((mission) => mission.villainId === "ronan").length,
-      ),
-    ).toEqual([572, 572, 546, 546, 572, 572, 546, 546]);
-    expect(
-      partitions.map(
-        (partition) =>
-          partition.filter((mission) => mission.villainId === "ebony_maw")
-            .length,
-      ),
-    ).toEqual([546, 546, 572, 572, 546, 546, 572, 572]);
-    expect(
-      partitions.map(
-        (partition) =>
-          partition.filter((mission) => mission.villainId === "tower_defense")
-            .length,
-      ),
-    ).toEqual([572, 572, 546, 546, 572, 572, 546, 546]);
-    expect(
-      partitions.map(
-        (partition) =>
-          partition.filter((mission) => mission.villainId === "thanos").length,
-      ),
-    ).toEqual([546, 546, 572, 572, 546, 546, 572, 572]);
-    expect(
-      partitions.map(
-        (partition) =>
-          partition.filter((mission) => mission.villainId === "hela").length,
-      ),
-    ).toEqual([572, 572, 546, 546, 572, 572, 546, 546]);
-    expect(
-      partitions.map(
-        (partition) =>
-          partition.filter((mission) => mission.villainId === "loki").length,
-      ),
-    ).toEqual([546, 546, 572, 572, 546, 546, 572, 572]);
+    ).toEqual([559, 559, 559, 559, 559, 559, 559, 559]);
     expect(
       partitions.map(
         (partition) =>
           partition.filter(
-            (mission) => mission.villainId === "the_wrecking_crew",
+            (mission) => !mission.variant && mission.villainId === "nebula",
           ).length,
       ),
-    ).toEqual([26, 26, 0, 0, 26, 26, 0, 0]);
+    ).toEqual([559, 559, 559, 559, 559, 559, 559, 559]);
     expect(
       partitions.map(
         (partition) =>
-          partition.filter((mission) => mission.villainId === "kang").length,
+          partition.filter(
+            (mission) => !mission.variant && mission.villainId === "ronan",
+          ).length,
       ),
-    ).toEqual([546, 546, 572, 572, 546, 546, 572, 572]);
-    expect(new Set(missions.map(key)).size).toBe(115856);
-    expect(new Set(combined.map(key)).size).toBe(115856);
+    ).toEqual([559, 559, 559, 559, 559, 559, 559, 559]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter(
+            (mission) => !mission.variant && mission.villainId === "ebony_maw",
+          ).length,
+      ),
+    ).toEqual([559, 559, 559, 559, 559, 559, 559, 559]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter(
+            (mission) =>
+              !mission.variant && mission.villainId === "tower_defense",
+          ).length,
+      ),
+    ).toEqual([559, 559, 559, 559, 559, 559, 559, 559]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter(
+            (mission) => !mission.variant && mission.villainId === "thanos",
+          ).length,
+      ),
+    ).toEqual([559, 559, 559, 559, 559, 559, 559, 559]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter(
+            (mission) => !mission.variant && mission.villainId === "hela",
+          ).length,
+      ),
+    ).toEqual([559, 559, 559, 559, 559, 559, 559, 559]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter(
+            (mission) => !mission.variant && mission.villainId === "loki",
+          ).length,
+      ),
+    ).toEqual([559, 559, 559, 559, 559, 559, 559, 559]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter(
+            (mission) =>
+              !mission.variant && mission.villainId === "the_wrecking_crew",
+          ).length,
+      ),
+    ).toEqual([13, 13, 13, 13, 13, 13, 13, 13]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter(
+            (mission) => !mission.variant && mission.villainId === "kang",
+          ).length,
+      ),
+    ).toEqual([559, 559, 559, 559, 559, 559, 559, 559]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter(
+            (mission) => !mission.variant && mission.villainId === "the_hood",
+          ).length,
+      ),
+    ).toEqual([559, 559, 559, 559, 559, 559, 559, 559]);
+    expect(
+      partitions.map(
+        (partition) =>
+          partition.filter((mission) => mission.variant === "ii").length,
+      ),
+    ).toEqual([351, 351, 351, 351, 351, 351, 351, 351]);
+    expect(new Set(missions.map(key)).size).toBe(123136);
+    expect(new Set(combined.map(key)).size).toBe(123136);
     expect(manifest(combined)).toEqual(manifest(missions));
     for (const partition of partitions) {
-      expect(partition).toHaveLength(14482);
+      expect(partition).toHaveLength(15392);
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     }
     for (const heroId of heroIds) {
@@ -1405,15 +1501,15 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBe(278);
-      expect(Math.max(...perShard)).toBe(279);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(2228);
+      expect(Math.min(...perShard)).toBe(295);
+      expect(Math.max(...perShard)).toBe(297);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(2368);
     }
-    expect(selectedMissions).toHaveLength(isSharded ? 14482 : 115856);
+    expect(selectedMissions).toHaveLength(isSharded ? 15392 : 123136);
   });
   for (const mission of selectedMissions)
     it(
-      `${mission.heroId}/${mission.villainId}/${mission.difficulty}/${mission.module} seed${mission.seed}`,
+      `${mission.heroId}/${mission.villainId}/${mission.difficulty}/${mission.module}${mission.variant ? `/${mission.variant}` : ""} seed${mission.seed}`,
       () => runMission(mission),
       30000,
     );

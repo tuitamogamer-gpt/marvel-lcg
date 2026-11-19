@@ -289,6 +289,7 @@ export interface GameState {
    * the encounter decks of the villains who are not active. */
   wreckingCrew?: import("./wrecking-crew.js").WreckingCrewState;
   kang?: import("./kang.js").KangState;
+  hood?: import("./hood.js").HoodState;
   taskmaster?: import("./taskmaster.js").TaskmasterState;
   absorbingMan?: import("./absorbing-man.js").AbsorbingManState;
   /** Original Crossbones stages and the separate hidden Experimental Weapons deck. */
@@ -370,6 +371,9 @@ export interface GameState {
   timeline?: ActionReview[];
   /** Heroic mode: additional encounter cards dealt to each player every villain phase. */
   heroic?: number;
+  /** The Hood scenario pack's alternative encounter sets are in use. */
+  standardII?: boolean;
+  expertII?: boolean;
   /** Increases whenever hidden information is revealed or the RNG advances; undo stops there. */
   hiddenInfo?: number;
   stats?: MissionStats;

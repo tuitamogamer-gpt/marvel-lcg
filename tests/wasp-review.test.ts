@@ -284,6 +284,30 @@ describe("independent Wasp rules review regressions", () => {
     expect(seatView(s, "p1").player.discard).toEqual([]);
   });
 
+  it("Biomechanical Upgrades replaces Beetle's defeat after the shuffle choice, so Beetle stays in play", () => {
+    let s = base();
+    const enemy = minion(s, "13028");
+    const upgrades = makePiece(s, "01185");
+    upgrades.attachedTo = enemy.id;
+    s.attachments.push(upgrades);
+    enemy.damage = pieceHP(s, enemy) - 1;
+    s = run(s, { type: "BASIC", action: "attack" });
+    s = target(s, enemy.id);
+    expect(s.prompt?.title).toBe("Beetle");
+    s = choose(s, "shuffle");
+    expect(s.error).toBeUndefined();
+    expect(s.minions.find((p) => p.id === enemy.id)?.damage).toBe(0);
+    expect(
+      s.minions.find((p) => p.id === enemy.id)?.pendingDefeat,
+    ).toBeUndefined();
+    expect(s.encounter.deck.some((p) => p.id === enemy.id)).toBe(false);
+    expect(s.encounter.discard.some((p) => p.id === enemy.id)).toBe(false);
+    expect(s.attachments.some((p) => p.id === upgrades.id)).toBe(false);
+    expect(
+      s.encounter.discard.filter((p) => p.id === upgrades.id),
+    ).toHaveLength(1);
+  });
+
   it("shuffled Beetle keeps its one physical card but loses all in-play memory and attachments", () => {
     let s = base();
     const enemy = minion(s, "13028");

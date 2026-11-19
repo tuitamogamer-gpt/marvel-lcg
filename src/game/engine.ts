@@ -12,6 +12,7 @@ import * as hela from "./hela.js";
 import * as loki from "./loki.js";
 import * as wreckingCrew from "./wrecking-crew.js";
 import * as kang from "./kang.js";
+import * as hood from "./hood.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -626,6 +627,7 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     ...(mansionAttack.mansionAttackModifiers(s, piece, { isTextBlank }).steady
       ? { steady: true }
       : {}),
+    ...(hood.hoodSteady(s, piece) ? { steady: true } : {}),
   };
 }
 function giveCharacterStatus(
@@ -954,7 +956,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           towerDefense.towerDefenseKeyword(s, p, "Retaliate") +
           thanos.thanosRetaliate(s, p) +
           wideawakeKeywords.retaliate +
-          moldKeywords.retaliate
+          moldKeywords.retaliate +
+          hood.hoodKeyword(s, p, "Retaliate")
       : 0,
   );
   const inherited = inheritors.inheritorsModifiers(s, p);
@@ -3461,6 +3464,7 @@ function dealDamage(
           redSkull.redSkullKeyword(s, retaliationTarget, "Retaliate") +
           taskmaster.taskmasterKeyword(s, retaliationTarget, "Retaliate") +
           towerDefense.towerDefenseKeyword(s, retaliationTarget, "Retaliate") +
+          hood.hoodKeyword(s, retaliationTarget, "Retaliate") +
           thanos.thanosRetaliate(s, retaliationTarget) +
           nebulaVillain.nebulaVillainKeyword(
             s,
@@ -3949,6 +3953,11 @@ function defeatCharacter(
   );
   if (bio) {
     m.damage = 0;
+    // The defeat is replaced, so it no longer waits for other interrupts.
+    delete m.pendingDefeat;
+    s.queue = s.queue.filter(
+      (e) => !(e.type === "finishDefeat" && e.id === m.id),
+    );
     discardPiece(s, bio.id);
     log(s, "Biomechanical Upgrades restores the minion.");
     return false;
@@ -4229,6 +4238,17 @@ function defeatCharacter(
     delete s.flags[`ironspiderExcess:${m.id}`];
     if (!textWasBlank)
       add(s, ...ironspider.ironspiderSinisterDefeatResponses(s, m, excess));
+    if (!textWasBlank)
+      add(
+        s,
+        ...hood.hoodMinionDefeated(
+          s,
+          m,
+          source.startsWith("hero:")
+            ? source.slice(5)
+            : controller(s, source)?.id || s.activePlayerId,
+        ),
+      );
     niNativeAchievement(s, source, "enemy-defeat", m.id);
     if (rulesCode(m) !== "01182" && !textWasBlank)
       add(
@@ -4522,34 +4542,37 @@ function advanceVillain(
       "ebony_maw",
       "tower_defense",
       "thanos",
+      "the_hood",
     ].includes(s.villainId)
   ) {
     const next =
       s.villainId === "tower_defense"
         ? towerDefense.towerDefenseNextStage(s)
-        : (s.villainId === "thanos"
-            ? s.thanos
-            : s.villainId === "ebony_maw"
-              ? s.ebonyMaw
-              : s.villainId === "ronan"
-                ? s.ronan
-                : s.villainId === "nebula"
-                  ? s.nebulaVillain
-                  : s.villainId === "infiltrate_the_museum"
-                    ? s.collector
-                    : s.villainId === "brotherhood_of_badoon"
-                      ? s.badoon
-                      : s.villainId === "red_skull"
-                        ? s.redSkull
-                        : s.villainId === "zola"
-                          ? s.zola
-                          : s.villainId === "taskmaster"
-                            ? s.taskmaster
-                            : s.villainId === "absorbing_man"
-                              ? s.absorbingMan
-                              : s.villainId === "crossbones"
-                                ? s.crossbones
-                                : s.magneto
+        : (s.villainId === "the_hood"
+            ? s.hood
+            : s.villainId === "thanos"
+              ? s.thanos
+              : s.villainId === "ebony_maw"
+                ? s.ebonyMaw
+                : s.villainId === "ronan"
+                  ? s.ronan
+                  : s.villainId === "nebula"
+                    ? s.nebulaVillain
+                    : s.villainId === "infiltrate_the_museum"
+                      ? s.collector
+                      : s.villainId === "brotherhood_of_badoon"
+                        ? s.badoon
+                        : s.villainId === "red_skull"
+                          ? s.redSkull
+                          : s.villainId === "zola"
+                            ? s.zola
+                            : s.villainId === "taskmaster"
+                              ? s.taskmaster
+                              : s.villainId === "absorbing_man"
+                                ? s.absorbingMan
+                                : s.villainId === "crossbones"
+                                  ? s.crossbones
+                                  : s.magneto
           )?.villainDeck?.shift();
     if (!next && s.villainId === "tower_defense") {
       if (towerDefense.towerDefenseFinalDefeat(s))
@@ -4587,7 +4610,9 @@ function advanceVillain(
                             ? "Absorbing Man is defeated. The way is clear."
                             : s.villainId === "crossbones"
                               ? "Crossbones is defeated. Project P.E.G.A.S.U.S. is safe."
-                              : "Magneto is defeated. Asteroid M is safe.",
+                              : s.villainId === "the_hood"
+                                ? "The Hood is defeated. His criminal empire falls apart."
+                                : "Magneto is defeated. Asteroid M is safe.",
       );
       return;
     }
@@ -4615,6 +4640,7 @@ function advanceVillain(
         "ebony_maw",
         "tower_defense",
         "thanos",
+        "the_hood",
       ].includes(s.villainId)
         ? { counters: old.counters }
         : {}),
@@ -4639,6 +4665,7 @@ function advanceVillain(
         "ebony_maw",
         "tower_defense",
         "thanos",
+        "the_hood",
       ].includes(s.villainId)
     ) {
       s.villain.maxHp =
@@ -4718,6 +4745,7 @@ function villainSetup(s: GameState) {
     ...(ronan.ronanReveal(s, s.villain) || []),
     ...(ebonyMaw.ebonyMawReveal(s, s.villain) || []),
     ...(thanos.thanosReveal(s, s.villain) || []),
+    ...hood.hoodVillainRevealed(s),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -4909,6 +4937,32 @@ function threat(
           s,
           ...(redSkull.redSkullReveal(s, next) || []),
           E("red-skull:main-back"),
+          E("clearMainCompletion"),
+        );
+        return;
+      }
+      if (s.villainId === "the_hood") {
+        if (s.pendingMainCompletion) return;
+        const next = s.hood?.mainDeck.shift();
+        if (!next) {
+          endGame(
+            s,
+            false,
+            "Crime State is complete. The Hood unites the underworld.",
+          );
+          return;
+        }
+        s.pendingMainCompletion = true;
+        discardMainAttachments(s);
+        s.removed.push(resetPiece(s.hood!.currentMain));
+        s.hood!.currentMain = next;
+        s.scheme.index++;
+        s.scheme.code = next.code;
+        s.scheme.threat = 0;
+        add(
+          s,
+          ...hood.hoodMainRevealed(s, next.code),
+          E("hood:main-back"),
           E("clearMainCompletion"),
         );
         return;
@@ -7827,6 +7881,10 @@ export function newGame(config: {
   guided?: boolean;
   pacing?: Pacing;
   heroic?: number;
+  /** Use Standard II instead of the core Standard set. */
+  standardII?: boolean;
+  /** Use Expert II instead of the core Expert set. */
+  expertII?: boolean;
 }): GameState {
   const team = config.heroes || [
     { heroId: config.heroId, aspect: config.aspect },
@@ -8109,10 +8167,20 @@ export function newGame(config: {
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
             c.pack_code === scenarioPack) ||
-          (c.set_code === "standard" && c.pack_code === "core") ||
+          (c.set_code === "standard" &&
+            c.pack_code === "core" &&
+            !config.standardII) ||
+          (c.set_code === "standard_ii" &&
+            c.pack_code === "hood" &&
+            !!config.standardII) ||
           (difficulty === "expert" &&
             c.set_code === "expert" &&
-            c.pack_code === "core")) &&
+            c.pack_code === "core" &&
+            !config.expertII) ||
+          (difficulty === "expert" &&
+            c.set_code === "expert_ii" &&
+            c.pack_code === "hood" &&
+            !!config.expertII)) &&
           !["villain", "main_scheme"].includes(c.type_code) &&
           c.code !== "32088b" &&
           c.code !== badoon.MILANO &&
@@ -8148,6 +8216,18 @@ export function newGame(config: {
       Array.from({ length: c.quantity }, () => makePiece(s, c.code)),
     ),
   );
+  if (config.standardII && v.id !== "the_wrecking_crew") {
+    s.standardII = true;
+    (s.environments ||= []).push(
+      makePiece(
+        s,
+        difficulty === "expert"
+          ? hood.FORMIDABLE_FOE.expert
+          : hood.FORMIDABLE_FOE.standard,
+      ),
+    );
+  }
+  if (config.expertII && difficulty === "expert") s.expertII = true;
   deadpool.deadpoolSetupPool(s, makePiece);
   if (s.deadpool?.initializedPoolSeats.length)
     s.encounter.deck = shuffle(s, s.encounter.deck);
@@ -8313,6 +8393,31 @@ export function newGame(config: {
       defeated: [],
     };
     s.queue.push(
+      effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
+    );
+    const pacing = s.pacing;
+    s.pacing = "expert";
+    run(s);
+    s.pacing = pacing;
+  } else if (v.id === "the_hood") {
+    // Making Connections (1A) setup: the seven chosen modular sets are set
+    // aside and one of them, at random, is shuffled into the encounter deck.
+    s.scheme.threat =
+      (card(hood.MAKING_CONNECTIONS).base_threat || 0) * s.playerCount;
+    s.hood = {
+      currentMain: makePiece(s, hood.MAKING_CONNECTIONS),
+      mainDeck: [makePiece(s, "24005a"), makePiece(s, "24006a")],
+      villainDeck: [makePiece(s, v.codes[stage])],
+      setAside: hood.hoodSetAside(s, selectedModules, () => random(s)),
+    };
+    s.encounter.deck = shuffle(s, s.encounter.deck);
+    s.villain = Object.assign(makePiece(s, v.codes[stage - 1]), {
+      hp,
+      maxHp: hp,
+      stage,
+    });
+    s.queue.push(
+      ...hood.hoodSetupEffects(s).map((e) => effectContext(s, e)),
       effectContext(s, E("openingHands", { actorId: s.firstPlayerId })),
     );
     const pacing = s.pacing;
@@ -10969,6 +11074,7 @@ export function abilityOptions(
     ...towerDefense.towerDefenseActions(s, p, towerDefensePorts),
     ...wreckingCrew.wreckingCrewActions(s, p, wreckingCrewPorts),
     ...kang.kangActions(s, p),
+    ...hood.hoodActions(s, p),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -13331,6 +13437,12 @@ const waspPorts: wasp.WaspPorts = {
     else defeatCharacter(s, p, source, attack, true);
     if (shouldShuffle) {
       const index = s.encounter.discard.findIndex((piece) => piece.id === id);
+      // Biomechanical Upgrades replaced the defeat: Beetle stays in play.
+      if (
+        index < 0 &&
+        s.minions.some((piece) => piece.id === id && !piece.pendingDefeat)
+      )
+        return;
       need(
         index >= 0,
         "The physical Beetle is missing from the encounter discard.",
@@ -15228,6 +15340,72 @@ const wreckingCrewPorts: wreckingCrew.WreckingCrewPorts = {
   cost: (p) => Math.max(0, Number(card(p).cost) || 0),
   canDiscard: (_s, p) => !isPermanent(card(p)),
 };
+/** Put the player's nemesis minion into play engaged with them from the
+ * encounter deck, its discard pile or the set-aside area. Returns true when
+ * the set-aside minion that Shadow of the Past would reveal entered play. */
+function putNemesisMinion(s: GameState, playerId: string): boolean {
+  const view = seatView(s, playerId);
+  const set = `${view.heroId}_nemesis`;
+  const isMinion = (p: Piece) =>
+    card(p).type_code === "minion" && card(p).set_code === set;
+  if (s.minions.some(isMinion)) return false;
+  for (const zone of [s.encounter.deck, s.encounter.discard]) {
+    const found = zone.find(isMinion);
+    if (!found) continue;
+    revealHidden(s);
+    mutagenPorts.putMinion(s, found, playerId);
+    return false;
+  }
+  const reserve = view.player.setAside || [];
+  const stored = reserve.find(isMinion);
+  if (stored) {
+    view.player.setAside = reserve.filter((p) => p !== stored);
+    mutagenPorts.putMinion(s, stored, playerId);
+    return false;
+  }
+  if (view.flags.nemesis) return false;
+  const minion = CATALOG_CARDS.find(
+    (c) =>
+      c.set_code === set &&
+      c.pack_code === heroCard(view).pack_code &&
+      c.type_code === "minion",
+  );
+  if (!minion) return false;
+  mutagenPorts.putMinion(s, makePiece(s, minion.code), playerId);
+  view.flags.nemesisMinionOut = true;
+  return true;
+}
+const hoodPorts: hood.HoodPorts = {
+  ...mutagenPorts,
+  revealHidden,
+  reveal: (s, p, playerId) => wreckingCrewPorts.reveal(s, p, playerId),
+  shuffle: (s, pieces) => shuffle(s, pieces),
+  log: (s, text, kind) => log(s, text, kind),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+  dealPiece: (s, p, playerId) => {
+    if (s.players.find((seat) => seat.id === playerId)?.eliminated) return;
+    removeEncounterInstance(s, p.id);
+    const dealt = resetPiece(p);
+    dealt.dealtTo = playerId;
+    s.encounter.dealt.push(dealt);
+    add(s, ...nickFury.nickFuryDealt(s));
+  },
+  random: (s) => random(s),
+  nemesisMinion: (s, playerId) => putNemesisMinion(s, playerId),
+  cost: (p) => Math.max(0, Number(card(p).cost) || 0),
+  canDiscard: (_s, p) => !isPermanent(card(p)),
+  allies: (s, playerId) => friends(seatView(s, playerId)),
+  payResources: (s, title, resources, after) =>
+    requestPayment(
+      s,
+      title,
+      resources.length,
+      after,
+      resources as Resource[],
+      undefined,
+      true,
+    ),
+};
 const kangPorts: kang.KangPorts = {
   ...mutagenPorts,
   revealHidden,
@@ -15249,37 +15427,7 @@ const kangPorts: kang.KangPorts = {
   allies: (s, playerId) => friends(seatView(s, playerId)),
   cost: (p) => Math.max(0, Number(card(p).cost) || 0),
   canDiscard: (_s, p) => !isPermanent(card(p)),
-  nemesisMinion: (s, playerId) => {
-    const view = seatView(s, playerId);
-    const set = `${view.heroId}_nemesis`;
-    const isMinion = (p: Piece) =>
-      card(p).type_code === "minion" && card(p).set_code === set;
-    if (s.minions.some(isMinion)) return false;
-    for (const zone of [s.encounter.deck, s.encounter.discard]) {
-      const found = zone.find(isMinion);
-      if (!found) continue;
-      revealHidden(s);
-      mutagenPorts.putMinion(s, found, playerId);
-      return false;
-    }
-    const reserve = view.player.setAside || [];
-    const stored = reserve.find(isMinion);
-    if (stored) {
-      view.player.setAside = reserve.filter((p) => p !== stored);
-      mutagenPorts.putMinion(s, stored, playerId);
-      return false;
-    }
-    if (view.flags.nemesis) return false;
-    const minion = CATALOG_CARDS.find(
-      (c) =>
-        c.set_code === set &&
-        c.pack_code === heroCard(view).pack_code &&
-        c.type_code === "minion",
-    );
-    if (!minion) return false;
-    mutagenPorts.putMinion(s, makePiece(s, minion.code), playerId);
-    return true;
-  },
+  nemesisMinion: (s, playerId) => putNemesisMinion(s, playerId),
   giveTough: (s, p) => giveCharacterStatus(s, p, "tough"),
   villainLeft: (s, id) => {
     iceman.icemanEnemyLeft(s, id);
@@ -22913,6 +23061,7 @@ function enemyAttack(
       ),
       ...thanos.thanosActivationInitiated(s, id),
       ...kang.kangAttackInitiated(s, id, s.attack.originalPlayerId!),
+      ...hood.hoodAttackInitiated(s, id),
     );
   if (!friendlySource) {
     const strategist = redSkull.redSkullActivation(s, id);
@@ -23336,6 +23485,7 @@ function boostEffects(s: GameState, p: Piece) {
     towerDefense.towerDefenseBoost(s, p) ??
     wreckingCrew.wreckingCrewBoost(s, p) ??
     kang.kangBoost(s, p) ??
+    hood.hoodBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -23796,6 +23946,13 @@ function finishScheme(s: GameState) {
     ...badoon.badoonSchemed(s, id),
     ...hela.helaSchemed(s, id),
     ...wreckingCrew.wreckingCrewSchemed(s, id),
+    ...hood
+      .hoodAfterActivation(s, {
+        token: (activation.id ||= `scheme${s.nextId++}`),
+        attackerId: id,
+        playerId: s.activePlayerId,
+      })
+      .flatMap((response) => response.effects),
     ...thanos
       .thanosAfterActivation(s, {
         token: (activation.id ||= `scheme${s.nextId++}`),
@@ -24653,6 +24810,11 @@ function finishAttackAfterDamage(
             },
             wreckingCrewPorts,
           ),
+          ...hood.hoodAfterActivation(s, {
+            token: a.id!,
+            attackerId: a.attacker,
+            playerId: a.originalPlayerId || recipientId,
+          }),
           ...kang.kangAttackResponses(s, {
             token: a.id!,
             attackerId: a.attacker,
@@ -25322,6 +25484,8 @@ function reveal(
         c.type_code !== "attachment") ||
       (kang.KANG_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
+      (hood.HOOD_SCRIPT_CODES.some((code) => code === p.code) &&
+        c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (taskmaster.TASKMASTER_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -25519,6 +25683,7 @@ function reveal(
       ...loki.LOKI_SCENARIO_CODES,
       ...wreckingCrew.WRECKING_CREW_SCRIPT_CODES,
       ...kang.KANG_SCRIPT_CODES,
+      ...hood.HOOD_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -25558,6 +25723,7 @@ function reveal(
       loki.lokiReveal(s, p) ??
       wreckingCrew.wreckingCrewReveal(s, p) ??
       kang.kangReveal(s, p) ??
+      hood.hoodReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -25640,6 +25806,7 @@ function reveal(
     loki.lokiReveal(s, p) ??
     wreckingCrew.wreckingCrewReveal(s, p) ??
     kang.kangReveal(s, p) ??
+    hood.hoodReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -26585,7 +26752,8 @@ function treachery(s: GameState, p: Piece) {
       shuffle(s, s.encounter.deck);
       add(
         s,
-        ...(s.kang?.nemesisOut?.includes(s.activePlayerId)
+        ...(s.kang?.nemesisOut?.includes(s.activePlayerId) ||
+        s.flags.nemesisMinionOut
           ? []
           : [E("reveal", { piece: makePiece(s, minion.code) })]),
         E("reveal", { piece: makePiece(s, scheme.code) }),
@@ -27038,6 +27206,7 @@ function resolve(s: GameState, e: Effect) {
           loki.lokiReveal(state, piece) ??
           wreckingCrew.wreckingCrewReveal(state, piece) ??
           kang.kangReveal(state, piece) ??
+          hood.hoodReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -27148,6 +27317,16 @@ function resolve(s: GameState, e: Effect) {
       (card(p).base_threat_fixed ? 1 : s.playerCount);
     return;
   }
+  if (e.type === "hood:main-back") {
+    const p = s.hood!.currentMain;
+    p.code = card(p).back_link || p.code;
+    s.scheme.code = p.code;
+    s.scheme.threat =
+      (card(p).base_threat || 0) *
+      (card(p).base_threat_fixed ? 1 : s.playerCount);
+    add(s, ...hood.hoodMainRevealed(s, p.code));
+    return;
+  }
   if (e.type === "zola:main-back") {
     const p = s.zola!.currentMain;
     p.code = "04113b";
@@ -27167,6 +27346,7 @@ function resolve(s: GameState, e: Effect) {
   if (towerDefense.resolveTowerDefenseEffect(s, e, towerDefensePorts)) return;
   if (wreckingCrew.resolveWreckingCrewEffect(s, e, wreckingCrewPorts)) return;
   if (kang.resolveKangEffect(s, e, kangPorts)) return;
+  if (hood.resolveHoodEffect(s, e, hoodPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -35665,6 +35845,7 @@ function resolve(s: GameState, e: Effect) {
           "project_wideawake",
           "mansion_attack",
           "magneto",
+          "the_hood",
         ].includes(s.villainId)
       )
         villainSetup(s);
@@ -35837,6 +36018,7 @@ function resolve(s: GameState, e: Effect) {
             ...inheritors.inheritorsVillainPhaseInterrupts(s),
             ...escape.escapeVillainPhaseInterrupts(s),
             ...nebulaVillain.nebulaVillainPhaseInterrupts(s),
+            ...hood.hoodVillainPhaseInterrupts(s),
             ...(s.environments || [])
               .filter((p) => p.code === "29039" && !isTextBlank(s, p))
               .map((p) =>
@@ -35896,7 +36078,7 @@ function resolve(s: GameState, e: Effect) {
       }
       log(
         s,
-        `Place ${escalation(s)} threat for ${s.playerCount} starting hero(es), plus ${(e.kangArea ? 0 : s.encounter.acceleration) + inheritorsAcceleration(s) + s.sideSchemes.reduce((n, p) => n + iceman.icemanSchemeIcon(s, p, "scheme_acceleration") + ironheart.ironheartSchemeIcons(s, p, { isTextBlank }).acceleration + Number(p.accelerationTokens || 0), 0)} acceleration.`,
+        `Place ${escalation(s)} threat for ${s.playerCount} starting hero(es), plus ${(e.kangArea ? 0 : s.encounter.acceleration) + hood.hoodAcceleration(s) + inheritorsAcceleration(s) + s.sideSchemes.reduce((n, p) => n + iceman.icemanSchemeIcon(s, p, "scheme_acceleration") + ironheart.ironheartSchemeIcons(s, p, { isTextBlank }).acceleration + Number(p.accelerationTokens || 0), 0)} acceleration.`,
         "bad",
       );
       add(
@@ -35906,6 +36088,7 @@ function resolve(s: GameState, e: Effect) {
           amount:
             escalation(s) +
             (e.kangArea ? 0 : s.encounter.acceleration) +
+            hood.hoodAcceleration(s) +
             inheritorsAcceleration(s) +
             angel.angelAcceleration(s) +
             s.attachments.filter(
@@ -35933,6 +36116,7 @@ function resolve(s: GameState, e: Effect) {
         ...badoon.badoonStepOne(s),
         ...(e.towerSecond ? [] : towerDefense.towerDefenseStepOne(s)),
         ...wreckingCrew.wreckingCrewStepOne(s),
+        ...hood.hoodStepOne(s),
       );
       break;
     case "villainActivate": {
@@ -36184,6 +36368,7 @@ function resolve(s: GameState, e: Effect) {
                 key.startsWith("deadpool") ||
                 key === "gambitCharges" ||
                 key === "cyclopsNemesisInitialized" ||
+                key === "nemesisMinionOut" ||
                 key.startsWith("stormController:") ||
                 key === "stormInitialized" ||
                 key === "angelInitialized" ||
@@ -36471,6 +36656,7 @@ function run(s: GameState) {
       e.type.startsWith("tower:") ||
       e.type.startsWith("crew:") ||
       e.type.startsWith("kang:") ||
+      e.type.startsWith("hood:") ||
       e.type.startsWith("thanos:") ||
       e.type.startsWith("hela:") ||
       e.type.startsWith("loki:") ||
@@ -36856,6 +37042,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...hela.helaActions(s, p, helaPorts),
               ...towerDefense.towerDefenseActions(s, p, towerDefensePorts),
               ...wreckingCrew.wreckingCrewActions(s, p, wreckingCrewPorts),
+              ...hood.hoodActions(s, p),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
