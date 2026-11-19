@@ -27,7 +27,7 @@ await build({
       "import {syncSeat} from './src/game/team.ts';",
       "export const definition=p=>card(p);",
       "export function fixture(kind){",
-      " const module={dial:'crime',csi:'crime',case:'crime',dragon:'fantasy',bounty:'western'}[kind];",
+      " const module={dial:'crime',csi:'crime',case:'crime',dragon:'fantasy',bounty:'western',files:'horror',bandolier:'horror',werewolf:'horror',toad:'sci-fi',family:'sitcom',watch:'sitcom'}[kind];",
       " let s=newGame({heroId:'spider_man',aspect:'justice',villainId:'rhino',difficulty:'standard',seed:39035,pacing:'expert',module,heroes:[{heroId:'spider_man',aspect:'justice'}]});",
       " function command(c){s=dispatch(s,c);if(s.error)throw Error(s.error);}",
       " for(let n=0;n<200;n++){",
@@ -43,11 +43,18 @@ await build({
       " function take(code){for(const zone of[s.encounter.deck,s.encounter.discard,s.encounter.dealt]){const i=zone.findIndex(p=>p.code===code);if(i>=0)return zone.splice(i,1)[0];}throw Error('Missing original encounter '+code);}",
       " const result={module};",
       " function single(code){const p=take(code);result.id=p.id;result.held=[{id:p.id,code:p.code}];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
+      " function fromDeck(code){const i=s.player.deck.findIndex(p=>p.code===code);if(i<0)throw Error('Missing deck card '+code);const p=s.player.deck.splice(i,1)[0];p.ownerId='p1';return p;}",
       // The Show surges: Advance from the Standard set is its next card.
       " if(kind==='dial'){const advance=take('01186');s.encounter.deck.unshift(advance);delete s.encounter.knownTop;single('39035');}",
       " else if(kind==='csi'){const names=new Set();const m=s.player.deck.filter(c=>{const d=card(c);if(d.resource_mental!==1||d.resource_wild||names.has(d.name))return false;names.add(d.name);return true;}).slice(0,2);s.player.deck=s.player.deck.filter(c=>!m.includes(c));s.player.hand.push(...m);result.cards=m.map(c=>card(c).name);single('39037');}",
       " else if(kind==='case')single('39036');",
       " else if(kind==='dragon')single('39042');",
+      " else if(kind==='files'){const advance=take('01186');s.encounter.deck.unshift(advance);delete s.encounter.knownTop;const files=take('39047'),vampire=take('39051');result.id=vampire.id;result.held=[{id:files.id,code:files.code},{id:vampire.id,code:vampire.code}];native([{type:'reveal',piece:files,actorId:'p1'},{type:'reveal',piece:vampire,actorId:'p1'}]);}",
+      " else if(kind==='bandolier'){const energy=fromDeck('01088');s.player.hand.push(energy);result.energy=card(energy).name;single('39048');}",
+      " else if(kind==='werewolf'){const ally=fromDeck('01059');s.player.inPlay.push(ally);result.ally=ally.id;single('39052');}",
+      " else if(kind==='toad'){const up=fromDeck('01093');s.player.inPlay.push(up);result.upgrade=up.id;single('39058');}",
+      " else if(kind==='family'){const may=fromDeck('01006');s.player.inPlay.push(may);s.player.form='alter';result.support=may.id;single('39061');}",
+      " else if(kind==='watch')single('39065');",
       " else if(kind==='bounty'){const shark=take('39068'),bounty=take('39067');result.id=bounty.id;result.shark=shark.id;result.held=[{id:shark.id,code:shark.code},{id:bounty.id,code:bounty.code}];native([{type:'reveal',piece:shark,actorId:'p1'},{type:'reveal',piece:bounty,actorId:'p1'}]);}",
       " else throw Error('Unknown fixture '+kind);",
       " syncSeat(s);return{state:s,...result};",
@@ -111,10 +118,11 @@ function originals(s, module, held = []) {
     "Each physical card has one owner",
   );
   const set = all.filter((p) => definition(p).set_code === module);
+  const size = module === "sci-fi" ? 7 : 6;
   assert.equal(
     set.length,
-    6,
-    `The 6 cards of ${module}: ${set.map((p) => p.code)}`,
+    size,
+    `The ${size} cards of ${module}: ${set.map((p) => p.code)}`,
   );
   return set.map((p) => p.id + ":" + p.code).sort();
 }
@@ -239,7 +247,14 @@ async function artwork(codes) {
 }
 try {
   for (const width of widths) {
-    for (const module of ["crime", "fantasy", "western"])
+    for (const module of [
+      "crime",
+      "fantasy",
+      "western",
+      "horror",
+      "sci-fi",
+      "sitcom",
+    ])
       for (const difficulty of ["standard", "expert"]) {
         current = { kind: "standalone-setup", width, module, difficulty };
         await open(width);
@@ -408,6 +423,172 @@ try {
     assert.deepEqual(originals(s, f.module), owned);
     await resumeExact();
     await audit("dead-or-alive", width);
+    checks.push({ ...current, exactReload: true });
+  }
+  for (const width of [widths[0], widths.at(-1)]) {
+    current = { kind: "the-mojo-files", width };
+    let f = fixture("files");
+    let owned = originals(f.state, f.module, f.held);
+    await open(width, f.state);
+    await page
+      .getByRole("button", { name: "Resolve original effect", exact: true })
+      .click();
+    let s = await settle();
+    assert.ok(
+      s.environments.some((p) => p.code === "39047"),
+      "The Mojo Files stays in play as a Setting",
+    );
+    const vampire = s.minions.find((p) => p.id === f.id);
+    assert.ok(vampire?.tough, "Vampire toughens after an unhurt quickstrike");
+    await page
+      .getByText("Each minion gains quickstrike", { exact: false })
+      .first()
+      .waitFor();
+    await artwork(["39047", "39051"]);
+    assert.deepEqual(originals(s, f.module), owned);
+    await resumeExact();
+    await audit("the-mojo-files", width);
+    checks.push({ ...current, exactReload: true });
+
+    current = { kind: "bandolier-of-stakes", width };
+    f = fixture("bandolier");
+    owned = originals(f.state, f.module, f.held);
+    await open(width, f.state);
+    await page
+      .getByRole("button", { name: "Resolve original effect", exact: true })
+      .click();
+    s = await settle((s) => s.prompt?.title === "Bandolier of Stakes");
+    await page
+      .locator("[role=dialog]")
+      .last()
+      .getByRole("button", {
+        name: "Spend 1 resource · attach it to your identity",
+        exact: true,
+      })
+      .click();
+    assert.equal((await saved()).prompt.kind, "payment");
+    await page
+      .getByRole("button", {
+        name: new RegExp(
+          "^" + f.energy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + " ·",
+        ),
+      })
+      .first()
+      .click();
+    await page
+      .getByRole("button", { name: "Confirm payment", exact: true })
+      .click();
+    s = await settle();
+    const bandolier = s.attachments.find((p) => p.id === f.id);
+    assert.equal(bandolier?.attachedTo, "hero:p1", "attached to your identity");
+    assert.equal(bandolier.counters, 3, "Uses (3 stake counters)");
+    await page.getByLabel("Bandolier of Stakes: 3 stake counters").waitFor();
+    await artwork(["39048"]);
+    assert.deepEqual(originals(s, f.module), owned);
+    await resumeExact();
+    await audit("bandolier-of-stakes", width);
+    checks.push({ ...current, exactReload: true });
+
+    current = { kind: "werewolf-pack", width };
+    f = fixture("werewolf");
+    owned = originals(f.state, f.module, f.held);
+    await open(width, f.state);
+    await page
+      .getByRole("button", { name: "Resolve original effect", exact: true })
+      .click();
+    s = await settle();
+    const pack = s.minions.find((p) => p.id === f.id);
+    assert.deepEqual(
+      pack?.captured?.map((p) => p.id),
+      [f.ally],
+      "The ally goes facedown under Werewolf Pack",
+    );
+    await page.getByText("1 FACEDOWN ALLY UNDER").first().waitFor();
+    await artwork(["39052"]);
+    assert.deepEqual(originals(s, f.module), owned);
+    await resumeExact();
+    await audit("werewolf-pack", width);
+    checks.push({ ...current, exactReload: true });
+
+    current = { kind: "toad-2-0", width };
+    f = fixture("toad");
+    owned = originals(f.state, f.module, f.held);
+    await open(width, f.state);
+    await page
+      .getByRole("button", { name: "Resolve original effect", exact: true })
+      .click();
+    s = await settle();
+    const toad = s.minions.find((p) => p.id === f.id);
+    assert.deepEqual(
+      toad?.captured?.map((p) => p.id),
+      [f.upgrade],
+      "The upgrade goes facedown under Toad 2.0",
+    );
+    await page.getByText("1 FACEDOWN UPGRADE UNDER").first().waitFor();
+    await artwork(["39058"]);
+    assert.deepEqual(originals(s, f.module), owned);
+    await resumeExact();
+    await audit("toad-2-0", width);
+    checks.push({ ...current, exactReload: true });
+
+    current = { kind: "family-matters", width };
+    f = fixture("family");
+    owned = originals(f.state, f.module, f.held);
+    await open(width, f.state);
+    await page
+      .getByRole("button", { name: "Resolve original effect", exact: true })
+      .click();
+    s = await settle();
+    assert.ok(
+      s.player.inPlay.some((p) => p.id === f.id),
+      "Family Matters stays in your play area",
+    );
+    await page
+      .getByText("Your supports have blank text boxes")
+      .first()
+      .waitFor();
+    await audit("family-matters", width);
+    await page
+      .getByRole("button", {
+        name: "Alter-Ego Action · exhaust your identity and each support · discard",
+        exact: true,
+      })
+      .click();
+    s = await settle();
+    assert.ok(
+      !s.player.inPlay.some((p) => p.id === f.id),
+      "The Alter-Ego Action discards Family Matters",
+    );
+    assert.ok(s.player.exhausted, "Your identity is exhausted");
+    await artwork(["01006"]);
+    assert.deepEqual(originals(s, f.module), owned);
+    await resumeExact();
+    checks.push({ ...current, exactReload: true });
+
+    current = { kind: "watch-me-play", width };
+    f = fixture("watch");
+    owned = originals(f.state, f.module, f.held);
+    await open(width, f.state);
+    await page
+      .getByRole("button", { name: "Resolve original effect", exact: true })
+      .click();
+    s = await settle();
+    assert.ok(s.player.inPlay.some((p) => p.id === f.id));
+    assert.ok(!s.player.confused);
+    await page
+      .getByRole("button", { name: /How to play/ })
+      .first()
+      .click();
+    await page.keyboard.press("Escape");
+    s = await saved();
+    assert.ok(s.player.confused, "Looking up a rule confuses you");
+    await page
+      .getByText("Looking up a rule in the app confuses you")
+      .first()
+      .waitFor();
+    assert.deepEqual(originals(s, f.module), owned);
+    await resumeExact();
+    await audit("watch-me-play", width);
     checks.push({ ...current, exactReload: true });
   }
   assert.deepEqual(errors, []);

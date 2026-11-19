@@ -1502,6 +1502,9 @@ export const MODULES = [
   { id: "crime", name: "Crime", difficulty: 3 },
   { id: "fantasy", name: "Fantasy", difficulty: 3 },
   { id: "western", name: "Western", difficulty: 3 },
+  { id: "horror", name: "Horror", difficulty: 3 },
+  { id: "sci-fi", name: "Sci-Fi", difficulty: 3 },
+  { id: "sitcom", name: "Sitcom", difficulty: 3 },
 ];
 /** Required encounter sets are separate from this scenario's modular slot. */
 export function scenarioModules(villainId: string) {

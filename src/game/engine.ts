@@ -598,7 +598,12 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
       mgPack.mutantGenesisPlayerPackMinionModifiers(s, p, { isTextBlank })
         .patrol
     ) ||
-    !!(s && typeof p !== "string" && venomGoblin.venomGoblinKeyword(s, p, name))
+    !!(
+      s &&
+      typeof p !== "string" &&
+      venomGoblin.venomGoblinKeyword(s, p, name)
+    ) ||
+    !!(s && typeof p !== "string" && mojoGenres.mojoGenreKeyword(s, p, name))
   );
 }
 function nativeStatusModifiers(s: GameState, p: StatusState) {
@@ -795,7 +800,7 @@ function readyIdentity(s: GameState) {
   if (!s.player.exhausted || !canReadyIdentity(s)) return false;
   const frozen = kang.kangFrozenInTime(s, s.activePlayerId);
   if (frozen) {
-    discardPiece(s, frozen.id);
+    rulesDiscard(s, frozen.id);
     log(s, "Frozen in Time is discarded instead of readying the identity.");
     return false;
   }
@@ -1317,6 +1322,7 @@ export function allyLimit(s: GameState) {
     starLordPack.starLordPackAllyLimit(s) +
     mtsPlayerPack.mtsPlayerPackAllyLimit(s, mtsPlayerPackPorts) +
     nebulaPack.nebulaPackAllyLimit(s, nebulaPackPorts) +
+    mojoGenres.mojoGenreAllyLimit(s) +
     scriptedModifier(s, "ally_limit")
   );
 }
@@ -1690,6 +1696,18 @@ function removedByPlayerElimination(s: GameState, p: Piece) {
         seatView(s, seat).player.inPlay.some((q) => q.id === p.id)),
   );
 }
+/** Powerful Enchantments only stops players discarding attachments: the
+ * game discarding attachments with their host, or an encounter card
+ * discarding itself, is not stopped. */
+let rulesDiscarding = 0;
+function rulesDiscard(s: GameState, id: string) {
+  rulesDiscarding++;
+  try {
+    discardPiece(s, id);
+  } finally {
+    rulesDiscarding--;
+  }
+}
 function discardPiece(s: GameState, id: string) {
   const p = find(s, id);
   need(
@@ -1697,10 +1715,14 @@ function discardPiece(s: GameState, id: string) {
     "Permanent cards cannot be discarded from play.",
   );
   need(
-    !p || valkyrie.valkyrieCanDiscardAttachment(s, p),
+    !p || rulesDiscarding > 0 || valkyrie.valkyrieCanDiscardAttachment(s, p),
     "Powerful Enchantments prevents discarding this attachment.",
   );
+  const obligationOwner =
+    p && card(p).type_code === "obligation" ? controller(s, id)?.id : undefined;
   movePieceFromPlay(s, id, false);
+  if (obligationOwner)
+    add(s, ...mojoGenres.mojoGenreObligationDiscarded(s, obligationOwner));
   if (p && !s.flags.nickDiscardingPreparation) {
     const owner = p.ownerId || s.activePlayerId;
     const view = seatView(s, owner);
@@ -1979,12 +2001,19 @@ function movePieceFromPlay(
     else if (!owner || owner.eliminated) s.removed.push(resetPiece(stored));
     else seatView(s, owner).player.discard.push(resetPiece(stored));
   }
-  for (const a of [
-    ...allInPlay(s),
-    ...s.attachments,
-    ...(sabretooth.sabretoothKelly(s) ? [sabretooth.sabretoothKelly(s)!] : []),
-  ].filter((a) => a.attachedTo === id && !isPermanent(card(a))))
-    discardPiece(s, a.id);
+  rulesDiscarding++;
+  try {
+    for (const a of [
+      ...allInPlay(s),
+      ...s.attachments,
+      ...(sabretooth.sabretoothKelly(s)
+        ? [sabretooth.sabretoothKelly(s)!]
+        : []),
+    ].filter((a) => a.attachedTo === id && !isPermanent(card(a))))
+      discardPiece(s, a.id);
+  } finally {
+    rulesDiscarding--;
+  }
   if (p.code === "drone") {
     if (p.droneCard) {
       const owner = s.players.find((x) => x.id === p!.droneCard!.ownerId);
@@ -3302,7 +3331,10 @@ function dealDamage(
   if (!traits.noDamageInstance && mojoGenres.mojoGenreVillainImmune(s, target))
     n = 0;
   if (!traits.noDamageInstance && isCharacterTarget(s, target))
-    n = mojoGenres.mojoGenreDamage(s, target, n, damageSourceCard(s, source));
+    n = mojoGenres.mojoGenreDamage(s, target, n, damageSourceCard(s, source), {
+      attack,
+      piercing: traits.piercing ?? !!sourceKeyword(s, source, "Piercing"),
+    });
   // Neocarbon Scales: 1 less damage from each attack.
   if (attack && !traits.noDamageInstance)
     n = Math.max(
@@ -4154,6 +4186,13 @@ function defeatCharacter(
   }
 
   if (!interrupted && thorPreventsDefeat(s, m, thorPorts)) return false;
+  // Werewolf Pack: discard an ally from under it instead, then heal it.
+  const werewolf = interrupted ? [] : mojoGenres.mojoGenreDefeatReplaced(s, m);
+  if (werewolf.length) {
+    m.damage = 0;
+    add(s, ...werewolf);
+    return false;
+  }
   if (!interrupted) {
     const options = allyDefeatInterruptOptions(
       s,
@@ -4402,6 +4441,8 @@ function defeatCharacter(
   add(s, ...mariaHill.mariaHillControlledDefeated(s, m));
   // Dead or Alive leaves play with its minion: read it first.
   const bounty = minion ? mojoGenres.mojoGenreDeadOrAlive(s, m) : [];
+  // Toad 2.0's cards return to their owners' hands instead of leaving with it.
+  const underToad = minion ? mojoGenres.mojoGenreToadDefeated(s, m) : [];
   const name = card(m).name;
   const textWasBlank = isTextBlank(s, m);
   const defeatedSentinel = minion && captainPackHasTrait(s, m.id, "Sentinel");
@@ -4487,7 +4528,7 @@ function defeatCharacter(
       add(s, ...hoodModular.hoodModularMinionDefeated(s, m, m.engagedWith));
     if (!textWasBlank) add(s, ...sandman.sandmanMinionDefeated(s, m));
     add(s, ...kreeFanatic.kreeFanaticMinionDefeated(s, m));
-    add(s, ...bounty);
+    add(s, ...bounty, ...underToad);
     add(
       s,
       ...mojoGenres.mojoGenreMinionDefeated(
@@ -6307,6 +6348,7 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
       blackWidowAllyDiscount(s, c) +
       doctorStrangeCostModifier(s, c) +
       sandman.sandmanCostIncrease(s, c) +
+      mojoGenres.mojoGenreCostIncrease(s, c) +
       scarletWitch.scarletWitchCardCostBonus(s),
   );
 }
@@ -9688,7 +9730,11 @@ export function playable(s: GameState, p: Piece): string | null {
   if (hawkeyeRestriction) return hawkeyeRestriction;
   const spiderWomanRestriction = spiderWomanPlayRestriction(s, p, swPorts);
   if (spiderWomanRestriction) return spiderWomanRestriction;
-  const captainRestriction = captainPlayRestriction(s, p);
+  const captainRestriction = captainPlayRestriction(
+    s,
+    p,
+    p.code === "03006" ? targets(s, "enemy", true).length : undefined,
+  );
   if (captainRestriction) return captainRestriction;
   const hulkRestriction = hulkPlayRestriction(s, p);
   if (hulkRestriction) return hulkRestriction;
@@ -10623,6 +10669,8 @@ function allyEnter(
   );
   if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
     giveCharacterStatus(s, p, "tough");
+  // Mojo Runner: each ally gains toughness.
+  if (mojoGenres.mojoGenreToughOnEntry(s)) giveCharacterStatus(s, p, "tough");
   if (isTextBlank(s, p)) return;
   add(s, ...magnetoHero.magnetoHeroEntered(s, p, magnetoHeroPorts));
   if (p.code === "41003") {
@@ -11518,7 +11566,7 @@ export function abilityOptions(
     ...mysterio.mysterioActions(s, p),
     ...venomGoblin.venomGoblinActions(s, p),
     ...sinisterModulars.sinisterModularActions(s, p),
-    ...mojoGenres.mojoGenreActions(s, p, mutagenPorts),
+    ...mojoGenres.mojoGenreActions(s, p, mojoGenrePorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -11928,6 +11976,18 @@ function ability(s: GameState, id: string, action = "special") {
         : kangOptions.find((o) => o.id === action);
     if (kangSelected) {
       add(s, ...kangSelected.effects);
+      return;
+    }
+    // MojoMania's sitcom obligations stay in play with Alter-Ego Actions.
+    const mojoOptions = obligation
+      ? mojoGenres.mojoGenreActions(s, obligation, mojoGenrePorts)
+      : [];
+    const mojoSelected =
+      action === "special"
+        ? mojoOptions[0]
+        : mojoOptions.find((o) => o.id === action);
+    if (mojoSelected) {
+      add(s, ...mojoSelected.effects);
       return;
     }
   }
@@ -14636,8 +14696,15 @@ const valkyriePackPorts: valkPack.ValkyriePackPorts = {
           attack: true,
           amount: starLordPack.starLordPackConsequentialDamage(
             original,
-            (card(ally).attack_cost || 0) +
-              captainPackModifiers(s, allyId).consequentialAttack,
+            Math.max(
+              0,
+              (card(ally).attack_cost || 0) +
+                captainPackModifiers(s, allyId).consequentialAttack -
+                mojoGenres.mojoGenreConsequentialReduction(
+                  s,
+                  targetIds.some((id) => s.minions.some((m) => m.id === id)),
+                ),
+            ),
           ),
         }),
         E("scarletAfterAllyAttack", { id: allyId }),
@@ -16074,8 +16141,13 @@ const mojoGenrePorts: mojoGenres.MojoGenrePorts = {
     mysterioPorts.millPlayer(s, playerId, count),
   discardHandCard: (s, playerId, id) =>
     kangPorts.discardHandCard(s, playerId, id),
+  // Permanent cards and attachments Powerful Enchantments protects cannot
+  // be discarded.
   controlled: (s, playerId) =>
-    seatView(s, playerId).player.inPlay.filter((p) => !isPermanent(card(p))),
+    seatView(s, playerId).player.inPlay.filter(
+      (p) =>
+        !isPermanent(card(p)) && valkyrie.valkyrieCanDiscardAttachment(s, p),
+    ),
   payResources: (s, title, resources, after) =>
     hoodPorts.payResources(s, title, resources, after),
   putAllyFromDiscard: (s, playerId, id) => {
@@ -16121,6 +16193,17 @@ const mojoGenrePorts: mojoGenres.MojoGenrePorts = {
     view.player.deck = shuffle(s, view.player.deck);
   },
   heroAttack: (s, playerId) => heroStats(seatView(s, playerId)).attack,
+  allies: (s, playerId) => friends(seatView(s, playerId)),
+  // The card leaves play through its owner's set-aside zone, then goes
+  // facedown under the enemy; it is discarded when that enemy leaves play.
+  moveUnder: (s, playerId, id, hostId) => {
+    const host = s.minions.find((m) => m.id === hostId);
+    if (!host || !find(s, id)) return;
+    movePieceFromPlay(s, id, false, playerId);
+    const zone = seatView(s, playerId).player.setAside || [];
+    const i = zone.findIndex((p) => p.id === id);
+    if (i >= 0) (host.captured ||= []).push(zone.splice(i, 1)[0]);
+  },
   reveal: (s, p, playerId) => wreckingCrewPorts.reveal(s, p, playerId),
 };
 const kreeFanaticPorts: kreeFanatic.KreeFanaticPorts = {
@@ -19076,6 +19159,8 @@ function minionEntered(s: GameState, p: Piece) {
   if (mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).toughness)
     giveCharacterStatus(s, p, "tough");
   if (sinisterSix.sixMinionTough(s, p)) giveCharacterStatus(s, p, "tough");
+  // Mojo Runner: each minion gains toughness.
+  if (mojoGenres.mojoGenreToughOnEntry(s)) giveCharacterStatus(s, p, "tough");
   if (underlying) p.droneCard = underlying;
   p.engagedWith = s.activePlayerId;
   for (const seat of s.players) {
@@ -19657,9 +19742,10 @@ const ghostSpiderPorts: ghostSpider.GhostSpiderPorts = {
     !(
       context.kind === "reveal" &&
       context.reveal.playerId !== s.activePlayerId &&
-      /Peril/i.test(
+      (/Peril/i.test(
         card(sinisterNativePiece(s, context.reveal.pieceId)!).text || "",
-      )
+      ) ||
+        mojoGenres.mojoGenrePeril(s))
     ),
   playReaction: (s, id, context, after) => {
     const p = [
@@ -23855,6 +23941,7 @@ function enemyAttack(
     add(
       s,
       ...crossbones.crossbonesAttackStarted(s, id, s.attack.originalPlayerId!),
+      ...mojoGenres.mojoGenreAttackInitiated(s, id, s.attack.originalPlayerId!),
     );
   if (!friendlySource)
     add(
@@ -24853,6 +24940,12 @@ function finishScheme(s: GameState) {
       playerId: s.activePlayerId,
       attack: false,
     }),
+    ...mojoGenres.mojoGenreActivated(s, {
+      enemyId: id,
+      playerId: s.activePlayerId,
+      attack: false,
+      againstPlayer: true,
+    }),
     ...iceman.icemanActivated(s, id),
     ...mariaHill.mariaHillActivation(s, id),
     ...armadillo.armadilloActivationResponses(s, id).flatMap((r) => r.effects),
@@ -25493,6 +25586,13 @@ function finishAttackAfterDamage(
       attack: true,
     }),
     ...mojoGenres.mojoGenreAttacked(s, a.attacker, recipientId),
+    ...mojoGenres.mojoGenreActivated(s, {
+      enemyId: a.attacker,
+      playerId: recipientId,
+      attack: true,
+      againstPlayer: true,
+      damagedTarget: a.damage > 0 ? target : undefined,
+    }),
     ...sinisterModulars.sinisterModularActivated(s, {
       enemyId: a.attacker,
       playerId: recipientId,
@@ -29545,6 +29645,27 @@ function resolve(s: GameState, e: Effect) {
           break;
         }
       }
+      if (
+        !e.mgenBandolierHandled &&
+        e.power === "attack" &&
+        !s.player.stunned
+      ) {
+        const packet = {
+          ...e,
+          mgenBandolierHandled: true,
+          amount: e.amount ?? heroStats(s).attack,
+        };
+        const options = mojoGenres.mojoGenreBasicAttackOptions(s, packet);
+        if (options.length) {
+          choose(
+            s,
+            "Bandolier of Stakes",
+            "Remove a stake counter for +1 ATK and piercing on this basic attack?",
+            [...options, option("continue", "Continue", [packet])],
+          );
+          break;
+        }
+      }
       const power = e.power as "attack" | "thwart";
       const extraCost = power === "attack" ? wasp.waspBasicAttackCost(s) : 0;
       if (extraCost && !e.costPaid) {
@@ -30887,6 +31008,7 @@ function resolve(s: GameState, e: Effect) {
           ...(keyword(p, "Quickstrike", s) && s.player.form === "hero"
             ? [E("enemyAttack", { id: p.id })]
             : []),
+          ...mojoGenres.mojoGenreEngageResponses(s, p, s.activePlayerId),
           E("minionResponses", { id: p.id }),
         );
       break;
@@ -33675,6 +33797,10 @@ function resolve(s: GameState, e: Effect) {
                     Number(e.cyclopsConsequenceReduction || 0) -
                     Number(e.jubileeChamberConsequence || 0) -
                     psylocke.psylockeConsequence(s, p, e.target, true) -
+                    mojoGenres.mojoGenreConsequentialReduction(
+                      s,
+                      !!minionTarget,
+                    ) -
                     icemanSnowReduction +
                     captainPackModifiers(s, p.id).consequentialAttack +
                     Number(e.stormHavok || 0) +
@@ -34495,6 +34621,13 @@ function resolve(s: GameState, e: Effect) {
           enemyId: a.attacker,
           playerId: a.targetPlayerId || s.activePlayerId,
           attack: true,
+        }),
+        ...mojoGenres.mojoGenreActivated(s, {
+          enemyId: a.attacker,
+          playerId: a.targetPlayerId || s.activePlayerId,
+          attack: true,
+          againstPlayer: false,
+          damagedTarget: a.damage > 0 ? a.originalTarget : undefined,
         }),
         ...(a.completionRecorded && a.attackerSnapshot
           ? spectrum.spectrumEnemyActivated(
@@ -37236,6 +37369,7 @@ function resolve(s: GameState, e: Effect) {
               (p) => p.code === "40031" && !isTextBlank(s, p),
             ).length +
             deadpool.deadpoolPlayerIcons(s, "scheme_acceleration") +
+            mojoGenres.mojoGenreAcceleration(s) +
             s.sideSchemes.reduce(
               (n, p) =>
                 n +
@@ -37587,6 +37721,10 @@ function resolve(s: GameState, e: Effect) {
       );
       add(
         s,
+        // ICE-Teroid M: after the first player token is passed.
+        ...mojoGenres
+          .mojoGenreRoundEnded(s)
+          .map((effect) => ({ ...effect, actorId: s.firstPlayerId })),
         ...x23.x23PhaseStart(s),
         E("wolverinePlayerPhase"),
         ...nebula.nebulaTurnBegan(s, s.turnPlayerId, nebulaPorts),
@@ -37949,6 +38087,21 @@ export function dispatch(state: GameState, command: Command): GameState {
         "Basic powers and ally attacks or thwarts require that hero’s own turn.",
       );
     }
+    if (command.type === "LOOK_UP_RULE") {
+      if (
+        !["won", "lost"].includes(s.phase) &&
+        mojoGenres.mojoGenreLooksUpRule(s) &&
+        giveCharacterStatus(s, s.player, "confused")
+      )
+        log(
+          s,
+          `Watch Me Play: ${heroCard(s).name} looks up a rule and is confused.`,
+          "bad",
+        );
+      mystiqueNativeFinishMovement(s, mystiqueCommandMovement);
+      syncSeat(s);
+      return s;
+    }
     if (command.type === "SET_PACING") {
       need(
         ["guided", "brisk", "expert"].includes(command.pacing),
@@ -38200,7 +38353,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...mysterio.mysterioActions(s, p),
               ...venomGoblin.venomGoblinActions(s, p),
               ...sinisterModulars.sinisterModularActions(s, p),
-              ...mojoGenres.mojoGenreActions(s, p, mutagenPorts),
+              ...mojoGenres.mojoGenreActions(s, p, mojoGenrePorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -38323,7 +38476,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               .mojoGenreActions(
                 s,
                 mojoGenres.mojoGenreActionSource(s, command.id)!,
-                mutagenPorts,
+                mojoGenrePorts,
               )
               .find((o) => o.id === (command.action || "remove"));
             need(

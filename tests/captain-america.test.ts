@@ -269,6 +269,17 @@ describe("Captain America's exact identity and signature hooks", () => {
     expect(s.prompt).toBeNull();
     expect(ports.attackBatch).not.toHaveBeenCalled();
   });
+  it("Shield Toss is playable only while the engine counts an enemy to attack", () => {
+    const { s, play, hand } = fixture();
+    play("03009");
+    const [toss] = hand("03006", "03003");
+    expect(captainPlayRestriction(s, toss)).toBeNull();
+    // Kang between stages has no villain in play to attack.
+    expect(captainPlayRestriction(s, toss, 0)).toBe(
+      "There is no eligible enemy to attack.",
+    );
+    expect(captainPlayRestriction(s, toss, 1)).toBeNull();
+  });
   it("Shield Toss cannot target the villain together with an engaged Guard minion or hit one enemy twice", () => {
     const { s, minion, run, play, hand } = fixture();
     const guard = minion("03029");

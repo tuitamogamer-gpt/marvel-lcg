@@ -61,6 +61,21 @@ export function isTextBlank(
     s.sideSchemes?.some((q) => q.code === "27079")
   )
     return true;
+  // Family Matters: each support its player controls has a blank text box.
+  if (targetId) {
+    const support = definitions.get(typeof p === "string" ? p : p.code);
+    if (
+      support?.type_code === "support" &&
+      s.players?.some((seat) => {
+        const zone = seatViewForBlank(s, seat.id).inPlay;
+        return (
+          zone.some((q) => q.id === targetId) &&
+          zone.some((q) => q.code === "39061")
+        );
+      })
+    )
+      return true;
+  }
   // Panic in the Streets: Location and Persona supports have blank text.
   if (targetId && s.sideSchemes?.some((q) => q.code === "27127")) {
     const support = definitions.get(typeof p === "string" ? p : p.code);

@@ -282,8 +282,11 @@ import {
   vgSchemeLimit,
 } from "./game/venom-goblin";
 import {
+  MOJO_GENRE_OBLIGATION_CAPTIONS,
   MOJO_GENRE_SCHEME_CAPTIONS,
   MOJO_GENRE_SHOW_CAPTIONS,
+  mojoGenreKeyword,
+  mojoGenreLooksUpRule,
 } from "./game/mojo-genres";
 import { effectTitle, pacingOf } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
@@ -1301,6 +1304,20 @@ export default function App() {
       );
     (window as any).advanceTime = () => {};
   }, [screen, hero, villain, aspect, difficulty, team, contentView]);
+  // Watch Me Play: opening the rules help or a keyword explanation during a
+  // mission looks up a rule, and the penalty cannot be undone.
+  function lookUpRule() {
+    if (!game || !mojoGenreLooksUpRule(game)) return;
+    const next = dispatch(game, { type: "LOOK_UP_RULE" });
+    if (next.error) return;
+    history.current = [];
+    setUndoDepth(0);
+    setGame(next);
+  }
+  useEffect(() => {
+    // Only opening the help counts, not later state changes.
+    if (help) lookUpRule();
+  }, [help]);
   function send(command: Command) {
     if (!game) return;
     const next = dispatch(game, command);
@@ -3360,7 +3377,10 @@ export default function App() {
                     ? "A resource card. Spend it when paying a resource cost."
                     : "No printed rules text on this face.")}
               </p>
-              <KeywordGuide text={card(inspect.piece || inspect.code).text} />
+              <KeywordGuide
+                text={card(inspect.piece || inspect.code).text}
+                onLookUp={lookUpRule}
+              />
               {!inspect.piece?.mariaControlled && (
                 <ProductSource code={inspect.code} />
               )}
@@ -5875,6 +5895,14 @@ function AttachedCards({
                 {p.counters} {p.counters === 1 ? "bomb" : "bombs"}
               </small>
             )}
+            {p.code === "39048" && (
+              <small
+                aria-label={`${card(p).name}: ${p.counters} stake counters`}
+              >
+                {p.counters} {p.counters === 1 ? "stake" : "stakes"} · +1 ATK
+                and piercing
+              </small>
+            )}
             {game.playerCount > 1 && p.ownerId && (
               <small>
                 {
@@ -7377,6 +7405,30 @@ function Tabletop({
                               · 2 damage each at the end of the player phase
                             </span>
                           )}
+                          {p.code === "39056" && p.counters > 0 && (
+                            <span
+                              className="engagement-label"
+                              aria-label={`Magnetic counters on ${card(p).name}: ${p.counters}`}
+                            >
+                              {p.counters} magnetic{" "}
+                              {p.counters === 1 ? "counter" : "counters"} ·
+                              discard that many after it activates against you
+                            </span>
+                          )}
+                          {!!p.captured?.length &&
+                            ["39052", "39058"].includes(p.code) && (
+                              <span className="minion-keyword">
+                                {p.captured.length} FACEDOWN{" "}
+                                {p.code === "39052"
+                                  ? p.captured.length === 1
+                                    ? "ALLY"
+                                    : "ALLIES"
+                                  : p.captured.length === 1
+                                    ? "UPGRADE"
+                                    : "UPGRADES"}{" "}
+                                UNDER
+                              </span>
+                            )}
                           <span className="minion-stats">
                             <span
                               className="minion-health"
@@ -7395,8 +7447,12 @@ function Tabletop({
                           </span>
                           {(card(p).text?.includes("Guard.") ||
                             inheritorsModifiers(s, p).guard ||
-                            zolaKeyword(s, p, "Guard") > 0) && (
+                            zolaKeyword(s, p, "Guard") > 0 ||
+                            mojoGenreKeyword(s, p, "Guard")) && (
                             <span className="minion-keyword">GUARD</span>
+                          )}
+                          {mojoGenreKeyword(s, p, "Patrol") && (
+                            <span className="minion-keyword">PATROL</span>
                           )}
                           {!!p.inheritorBoosts?.length && (
                             <span className="minion-keyword">
@@ -8012,6 +8068,11 @@ function Tabletop({
                               send={canUseAction ? sendAction : undefined}
                             />
                             <span className="in-play-name">{card(p).name}</span>
+                            {MOJO_GENRE_OBLIGATION_CAPTIONS[p.code] && (
+                              <span className="in-play-caption">
+                                {MOJO_GENRE_OBLIGATION_CAPTIONS[p.code]}
+                              </span>
+                            )}
                             {p.exhausted && (
                               <span className="card-spent-label">
                                 EXHAUSTED

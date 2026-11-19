@@ -85,14 +85,28 @@ export function TutorialCoach({
   );
 }
 
-export function KeywordGuide({ text }: { text?: string }) {
+export function KeywordGuide({
+  text,
+  onLookUp,
+}: {
+  text?: string;
+  /** Opening an explanation looks up a rule (Watch Me Play). */
+  onLookUp?: () => void;
+}) {
   const entries = keywordsIn(text);
   return entries.length ? (
     <section className="keyword-guide" aria-label="Card keyword explanations">
       <span className="small-label">KEYWORDS · SELECT TO EXPLAIN</span>
       <div>
         {entries.map((entry) => (
-          <details key={entry.term} className="keyword-chip">
+          <details
+            key={entry.term}
+            className="keyword-chip"
+            onToggle={(event) => {
+              if ((event.currentTarget as HTMLDetailsElement).open)
+                onLookUp?.();
+            }}
+          >
             <summary>{entry.term}</summary>
             <p>{entry.text}</p>
           </details>

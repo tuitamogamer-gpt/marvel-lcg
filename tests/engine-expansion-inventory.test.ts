@@ -444,7 +444,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(65);
+    expect(MODULES).toHaveLength(68);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "temporal",
@@ -474,9 +474,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(2938);
-    expect(coverage.unsupportedFaces).toBe(1613);
-    expect(coverage.dedicatedFaces).toBe(2500);
+    expect(coverage.executableFaces).toBe(2957);
+    expect(coverage.unsupportedFaces).toBe(1594);
+    expect(coverage.dedicatedFaces).toBe(2519);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -686,6 +686,8 @@ describe("complete expansion rules inventory", () => {
         5 -
         // MojoMania's Crime, Fantasy and Western genre sets.
         17 -
+        // MojoMania's Horror, Sci-Fi and Sitcom genre sets.
+        19 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -813,7 +815,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(65);
+    expect(coverage.registeredModules).toHaveLength(68);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(

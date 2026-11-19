@@ -583,4 +583,6 @@ export type Command =
   | { type: "ABILITY"; id: string; action?: string; playerId?: string }
   | { type: "END_TURN"; discard?: string[] }
   | { type: "CANCEL" }
-  | { type: "SET_PACING"; pacing: Pacing };
+  | { type: "SET_PACING"; pacing: Pacing }
+  /** The player opens the app's rules help (Watch Me Play). */
+  | { type: "LOOK_UP_RULE" };

@@ -201,14 +201,20 @@ export function captainEvent(
       return null;
   }
 }
-export function captainPlayRestriction(s: GameState, p: Piece): string | null {
+/** `attackTargets` is the engine's own count of enemies Captain America can
+ * attack now, the same list Shield Toss resolves against. */
+export function captainPlayRestriction(
+  s: GameState,
+  p: Piece,
+  attackTargets?: number,
+): string | null {
   if (p.code === "03005")
     return "Available when your identity would take damage.";
   if (p.code === "03006") {
     if (!shield(s)) return "Captain America’s Shield must be in play.";
     if (s.player.hand.filter((x) => x.id !== p.id).length === 0)
       return "Shield Toss requires another card to discard.";
-    if (!captainAttackTargets(s).length)
+    if (!(attackTargets ?? captainAttackTargets(s).length))
       return "There is no eligible enemy to attack.";
   }
   return null;

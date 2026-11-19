@@ -287,7 +287,9 @@ function localPaymentSources(
         (x.kind === "card" ||
           x.id.startsWith("spdr-sync:") ||
           committed.some((r) => r.id === x.id) ||
-          !isTextBlank(s, x.code)),
+          // The physical source: Family Matters and Panic in the Streets
+          // blank particular supports, not every copy of a card.
+          !isTextBlank(s, { code: x.code, id: x.localId || x.id })),
     )
     .map((source) => ({
       ...source,
