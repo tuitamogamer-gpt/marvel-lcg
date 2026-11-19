@@ -263,12 +263,11 @@ describe("batch three: independent immutable source contract", () => {
     }
     expect(faces).toBe(171);
     expect(physical).toBe(230);
-    // Morlock Siege, On the Run and Juggernaut are native since their own
-    // imports; the other boxed scenarios and the campaign are not claimed
-    // here.
-    for (const code of ["40070a", "40103a", "40118"])
+    // Morlock Siege, On the Run, Juggernaut and Mister Sinister are native
+    // since their own imports; Stryfe and the campaign are not claimed here.
+    for (const code of ["40070a", "40103a", "40118", "40136"])
       expect(hasExecutableScript(code), code).toBe(true);
-    for (const code of ["40136", "40190a", "40204"])
+    for (const code of ["40163", "40190a", "40204"])
       expect(hasExecutableScript(code), code).toBe(false);
   });
 

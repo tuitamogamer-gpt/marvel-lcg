@@ -100,6 +100,10 @@ const alive = (s: GameState, playerId: string) =>
 const over = (s: GameState) => s.phase === "won" || s.phase === "lost";
 const active = (s: GameState, p: Piece) => !isTextBlank(s, p);
 export const juggernaut = (s: GameState) => s.villainId === "juggernaut";
+/** The scenarios that put Hope Summers into play: The Unstoppable
+ * Juggernaut and Mister Sinister's Sinister Intent. */
+export const hopeScenario = (s: GameState) =>
+  s.villainId === "juggernaut" || s.villainId === "mister_sinister";
 /** The villain in play is a Juggernaut stage with its text active. */
 const juggernautInPlay = (s: GameState) =>
   !!s.villain && STAGES.includes(s.villain.code) && active(s, s.villain);
@@ -145,12 +149,19 @@ export function jugSetup(
   const helmet = ports.makePiece(s, HELMET);
   helmet.attachedTo = s.villain.id;
   s.attachments.push(helmet);
-  const hope = ports.makePiece(s, HOPE_SUMMERS);
-  delete hope.ownerId;
-  seatView(s, s.firstPlayerId).player.inPlay.push(hope);
+  hopeSetup(s, ports);
   const main = def(UNSTOPPABLE);
   s.scheme.threat =
     (main?.base_threat || 0) * (main?.base_threat_fixed ? 1 : s.playerCount);
+}
+/** Hope Summers enters play under the first player's control. */
+export function hopeSetup(
+  s: GameState,
+  ports: { makePiece(s: GameState, code: string): Piece },
+) {
+  const hope = ports.makePiece(s, HOPE_SUMMERS);
+  delete hope.ownerId;
+  seatView(s, s.firstPlayerId).player.inPlay.push(hope);
 }
 /** The deck leaves out the cards that setup puts into play. */
 export const jugSetupCard = (code: string) =>
@@ -423,11 +434,11 @@ export function resolveJuggernautEffect(
   switch (e.type) {
     case "jug:check":
       // Hope Summers leaving play loses the game.
-      if (juggernaut(s) && !over(s) && !jugHope(s))
+      if (hopeScenario(s) && !over(s) && !jugHope(s))
         ports.endGame(
           s,
           false,
-          "Hope Summers has left play. Juggernaut cannot be stopped.",
+          "Hope Summers has left play. The mission fails.",
         );
       break;
     case "jug:momentum": {

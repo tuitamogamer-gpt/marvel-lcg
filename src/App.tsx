@@ -344,6 +344,16 @@ import {
   juggernaut,
   momentum,
 } from "./game/juggernaut";
+import {
+  AERIAL_BOMBARDMENT,
+  IMPERVIOUS,
+  OUT_OF_REACH,
+  SINISTER_ENDS,
+  STAGE_TWO,
+  misterSinister,
+  superpowers,
+  villainHas,
+} from "./game/mister-sinister";
 import { effectTitle, pacingOf } from "./game/review";
 import { paymentStatus, paymentSubject, suggestPayment } from "./game/payment";
 import type { PaymentSource } from "./game/payment";
@@ -2756,6 +2766,16 @@ export default function App() {
                       While a Marauder minion is engaged with you, the villain
                       schemes instead of attacking you. Mutant Slayers is always
                       included; Military Grade and Nasty Boys are preselected.
+                    </p>
+                  )}
+                  {villain.id === "mister_sinister" && (
+                    <p className="setting-help">
+                      Sinister&rsquo;s plan runs through two of three random
+                      stage 2 schemes, each attaching a superpower from a
+                      set-aside set. Every status card placed on him puts threat
+                      on the main scheme, and once Sinister Ends is reached he
+                      attacks Hope Summers instead of you. You lose if she
+                      leaves play. Nasty Boys is preselected.
                     </p>
                   )}
                   {villain.id === "juggernaut" && (
@@ -6229,8 +6249,11 @@ function AttachedCards({
                 PUSHED_TO_THE_LIMIT,
                 TITANIUM_EXOSKELETON,
                 INHIBITOR_COLLAR,
-                // Juggernaut's Helmet.
+                // Juggernaut's Helmet; Mister Sinister's superpower sets.
                 HELMET,
+                AERIAL_BOMBARDMENT,
+                OUT_OF_REACH,
+                IMPERVIOUS,
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -6829,7 +6852,9 @@ function Tabletop({
                                     ? `VILLAIN · ${s.villain.code.endsWith("b") ? "B" : "A"} · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? "CONFIDENT" : "DESPERATE"}`
                                     : juggernaut(s)
                                       ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${momentum(s)} MOMENTUM`
-                                      : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
+                                      : misterSinister(s)
+                                        ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${superpowers(s)} ${superpowers(s) === 1 ? "SUPERPOWER" : "SUPERPOWERS"}`
+                                        : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
                     {s.kang ? (
                       <h2>
@@ -6911,6 +6936,14 @@ function Tabletop({
                         {otrCaptor(s)?.code === CAPTOR_CONFIDENT
                           ? "Hope's Captor · resets instead of being defeated once"
                           : "Desperate · defeat the villain to win"}
+                      </span>
+                    )}
+                    {misterSinister(s) && (
+                      <span className="stat-caption">
+                        {(["Aerial", "Brute", "Psionic"] as const)
+                          .filter((t) => villainHas(s, t))
+                          .join(" · ") || "No superpower yet"}{" "}
+                        · each status card places {s.villain.stage} threat
                       </span>
                     )}
                     {juggernaut(s) && (
@@ -7036,7 +7069,7 @@ function Tabletop({
                   <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
-                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) ? " magog-scheme" : ""}`}
+                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) ? " magog-scheme" : ""}`}
                     style={
                       {
                         "--scheme-actions": mainActionPiece
@@ -7133,6 +7166,19 @@ function Tabletop({
                     {juggernaut(s) && (
                       <p className="magog-scheme-note">
                         Completed: Juggernaut charges
+                      </p>
+                    )}
+                    {misterSinister(s) && STAGE_TWO.includes(s.scheme.code) && (
+                      <p className="magog-scheme-note">
+                        Completed:{" "}
+                        {(s.sinister?.visited.length || 0) < 2
+                          ? "the other stage 2"
+                          : "Sinister Ends"}
+                      </p>
+                    )}
+                    {misterSinister(s) && s.scheme.code === SINISTER_ENDS && (
+                      <p className="magog-scheme-note">
+                        Sinister attacks Hope Summers
                       </p>
                     )}
                     {mainActionPiece &&

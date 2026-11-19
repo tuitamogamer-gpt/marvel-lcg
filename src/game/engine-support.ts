@@ -36,6 +36,12 @@ import {
   HOPE_SUMMERS_CODES,
   JUGGERNAUT_SCRIPT_CODES,
 } from "./juggernaut.js";
+import {
+  FLIGHT_CODES,
+  MISTER_SINISTER_SCRIPT_CODES,
+  SUPER_STRENGTH_CODES,
+  TELEPATHY_CODES,
+} from "./mister-sinister.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -317,6 +323,10 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...JUGGERNAUT_SCRIPT_CODES,
   ...HOPE_SUMMERS_CODES,
   ...BLACK_TOM_CODES,
+  ...MISTER_SINISTER_SCRIPT_CODES,
+  ...FLIGHT_CODES,
+  ...SUPER_STRENGTH_CODES,
+  ...TELEPATHY_CODES,
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

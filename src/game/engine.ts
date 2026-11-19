@@ -28,6 +28,7 @@ import * as mojoVillain from "./mojo.js";
 import * as morlock from "./morlock-siege.js";
 import * as otr from "./on-the-run.js";
 import * as jug from "./juggernaut.js";
+import * as sin from "./mister-sinister.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -613,7 +614,8 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
     !!(s && typeof p !== "string" && mojoGenres.mojoGenreKeyword(s, p, name)) ||
     !!(s && typeof p !== "string" && morlock.morlockKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && otr.otrKeyword(s, p, name) > 0) ||
-    !!(s && typeof p !== "string" && jug.jugKeyword(s, p, name) > 0)
+    !!(s && typeof p !== "string" && jug.jugKeyword(s, p, name) > 0) ||
+    !!(s && typeof p !== "string" && sin.sinisterKeyword(s, p, name) > 0)
   );
 }
 function nativeStatusModifiers(s: GameState, p: StatusState) {
@@ -661,7 +663,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     ...(hood.hoodSteady(s, piece) ? { steady: true } : {}),
     ...(hoodModular.hoodModularSteady(s) ? { steady: true } : {}),
     ...(morlock.morlockStatusModifiers(s, piece).steady ||
-    otr.otrStatusModifiers(s, piece).steady
+    otr.otrStatusModifiers(s, piece).steady ||
+    sin.sinisterSteady(s, piece)
       ? { steady: true }
       : {}),
   };
@@ -724,6 +727,9 @@ function giveCharacterStatus(
         }
       : nativeStatusModifiers(s, p),
   );
+  // Mister Sinister: each status card placed on him feeds the main scheme.
+  if (changed && "code" in p)
+    add(s, ...sin.sinisterStatusPlaced(s, (p as Piece).id));
   if (
     changed &&
     "code" in p &&
@@ -818,6 +824,7 @@ function canReadyPiece(s: GameState, p: Piece) {
     !mysterio.mysterioReadyBlocked(s, p) &&
     !ebonyMaw.ebonyMawRestrained(s, p.id) &&
     !jug.jugCannotReady(s, p) &&
+    !sin.sinisterCannotReady(s, p, controller(s, p.id)?.id) &&
     hela.helaCanReadyPiece(s, p)
   );
 }
@@ -1086,7 +1093,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         magog.magogKeyword(s, p, "Retaliate") +
         mojoVillain.mojoKeyword(s, p, "Retaliate") +
         morlock.morlockKeyword(s, p, "Retaliate") +
-        jug.jugKeyword(s, p, "Retaliate")
+        jug.jugKeyword(s, p, "Retaliate") +
+        sin.sinisterKeyword(s, p, "Retaliate")
     : Math.max(intrinsic, grantedValue);
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
@@ -1818,7 +1826,7 @@ function movePieceFromPlay(
   if (removedSource?.code === morlock.MORLOCK && s.morlockSiege)
     add(s, { type: "msg:check" });
   // The Unstoppable Juggernaut: the players lose if Hope Summers leaves play.
-  if (removedSource?.code === jug.HOPE_SUMMERS && jug.juggernaut(s))
+  if (removedSource?.code === jug.HOPE_SUMMERS && jug.hopeScenario(s))
     add(s, { type: "jug:check" });
   // These actual cards were attached from a hand, never put into play.
   // Retain the marker before Electro leaves so legacy saves also bypass all
@@ -2820,7 +2828,7 @@ function check(s: GameState) {
     // the main scheme.
     add(s, ...mojoVillain.mojoCharacterThreatLeaves(s, `hero:${seat.id}`));
     if (s.morlockSiege) add(s, { type: "msg:check" });
-    if (jug.juggernaut(s)) add(s, { type: "jug:check" });
+    if (jug.hopeScenario(s)) add(s, { type: "jug:check" });
     if (s.firstPlayerId === seat.id) {
       s.firstPlayerId = next.id;
       sabretooth.sabretoothFirstPlayerChanged(s);
@@ -3394,7 +3402,12 @@ function dealDamage(
     !traits.noDamageInstance &&
     (mojoGenres.mojoGenreVillainImmune(s, target) ||
       spiral.spiralVillainImmune(s, target) ||
-      jug.jugImmune(s, target))
+      jug.jugImmune(s, target) ||
+      sin.sinisterImmune(s, target, {
+        aerial: damageSourceAerial(s, source),
+        ranged:
+          !!traits.ranged || (attack && !!sourceKeyword(s, source, "Ranged")),
+      }))
   )
     n = 0;
   // Juggernaut Exposed: 1 more damage from a card with a printed mental
@@ -3410,7 +3423,9 @@ function dealDamage(
   if (attack && !traits.noDamageInstance)
     n = Math.max(
       0,
-      n - sinisterModulars.sinisterModularAttackReduction(s, target),
+      n -
+        sinisterModulars.sinisterModularAttackReduction(s, target) -
+        sin.sinisterAttackReduction(s, target),
     );
   // Titanium Exoskeleton: no more than 2 damage from a single attack.
   if (attack && !traits.noDamageInstance)
@@ -3852,6 +3867,7 @@ function dealDamage(
           mojoVillain.mojoKeyword(s, retaliationTarget, "Retaliate") +
           morlock.morlockKeyword(s, retaliationTarget, "Retaliate") +
           jug.jugKeyword(s, retaliationTarget, "Retaliate") +
+          sin.sinisterKeyword(s, retaliationTarget, "Retaliate") +
           (retaliationTarget.id === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -4085,6 +4101,21 @@ function applyDamage(
     log(s, `You take ${n} damage.`, "bad");
     check(s);
     return { actualDamage: n, excessDamage: 0 };
+  }
+  // Sinister Disguise: the damage a player would deal to the villain waits
+  // for that player's choice.
+  if (n > 0 && target === s.villain.id) {
+    const dealer =
+      source === "hero"
+        ? s.activePlayerId
+        : source?.startsWith("hero:")
+          ? source.slice(5)
+          : controller(s, source)?.id;
+    const disguise = sin.sinisterDisguise(s, target, n, dealer);
+    if (disguise) {
+      add(s, disguise);
+      return none;
+    }
   }
   // Hidden in the Clutter takes the damage dealt to the attached enemy.
   if (
@@ -5223,6 +5254,7 @@ function villainSetup(s: GameState) {
     ...spiral.spiralVillainRevealed(s),
     ...mojoVillain.mojoVillainRevealed(s, mojoVillainPorts),
     ...jug.jugVillainRevealed(s),
+    ...sin.sinisterVillainRevealed(s),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -5725,6 +5757,16 @@ function threat(
       }
       // The Unstoppable Juggernaut: instead of completing, the scheme
       // resets and Juggernaut charges each player.
+      // Mister Sinister: a completed stage 2 advances to the other one, or
+      // to Sinister Ends.
+      const sinisterNext = sin.sinisterMainCompleted(s);
+      if (sinisterNext) {
+        if (!s.pendingMainCompletion) {
+          s.pendingMainCompletion = true;
+          add(s, ...sinisterNext, E("clearMainCompletion"));
+        }
+        return;
+      }
       const juggernautCharge = jug.jugMainCompleted(s);
       if (juggernautCharge) {
         if (!s.pendingMainCompletion) {
@@ -8912,6 +8954,10 @@ export function newGame(config: {
   if (v.id === "morlock_siege") morlock.morlockSetup(s, morlockPorts);
   if (v.id === "juggernaut")
     jug.jugSetup(s, { makePiece: (s, code) => makePiece(s, code) });
+  if (v.id === "mister_sinister") {
+    sin.sinisterSetup(s);
+    jug.hopeSetup(s, { makePiece: (s, code) => makePiece(s, code) });
+  }
   if (v.id === "on_the_run")
     otr.otrSetup(s, {
       shuffle: (s, pieces) => shuffle(s, pieces),
@@ -9785,6 +9831,7 @@ function initialSetup(s: GameState) {
     );
   if (s.villainId === "ultron") setup.push(...eachPlayer(s, E("drone")));
   setup.push(...otr.otrSetupEffects(s));
+  setup.push(...sin.sinisterSetupEffects(s));
   // Queue stage setup after scenario setup and before the first turn.
   add(
     s,
@@ -11826,6 +11873,7 @@ export function abilityOptions(
     ...mojoVillain.mojoActions(s, p, mojoVillainPorts),
     ...morlock.morlockActions(s, p, morlockPorts),
     ...jug.jugActions(s, p, jugPorts),
+    ...sin.sinisterActions(s, p, sinPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -16678,6 +16726,85 @@ const jugPorts: jug.JuggernautPorts = {
           !isPermanent(card(p)),
       )
       .map((piece) => ({ piece, cost: card(piece).cost || 0 })),
+  endGame: (s, won, reason) => endGame(s, won, reason),
+};
+/** The character an attack is against has the Aerial trait. */
+function characterAerial(s: GameState, target: string): boolean {
+  if (target === "hero") return aerial(s);
+  if (target.startsWith("hero:")) return aerial(seatView(s, target.slice(5)));
+  const p = find(s, target);
+  return !!p && (card(p).traits || "").split(/\.\s*/).includes("Aerial");
+}
+function attackTargetAerial(s: GameState): boolean {
+  const a = s.attack;
+  if (!a) return false;
+  const target = a.originalTarget || a.defender || "hero";
+  return target === "hero"
+    ? aerial(seatView(s, a.targetPlayerId || s.activePlayerId))
+    : characterAerial(s, target);
+}
+/** The attacker dealing this damage, or the card it comes from, has the
+ * Aerial trait. */
+function damageSourceAerial(s: GameState, source: string | undefined) {
+  if (!source) return false;
+  if (source === "hero") return aerial(s);
+  if (source.startsWith("hero:")) return aerial(seatView(s, source.slice(5)));
+  const c = damageSourceCard(s, source);
+  return !!c && (c.traits || "").split(/\.\s*/).includes("Aerial");
+}
+const sinPorts: sin.SinisterPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  shuffle: (s, pieces) => shuffle(s, pieces),
+  pick: (s, n) => Math.floor(random(s) * n),
+  setMain: (s, code) => {
+    discardMainAttachments(s);
+    const v = VILLAINS.find((v) => v.id === s.villainId)!;
+    s.scheme.index = Math.max(0, v.schemes.indexOf(code));
+    s.scheme.code = code;
+    s.scheme.threat =
+      (card(code).base_threat || 0) *
+      (card(code).base_threat_fixed ? 1 : s.playerCount);
+    log(s, `The main scheme advances: ${card(code).name}.`, "bad");
+  },
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+  canStatus: (s, target, status) => morlockPorts.canStatus(s, target, status),
+  allies: (s, playerId) => friends(seatView(s, playerId)),
+  friendly: (s) =>
+    playerOrder(s)
+      .filter((seat) => !seat.eliminated)
+      .flatMap((seat) => {
+        const view = seatView(s, seat);
+        return [
+          { target: "hero", playerId: seat.id, hp: view.player.hp },
+          ...friends(view).map((p) => ({
+            target: p.id,
+            playerId: seat.id,
+            hp: pieceHP(s, p) - p.damage,
+          })),
+        ];
+      }),
+  upgrades: (s, playerId) =>
+    seatView(s, playerId)
+      .player.inPlay.filter(
+        (p) => card(p).type_code === "upgrade" && !isPermanent(card(p)),
+      )
+      .map((piece) => ({ piece, cost: card(piece).cost || 0 })),
+  supports: (s, playerId) =>
+    seatView(s, playerId).player.inPlay.filter(
+      (p) => card(p).type_code === "support",
+    ),
+  discardRandomHand: (s, playerId) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    randomDiscard(s);
+    activateSeat(s, previous);
+  },
+  heal: (s, target, n) => {
+    heal(s, target, n, "encounter");
+  },
   endGame: (s, won, reason) => endGame(s, won, reason),
 };
 const kreeFanaticPorts: kreeFanatic.KreeFanaticPorts = {
@@ -24163,6 +24290,37 @@ function enemyAttack(
     );
     return;
   }
+  // Teleported Away: when Mister Sinister would attack, he schemes instead.
+  if (!originalTarget && sin.sinisterSchemesInstead(s, id)) {
+    log(s, "Teleported Away: Mister Sinister schemes instead of attacking.");
+    enemyScheme(
+      s,
+      id,
+      extra,
+      activation ? { ...activation, kind: "scheme" } : undefined,
+    );
+    return;
+  }
+  // Sinister Ends: Mister Sinister attacks Hope Summers instead.
+  if (!originalTarget) {
+    const hope = sin.sinisterAttackRedirect(s, id, jug.jugHope(s));
+    if (hope) {
+      if (hope.playerId !== s.activePlayerId) {
+        add(
+          s,
+          E("enemyAttack", {
+            id,
+            extra,
+            activation,
+            originalTarget: hope.piece.id,
+            actorId: hope.playerId,
+          }),
+        );
+        return;
+      }
+      originalTarget = hope.piece.id;
+    }
+  }
   // Across the Mojoverse: an Escaped Spiral schemes instead of attacking.
   if (!originalTarget && spiral.spiralSchemesInstead(s, id)) {
     log(s, "Spiral is Escaped: she schemes instead of attacking.");
@@ -24556,6 +24714,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     spiral.spiralAttackBonus(s, p) +
     otr.otrAttackBonus(s, p) +
     jug.jugAttackBonus(s, p) +
+    sin.sinisterStatBonus(s, p, "attack", attackTargetAerial(s)) +
     mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).attack;
   const attachments = enemyAttachmentModifier(s, p.id, "attack");
   const base =
@@ -24970,6 +25129,7 @@ function boostEffects(s: GameState, p: Piece) {
     morlock.morlockBoost(s, p) ??
     otr.otrBoost(s, p) ??
     jug.jugBoost(s, p) ??
+    sin.sinisterBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -25330,7 +25490,8 @@ function enemySCH(s: GameState, p: Piece, playerId: string): number {
     hela.helaVillainStat(s, p) +
     mysterio.mysterioEnemyBonus(s, p) +
     sinisterSix.sixEnemyModifier(s, p, "scheme") +
-    kang.kangEnemyStat(s, p, "scheme", playerId)
+    kang.kangEnemyStat(s, p, "scheme", playerId) +
+    sin.sinisterStatBonus(s, p, "scheme")
   );
 }
 export function enemyStats(
@@ -26060,6 +26221,7 @@ function finishAttackAfterDamage(
   if (s.phase === "lost" || s.phase === "won") return;
   const retaliation =
     !sourceKeyword(s, a.attacker, "Ranged") &&
+    !sin.sinisterIgnoresRetaliate(s, a.attacker, characterAerial(s, target)) &&
     ((target === "hero" && s.player.hp > 0) ||
       (target !== "hero" && !!find(s, target)))
       ? target === "hero"
@@ -26163,6 +26325,7 @@ function finishAttackAfterDamage(
       recipientId,
       a.damage > 0 ? target : undefined,
     ),
+    ...sin.sinisterAttacked(s, a.attacker),
     ...sinisterModulars.sinisterModularActivated(s, {
       enemyId: a.attacker,
       playerId: recipientId,
@@ -27154,6 +27317,10 @@ function reveal(
         ...jug.JUGGERNAUT_SCRIPT_CODES,
         ...jug.HOPE_SUMMERS_CODES,
         ...jug.BLACK_TOM_CODES,
+        ...sin.MISTER_SINISTER_SCRIPT_CODES,
+        ...sin.FLIGHT_CODES,
+        ...sin.SUPER_STRENGTH_CODES,
+        ...sin.TELEPATHY_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -27216,7 +27383,10 @@ function reveal(
         (
           mojoGenres.MOJO_GENRE_IN_PLAY_OBLIGATIONS as readonly string[]
         ).includes(p.code) ||
-        p.code === mojoVillain.PAPARAZZI)
+        p.code === mojoVillain.PAPARAZZI ||
+        (sin.SINISTER_IN_PLAY_OBLIGATIONS as readonly string[]).includes(
+          p.code,
+        ))
     ) {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       if (!s.player.inPlay.some((x) => x.id === p.id)) s.player.inPlay.push(p);
@@ -27382,6 +27552,10 @@ function reveal(
       ...jug.JUGGERNAUT_SCRIPT_CODES,
       ...jug.HOPE_SUMMERS_CODES,
       ...jug.BLACK_TOM_CODES,
+      ...sin.MISTER_SINISTER_SCRIPT_CODES,
+      ...sin.FLIGHT_CODES,
+      ...sin.SUPER_STRENGTH_CODES,
+      ...sin.TELEPATHY_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -27443,6 +27617,7 @@ function reveal(
       morlock.morlockReveal(s, p) ??
       otr.otrReveal(s, p) ??
       jug.jugReveal(s, p) ??
+      sin.sinisterReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -27543,6 +27718,7 @@ function reveal(
     morlock.morlockReveal(s, p) ??
     otr.otrReveal(s, p) ??
     jug.jugReveal(s, p) ??
+    sin.sinisterReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -28982,6 +29158,7 @@ function resolve(s: GameState, e: Effect) {
           morlock.morlockReveal(state, piece) ??
           otr.otrReveal(state, piece) ??
           jug.jugReveal(state, piece) ??
+          sin.sinisterReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -29138,6 +29315,7 @@ function resolve(s: GameState, e: Effect) {
   if (morlock.resolveMorlockEffect(s, e, morlockPorts)) return;
   if (otr.resolveOnTheRunEffect(s, e, otrPorts)) return;
   if (jug.resolveJuggernautEffect(s, e, jugPorts)) return;
+  if (sin.resolveSinisterEffect(s, e, sinPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -39002,6 +39180,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...mojoVillain.mojoActions(s, p, mojoVillainPorts),
               ...morlock.morlockActions(s, p, morlockPorts),
               ...jug.jugActions(s, p, jugPorts),
+              ...sin.sinisterActions(s, p, sinPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -39134,6 +39313,25 @@ export function dispatch(state: GameState, command: Command): GameState {
                 s,
                 morlock.morlockActionSource(s, command.id)!,
                 morlockPorts,
+              )
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
+            add(s, ...selected!.effects);
+          } else if (
+            sin.sinisterActionSource(s, command.id) &&
+            sin
+              .sinisterActions(
+                s,
+                sin.sinisterActionSource(s, command.id)!,
+                sinPorts,
+              )
+              .some((o) => !command.action || o.id === command.action)
+          ) {
+            const selected = sin
+              .sinisterActions(
+                s,
+                sin.sinisterActionSource(s, command.id)!,
+                sinPorts,
               )
               .find((o) => !command.action || o.id === command.action);
             need(selected, "This action needs its printed cost.");

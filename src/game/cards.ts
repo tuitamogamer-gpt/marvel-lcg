@@ -1545,6 +1545,23 @@ export const VILLAINS = [
       "Nothing stops the Juggernaut. Every charge builds his momentum, his scheme only sends him crashing through every hero in turn, and Hope Summers must stay in the fight.",
     color: "#7a3b2a",
   },
+  {
+    id: "mister_sinister",
+    name: "Mister Sinister",
+    // Mister Sinister (I) and (II) in Standard, (II) and (III) in Expert; the
+    // main scheme passes through two of three random stage 2 schemes, each
+    // bringing in a set-aside superpower set.
+    codes: ["40136", "40137", "40138"],
+    schemes: ["40139b", "40140b", "40141b", "40142b", "40143b"],
+    module: "nasty_boys",
+    fixedSets: ["flight", "super_strength", "telepathy", "hope_summers"],
+    difficulty: 4,
+    title: "Sinister Intent",
+    location: "Under Sinister's eye",
+    description:
+      "Mister Sinister gains a new superpower with each stage of his plan, every status card you land feeds his scheme, and at the end he goes after Hope Summers herself.",
+    color: "#4b2d5c",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },

@@ -92,7 +92,8 @@
     "test:mojo": "node scripts/mojo-check.mjs",
     "test:morlock": "node scripts/morlock-check.mjs",
     "test:on-the-run": "node scripts/on-the-run-check.mjs",
-    "test:juggernaut": "node scripts/juggernaut-check.mjs"
+    "test:juggernaut": "node scripts/juggernaut-check.mjs",
+    "test:mister-sinister": "node scripts/mister-sinister-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

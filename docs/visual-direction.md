@@ -203,3 +203,7 @@ On the Run has one villain and one way to win, so the villain column keeps its u
 ## Juggernaut's momentum, 2026-11-19
 
 Juggernaut follows the usual villain stages, so the villain column only adds his momentum: the label counts the momentum counters and the caption gives the ATK they add and the Helmet's side. The main scheme carries a one-line note that completing it makes him charge, with the threat token raised by that line as for MaGog and Morlock Siege. Because his scheme never loses the game, the objective bar shows "Keep Hope Summers in play" in place of the threat limit. Head of Steam shows its retaliate value on the attachment, and Hope Summers is an ordinary ally outside the ally count.
+
+## Mister Sinister's superpowers, 2026-11-19
+
+Mister Sinister keeps the usual villain column: the label counts his superpowers and the caption names the traits they give and the threat each status card places. The superpowers are ordinary attachments beside him. The main scheme's one-line note says where its completion leads, the other stage 2 or Sinister Ends, and on Sinister Ends that he attacks Hope Summers, with the threat token raised by that line as for Juggernaut. The Telepathy obligations stay in their player's area with their Alter-Ego Actions, like MojoMania's sitcom obligations.

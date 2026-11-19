@@ -159,6 +159,8 @@ jobs:
             scripts: test:on-the-run
           - group: juggernaut
             scripts: test:juggernaut
+          - group: mister-sinister
+            scripts: test:mister-sinister
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules
