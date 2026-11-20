@@ -29,7 +29,9 @@ jobs:
   missions:
     name: Source missions (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    # Each shard now runs about 29,300 configurations; the slowest took about
+    # 75 minutes at 26,500.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       max-parallel: 16
@@ -181,6 +183,8 @@ jobs:
             scripts: test:batroc
           - group: modok
             scripts: test:modok
+          - group: thunderbolts
+            scripts: test:thunderbolts
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

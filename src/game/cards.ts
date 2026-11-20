@@ -66,6 +66,7 @@ import { warMachineTraits } from "./war-machine.js";
 import { sinisterPlayerPackIdentityModifiers } from "./sinister-player-pack.js";
 import { mysterioHandSize } from "./mysterio.js";
 import { stryfeHandSize, stryfeIdentityPenalty } from "./stryfe.js";
+import { thunderboltsIdentityStats } from "./thunderbolts.js";
 import { unusHealth } from "./unus.js";
 import { apocalypseHealth } from "./apocalypse.js";
 import { darkBeastHealth } from "./dark-beast.js";
@@ -1721,6 +1722,40 @@ export const VILLAINS = [
       "Free the four Inhumans from M.O.D.O.K.'s Holding Cells before his Adaptoids copy every one of their powers, then bring him down for good.",
     color: "#6b5a1e",
   },
+  {
+    id: "thunderbolts",
+    name: "Thunderbolts",
+    // Citizen V (A) in Standard, (B) in Expert: the two sides of one card.
+    codes: ["50129a", "50129b"],
+    schemes: ["50130b"],
+    // One modular set plus one per player, each with an Elite Thunderbolt
+    // minion: only the six Thunderbolt sets qualify.
+    module: "gravitational_pull",
+    moduleCount: 1,
+    moduleCountPerHero: 1,
+    defaultModules: [
+      "gravitational_pull",
+      "hard_sound",
+      "pale_little_spider",
+      "power_of_the_atom",
+      "supersonic",
+      "the_leaper",
+    ],
+    onlySets: [
+      "gravitational_pull",
+      "hard_sound",
+      "pale_little_spider",
+      "power_of_the_atom",
+      "supersonic",
+      "the_leaper",
+    ],
+    difficulty: 4,
+    title: "Apprehending Rogue Agents",
+    location: "Washington, D.C.",
+    description:
+      "Citizen V's Thunderbolts have come to arrest you. Defeat one Thunderbolt per hero to break their ranks before Citizen V can fall.",
+    color: "#2b4a7a",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1823,6 +1858,12 @@ export const MODULES = [
   { id: "a.i.m._science", name: "A.I.M. Science", difficulty: 2 },
   { id: "batrocs_brigade", name: "Batroc's Brigade", difficulty: 3 },
   { id: "scientist_supreme", name: "Scientist Supreme", difficulty: 3 },
+  { id: "gravitational_pull", name: "Gravitational Pull", difficulty: 3 },
+  { id: "hard_sound", name: "Hard Sound", difficulty: 3 },
+  { id: "pale_little_spider", name: "Pale Little Spider", difficulty: 3 },
+  { id: "power_of_the_atom", name: "Power of the Atom", difficulty: 4 },
+  { id: "supersonic", name: "Supersonic", difficulty: 3 },
+  { id: "the_leaper", name: "The Leaper", difficulty: 3 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(
@@ -1838,6 +1879,9 @@ export function scenarioModules(villainId: string) {
   const scenario = VILLAINS.find((v) => v.id === villainId);
   // The Wrecking Crew uses no other encounter sets.
   if (scenario?.moduleCount === 0) return [];
+  // Thunderbolts uses only the modular sets with an Elite Thunderbolt minion.
+  if (scenario?.onlySets)
+    return MODULES.filter((module) => scenario.onlySets!.includes(module.id));
   const fixed = [
     ...(scenario?.fixedSets || []),
     ...(scenario?.reservedSets || []),
@@ -2303,9 +2347,21 @@ export function heroStats(s: GameState) {
       antManPackStats(s).attack +
       spiderWomanStats(s).attack +
       captainPackStats(s).attack +
-      mansionAttackModifiers(s, "hero", { isTextBlank }).attack,
+      mansionAttackModifiers(s, "hero", { isTextBlank }).attack +
+      thunderboltsIdentityStats(
+        s,
+        s.activePlayerId,
+        h.traits || "",
+        s.player.form === "hero",
+      ).attack,
     thwart:
-      h.thwart! -
+      h.thwart! +
+      thunderboltsIdentityStats(
+        s,
+        s.activePlayerId,
+        h.traits || "",
+        s.player.form === "hero",
+      ).thwart -
       // Psychic Inertia: -1 THW.
       stryfeIdentityPenalty(s, s.activePlayerId) +
       collectorIdentityStats(s).thwart +

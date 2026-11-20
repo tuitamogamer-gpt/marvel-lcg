@@ -52,7 +52,10 @@ export function playerOrder(s: GameState): PlayerSeat[] {
   );
 }
 export function engaged(s: GameState, id = s.activePlayerId) {
-  return s.minions.filter((p) => !p.engagedWith || p.engagedWith === id);
+  // The minion attached to Thunderbolt Backup is engaged with no player.
+  return s.minions.filter(
+    (p) => !p.thunderboltBackup && (!p.engagedWith || p.engagedWith === id),
+  );
 }
 export function allInPlay(s: GameState): Piece[] {
   return s.players.flatMap((p) =>

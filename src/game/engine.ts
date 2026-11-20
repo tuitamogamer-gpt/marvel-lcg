@@ -39,6 +39,7 @@ import * as std3 from "./standard-iii.js";
 import * as bwv from "./black-widow-villain.js";
 import * as btc from "./batroc.js";
 import * as mdk from "./modok.js";
+import * as tb from "./thunderbolts.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -637,6 +638,7 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
     !!(s && typeof p !== "string" && bwv.blackWidowKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && btc.batrocKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && mdk.modokKeyword(s, p, name) > 0) ||
+    !!(s && typeof p !== "string" && tb.thunderboltsKeyword(s, p, name) > 0) ||
     !!(
       s &&
       typeof p !== "string" &&
@@ -699,6 +701,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     sin.sinisterSteady(s, piece)
       ? { steady: true }
       : {}),
+    // Solid Sound Constructs: the attached enemy loses stalwart.
+    ...(tb.thunderboltsLosesStalwart(s, piece) ? { stalwart: false } : {}),
   };
 }
 function giveCharacterStatus(
@@ -730,6 +734,11 @@ function giveCharacterStatus(
     kind === "stunned" &&
     "code" in p &&
     spiral.spiralCannotStun(s, p as Piece)
+  )
+    return false;
+  if (
+    "code" in p &&
+    tb.thunderboltsStatusPrevented(s, p as Piece, kind, thunderboltsPorts)
   )
     return false;
   const changed = giveStatus(
@@ -1067,6 +1076,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           hoodModular.hoodModularKeyword(s, p, "Ranged") > 0 ||
           btc.batrocKeyword(s, p, "Ranged") > 0 ||
           mdk.modokKeyword(s, p, "Ranged") > 0 ||
+          tb.thunderboltsKeyword(s, p, "Ranged") > 0 ||
           granted.ranged ||
           (s.attack?.attacker === p.id && s.attack.experimentalWeaponsRanged) ||
           (s.attack?.attacker === p.id && s.attack.redSkullModulesRanged) ||
@@ -1096,6 +1106,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           kreeFanatic.kreeFanaticOverkill(s, p.id) ||
           mojoGenres.mojoGenreOverkill(s, p) ||
           mdk.modokKeyword(s, p, "Overkill") > 0 ||
+          tb.thunderboltsKeyword(s, p, "Overkill") > 0 ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
             .overkill)
       ),
@@ -2731,6 +2742,12 @@ function check(s: GameState) {
   if (escapeNext === "won") return;
   if (escapeNext) advanceEscapeMain(s, escapeNext);
   if (s.batroc && btc.batrocCheck(s, batrocPorts)) return;
+  // Citizen V at 0 hit points is defeated once enough Thunderbolts are in
+  // the victory display.
+  if (tb.thunderboltsDefeatReady(s)) {
+    advanceVillain(s);
+    if (["won", "lost"].includes(s.phase)) return;
+  }
   if (zeroTolerance.zeroToleranceCheckLoss(s, zeroTolerancePorts)) return;
   // Simultaneous Spectrum batches place every prepared packet before checking
   // hero elimination. This flag exists only during the synchronous commit.
@@ -3457,6 +3474,38 @@ function dealDamage(
   // M.O.D.O.K.: Hostage Situation keeps him from taking damage, and Psionic
   // Force Field takes the damage to the enemy it is attached to.
   if (s.modok && n > 0) n = mdk.modokDamageTaken(s, target, n, modokPorts);
+  // Thunderbolts: Aerial Dogfight reduces attack damage to an Aerial
+  // character, Handspring sends attack damage back to the attacker and Sonic
+  // Bubble takes damage to an enemy as threat.
+  if (n > 0 && !traits.noDamageInstance)
+    n = tb.thunderboltsDamageTaken(
+      s,
+      target,
+      n,
+      {
+        playerAttack: attack,
+        enemyAttack: !!traits.enemyAttack,
+        attacker: attack
+          ? source === "hero"
+            ? `hero:${s.activePlayerId}`
+            : source
+          : undefined,
+        attackerAerial: damageSourceAerial(s, source),
+        ranged:
+          !!traits.ranged ||
+          !!sourceKeyword(s, source, "Ranged") ||
+          (!!traits.enemyAttack && !!s.attack?.ranged),
+        targetAerial:
+          target === "hero"
+            ? aerial(s)
+            : target.startsWith("hero:")
+              ? aerial(seatView(s, target.slice(5)))
+              : captainPackHasTrait(s, target, "Aerial"),
+        enemy:
+          target === s.villain.id || s.minions.some((m) => m.id === target),
+      },
+      thunderboltsPorts,
+    );
   const raySource = source === "hero" ? `hero:${s.activePlayerId}` : source;
   const ray =
     attack &&
@@ -3834,6 +3883,7 @@ function dealDamage(
       result.actualDamage,
       attack,
     ),
+    ...tb.thunderboltsDamaged(s, target, result.actualDamage),
   );
   if (s.currentEventId && attack)
     s.flags[`shadowcatDealt:${s.currentEventId}:${target}`] =
@@ -4788,6 +4838,9 @@ function defeatCharacter(
   // Scientist Supreme and Monica Rappaccini: Victory -1.
   else if (minion && mdk.modokVictoryMinion(m) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
+  // The Elite Thunderbolt minions: Victory 1.
+  else if (minion && tb.thunderboltsVictoryMinion(m) && !textWasBlank)
+    movePieceFromPlay(s, m.id, false, undefined, true);
   // Morlock: Victory -1.
   else if (!minion && morlock.morlockVictoryAlly(s, m) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
@@ -4862,6 +4915,7 @@ function defeatCharacter(
       ...(minion ? esn.esnMinionDefeated(s, m) : []),
       ...(minion ? btc.batrocMinionDefeated(s, m, textWasBlank) : []),
       ...(minion ? mdk.modokMinionDefeated(s, m, textWasBlank) : []),
+      ...(minion ? tb.thunderboltsMinionDefeated(s, m, textWasBlank) : []),
     );
     add(
       s,
@@ -5142,6 +5196,21 @@ function advanceVillain(
   if (modokReset) {
     log(s, "M.O.D.O.K.'s hit points reset instead of his defeat.", "good");
     add(s, ...modokReset);
+    return;
+  }
+  // Citizen V cannot be defeated unless 1 Thunderbolt minion per player is in
+  // the victory display; when he is, the players win.
+  const citizenDefeat = tb.thunderboltsWouldBeDefeated(s);
+  if (citizenDefeat === "immune") {
+    if (s.villain.hp < 0) s.villain.hp = 0;
+    log(
+      s,
+      `Citizen V cannot be defeated until ${s.playerCount} Thunderbolt minion${s.playerCount === 1 ? " is" : "s are"} in the victory display.`,
+    );
+    return;
+  }
+  if (citizenDefeat === "won") {
+    endGame(s, true, "Citizen V is defeated. The Thunderbolts stand down.");
     return;
   }
   const priorityKey = `cyclopsPriority:${s.villain.id}:${s.villain.stage}`;
@@ -7333,6 +7402,20 @@ function attackAction(
     log(s, "Stunned is removed instead of attacking.");
     return;
   }
+  // Hard Sound Bindings: discarded instead of the attack, then you are
+  // stunned.
+  if (
+    source === "hero" &&
+    !traits.initiated &&
+    tb.thunderboltsBound(s, s.activePlayerId)
+  ) {
+    add(
+      s,
+      ...tb.thunderboltsBindingsReplace(s, s.activePlayerId, thunderboltsPorts),
+    );
+    s.flags.basicAttack = false;
+    return;
+  }
   if (
     !traits.initiated &&
     !(
@@ -7375,6 +7458,18 @@ function attackAction(
       target,
       source,
       s.activePlayerId,
+    ),
+  );
+  // Thunderbolts: an attacked Thunderbolt minion engages the attacker's
+  // player, and the responses after you attack.
+  add(
+    s,
+    ...tb.thunderboltsEnemyAttacked(
+      s,
+      target,
+      source,
+      s.activePlayerId,
+      result?.actualDamage || 0,
     ),
   );
   add(
@@ -9024,7 +9119,8 @@ export function newGame(config: {
       (id) =>
         MODULES.some((m) => m.id === id) &&
         !v.fixedSets?.includes(id) &&
-        !v.reservedSets?.includes(id),
+        !v.reservedSets?.includes(id) &&
+        (!v.onlySets || v.onlySets.includes(id)),
     ),
     "This modular set’s complete rules are not implemented yet.",
   );
@@ -9246,6 +9342,7 @@ export function newGame(config: {
                                       ...bwv.BLACK_WIDOW_MODULAR_SETS,
                                       ...btc.BATROC_MODULAR_SETS,
                                       ...mdk.MODOK_MODULAR_SETS,
+                                      ...tb.THUNDERBOLTS_MODULAR_SETS,
                                     ].some((set) => set === c.set_code)
                                   ? "aos"
                                   : [
@@ -9420,6 +9517,8 @@ export function newGame(config: {
   if (v.id === "dark_beast") db.darkBeastSetup(s);
   if (v.id === "en_sabah_nur") esn.esnSetup(s);
   if (v.id === "black_widow_villain") bwv.blackWidowSetup(s);
+  if (v.id === "thunderbolts")
+    tb.thunderboltsSetup(s, { makePiece: (s, code) => makePiece(s, code) });
   if (v.id === "modok")
     mdk.modokSetup(s, {
       makePiece: (s, code) => makePiece(s, code),
@@ -10328,6 +10427,7 @@ function initialSetup(s: GameState) {
   setup.push(...esn.esnSetupEffects(s));
   setup.push(...bwv.blackWidowSetupEffects(s));
   setup.push(...mdk.modokSetupEffects(s));
+  setup.push(...tb.thunderboltsSetupEffects(s));
   // Queue stage setup after scenario setup and before the first turn.
   add(
     s,
@@ -12397,6 +12497,7 @@ export function abilityOptions(
     ...bwv.blackWidowActions(s, p, blackWidowVillainPorts),
     ...btc.batrocActions(s, p, batrocPorts),
     ...mdk.modokActions(s, p, modokPorts),
+    ...tb.thunderboltsActions(s, p),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -12576,6 +12677,9 @@ function allyStat(s: GameState, p: Piece, kind: "attack" | "thwart") {
       heroStats(seatView(s, playerId)),
     ) +
     (card(p)[kind] || 0) +
+    (kind === "attack"
+      ? tb.thunderboltsAllyAttack(s, captainPackHasTrait(s, p.id, "Aerial"))
+      : 0) +
     phoenixBonus[kind] +
     (kind === "attack"
       ? mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).attack
@@ -16262,6 +16366,7 @@ const thorPorts: ThorEnginePorts = {
       ...ironspider.ironspiderSinisterEngagementResponses(s, p, playerId),
       E("valkPackEngagementWindow", { id: p.id, actorId: playerId }),
       ...thorEngagementResponses(s, p, old, false),
+      ...tb.thunderboltsMinionEngaged(s, p, playerId),
     );
   },
   identityMaxHP: (s, id) => maxHP(seatView(s, id)),
@@ -17497,6 +17602,36 @@ const modokPorts: mdk.ModokPorts = {
   schemeValue: (s, id) => {
     const p = find(s, id);
     return p ? enemySCH(s, p, s.activePlayerId) : 0;
+  },
+  endGame: (s, won, reason) => endGame(s, won, reason),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+};
+const thunderboltsPorts: tb.ThunderboltsPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  reveal: (s, p, playerId) => blackWidowVillainPorts.reveal(s, p, playerId),
+  engage: (s, id, playerId) => thorPorts.engageMinion(s, id, playerId),
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  heal: (s, target, n) => {
+    heal(s, target, n, "encounter");
+  },
+  characters: (s, playerId) => blackWidowVillainPorts.characters(s, playerId),
+  remainingHP: (s, id) => blackWidowVillainPorts.remainingHP(s, id),
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  discardFromHand: (s, playerId, id) =>
+    blackWidowVillainPorts.discardFromHand(s, playerId, id),
+  mill: (s, playerId, n) => mysterioPorts.millPlayer(s, playerId, n),
+  removeFromGame: (s, id) => movePieceFromPlay(s, id, true),
+  shuffle: (s, items) => shuffle(s, items),
+  heroAttack: (s, playerId) => heroStats(seatView(s, playerId)).attack,
+  enemyAttack: (s, id) => {
+    const p = find(s, id);
+    return p ? enemyATK(s, p, s.activePlayerId) : 0;
+  },
+  boostIcons: (s, p) => card(p).boost || 0,
+  exhaustIdentity: (s, playerId) => {
+    seatView(s, playerId).player.exhausted = true;
   },
   endGame: (s, won, reason) => endGame(s, won, reason),
   heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
@@ -20744,6 +20879,8 @@ function minionEntered(s: GameState, p: Piece) {
   add(s, ...badoon.badoonMinionEngaged(s, p));
   add(s, ...towerDefense.towerDefenseMinionEngaged(s, p));
   add(s, ...sinisterModulars.sinisterModularEngaged(s, p, s.activePlayerId));
+  // Batroc and Coup de Foudre: when a minion engages a player.
+  add(s, ...tb.thunderboltsMinionEngaged(s, p, s.activePlayerId));
 }
 function minionResponses(s: GameState, p: Piece) {
   add(s, ...waspPack.waspPackMinionEngaged(s, p));
@@ -25708,6 +25845,12 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     sinisterSix.sixEnemyModifier(s, p, "attack") +
     btc.batrocEnemyStat(s, p, "attack") +
     mdk.modokEnemyStat(s, p, "attack") +
+    tb.thunderboltsEnemyStat(
+      s,
+      p,
+      "attack",
+      captainPackHasTrait(s, p.id, "Aerial"),
+    ) +
     wreckingCrew.wreckingCrewAttackBonus(s, p) +
     kang.kangEnemyStat(s, p, "attack", originalPlayerId) +
     nebulaVillain.nebulaEnemyAttack(s, p) +
@@ -25849,7 +25992,8 @@ function prepareAttackBoosts(s: GameState) {
       mutagenAdditionalBoosts(s, a.attacker) +
       morlock.morlockAdditionalBoosts(s) +
       (a.isVillain ? db.darkBeastAdditionalBoosts(s) : 0) +
-      (a.isVillain ? bwv.blackWidowAdditionalBoosts(s) : 0);
+      (a.isVillain ? bwv.blackWidowAdditionalBoosts(s) : 0) +
+      tb.thunderboltsAdditionalBoosts(s, a.attacker);
   for (let i = 0; i < n; i++) {
     const p = drawEncounter(s);
     if (p) a.pendingBoosts.push(p);
@@ -25914,7 +26058,8 @@ function declareDefense(s: GameState) {
       !view.player.exhausted &&
       vision.visionCanDefend(view) &&
       shadowcat.shadowcatCanDefend(view) &&
-      !magneto.magnetoIdentityRestricted(s, seat.id, { isTextBlank })
+      !magneto.magnetoIdentityRestricted(s, seat.id, { isTextBlank }) &&
+      !tb.thunderboltsBlocksBasicDefense(s, a.attacker, aerial(view))
     )
       opts.push(
         option(
@@ -26142,6 +26287,7 @@ function boostEffects(s: GameState, p: Piece) {
     std3.standardIIIBoost(s, p) ??
     btc.batrocBoost(s, p) ??
     mdk.modokBoost(s, p) ??
+    tb.thunderboltsBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -26453,7 +26599,11 @@ function enemyScheme(
     : id === s.villain.id || keyword(p, "Villainous", s)
       ? 1
       : 0;
-  const n = omitNewBoost ? 0 : normal + mutagenAdditionalBoosts(s, id);
+  const n = omitNewBoost
+    ? 0
+    : normal +
+      mutagenAdditionalBoosts(s, id) +
+      tb.thunderboltsAdditionalBoosts(s, id);
   for (let i = 0; i < n; i++) {
     const boost = drawEncounter(s);
     if (boost) pendingBoosts.push(boost);
@@ -26626,6 +26776,8 @@ function finishScheme(s: GameState) {
     ...apoc.apocalypseSchemed(s, id),
     ...apoc.apocalypseActivated(s, id, s.activePlayerId),
     ...mdk.modokActivated(s, id),
+    ...tb.thunderboltsSchemed(s, id, s.activePlayerId),
+    ...tb.thunderboltsActivated(s, id, s.activePlayerId),
     ...hood
       .hoodAfterActivation(s, {
         token: (activation.id ||= `scheme${s.nextId++}`),
@@ -27369,6 +27521,8 @@ function finishAttackAfterDamage(
     ),
     ...apoc.apocalypseActivated(s, a.attacker, recipientId),
     ...mdk.modokActivated(s, a.attacker),
+    ...tb.thunderboltsAttackedYou(s, a.attacker, recipientId),
+    ...tb.thunderboltsActivated(s, a.attacker, recipientId),
     ...db.darkBeastAttacked(
       s,
       a.attacker,
@@ -28440,6 +28594,8 @@ function reveal(
         ...btc.BATROCS_BRIGADE_CODES,
         ...mdk.MODOK_CODES,
         ...mdk.SCIENTIST_SUPREME_CODES,
+        ...tb.THUNDERBOLTS_CODES,
+        ...tb.ELITE_THUNDERBOLT_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -28509,10 +28665,16 @@ function reveal(
         (unus.UNUS_IN_PLAY_OBLIGATIONS as readonly string[]).includes(p.code) ||
         (std3.STANDARD_III_IN_PLAY_OBLIGATIONS as readonly string[]).includes(
           p.code,
+        ) ||
+        (tb.THUNDERBOLTS_IN_PLAY_OBLIGATIONS as readonly string[]).includes(
+          p.code,
         ))
     ) {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
-      if (!s.player.inPlay.some((x) => x.id === p.id)) s.player.inPlay.push(p);
+      if (!s.player.inPlay.some((x) => x.id === p.id)) {
+        s.player.inPlay.push(p);
+        tb.thunderboltsObligationEntered(p);
+      }
     }
     add(
       s,
@@ -28705,6 +28867,8 @@ function reveal(
       ...btc.BATROCS_BRIGADE_CODES,
       ...mdk.MODOK_CODES,
       ...mdk.SCIENTIST_SUPREME_CODES,
+      ...tb.THUNDERBOLTS_CODES,
+      ...tb.ELITE_THUNDERBOLT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -28781,6 +28945,7 @@ function reveal(
       bwv.blackWidowReveal(s, p) ??
       btc.batrocReveal(s, p) ??
       mdk.modokReveal(s, p) ??
+      tb.thunderboltsReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -28897,6 +29062,7 @@ function reveal(
     bwv.blackWidowReveal(s, p) ??
     btc.batrocReveal(s, p) ??
     mdk.modokReveal(s, p) ??
+    tb.thunderboltsReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -30370,6 +30536,7 @@ function resolve(s: GameState, e: Effect) {
           bwv.blackWidowReveal(state, piece) ??
           btc.batrocReveal(state, piece) ??
           mdk.modokReveal(state, piece) ??
+          tb.thunderboltsReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -30537,6 +30704,7 @@ function resolve(s: GameState, e: Effect) {
   if (bwv.resolveBlackWidowVillainEffect(s, e, blackWidowVillainPorts)) return;
   if (btc.resolveBatrocEffect(s, e, batrocPorts)) return;
   if (mdk.resolveModokEffect(s, e, modokPorts)) return;
+  if (tb.resolveThunderboltsEffect(s, e, thunderboltsPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -31599,6 +31767,7 @@ function resolve(s: GameState, e: Effect) {
         ...iceman.icemanRecovered(s),
         ...phoenix.phoenixRecovered(s),
         ...x23.x23Recovered(s),
+        ...tb.thunderboltsRecovered(s),
       );
       break;
     case "basicPower": {
@@ -39467,6 +39636,13 @@ function resolve(s: GameState, e: Effect) {
         add(s, E("minionActivations"));
         break;
       }
+      if (
+        !e.colossusActivationHandled &&
+        tb.thunderboltsSkipsActivation(s, thunderboltsPorts)
+      ) {
+        add(s, E("minionActivations"));
+        break;
+      }
       if (!e.colossusActivationHandled) {
         const kind = s.player.form === "hero" ? "attack" : "scheme";
         const replaced =
@@ -39601,6 +39777,13 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "newRound": {
+      if (!e.thunderboltsRoundEnded) {
+        const effects = tb.thunderboltsRoundEnded(s);
+        if (effects.length) {
+          add(s, ...effects, { ...e, thunderboltsRoundEnded: true });
+          break;
+        }
+      }
       if (!e.kangPhaseEnded) {
         const effects = kang.kangPhaseEnded(s);
         if (effects.length) {
@@ -40448,6 +40631,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...bwv.blackWidowActions(s, p, blackWidowVillainPorts),
               ...btc.batrocActions(s, p, batrocPorts),
               ...mdk.modokActions(s, p, modokPorts),
+              ...tb.thunderboltsActions(s, p),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -40592,6 +40776,23 @@ export function dispatch(state: GameState, command: Command): GameState {
           ) {
             const selected = db
               .darkBeastActions(s, db.darkBeastActionSource(s, command.id)!)
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
+            add(s, ...selected!.effects);
+          } else if (
+            tb.thunderboltsActionSource(s, command.id) &&
+            tb
+              .thunderboltsActions(
+                s,
+                tb.thunderboltsActionSource(s, command.id)!,
+              )
+              .some((o) => !command.action || o.id === command.action)
+          ) {
+            const selected = tb
+              .thunderboltsActions(
+                s,
+                tb.thunderboltsActionSource(s, command.id)!,
+              )
               .find((o) => !command.action || o.id === command.action);
             need(selected, "This action needs its printed cost.");
             add(s, ...selected!.effects);

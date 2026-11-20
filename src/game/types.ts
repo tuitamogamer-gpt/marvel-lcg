@@ -130,6 +130,9 @@ export interface Piece {
   dealtTo?: string;
   /** Encounter card placed in this player's play area (Ebony Maw's Spells). */
   playAreaOf?: string;
+  /** The Thunderbolt minion attached to Thunderbolt Backup: in play, engaged
+   * with no player. */
+  thunderboltBackup?: boolean;
 }
 export interface Effect {
   type: string;
@@ -191,6 +194,8 @@ export interface Attack {
   experimentalWeaponsRanged?: boolean;
   /** Hydra Sidearm grants Ranged to this actual attack at initiation. */
   redSkullModulesRanged?: boolean;
+  /** Supersonic's boost gives this actual attack ranged. */
+  ranged?: boolean;
   angelIgnoreBoosts?: boolean;
   angelRetaliatePlayerId?: string;
   angelRetaliate?: number;
@@ -316,6 +321,7 @@ export interface GameState {
   blackWidowVillain?: import("./black-widow-villain.js").BlackWidowVillainState;
   batroc?: import("./batroc.js").BatrocState;
   modok?: import("./modok.js").ModokState;
+  thunderbolts?: import("./thunderbolts.js").ThunderboltsState;
   venomGoblin?: import("./venom-goblin.js").VenomGoblinState;
   /** Across the Mojoverse: the show deck. */
   spiral?: import("./spiral.js").SpiralState;

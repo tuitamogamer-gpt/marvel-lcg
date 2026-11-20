@@ -247,3 +247,7 @@ The objective reads "Clear all threat · stage N of 3", since defeating Batroc i
 ## M.O.D.O.K.'s holding cells, 2026-11-20
 
 The objective counts the Inhumans freed, "Free the Inhumans · N of 4 free", and reads "Defeat M.O.D.O.K." once all four are free; his caption says that he resets while a Holding Cell is in play and that 2 locks come off it. The Holding Cell is labelled as such and captioned with its locks, the Inhumans still held and the one it frees. Its Hero Action is two buttons, "Spend Energy + Energy · remove a lock" and "Spend 3 · remove a lock", each with the full ability as its accessible name. Each Adaptoid upgrade is labelled and captioned with what it gives every Adaptoid, the main scheme's note counts the upgrades left, and Hostage Situation names the ally it holds.
+
+## The Thunderbolts' arrest, 2026-11-20
+
+The objective counts the Thunderbolts still to defeat, "Defeat N Thunderbolts, then Citizen V · X of N", and reads "Defeat Citizen V" once enough are in the victory display; his caption gives that condition and the heal that replaces his activation against a player engaged with a Thunderbolt. Thunderbolt Backup is labelled and captioned with the minion it holds and its end-of-round swap, and that minion's tile reads "On Thunderbolt Backup · engaged with no hero" instead of naming a hero. Jolt's tile shows her parley counters and offers "Parley · exhaust your hero", with the full Hero Action as its accessible name, and Innocent Bystanders is captioned with its counters and its cost in the player's area.

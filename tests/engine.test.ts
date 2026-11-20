@@ -23,6 +23,7 @@ import {
   targets,
   canChangeIdentityForm,
   abilityOptions,
+  canPay,
 } from "../src/game/engine";
 import type { GameState, Resource, Piece } from "../src/game/types";
 import { deckSizeFor } from "../src/game/decks";
@@ -31,6 +32,7 @@ import { visionCanAttack } from "../src/game/vision";
 import { cyclopsCanAttack } from "../src/game/cyclops";
 import { valkyrieCannotBasicAttack } from "../src/game/valkyrie";
 import { stunNetted } from "../src/game/black-widow-villain";
+import { waspBasicAttackCost } from "../src/game/wasp";
 import { captainThwartBlocked } from "../src/game/captain-america";
 function base(
   heroId = "spider_man",
@@ -737,7 +739,9 @@ describe("complete seeded missions", () => {
               !cyclopsCanAttack(s) ||
               valkyrieCannotBasicAttack(s) ||
               // Black Widow's Stun Net.
-              stunNetted(s, `hero:${s.activePlayerId}`);
+              stunNetted(s, `hero:${s.activePlayerId}`) ||
+              // Mother's Orders adds a resource to a basic attack's cost.
+              !canPay(s, waspBasicAttackCost(s));
             const canThwart =
               !captainThwartBlocked(s) &&
               (s.player.confused ||

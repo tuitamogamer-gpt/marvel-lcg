@@ -103,7 +103,8 @@
     "test:standard-iii": "node scripts/standard-iii-check.mjs",
     "test:black-widow-villain": "node scripts/black-widow-villain-check.mjs",
     "test:batroc": "node scripts/batroc-check.mjs",
-    "test:modok": "node scripts/modok-check.mjs"
+    "test:modok": "node scripts/modok-check.mjs",
+    "test:thunderbolts": "node scripts/thunderbolts-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",
