@@ -64,6 +64,11 @@ import {
   GENOSHA_CODES,
   SAVAGE_LAND_CODES,
 } from "./dark-beast.js";
+import {
+  CELESTIAL_TECH_CODES,
+  CLAN_AKKABA_CODES,
+  EN_SABAH_NUR_SCRIPT_CODES,
+} from "./en-sabah-nur.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -364,6 +369,9 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...SAVAGE_LAND_CODES,
   ...GENOSHA_CODES,
   ...BLUE_MOON_CODES,
+  ...EN_SABAH_NUR_SCRIPT_CODES,
+  ...CELESTIAL_TECH_CODES,
+  ...CLAN_AKKABA_CODES,
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

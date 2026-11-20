@@ -34,6 +34,7 @@ import * as unus from "./unus.js";
 import * as horsemen from "./four-horsemen.js";
 import * as apoc from "./apocalypse.js";
 import * as db from "./dark-beast.js";
+import * as esn from "./en-sabah-nur.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -4753,7 +4754,14 @@ function defeatCharacter(
     if (!textWasBlank) add(s, ...sandman.sandmanMinionDefeated(s, m));
     if (!textWasBlank) add(s, ...magog.magogMinionDefeated(s, m));
     add(s, ...kreeFanatic.kreeFanaticMinionDefeated(s, m));
-    add(s, ...bounty, ...underToad, ...geneticExperiments, ...darkBeastDefeat);
+    add(
+      s,
+      ...bounty,
+      ...underToad,
+      ...geneticExperiments,
+      ...darkBeastDefeat,
+      ...(minion ? esn.esnMinionDefeated(s, m) : []),
+    );
     add(
       s,
       ...mojoGenres.mojoGenreMinionDefeated(
@@ -5986,7 +5994,9 @@ function threat(
                   .map((e) => ({ ...e, actorId: s.firstPlayerId }))
               : s.villainId === "morlock_siege"
                 ? morlock.morlockMainAdvanced(s)
-                : eachPlayer(s, E("drone"))),
+                : s.villainId === "en_sabah_nur"
+                  ? esn.esnMainAdvanced(s)
+                  : eachPlayer(s, E("drone"))),
       );
     }
   } else {
@@ -5995,6 +6005,7 @@ function threat(
       p.counters += n;
       track(s, "threatPlaced", n);
       phoenix.phoenixThreatPlaced(s, p, phoenixPorts);
+      add(s, ...esn.esnThreatPlaced(s, p, n));
     }
   }
 }
@@ -6257,6 +6268,13 @@ function defeatScheme(
         ),
         ...apoc.apocalypseSchemeDefeated(s, p),
         ...db.darkBeastSchemeDefeated(
+          s,
+          p,
+          source.startsWith("hero:")
+            ? source.slice(5)
+            : controller(s, source)?.id || s.activePlayerId,
+        ),
+        ...esn.esnSchemeDefeated(
           s,
           p,
           source.startsWith("hero:")
@@ -9045,6 +9063,7 @@ export function newGame(config: {
                                     ...horsemen.HORSEMEN_MODULAR_SETS,
                                     ...apoc.APOCALYPSE_MODULAR_SETS,
                                     ...db.DARK_BEAST_MODULAR_SETS,
+                                    ...esn.EN_SABAH_NUR_MODULAR_SETS,
                                   ].some((set) => set === c.set_code)
                                 ? "aoa"
                                 : ["temporal", "anachronauts", "mot"].includes(
@@ -9127,6 +9146,8 @@ export function newGame(config: {
           !unus.unusSetupCard(c.code) &&
           // The citadel's side schemes and the Prelates start set aside.
           !apoc.apocalypseSetupCard(c.code) &&
+          // Ancient Ritual (Setup) begins the game in play.
+          !esn.esnSetupCard(c.code) &&
           !(v.id === "magneto" && ["32144b", "32145b"].includes(c.code)) &&
           (c.type_code !== "environment" ||
             (v.id === "absorbing_man" &&
@@ -9199,6 +9220,11 @@ export function newGame(config: {
   if (v.id === "apocalypse")
     apoc.apocalypseSetup(s, { makePiece: (s, code) => makePiece(s, code) });
   if (v.id === "dark_beast") db.darkBeastSetup(s);
+  if (v.id === "en_sabah_nur") esn.esnSetup(s);
+  // Ancient Ritual (Permanent, Setup) begins the game in play with the
+  // Clan Akkaba set.
+  if (selectedModules.includes("clan_akkaba"))
+    esn.esnRitualSetup(s, { makePiece: (s, code) => makePiece(s, code) });
   // Gene Pool (Setup) begins the game in play with the Infinites set.
   if (
     v.fixedSets?.includes("infinites") ||
@@ -10089,6 +10115,7 @@ function initialSetup(s: GameState) {
   setup.push(...horsemen.horsemenSetupEffects(s));
   setup.push(...apoc.apocalypseSetupEffects(s));
   setup.push(...db.darkBeastSetupEffects(s));
+  setup.push(...esn.esnSetupEffects(s));
   // Queue stage setup after scenario setup and before the first turn.
   add(
     s,
@@ -13706,7 +13733,8 @@ function countActivationBoost(s: GameState, id: string, after: Effect[]): void {
         numericOverrides: [
           (card(p).boost || 0) +
             iceman.icemanBoostExtra(s, p.id) +
-            db.darkBeastBoostIcons(s, p),
+            db.darkBeastBoostIcons(s, p) +
+            esn.esnBoostIcons(s, p),
         ],
       },
     ),
@@ -13769,6 +13797,7 @@ const bwPorts: BlackWidowPorts = {
           (card(p).boost || 0) +
             iceman.icemanBoostExtra(s, p.id) +
             db.darkBeastBoostIcons(s, p) +
+            esn.esnBoostIcons(s, p) +
             scarletWitch.scarletWitchBoostIconBonus(textActiveState(s)) +
             activationAmplify(s));
   },
@@ -17098,6 +17127,23 @@ const darkBeastPorts: db.DarkBeastPorts = {
   },
   indirect: (s, playerId, amount, sourceId, title) =>
     hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+};
+const enSabahNurPorts: esn.EnSabahNurPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  reveal: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    wreckingCrewPorts.reveal(s, p, playerId);
+  },
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  mill: (s, playerId, n) => mysterioPorts.millPlayer(s, playerId, n),
+  discardFromHand: (s, playerId, id) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    if (s.player.hand.some((p) => p.id === id)) discardHand(s, id);
+    activateSeat(s, previous);
+  },
 };
 const horsemenPorts: horsemen.HorsemenPorts = {
   ...mutagenPorts,
@@ -25041,6 +25087,7 @@ function enemyAttack(
     overkill:
       novaModifiers.overkill ||
       (isVillain && !!villainAt(s, "01099").length) ||
+      esn.esnOverkill(s, id) ||
       (!!nebulaSource && !!sourceKeyword(s, id, "Overkill")),
     extra,
     modifier:
@@ -25116,6 +25163,12 @@ function enemyAttack(
       ...apoc.apocalypseAttackInitiated(s, id, s.attack.originalPlayerId!),
       ...db.darkBeastAttackInitiated(s, id, s.attack.originalPlayerId!),
       ...db.darkBeastMinionAttackInitiated(s, id, s.attack.originalPlayerId!),
+      ...esn.esnActivationInitiated(
+        s,
+        id,
+        s.attack.originalPlayerId!,
+        "attack",
+      ),
     );
   if (!friendlySource)
     add(
@@ -25615,6 +25668,7 @@ function boostEffects(s: GameState, p: Piece) {
     horsemen.horsemenBoost(s, p) ??
     apoc.apocalypseBoost(s, p) ??
     db.darkBeastBoost(s, p) ??
+    esn.esnBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -25954,6 +26008,7 @@ function enemyScheme(
     ...ebonyMaw.ebonyMawActivationInitiated(s, id, s.activePlayerId),
     ...thanos.thanosActivationInitiated(s, id),
     ...hoodModular.hoodModularActivationInitiated(s, id, s.activePlayerId),
+    ...esn.esnActivationInitiated(s, id, s.activePlayerId, "scheme"),
     ...masterMold.masterMoldBeforeScheme(s, moldReceipt, { isTextBlank }),
     E(pendingBoosts.length ? "revealSchemeBoost" : "finishScheme"),
   );
@@ -26068,6 +26123,7 @@ function finishScheme(s: GameState) {
           s.sideSchemes.some((q) => q.code === "44034")
             ? s.sideSchemes.find((q) => q.code === "44034")!.id
             : (wreckingCrew.wreckingCrewSchemeTarget(s, p) ??
+              esn.esnSchemeTarget(s, p) ??
               phoenix.phoenixSchemeTarget(s, p)),
         amount:
           amount +
@@ -26836,6 +26892,15 @@ function finishAttackAfterDamage(
       s,
       a.attacker,
       recipientId,
+      target !== "hero" &&
+        !target.startsWith("hero:") &&
+        before > 0 &&
+        a.gmwReturnedDefender !== target &&
+        !find(s, target),
+    ),
+    ...esn.esnAttacked(
+      s,
+      a.attacker,
       target !== "hero" &&
         !target.startsWith("hero:") &&
         before > 0 &&
@@ -27869,6 +27934,9 @@ function reveal(
         ...db.SAVAGE_LAND_CODES,
         ...db.GENOSHA_CODES,
         ...db.BLUE_MOON_CODES,
+        ...esn.EN_SABAH_NUR_SCRIPT_CODES,
+        ...esn.CELESTIAL_TECH_CODES,
+        ...esn.CLAN_AKKABA_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -28120,6 +28188,9 @@ function reveal(
       ...db.SAVAGE_LAND_CODES,
       ...db.GENOSHA_CODES,
       ...db.BLUE_MOON_CODES,
+      ...esn.EN_SABAH_NUR_SCRIPT_CODES,
+      ...esn.CELESTIAL_TECH_CODES,
+      ...esn.CLAN_AKKABA_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -28191,6 +28262,7 @@ function reveal(
       horsemen.horsemenReveal(s, p) ??
       apoc.apocalypseReveal(s, p) ??
       db.darkBeastReveal(s, p) ??
+      esn.esnReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -28297,6 +28369,7 @@ function reveal(
     horsemen.horsemenReveal(s, p) ??
     apoc.apocalypseReveal(s, p) ??
     db.darkBeastReveal(s, p) ??
+    esn.esnReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -29763,6 +29836,7 @@ function resolve(s: GameState, e: Effect) {
           horsemen.horsemenReveal(state, piece) ??
           apoc.apocalypseReveal(state, piece) ??
           db.darkBeastReveal(state, piece) ??
+          esn.esnReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -29925,6 +29999,7 @@ function resolve(s: GameState, e: Effect) {
   if (horsemen.resolveHorsemenEffect(s, e, horsemenPorts)) return;
   if (apoc.resolveApocalypseEffect(s, e, apocalypsePorts)) return;
   if (db.resolveDarkBeastEffect(s, e, darkBeastPorts)) return;
+  if (esn.resolveEnSabahNurEffect(s, e, enSabahNurPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -38827,6 +38902,7 @@ function resolve(s: GameState, e: Effect) {
         ...morlock.morlockStepOne(s),
         ...sty.stryfeStepOne(s),
         ...unus.unusStepOne(s),
+        ...esn.esnStepOne(s),
       );
       break;
     case "villainActivate": {

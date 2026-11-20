@@ -71,6 +71,11 @@ import {
   GENOSHA_CODES,
   SAVAGE_LAND_CODES,
 } from "../src/game/dark-beast";
+import {
+  CELESTIAL_TECH_CODES,
+  CLAN_AKKABA_CODES,
+  EN_SABAH_NUR_SCRIPT_CODES,
+} from "../src/game/en-sabah-nur";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -140,6 +145,9 @@ const badoonCodes = new Set<string>([
   ...SAVAGE_LAND_CODES,
   ...GENOSHA_CODES,
   ...BLUE_MOON_CODES,
+  ...EN_SABAH_NUR_SCRIPT_CODES,
+  ...CELESTIAL_TECH_CODES,
+  ...CLAN_AKKABA_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -523,7 +531,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(82);
+    expect(MODULES).toHaveLength(84);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "temporal",
@@ -553,9 +561,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(3244);
-    expect(coverage.unsupportedFaces).toBe(1307);
-    expect(coverage.dedicatedFaces).toBe(2806);
+    expect(coverage.executableFaces).toBe(3272);
+    expect(coverage.unsupportedFaces).toBe(1279);
+    expect(coverage.dedicatedFaces).toBe(2834);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -621,14 +629,14 @@ describe("complete expansion rules inventory", () => {
       ).registered,
     ).toBe(true);
   });
-  it("closes the Age of Apocalypse hero slice, Unus, Four Horsemen, Apocalypse, Dark Beast and both complete retail Hero Packs", () => {
+  it("closes the Age of Apocalypse hero slice, Unus, Four Horsemen, Apocalypse, Dark Beast, En Sabah Nur and both complete retail Hero Packs", () => {
     const products = inventory.installedRegistryCoverage.products;
     const apocalypse = products.find(
       (pack: { code: string }) => pack.code === "aoa",
     );
     expect(apocalypse).toMatchObject({
       faceCount: 220,
-      executableFaces: 159,
+      executableFaces: 187,
       installedCardClosure: false,
     });
     // Unus with the Infinites and Dystopian Nightmare sets fills positions
@@ -706,6 +714,25 @@ describe("complete expansion rules inventory", () => {
         .map((entry: { code: string }) => entry.code)
         .sort(),
     ).toEqual([...darkBeastFaces].sort());
+    // En Sabah Nur with the Celestial Tech and Clan Akkaba sets fills
+    // positions 147 to 163, and Apocalypse's three stage cards 184 to 186.
+    const enSabahNurFaces = new Set<string>([
+      ...EN_SABAH_NUR_SCRIPT_CODES,
+      ...CELESTIAL_TECH_CODES,
+      ...CLAN_AKKABA_CODES,
+    ]);
+    expect(enSabahNurFaces.size).toBe(28);
+    expect(
+      cards
+        .filter(
+          (entry: { pack_code: string; position: number }) =>
+            entry.pack_code === "aoa" &&
+            ((entry.position > 146 && entry.position <= 163) ||
+              (entry.position >= 184 && entry.position <= 186)),
+        )
+        .map((entry: { code: string }) => entry.code)
+        .sort(),
+    ).toEqual([...enSabahNurFaces].sort());
     const prelates = new Set<string>(PRELATE_CODES);
     expect(
       cards
@@ -725,16 +752,25 @@ describe("complete expansion rules inventory", () => {
           (entry: { pack_code: string; position: number; code: string }) =>
             entry.pack_code === "aoa" &&
             entry.position > 74 &&
-            !(entry.position > 80 && entry.position <= 146) &&
+            !(entry.position > 80 && entry.position <= 163) &&
+            !(entry.position >= 184 && entry.position <= 186) &&
             !prelates.has(entry.code),
         )
         .map((entry: { code: string }) => entry.code)
         .sort(),
     );
     expect(apocalypse.unsupportedFaceCodes).toEqual(
-      expect.arrayContaining(["45075a", "45147a", "45179a"]),
+      expect.arrayContaining(["45075a", "45164", "45179a"]),
     );
-    for (const code of ["45081a", "45101a", "45118", "45179b"])
+    for (const code of [
+      "45081a",
+      "45101a",
+      "45118",
+      "45147a",
+      "45163",
+      "45184c",
+      "45179b",
+    ])
       expect(apocalypse.unsupportedFaceCodes).not.toContain(code);
     for (const [code, count] of [
       ["iceman", 33],
@@ -887,6 +923,8 @@ describe("complete expansion rules inventory", () => {
         27 -
         // Age of Apocalypse: Dark Beast, Savage Land, Genosha and Blue Moon.
         30 -
+        // Age of Apocalypse: En Sabah Nur, Celestial Tech and Clan Akkaba.
+        28 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -1059,7 +1097,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(82);
+    expect(coverage.registeredModules).toHaveLength(84);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -1243,7 +1281,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(45);
+    ).toHaveLength(46);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "venom_goblin",
@@ -1490,7 +1528,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(167);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(168);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

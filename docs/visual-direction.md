@@ -227,3 +227,7 @@ Apocalypse's label carries his stage, I to IV, and whether he still regenerates 
 ## Dark Beast's Settings, 2026-11-20
 
 Dark Beast's label carries his stage and the Setting in play, and the caption names the Special his attacks resolve for the player he attacks. Each Setting environment is labelled as a Setting, with its constant ability, its Special and the reminder that another Setting discards it. High-Tech Goggles, Genetic Enhancement and Escaped Mutant show their actions as buttons on the attached card, like the other attachment actions.
+
+## En Sabah Nur's forms, 2026-11-20
+
+Apocalypse's label carries his stage and current form, and the caption names that form's keyword and what changing to it does, with his stage as X, so a form change reads at a glance. The main scheme's one-line note counts the power counters toward the next Superpower, and on The Rise of Apocalypse adds that completing it loses. Ancient Ritual carries a caption with its threshold and what it does.

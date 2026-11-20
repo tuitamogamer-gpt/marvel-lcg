@@ -389,6 +389,17 @@ import {
   darkBeastSettingLabel,
 } from "./game/dark-beast";
 import {
+  ANCIENT_RITUAL,
+  ANCIENT_RITUAL_CAPTION,
+  POWER_LIMIT,
+  PYRAMID,
+  RISE,
+  enSabahNur,
+  esnCaption,
+  esnFormLabel,
+  esnPower,
+} from "./game/en-sabah-nur";
+import {
   AERIAL_BOMBARDMENT,
   IMPERVIOUS,
   OUT_OF_REACH,
@@ -2822,6 +2833,20 @@ export default function App() {
                       becomes the Living Bomb, and Stryfe cannot be defeated
                       until it is gone. Extreme Measures and Mutant Insurrection
                       are preselected.
+                    </p>
+                  )}
+                  {villain.id === "en_sabah_nur" && (
+                    <p className="setting-help">
+                      Apocalypse begins in his Biomorph form and shifts to his
+                      Cyberpath or Giant form when his Superpower cards say so.
+                      A form change keeps his damage, statuses and attachments
+                      and resolves the new form&rsquo;s Forced Response. After
+                      step one of each villain phase his main scheme gains a
+                      power counter, and the fourth digs a Superpower card out
+                      of the encounter deck. Each player starts with a facedown
+                      encounter card. Celestial Tech and Clan Akkaba are
+                      preselected; with Clan Akkaba, Ancient Ritual starts in
+                      play.
                     </p>
                   )}
                   {villain.id === "dark_beast" && (
@@ -7071,11 +7096,13 @@ function Tabletop({
                                           ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · GENE POOL ${genePoolThreat(s)}`
                                           : apocalypse(s)
                                             ? `VILLAIN · STAGE ${apocalypseRoman(apocalypseStage(s))} · ${noLongerWorthy(s) ? "NO LONGER WORTHY" : "REGENERATES"}`
-                                            : darkBeast(s)
-                                              ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${darkBeastSettingLabel(s)}`
-                                              : misterSinister(s)
-                                                ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${superpowers(s)} ${superpowers(s) === 1 ? "SUPERPOWER" : "SUPERPOWERS"}`
-                                                : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
+                                            : enSabahNur(s)
+                                              ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${esnFormLabel(s)}`
+                                              : darkBeast(s)
+                                                ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${darkBeastSettingLabel(s)}`
+                                                : misterSinister(s)
+                                                  ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${superpowers(s)} ${superpowers(s) === 1 ? "SUPERPOWER" : "SUPERPOWERS"}`
+                                                  : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
                     {s.kang ? (
                       <h2>
@@ -7182,6 +7209,9 @@ function Tabletop({
                       <span className="stat-caption">
                         {darkBeastCaption(s)}
                       </span>
+                    )}
+                    {enSabahNur(s) && (
+                      <span className="stat-caption">{esnCaption(s)}</span>
                     )}
                     {misterSinister(s) && (
                       <span className="stat-caption">
@@ -7314,7 +7344,7 @@ function Tabletop({
                   <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
-                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen || apocalypse(s) ? " magog-scheme" : ""}`}
+                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen || apocalypse(s) || enSabahNur(s) ? " magog-scheme" : ""}`}
                     style={
                       {
                         "--scheme-actions": mainActionPiece
@@ -7439,6 +7469,16 @@ function Tabletop({
                         moves on after each activation
                       </p>
                     )}
+                    {enSabahNur(s) &&
+                      [PYRAMID, RISE].includes(s.scheme.code) && (
+                        <p className="magog-scheme-note">
+                          Power {esnPower(s)} of {POWER_LIMIT} · the{" "}
+                          {POWER_LIMIT}th after step one digs out a Superpower
+                          {s.scheme.code === RISE
+                            ? " · completed: you lose"
+                            : ""}
+                        </p>
+                      )}
                     {apocalypse(s) && s.scheme.code === AGE_OF_APOCALYPSE && (
                       <p className="magog-scheme-note">
                         {apocalypseStage(s) < 4
@@ -7913,6 +7953,11 @@ function Tabletop({
                       {p.code === UNDERCOVER_MOJO && (
                         <span className="stat-caption">
                           Damage to Mojo removes threat here instead
+                        </span>
+                      )}
+                      {p.code === ANCIENT_RITUAL && (
+                        <span className="stat-caption">
+                          {ANCIENT_RITUAL_CAPTION}
                         </span>
                       )}
                       {apocalypseThwartLocked(s, p.id) && (

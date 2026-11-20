@@ -171,6 +171,8 @@ jobs:
             scripts: test:apocalypse
           - group: dark-beast
             scripts: test:dark-beast
+          - group: en-sabah-nur
+            scripts: test:en-sabah-nur
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

@@ -1656,6 +1656,23 @@ export const VILLAINS = [
       "Dark Beast drags the heroes through time: each of his stages reveals the Savage Land, Genosha or the Blue Area of the Moon, whose Special ability his attacks keep unleashing.",
     color: "#2f5d50",
   },
+  {
+    id: "en_sabah_nur",
+    name: "En Sabah Nur",
+    // Apocalypse (I) and (II) in Standard, (II) and (III) in Expert, each
+    // entering in his Biomorph form (a); b is Cyberpath and c is Giant.
+    codes: ["45184a", "45185a", "45186a"],
+    schemes: ["45147b", "45148b"],
+    module: "celestial_tech",
+    moduleCount: 2,
+    defaultModules: ["celestial_tech", "clan_akkaba"],
+    difficulty: 5,
+    title: "En Sabah Nur's Pyramid",
+    location: "Akkaba, ancient Egypt",
+    description:
+      "The first mutant rises: Apocalypse shifts between his Biomorph, Cyberpath and Giant forms while power counters on his pyramid dig out his Superpowers.",
+    color: "#a8792a",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1752,6 +1769,8 @@ export const MODULES = [
   { id: "savage_land", name: "Savage Land", difficulty: 3 },
   { id: "genosha", name: "Genosha", difficulty: 3 },
   { id: "blue_moon", name: "Blue Moon", difficulty: 3 },
+  { id: "celestial_tech", name: "Celestial Tech", difficulty: 3 },
+  { id: "clan_akkaba", name: "Clan Akkaba", difficulty: 3 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(
