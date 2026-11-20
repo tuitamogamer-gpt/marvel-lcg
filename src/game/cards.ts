@@ -1793,6 +1793,23 @@ export const VILLAINS = [
       "Enchantress casts a hypnotic gaze on every hero. Break free before her charm puts you in a trance, and stop her from crowning herself queen.",
     color: "#2f7d4f",
   },
+  {
+    id: "god_of_lies",
+    name: "God of Lies",
+    // Single Group Mode. Loki, God of Lies stays outside the game area;
+    // setup puts a random Avatar of Loki into play as the villain.
+    codes: ["55027a", "55027a"],
+    schemes: ["55033b"],
+    module: "trickster_magic",
+    moduleCount: 1,
+    defaultModules: ["trickster_magic"],
+    difficulty: 4,
+    title: "Mischief and Mayhem",
+    location: "Europe",
+    description:
+      "Loki hides behind his illusions. Shatter each Avatar of Loki to wound the God of Lies, and coordinate your synergy before his worlds collide.",
+    color: "#4f6d1f",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },

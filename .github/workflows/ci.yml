@@ -189,6 +189,8 @@ jobs:
             scripts: test:baron-zemo
           - group: enchantress
             scripts: test:enchantress
+          - group: god-of-lies
+            scripts: test:god-of-lies
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

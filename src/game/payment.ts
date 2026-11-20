@@ -50,6 +50,7 @@ import { warMachinePackResourceSources } from "./war-machine-pack.js";
 import { mtsPlayerPackCardResources } from "./mts-player-pack.js";
 import { isTextBlank } from "./card-text.js";
 import { MILANO, badoonMilanoSource } from "./badoon.js";
+import { godOfLiesResourceSources } from "./god-of-lies.js";
 import { hawkeyeResourceSources } from "./hawkeye.js";
 import { spiderWomanResourceSources } from "./spider-woman.js";
 import { blackWidowResourceSources } from "./black-widow.js";
@@ -396,6 +397,10 @@ export function paymentSources(
           kind: "ability",
         });
     }
+    // Unified Front: remove a synergy counter for 2 wild resources.
+    for (const source of godOfLiesResourceSources(s))
+      if (!sources.some((existing) => existing.id === source.id))
+        sources.push(source);
   }
   return sources.filter(
     (source) =>

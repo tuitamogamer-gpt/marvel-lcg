@@ -1158,6 +1158,7 @@ export async function generateAudit(
     "src/game/thunderbolts.ts",
     "src/game/baron-zemo.ts",
     "src/game/enchantress-villain.ts",
+    "src/game/god-of-lies.ts",
     "src/game/reveal-window.ts",
     "src/game/black-widow.ts",
     "src/game/doctor-strange.ts",

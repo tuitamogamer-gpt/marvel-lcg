@@ -93,6 +93,7 @@ import {
   ENCHANTRESS_CODES,
   TRICKSTER_MAGIC_CODES,
 } from "../src/game/enchantress-villain";
+import { GOD_OF_LIES_CODES } from "../src/game/god-of-lies";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -178,6 +179,7 @@ const badoonCodes = new Set<string>([
   ...ZEMO_CODES,
   ...ENCHANTRESS_CODES,
   ...TRICKSTER_MAGIC_CODES,
+  ...GOD_OF_LIES_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -591,9 +593,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(3478);
-    expect(coverage.unsupportedFaces).toBe(1073);
-    expect(coverage.dedicatedFaces).toBe(3040);
+    expect(coverage.executableFaces).toBe(3515);
+    expect(coverage.unsupportedFaces).toBe(1036);
+    expect(coverage.dedicatedFaces).toBe(3077);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -828,28 +830,26 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
       });
   });
-  it("registers Trickster Takeover's Enchantress scenario and the Trickster Magic set; God of Lies remains", () => {
+  it("closes all 81 Trickster Takeover faces: Enchantress, God of Lies and the Trickster Magic set", () => {
     const coverage = inventory.installedRegistryCoverage;
     const trickster = coverage.products.find(
       (pack: { code: string }) => pack.code === "tt",
     );
     expect(trickster).toMatchObject({
       faceCount: 81,
-      executableFaces: 44,
-      installedCardClosure: false,
+      executableFaces: 81,
+      unsupportedFaceCodes: [],
+      installedCardClosure: true,
     });
     const faces = new Set<string>([
       ...ENCHANTRESS_CODES,
       ...TRICKSTER_MAGIC_CODES,
+      ...GOD_OF_LIES_CODES,
     ]);
-    expect(faces.size).toBe(44);
+    expect(faces.size).toBe(81);
     expect(
       cards
-        .filter(
-          (entry: { pack_code: string; set_code: string }) =>
-            entry.pack_code === "tt" &&
-            ["enchantress_villain", "trickster_magic"].includes(entry.set_code),
-        )
+        .filter((entry: { pack_code: string }) => entry.pack_code === "tt")
         .map((entry: { code: string }) => entry.code)
         .sort(),
     ).toEqual([...faces].sort());
@@ -858,18 +858,13 @@ describe("complete expansion rules inventory", () => {
         executable: true,
         mechanism: "dedicated-module",
       });
-    // Every unsupported face belongs to the God of Lies scenario.
-    for (const code of trickster.unsupportedFaceCodes)
+    for (const id of ["enchantress_villain", "god_of_lies"])
       expect(
-        cards.find((entry: { code: string }) => entry.code === code)?.set_code,
-        code,
-      ).not.toMatch(/^(enchantress_villain|trickster_magic)$/);
-    expect(trickster.unsupportedFaceCodes).toHaveLength(37);
-    expect(
-      coverage.registeredScenarios.find(
-        (entry: { id: string }) => entry.id === "enchantress_villain",
-      ),
-    ).toBeTruthy();
+        coverage.registeredScenarios.find(
+          (entry: { id: string }) => entry.id === id,
+        ),
+        id,
+      ).toBeTruthy();
     expect(
       coverage.registeredModules.find(
         (entry: { id: string }) => entry.id === "trickster_magic",
@@ -1133,6 +1128,8 @@ describe("complete expansion rules inventory", () => {
         39 -
         // Trickster Takeover: Enchantress and Trickster Magic.
         44 -
+        // Trickster Takeover: God of Lies.
+        37 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -1489,7 +1486,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(52);
+    ).toHaveLength(53);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "venom_goblin",
@@ -1736,7 +1733,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(175);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(176);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

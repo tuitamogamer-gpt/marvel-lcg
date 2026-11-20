@@ -83,6 +83,7 @@ import {
   ENCHANTRESS_CODES,
   TRICKSTER_MAGIC_CODES,
 } from "./enchantress-villain.js";
+import { GOD_OF_LIES_CODES } from "./god-of-lies.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -399,6 +400,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...ZEMO_CODES,
   ...ENCHANTRESS_CODES,
   ...TRICKSTER_MAGIC_CODES,
+  ...GOD_OF_LIES_CODES,
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

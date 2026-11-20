@@ -332,6 +332,9 @@ export interface GameState {
   enchantress?: import("./enchantress-villain.js").EnchantressState;
   /** Trickster Magic: its linked allies, set aside. */
   tricksterMagic?: import("./enchantress-villain.js").TricksterMagicState;
+  /** God of Lies: Loki, God of Lies, Worlds Collide, the shatter counters
+   * and the set-aside Avatars of Loki. */
+  godOfLies?: import("./god-of-lies.js").GodOfLiesState;
   venomGoblin?: import("./venom-goblin.js").VenomGoblinState;
   /** Across the Mojoverse: the show deck. */
   spiral?: import("./spiral.js").SpiralState;

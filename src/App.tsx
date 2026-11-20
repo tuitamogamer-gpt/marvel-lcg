@@ -462,6 +462,17 @@ import {
   GAZES as HYPNOTIC_GAZES,
 } from "./game/enchantress-villain";
 import {
+  CHAINS as WRAPPED_IN_CHAINS,
+  LOKI as GOD_OF_LIES_LOKI,
+  SYNERGY as GOD_OF_LIES_SYNERGY,
+  WORLDS as WORLDS_COLLIDE,
+  godOfLiesCaption,
+  godOfLiesMainNote,
+  godOfLiesObjective,
+  godOfLiesPanel,
+  synergyUse,
+} from "./game/god-of-lies";
+import {
   AERIAL_BOMBARDMENT,
   IMPERVIOUS,
   OUT_OF_REACH,
@@ -2983,6 +2994,19 @@ export default function App() {
                       to turn them into allies. Trickster Magic is preselected.
                     </p>
                   )}
+                  {villain.id === "god_of_lies" && (
+                    <p className="setting-help">
+                      Loki, God of Lies stays out of reach while a random Avatar
+                      of Loki fights you. An Avatar that would be defeated gains
+                      5 shatter counters per hero and flips: the shatter
+                      counters wound Loki, and another Avatar takes his place.
+                      Minions and side schemes add shatter and synergy counters.
+                      Mischief and Mayhem never completes and heroes are never
+                      defeated: each places threat on Worlds Collide instead,
+                      and at 2 you lose. Single Group Mode; Trickster Magic is
+                      preselected.
+                    </p>
+                  )}
                   {villain.id === "thunderbolts" && (
                     <p className="setting-help">
                       Choose one modular set with an Elite Thunderbolt, plus one
@@ -3451,7 +3475,9 @@ export default function App() {
                     <Heart size={16} />
                     {villain.id === "mansion_attack"
                       ? `${difficulty === "expert" ? 3 : 2} villains to defeat`
-                      : `${card(villain.codes[difficulty === "expert" ? 1 : 0]).health! * team.length} villain HP`}
+                      : villain.id === "god_of_lies"
+                        ? `${(card("55029a").health! + (difficulty === "expert" ? 2 : 0)) * team.length} Avatar HP · Loki ${card(GOD_OF_LIES_LOKI).health! * team.length}`
+                        : `${card(villain.codes[difficulty === "expert" ? 1 : 0]).health! * team.length} villain HP`}
                   </span>
                   <span>
                     <Target size={16} />
@@ -6236,6 +6262,91 @@ const MAGOG_CROWDS = [
 ];
 /** Melee in the Mojo-seum: The Challengers and The Champion together, each
  * with its ratings counters toward its flip and the end of the game. */
+/** God of Lies: Loki, God of Lies and Worlds Collide, outside the group's
+ * game area. */
+function GodOfLiesPanel({
+  game: s,
+  inspect,
+}: {
+  game: GameState;
+  inspect: (c: Inspect) => void;
+}) {
+  const panel = godOfLiesPanel(s);
+  if (!panel) return null;
+  return (
+    <div
+      className="scenario-environment magog-crowds god-of-lies"
+      role="group"
+      aria-label="Loki, God of Lies and Worlds Collide"
+    >
+      <span className="small-label">OUTSIDE YOUR GAME AREA</span>
+      <div className="crowd-row champion">
+        <button
+          className="environment-card"
+          onClick={() => inspect({ code: panel.loki })}
+          aria-label="Inspect Loki, God of Lies"
+        >
+          <CardImage code={panel.loki} />
+        </button>
+        <div>
+          <span className="small-label">
+            {panel.loki === GOD_OF_LIES_LOKI ? "VILLAIN" : "VILLAIN · FLIPPED"}
+          </span>
+          <strong>Loki, God of Lies</strong>
+          <span
+            className="environment-counter tower-damage"
+            aria-label={`Loki, God of Lies health: ${panel.hp} of ${panel.maxHp}`}
+          >
+            <PremiumToken kind="health" />
+            {panel.hp} / {panel.maxHp} HP
+          </span>
+          <span className="tower-meter" aria-hidden="true">
+            <i style={{ width: `${(100 * panel.hp) / panel.maxHp}%` }} />
+          </span>
+          <span className="stat-caption">
+            Only shatter counters wound him · {panel.shatter} on the Avatar
+            {panel.loki === GOD_OF_LIES_LOKI
+              ? ` · flips at ${panel.flipAt}`
+              : ""}
+          </span>
+        </div>
+      </div>
+      <div className="crowd-row challengers">
+        <button
+          className="environment-card"
+          onClick={() => inspect({ code: WORLDS_COLLIDE })}
+          aria-label="Inspect Worlds Collide"
+        >
+          <CardImage code={WORLDS_COLLIDE} />
+        </button>
+        <div>
+          <span className="small-label">MAIN SCHEME</span>
+          <strong>Worlds Collide</strong>
+          <span
+            className="environment-counter"
+            aria-label={`Worlds Collide threat: ${panel.worlds} of ${panel.target}`}
+          >
+            <PremiumToken kind="threat" />
+            {panel.worlds} / {panel.target} threat
+          </span>
+          <span
+            className="stat-caption"
+            role={panel.doomed ? "status" : undefined}
+          >
+            {panel.doomed
+              ? "Complete: defeat Loki before the player phase ends"
+              : "A completed scheme or a defeated hero adds 1 · at 2 you lose"}
+          </span>
+        </div>
+      </div>
+      {panel.avatars.length > 0 && (
+        <span className="stat-caption">
+          Set aside: {panel.avatars.map((code) => card(code).name).join(" · ")}
+        </span>
+      )}
+    </div>
+  );
+}
 function MagogCrowds({
   game: s,
   inspect,
@@ -6701,6 +6812,8 @@ function AttachedCards({
                 "55015",
                 ENCHANTRESS_CROWN,
                 LOVE_TRIANGLE,
+                // God of Lies: Wrapped in Chains.
+                WRAPPED_IN_CHAINS,
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -7071,33 +7184,35 @@ function Tabletop({
                           ? zemoObjective(s)
                           : s.enchantress
                             ? enchantressObjective(s)
-                            : s.hela
-                              ? helaOdinCaptive(s)
-                                ? "Free Odin, then defeat Hela"
-                                : "Defeat Hela's Mystic side"
-                              : s.loki
-                                ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
-                                : s.horsemen
-                                  ? `Bring all four Horsemen to 0 · ${horsemenVillains(s).filter((v) => !horsemanStanding(s, v)).length} of 4 at 0`
-                                  : apocalypse(s)
-                                    ? noLongerWorthy(s)
-                                      ? "Defeat Apocalypse · No Longer Worthy"
-                                      : `Storm the citadel · ${apocalypseCitadel(s)} of 3 cleared`
-                                    : s.sinisterSix
-                                      ? "Escape: clear the Light at the End"
-                                      : s.wreckingCrew
-                                        ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
-                                        : s.kang
-                                          ? kangObjective(s)
-                                          : magogScenario(s)
-                                            ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
-                                            : s.spiral
-                                              ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
-                                              : s.morlockSiege
-                                                ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
-                                                : onTheRun(s)
-                                                  ? `Defeat ${card(s.villain).name} twice · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? 0 : 1} of 2`
-                                                  : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                            : s.godOfLies
+                              ? godOfLiesObjective(s)
+                              : s.hela
+                                ? helaOdinCaptive(s)
+                                  ? "Free Odin, then defeat Hela"
+                                  : "Defeat Hela's Mystic side"
+                                : s.loki
+                                  ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
+                                  : s.horsemen
+                                    ? `Bring all four Horsemen to 0 · ${horsemenVillains(s).filter((v) => !horsemanStanding(s, v)).length} of 4 at 0`
+                                    : apocalypse(s)
+                                      ? noLongerWorthy(s)
+                                        ? "Defeat Apocalypse · No Longer Worthy"
+                                        : `Storm the citadel · ${apocalypseCitadel(s)} of 3 cleared`
+                                      : s.sinisterSix
+                                        ? "Escape: clear the Light at the End"
+                                        : s.wreckingCrew
+                                          ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
+                                          : s.kang
+                                            ? kangObjective(s)
+                                            : magogScenario(s)
+                                              ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
+                                              : s.spiral
+                                                ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
+                                                : s.morlockSiege
+                                                  ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
+                                                  : onTheRun(s)
+                                                    ? `Defeat ${card(s.villain).name} twice · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? 0 : 1} of 2`
+                                                    : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
             <span
@@ -7484,6 +7599,11 @@ function Tabletop({
                         {enchantressCaption(s)}
                       </span>
                     )}
+                    {!!s.godOfLies && godOfLiesCaption(s) && (
+                      <span className="stat-caption">
+                        {godOfLiesCaption(s)}
+                      </span>
+                    )}
                     {misterSinister(s) && (
                       <span className="stat-caption">
                         {(["Aerial", "Brute", "Psionic"] as const)
@@ -7615,7 +7735,7 @@ function Tabletop({
                   <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
-                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen || apocalypse(s) || enSabahNur(s) || blackWidowVillain(s) || batroc(s) || modok(s) || thunderbolts(s) || !!s.zemo || !!s.enchantress ? " magog-scheme" : ""}`}
+                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen || apocalypse(s) || enSabahNur(s) || blackWidowVillain(s) || batroc(s) || modok(s) || thunderbolts(s) || !!s.zemo || !!s.enchantress || !!s.godOfLies ? " magog-scheme" : ""}`}
                     style={
                       {
                         "--scheme-actions": mainActionPiece
@@ -7754,6 +7874,11 @@ function Tabletop({
                     {!!s.enchantress && enchantressMainNote(s) && (
                       <p className="magog-scheme-note">
                         {enchantressMainNote(s)}
+                      </p>
+                    )}
+                    {!!s.godOfLies && godOfLiesMainNote(s) && (
+                      <p className="magog-scheme-note">
+                        {godOfLiesMainNote(s)}
                       </p>
                     )}
 
@@ -7911,6 +8036,7 @@ function Tabletop({
                     </div>
                   </div>
                 )}
+                {!!s.godOfLies && <GodOfLiesPanel game={s} inspect={inspect} />}
                 {magogScenario(s) && <MagogCrowds game={s} inspect={inspect} />}
                 {(s.environments || [])
                   .filter((p) => !MAGOG_CROWDS.includes(p.code))
@@ -7974,7 +8100,11 @@ function Tabletop({
                                                                 MANHATTAN_FLIPPED,
                                                               ).includes(p.code)
                                                             ? "ENVIRONMENT · SYMBIOTE"
-                                                            : "ENVIRONMENT"}
+                                                            : GOD_OF_LIES_SYNERGY.includes(
+                                                                  p.code,
+                                                                )
+                                                              ? "ENVIRONMENT · SYNERGY"
+                                                              : "ENVIRONMENT"}
                         </span>
                         <strong>{card(p).name}</strong>
                         {p.id === pursued(s)?.id && (
@@ -7999,6 +8129,20 @@ function Tabletop({
                             Infested · a second Symbiote environment loses the
                             game
                           </span>
+                        )}
+                        {GOD_OF_LIES_SYNERGY.includes(p.code) && (
+                          <>
+                            <span
+                              className="environment-counter"
+                              aria-label={`${card(p).name}: ${p.counters} of ${s.playerCount} synergy counters`}
+                            >
+                              <PremiumToken kind="counter" />
+                              {p.counters} / {s.playerCount} synergy
+                            </span>
+                            <span className="stat-caption">
+                              Remove 1: {synergyUse(p)}
+                            </span>
+                          </>
                         )}
                         {(p.code === ROUTED_A || p.code === ROUTED_B) && (
                           <span className="stat-caption">

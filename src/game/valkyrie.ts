@@ -379,7 +379,9 @@ export function valkyrieAbility(
     : options.length === 1
       ? options[0]
       : undefined;
-  need(!action || chosen, "Valkyrie's action is unavailable.");
+  // An ally's basic attack or thwart is not one of these actions: Annabelle
+  // Riggs's Alter-Ego Action leaves them to the ally.
+  if (action && !chosen) return false;
   if (chosen) ports.queue(s, ...chosen.effects);
   else ports.choose(s, "Valkyrie", "Choose an action.", options);
   return true;

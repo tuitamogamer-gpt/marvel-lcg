@@ -1016,10 +1016,10 @@ describe("published expansion starters across every supported mission setting", 
     expect(executiveBoardSets).toHaveLength(
       alternativeSets.length - heroIds.length * 2,
     );
-    expect(VILLAINS).toHaveLength(52);
+    expect(VILLAINS).toHaveLength(53);
     expect(MODULES).toHaveLength(96);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(504088);
+    expect(missions).toHaveLength(514384);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -1031,26 +1031,42 @@ describe("published expansion starters across every supported mission setting", 
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
-    // Trickster Takeover's Enchantress joins as the fifty-second scenario,
-    // with every modular set as her one, and the Trickster Magic modular set
-    // joins every other scenario with modular sets. Every earlier name and
-    // seed stays in place: the 488,800 configurations before them hash
-    // identically to the complete grid of 80a3be9.
+    // Trickster Takeover's God of Lies joins as the fifty-third scenario, in
+    // Single Group Mode, with every modular set as its one. Every earlier
+    // name and seed stays in place: the 504,088 configurations before it
+    // hash identically to the complete grid of 915d939.
+    expect(missions.filter((m) => m.villainId === "god_of_lies")).toHaveLength(
+      52 * 2 * 96 + 52 * 2 * 3,
+    );
+    const enchantressGrid = missions.filter(
+      (m) => m.villainId !== "god_of_lies",
+    );
+    expect(enchantressGrid).toHaveLength(504088);
     expect(
-      missions.filter((m) => m.villainId === "enchantress_villain"),
+      createHash("sha256")
+        .update(manifest(enchantressGrid).join("\n"))
+        .digest("hex"),
+    ).toBe("7f2ccfb4e681f3cea43f05e47db0e374de90d155c5133bc8224c82c3912584cd");
+    // Trickster Takeover's Enchantress joined as the fifty-second scenario
+    // before that, with every modular set as her one, and the Trickster
+    // Magic modular set joined every other scenario with modular sets: the
+    // 488,800 configurations before them hash identically to the complete
+    // grid of 80a3be9.
+    expect(
+      enchantressGrid.filter((m) => m.villainId === "enchantress_villain"),
     ).toHaveLength(52 * 2 * 96 + 52 * 2 * 3);
     for (const scenario of VILLAINS.filter(
       (v) =>
         v.moduleCount !== 0 &&
-        !["thunderbolts", "enchantress_villain"].includes(v.id),
+        !["thunderbolts", "enchantress_villain", "god_of_lies"].includes(v.id),
     ))
       expect(
-        missions.filter(
+        enchantressGrid.filter(
           (m) => m.villainId === scenario.id && m.module === "trickster_magic",
         ),
         scenario.id,
       ).toHaveLength(52 * 2);
-    const zemoGrid = missions.filter(
+    const zemoGrid = enchantressGrid.filter(
       (m) =>
         m.villainId !== "enchantress_villain" && m.module !== "trickster_magic",
     );
@@ -1070,7 +1086,12 @@ describe("published expansion starters across every supported mission setting", 
     for (const scenario of VILLAINS.filter(
       (v) =>
         v.moduleCount !== 0 &&
-        !["thunderbolts", "baron_zemo", "enchantress_villain"].includes(v.id),
+        ![
+          "thunderbolts",
+          "baron_zemo",
+          "enchantress_villain",
+          "god_of_lies",
+        ].includes(v.id),
     ))
       expect(
         zemoGrid.filter(
@@ -1081,7 +1102,7 @@ describe("published expansion starters across every supported mission setting", 
     for (const scenario of VILLAINS.filter(
       (v) =>
         v.moduleCount !== 0 &&
-        !["baron_zemo", "enchantress_villain"].includes(v.id),
+        !["baron_zemo", "enchantress_villain", "god_of_lies"].includes(v.id),
     ))
       expect(
         zemoGrid.filter(
@@ -1120,7 +1141,12 @@ describe("published expansion starters across every supported mission setting", 
     for (const scenario of VILLAINS.filter(
       (v) =>
         v.moduleCount !== 0 &&
-        !["thunderbolts", "baron_zemo", "enchantress_villain"].includes(v.id),
+        ![
+          "thunderbolts",
+          "baron_zemo",
+          "enchantress_villain",
+          "god_of_lies",
+        ].includes(v.id),
     ))
       for (const module of thunderboltsSets)
         expect(
@@ -1153,6 +1179,7 @@ describe("published expansion starters across every supported mission setting", 
           "thunderbolts",
           "baron_zemo",
           "enchantress_villain",
+          "god_of_lies",
         ].includes(v.id),
     ))
       expect(
@@ -1188,6 +1215,7 @@ describe("published expansion starters across every supported mission setting", 
           "thunderbolts",
           "baron_zemo",
           "enchantress_villain",
+          "god_of_lies",
         ].includes(v.id),
     ))
       expect(
@@ -1224,6 +1252,7 @@ describe("published expansion starters across every supported mission setting", 
           "thunderbolts",
           "baron_zemo",
           "enchantress_villain",
+          "god_of_lies",
         ].includes(v.id),
     ))
       for (const module of blackWidowSets)
@@ -1248,7 +1277,10 @@ describe("published expansion starters across every supported mission setting", 
     // sets before that, with one configuration per hero, difficulty and
     // scenario that uses the Standard set: the 387,712 configurations before
     // them hash identically to the complete grid of 8387e99.
-    expect(missions.filter((m) => m.variant === "iii")).toHaveLength(5200);
+    expect(missions.filter((m) => m.variant === "iii")).toHaveLength(5304);
+    expect(enchantressGrid.filter((m) => m.variant === "iii")).toHaveLength(
+      5200,
+    );
     expect(zemoGrid.filter((m) => m.variant === "iii")).toHaveLength(5096);
     expect(thunderboltsGrid.filter((m) => m.variant === "iii")).toHaveLength(
       4992,
@@ -1288,6 +1320,7 @@ describe("published expansion starters across every supported mission setting", 
           "thunderbolts",
           "baron_zemo",
           "enchantress_villain",
+          "god_of_lies",
         ].includes(v.id),
     ))
       for (const module of enSabahNurSets)
@@ -1328,6 +1361,7 @@ describe("published expansion starters across every supported mission setting", 
           "thunderbolts",
           "baron_zemo",
           "enchantress_villain",
+          "god_of_lies",
         ].includes(v.id),
     ))
       for (const module of darkBeastSets)
@@ -1367,6 +1401,7 @@ describe("published expansion starters across every supported mission setting", 
           "thunderbolts",
           "baron_zemo",
           "enchantress_villain",
+          "god_of_lies",
         ].includes(v.id),
     ))
       expect(
@@ -1406,6 +1441,7 @@ describe("published expansion starters across every supported mission setting", 
           "thunderbolts",
           "baron_zemo",
           "enchantress_villain",
+          "god_of_lies",
         ].includes(v.id),
     ))
       expect(
@@ -1445,6 +1481,7 @@ describe("published expansion starters across every supported mission setting", 
           "thunderbolts",
           "baron_zemo",
           "enchantress_villain",
+          "god_of_lies",
         ].includes(v.id),
     ))
       for (const module of aoaSets)
@@ -1486,6 +1523,7 @@ describe("published expansion starters across every supported mission setting", 
           "thunderbolts",
           "baron_zemo",
           "enchantress_villain",
+          "god_of_lies",
         ].includes(v.id),
     ))
       for (const module of stryfeSets)
@@ -1539,6 +1577,7 @@ describe("published expansion starters across every supported mission setting", 
           "thunderbolts",
           "baron_zemo",
           "enchantress_villain",
+          "god_of_lies",
         ].includes(v.id),
     ))
       expect(
@@ -1582,6 +1621,7 @@ describe("published expansion starters across every supported mission setting", 
           "thunderbolts",
           "baron_zemo",
           "enchantress_villain",
+          "god_of_lies",
         ].includes(v.id),
     ))
       expect(
@@ -1626,7 +1666,8 @@ describe("published expansion starters across every supported mission setting", 
         v.id !== "modok" &&
         v.id !== "thunderbolts" &&
         v.id !== "baron_zemo" &&
-        v.id !== "enchantress_villain",
+        v.id !== "enchantress_villain" &&
+        v.id !== "god_of_lies",
     ))
       for (const module of nextSets)
         expect(
@@ -1671,6 +1712,7 @@ describe("published expansion starters across every supported mission setting", 
           "thunderbolts",
           "baron_zemo",
           "enchantress_villain",
+          "god_of_lies",
         ].includes(v.id),
     ))
       expect(
@@ -1937,8 +1979,14 @@ describe("published expansion starters across every supported mission setting", 
     );
     expect(zemoGrid.filter((m) => m.variant === "ii")).toHaveLength(5096);
     expect(zemoGrid.filter((m) => m.variant === "board")).toHaveLength(4992);
-    expect(missions.filter((m) => m.variant === "ii")).toHaveLength(5200);
-    expect(missions.filter((m) => m.variant === "board")).toHaveLength(5096);
+    expect(enchantressGrid.filter((m) => m.variant === "ii")).toHaveLength(
+      5200,
+    );
+    expect(enchantressGrid.filter((m) => m.variant === "board")).toHaveLength(
+      5096,
+    );
+    expect(missions.filter((m) => m.variant === "ii")).toHaveLength(5304);
+    expect(missions.filter((m) => m.variant === "board")).toHaveLength(5200);
     // Kang and the Temporal, Master of Time and Anachronauts modular sets
     // extended the grid before that: the 103,584 configurations before it
     // hash identically to the complete grid of 1600763.
@@ -2497,6 +2545,14 @@ describe("published expansion starters across every supported mission setting", 
     ]);
     expect(
       perShard(
+        (mission) => !mission.variant && mission.villainId === "god_of_lies",
+      ),
+    ).toEqual([
+      624, 624, 624, 624, 624, 624, 624, 624, 624, 624, 624, 624, 624, 624, 624,
+      624,
+    ]);
+    expect(
+      perShard(
         (mission) =>
           !mission.variant && mission.villainId === "enchantress_villain",
       ),
@@ -2555,24 +2611,23 @@ describe("published expansion starters across every supported mission setting", 
       [0, 0, 13, 13, 0, 0, 13, 13, 0, 0, 13, 13, 0, 0, 13, 13],
     );
     expect(perShard((mission) => mission.variant === "ii")).toEqual([
-      325, 325, 325, 325, 325, 325, 325, 325, 325, 325, 325, 325, 325, 325, 325,
-      325,
+      332, 332, 332, 332, 332, 332, 332, 332, 331, 331, 331, 331, 331, 331, 331,
+      331,
     ]);
     expect(perShard((mission) => mission.variant === "iii")).toEqual([
+      331, 331, 331, 331, 331, 331, 331, 331, 332, 332, 332, 332, 332, 332, 332,
+      332,
+    ]);
+    expect(perShard((mission) => mission.variant === "board")).toEqual([
       325, 325, 325, 325, 325, 325, 325, 325, 325, 325, 325, 325, 325, 325, 325,
       325,
     ]);
-    expect(perShard((mission) => mission.variant === "board")).toEqual([
-      319, 319, 319, 319, 319, 319, 319, 319, 318, 318, 318, 318, 318, 318, 318,
-      318,
-    ]);
-    expect(new Set(missions.map(key)).size).toBe(504088);
-    expect(new Set(combined.map(key)).size).toBe(504088);
+    expect(new Set(missions.map(key)).size).toBe(514384);
+    expect(new Set(combined.map(key)).size).toBe(514384);
     expect(manifest(combined)).toEqual(manifest(missions));
-    expect(partitions.map((partition) => partition.length)).toEqual([
-      31506, 31506, 31506, 31506, 31506, 31506, 31506, 31506, 31505, 31505,
-      31505, 31505, 31505, 31505, 31505, 31505,
-    ]);
+    expect(partitions.map((partition) => partition.length)).toEqual(
+      Array(16).fill(32149),
+    );
     for (const partition of partitions)
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     for (const heroId of heroIds) {
@@ -2580,14 +2635,14 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBeGreaterThanOrEqual(605);
-      expect(Math.max(...perShard)).toBeLessThanOrEqual(609);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(9694);
+      expect(Math.min(...perShard)).toBeGreaterThanOrEqual(617);
+      expect(Math.max(...perShard)).toBeLessThanOrEqual(620);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(9892);
     }
     expect(selectedMissions).toHaveLength(
-      isSharded ? partitions[Number(shardIndex)].length : 504088,
+      isSharded ? partitions[Number(shardIndex)].length : 514384,
     );
-    // Hashing every layer of the 504,088-configuration manifest takes a few
+    // Hashing every layer of the 514,384-configuration manifest takes a few
     // seconds on its own.
   }, 60000);
   for (const mission of selectedMissions)

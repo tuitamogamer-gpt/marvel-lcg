@@ -302,6 +302,19 @@ function responseAvailable(
         (receipt as SpiderHamRecoverReceipt).performed)
   );
 }
+/** A queued Spider-Nonsense or Cartoon Power whose trigger no longer holds,
+ * once the identity has changed form or left play, is not offered. */
+export function spiderHamOptionalAvailable(
+  s: GameState,
+  effects: Effect[],
+  ports: TextPorts = defaultTextPorts,
+) {
+  return effects.every(
+    (e) =>
+      e.type !== "spider-ham:response" ||
+      responseAvailable(s, e.kind, e.receipt, ports),
+  );
+}
 /** Host calls only AFTER the complete cost commit when damage paid a cost. A
  * response may never create a resource to finish the cost that triggered it. */
 export function spiderHamAfterDamage(

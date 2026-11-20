@@ -42,6 +42,7 @@ import * as mdk from "./modok.js";
 import * as tb from "./thunderbolts.js";
 import * as zemo from "./baron-zemo.js";
 import * as ench from "./enchantress-villain.js";
+import * as gol from "./god-of-lies.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -642,6 +643,7 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
     !!(s && typeof p !== "string" && mdk.modokKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && tb.thunderboltsKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && ench.enchantressKeyword(s, p, name) > 0) ||
+    !!(s && typeof p !== "string" && gol.godOfLiesKeyword(s, p, name) > 0) ||
     !!(
       s &&
       typeof p !== "string" &&
@@ -687,7 +689,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     sty.stryfeStalwart(s, piece) ||
     unus.unusKeyword(s, piece, "Stalwart") > 0 ||
     apoc.apocalypseKeyword(s, piece, "Stalwart") > 0 ||
-    ench.enchantressKeyword(s, piece, "Stalwart") > 0
+    ench.enchantressKeyword(s, piece, "Stalwart") > 0 ||
+    gol.godOfLiesKeyword(s, piece, "Stalwart") > 0
       ? { stalwart: true }
       : {}),
     ...(piece.code === "50060" && !isTextBlank(s, piece)
@@ -698,6 +701,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
       ? { steady: true }
       : {}),
     ...(hood.hoodSteady(s, piece) ? { steady: true } : {}),
+    // Intense and Total Focus: the Avatar of Loki gains steady.
+    ...(gol.godOfLiesKeyword(s, piece, "Steady") > 0 ? { steady: true } : {}),
     ...(db.darkBeastSteady(s, piece) ? { steady: true } : {}),
     ...(hoodModular.hoodModularSteady(s) ? { steady: true } : {}),
     ...(morlock.morlockStatusModifiers(s, piece).steady ||
@@ -859,7 +864,8 @@ function canReadyIdentity(s: GameState) {
     !goblinIdentityLocked(s) &&
     quicksilver.quicksilverCanReady(s) &&
     !ebonyMaw.ebonyMawRestrained(s, `hero:${s.activePlayerId}`) &&
-    hela.helaCanReadyIdentity(s, s.activePlayerId)
+    hela.helaCanReadyIdentity(s, s.activePlayerId) &&
+    gol.godOfLiesCanReadyIdentity(s, s.activePlayerId)
   );
 }
 /** Every in-play card readiness check: Nova's locks and Restrained. */
@@ -1023,7 +1029,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           hela.helaKeyword(s, p, "Stalwart") ||
           mdk.modokKeyword(s, p, "Stalwart") > 0 ||
           magog.magogKeyword(s, p, "Stalwart") > 0 ||
-          ench.enchantressKeyword(s, p, "Stalwart") > 0),
+          ench.enchantressKeyword(s, p, "Stalwart") > 0 ||
+          gol.godOfLiesKeyword(s, p, "Stalwart") > 0),
     ),
     Number(
       name === "Quickstrike" &&
@@ -1246,9 +1253,13 @@ function finishResolution(s: GameState, id: string) {
   delete s.flags[`bishopSidekickCost:${id}`];
   phoenix.phoenixEventFinished(s, id);
   gambit.gambitEventFinished(s, id);
+  // God of Lies: the responses after you resolve a treachery.
+  const golTreachery = gol.godOfLiesTreacheryFinished(s, id);
   const index = s.resolving.findIndex((p) => p.id === id);
   if (index < 0) return;
   const [p] = s.resolving.splice(index, 1);
+  if (golTreachery !== undefined && !s.flags[`ghostCancelled:${p.id}`])
+    add(s, ...gol.godOfLiesTreacheryResolved(s, golTreachery, golPorts));
   if (
     card(p).type_code === "event" &&
     card(p).set_code === s.heroId &&
@@ -2770,12 +2781,17 @@ function syncVillainTextHealth(s: GameState) {
     s.villain.hp += change;
     decreased ||= change < 0;
   }
+  // Intense and Total Focus: the Avatar of Loki's hit points.
+  if (gol.godOfLiesSyncHealth(s)) decreased = true;
   if (decreased && s.villain.hp <= 0 && !["won", "lost"].includes(s.phase))
     advanceVillain(s);
 }
 function check(s: GameState) {
   // Ulik's attacks wait for the card or activation in progress.
   if (s.enchantress?.ulik?.length) add(s, ...ench.enchantressFlush(s));
+  // God of Lies: a defeated identity changes to alter-ego once the attack,
+  // activation or card in progress has finished.
+  if (s.godOfLies?.alterEgo?.length) add(s, ...gol.godOfLiesFlush(s));
   for (const p of allInPlay(s).filter(
     (p) =>
       (p.code === "40021" && !allInPlay(s).some((q) => q.code === "40015")) ||
@@ -2892,6 +2908,18 @@ function check(s: GameState) {
     if (seat.player.hp > 0 || seat.eliminated || s.phase === "won") continue;
     const view = seatView(s, seat);
     if (deadpool.deadpoolRescue(view, deadpoolPorts)) continue;
+    // God of Lies: Mischief and Mayhem changes the identity to alter-ego
+    // with 1 hit point and places 1 threat on Worlds Collide instead.
+    const golDefeat = gol.godOfLiesIdentityWouldBeDefeated(
+      s,
+      seat.id,
+      golPorts,
+    );
+    if (golDefeat) {
+      add(s, ...golDefeat);
+      if (["won", "lost"].includes(s.phase)) return;
+      continue;
+    }
     if (
       view.flags.captainHelmetPending ||
       view.flags.draxStubbornPending ||
@@ -4170,6 +4198,8 @@ function dealDamage(
           afterAttack: true,
         }),
       );
+    // Laufey's Forced Response after a character attacks her.
+    add(s, ...gol.godOfLiesCharacterAttacked(s, retaliationTarget.id, source));
     // Heavy Armament: Hero Response after you attack the attached enemy.
     if (sourceIsIdentity)
       add(
@@ -4950,6 +4980,9 @@ function defeatCharacter(
   // The beguiled Trickster Magic minions: Victory 1.
   else if (minion && ench.enchantressVictoryMinion(m) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
+  // The Mangog: Victory 1.
+  else if (minion && gol.godOfLiesVictoryMinion(m) && !textWasBlank)
+    movePieceFromPlay(s, m.id, false, undefined, true);
   // Morlock: Victory -1.
   else if (!minion && morlock.morlockVictoryAlly(s, m) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
@@ -5031,6 +5064,16 @@ function defeatCharacter(
       ...(minion ? zemo.zemoMinionDefeated(s, m, textWasBlank) : []),
       ...(minion
         ? ench.enchantressMinionDefeated(
+            s,
+            m,
+            textWasBlank,
+            source.startsWith("hero:")
+              ? source.slice(5)
+              : controller(s, source)?.id || s.activePlayerId,
+          )
+        : []),
+      ...(minion
+        ? gol.godOfLiesMinionDefeated(
             s,
             m,
             textWasBlank,
@@ -5350,6 +5393,12 @@ function advanceVillain(
   if (zemoReset) {
     log(s, "Baron Zemo's hit points reset instead of his defeat.", "good");
     add(s, ...zemoReset);
+    return;
+  }
+  // God of Lies: an Avatar of Loki flips to his Fading Figment instead of
+  // being defeated, and the illusion shatters.
+  if (s.godOfLies) {
+    gol.godOfLiesVillainWouldBeDefeated(s, golPorts);
     return;
   }
   const priorityKey = `cyclopsPriority:${s.villain.id}:${s.villain.stage}`;
@@ -5922,6 +5971,12 @@ function threat(
           "bad",
         );
         add(s, ...towerDefense.towerDefenseMainCompleted(s));
+        return;
+      }
+      // God of Lies: Mischief and Mayhem loses its threat and places 1
+      // threat on Worlds Collide instead.
+      if (s.godOfLies) {
+        gol.godOfLiesMainCompleted(s, golPorts);
         return;
       }
       if (s.villainId === "magneto") {
@@ -6627,6 +6682,7 @@ function defeatScheme(
         ...bwv.blackWidowSchemeDefeated(s, p),
         ...btc.batrocSchemeDefeated(s, p),
         ...zemo.zemoSchemeDefeated(s, p),
+        ...gol.godOfLiesSchemeDefeated(s, p),
         ...mdk.modokSchemeDefeated(
           s,
           p,
@@ -6692,6 +6748,7 @@ function defeatScheme(
       ...collector.COLLECTOR_VICTORY_SCHEMES,
       ...thanos.THANOS_VICTORY_SCHEMES,
       ...hela.HELA_VICTORY_SCHEMES,
+      ...gol.GOD_OF_LIES_VICTORY_SCHEMES,
     ].includes(p.code) ||
       (isPlayerSideScheme(p) && playerSideSchemeHasVictory(p))) &&
     !isTextBlank(s, p);
@@ -8936,7 +8993,9 @@ function pay(
     const responseStart = spentResponses.length;
     try {
       if (id === "scientist") s.flags.scientist = true;
-      else if (id === "symbiotic-bond") {
+      else if (gol.godOfLiesResourceSpent(s, id)) {
+        // Unified Front: a synergy counter comes off.
+      } else if (id === "symbiotic-bond") {
         need(
           venom.venomResourceSpent(s, id, venomPorts),
           "Symbiotic Bond is unavailable.",
@@ -9689,6 +9748,9 @@ export function newGame(config: {
     ench.enchantressSetup(s, enchantressPorts);
   if (selectedModules.includes("trickster_magic"))
     ench.tricksterMagicSetup(s, enchantressPorts);
+  // God of Lies: a random Avatar of Loki, the Synergy environments and
+  // Intense Focus.
+  if (v.id === "god_of_lies") gol.godOfLiesSetup(s, golPorts);
   if (v.id === "modok")
     mdk.modokSetup(s, {
       makePiece: (s, code) => makePiece(s, code),
@@ -12675,6 +12737,7 @@ export function abilityOptions(
     ...tb.thunderboltsActions(s, p),
     ...zemo.zemoActions(s, p, zemoPorts),
     ...ench.enchantressActions(s, p, enchantressPorts),
+    ...gol.godOfLiesActions(s, p, golPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -14114,6 +14177,8 @@ function openMsDamageWindow(s: GameState, packet: Effect): boolean {
       starLordPorts,
     ),
     ...gamora.gamoraDamageOptions(s, packet, amount, [packet], gamoraPorts),
+    // Feigned Retreat: prevent 4 of the damage.
+    ...gol.godOfLiesDamageOptions(s, packet, amount, [packet]),
     ...scarletWitch.scarletWitchDamageOptions(
       s,
       packet,
@@ -16105,7 +16170,8 @@ const warlockPorts: warlock.WarlockPorts = {
   canCancelTreachery: (s, p) =>
     card(p).type_code === "treachery" &&
     s.resolving.some((x) => x.id === p.id) &&
-    !uncancelableText(s, card(p).text),
+    !uncancelableText(s, card(p).text) &&
+    !gol.godOfLiesUncancelable(s, p),
   cancelWhenRevealed: (s, p, after, context) => {
     const c = card(p);
     const revealCard = context?.knifeSurge
@@ -17864,6 +17930,26 @@ const enchantressPorts: ench.EnchantressPorts = {
   shufflePlayerDeck: (s) => {
     s.player.deck = shuffle(s, s.player.deck);
     recyclePlayer(s);
+  },
+};
+const golPorts: gol.GodOfLiesPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  reveal: (s, p, playerId) => blackWidowVillainPorts.reveal(s, p, playerId),
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  mill: (s, playerId, n) => mysterioPorts.millPlayer(s, playerId, n),
+  shuffle: (s, items) => shuffle(s, items),
+  makePiece: (s, code) => makePiece(s, code),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+  endGame: (s, won, reason) => endGame(s, won, reason),
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  canAddStatus: (s, target, status) => dsPorts.canAddStatus(s, target, status),
+  dealFacedown: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    p.dealtTo = playerId;
+    s.encounter.dealt.push(p);
+    add(s, ...nickFury.nickFuryDealt(s));
   },
 };
 const zemoPorts: zemo.ZemoPorts = {
@@ -26036,6 +26122,12 @@ function enemyAttack(
         s.attack.originalPlayerId!,
         "attack",
       ),
+      ...gol.godOfLiesActivationInitiated(
+        s,
+        id,
+        s.attack.originalPlayerId!,
+        "attack",
+      ),
     );
   if (!friendlySource)
     add(
@@ -26562,6 +26654,7 @@ function boostEffects(s: GameState, p: Piece) {
     tb.thunderboltsBoost(s, p) ??
     zemo.zemoBoost(s, p) ??
     ench.enchantressBoost(s, p) ??
+    gol.godOfLiesBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -26907,6 +27000,7 @@ function enemyScheme(
     ...hoodModular.hoodModularActivationInitiated(s, id, s.activePlayerId),
     ...esn.esnActivationInitiated(s, id, s.activePlayerId, "scheme"),
     ...zemo.zemoActivationInitiated(s, id, s.activePlayerId, "scheme"),
+    ...gol.godOfLiesActivationInitiated(s, id, s.activePlayerId, "scheme"),
     ...masterMold.masterMoldBeforeScheme(s, moldReceipt, { isTextBlank }),
     E(pendingBoosts.length ? "revealSchemeBoost" : "finishScheme"),
   );
@@ -27804,6 +27898,7 @@ function finishAttackAfterDamage(
     ...mdk.modokActivated(s, a.attacker),
     ...tb.thunderboltsAttackedYou(s, a.attacker, recipientId),
     ...ench.enchantressAttacked(s, a.attacker, recipientId),
+    ...gol.godOfLiesAttacked(s, a.attacker, recipientId),
     ...tb.thunderboltsActivated(s, a.attacker, recipientId),
     ...db.darkBeastAttacked(
       s,
@@ -28609,6 +28704,8 @@ function reveal(
         ronanPorts,
       ),
     );
+    // Dark Scepter: treacheries cannot be canceled.
+    if (gol.godOfLiesUncancelable(s, p)) opts.length = 0;
     if (opts.length) {
       opts.push(
         option("resolve", "Resolve the encounter", [
@@ -28626,6 +28723,7 @@ function reveal(
     return;
   }
   const c = card(p);
+  if (!repeat && !whenRevealedOnly) gol.godOfLiesTreacheryRevealed(s, p);
   const moduleSurge = ironspider.ironspiderSinisterCriminalSurge(
     s,
     p,
@@ -28652,9 +28750,13 @@ function reveal(
             ench.enchantressRevealCard(
               s,
               p,
-              knifeSurge || moduleSurge
-                ? { ...c, text: `Surge.\n${c.text || ""}` }
-                : c,
+              gol.godOfLiesRevealCard(
+                s,
+                p,
+                knifeSurge || moduleSurge
+                  ? { ...c, text: `Surge.\n${c.text || ""}` }
+                  : c,
+              ),
             ),
           ),
         ),
@@ -28898,6 +29000,7 @@ function reveal(
         ...tb.ELITE_THUNDERBOLT_CODES,
         ...zemo.ZEMO_CODES,
         ...ench.ENCHANTRESS_SCRIPT_CODES,
+        ...gol.GOD_OF_LIES_SCRIPT_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -29174,6 +29277,7 @@ function reveal(
       ...tb.ELITE_THUNDERBOLT_CODES,
       ...zemo.ZEMO_CODES,
       ...ench.ENCHANTRESS_SCRIPT_CODES,
+      ...gol.GOD_OF_LIES_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -29253,6 +29357,7 @@ function reveal(
       tb.thunderboltsReveal(s, p) ??
       zemo.zemoReveal(s, p) ??
       ench.enchantressReveal(s, p) ??
+      gol.godOfLiesReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -29372,6 +29477,7 @@ function reveal(
     tb.thunderboltsReveal(s, p) ??
     zemo.zemoReveal(s, p) ??
     ench.enchantressReveal(s, p) ??
+    gol.godOfLiesReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -30848,6 +30954,7 @@ function resolve(s: GameState, e: Effect) {
           tb.thunderboltsReveal(state, piece) ??
           zemo.zemoReveal(state, piece) ??
           ench.enchantressReveal(state, piece) ??
+          gol.godOfLiesReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -31018,6 +31125,7 @@ function resolve(s: GameState, e: Effect) {
   if (tb.resolveThunderboltsEffect(s, e, thunderboltsPorts)) return;
   if (zemo.resolveZemoEffect(s, e, zemoPorts)) return;
   if (ench.resolveEnchantressEffect(s, e, enchantressPorts)) return;
+  if (gol.resolveGodOfLiesEffect(s, e, golPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -32294,6 +32402,23 @@ function resolve(s: GameState, e: Effect) {
             "Basic power interrupts",
             "Use a Vines upgrade before resolving this basic power?",
             [...options, option("continue", "Continue", after)],
+          );
+          break;
+        }
+      }
+      // God of Lies: Domineering Force and Mounting Resistance as the
+      // identity attacks or thwarts.
+      if (!replaced && !e.golSynergyHandled) {
+        const after = { ...continuation, golSynergyHandled: true };
+        const options = gol.godOfLiesPowerOptions(s, power, after);
+        if (options.length) {
+          choose(
+            s,
+            "Synergy",
+            power === "attack"
+              ? "Remove a synergy counter as you attack?"
+              : "Remove a synergy counter as you thwart?",
+            [...options, option("continue", "Continue", [after])],
           );
           break;
         }
@@ -35423,6 +35548,8 @@ function resolve(s: GameState, e: Effect) {
     case "optional":
       // A response whose source card has left play is no longer available.
       if (e.sourceId && !find(s, e.sourceId)) break;
+      // Nor is a Spider-Ham response once its identity has changed form.
+      if (!spiderHam.spiderHamOptionalAvailable(s, e.effects || [])) break;
       if (
         deadpool.deadpoolTriggeredBlocked(
           e.abilityControllerId ? seatView(s, e.abilityControllerId) : s,
@@ -35910,6 +36037,32 @@ function resolve(s: GameState, e: Effect) {
                 { ...packet, enchAllyHandled: true },
               ]),
             ],
+          );
+          break;
+        }
+      }
+      // God of Lies: Domineering Force and Mounting Resistance as the ally
+      // attacks or thwarts.
+      if (!e.golSynergyHandled && !(attack ? p.stunned : p.confused)) {
+        const packet = {
+          ...e,
+          golSynergyHandled: true,
+          amount: e.amount ?? allyStat(s, p, attack ? "attack" : "thwart"),
+        };
+        const options = gol.godOfLiesPowerOptions(
+          s,
+          attack ? "attack" : "thwart",
+          packet,
+        );
+        if (options.length) {
+          p.exhausted = true;
+          choose(
+            s,
+            "Synergy",
+            attack
+              ? "Remove a synergy counter as this ally attacks?"
+              : "Remove a synergy counter as this ally thwarts?",
+            [...options, option("continue", "Continue", [packet])],
           );
           break;
         }
@@ -37989,12 +38142,20 @@ function resolve(s: GameState, e: Effect) {
       if (s.boostCancellations) delete s.boostCancellations[e.id];
       if (s.attack?.targetPlayerId && !e.scheme)
         activateSeat(s, s.attack.targetPlayerId);
+      // Loki the Rascal's Forced Response follows the boost card.
+      const golRascal = gol.godOfLiesBoostResolved(
+        s,
+        s.resolving.find((p) => p.id === e.id),
+      );
       if (
         !(s.scheming || s.attack)?.retainedBoostIds?.includes(e.id) &&
         !mysterio.mysterioIllusionBoost(s, e.id)
       )
         finishResolution(s, e.id);
-      if (e.legacy) break;
+      if (e.legacy) {
+        add(s, ...golRascal);
+        break;
+      }
       if (e.scheme && s.scheming)
         add(
           s,
@@ -38009,6 +38170,7 @@ function resolve(s: GameState, e: Effect) {
           s,
           E(s.attack.pendingBoosts?.length ? "revealBoost" : "damageWindow"),
         );
+      add(s, ...golRascal);
       break;
     case "legacyBoost":
       resolve(s, { ...e, type: "revealBoost" });
@@ -38476,6 +38638,8 @@ function resolve(s: GameState, e: Effect) {
             [E("damageWindow")],
             gamoraPorts,
           ),
+          // Feigned Retreat: prevent 4 of the attack's damage.
+          ...gol.godOfLiesDamageOptions(s, packet, amount, [E("damageWindow")]),
         );
       }
       if (!(heroTarget ? s.player.tough : find(s, shieldTarget)?.tough))
@@ -39890,6 +40054,8 @@ function resolve(s: GameState, e: Effect) {
       }
       hawkeyePhaseEnded(s, hawkeyePorts);
       antMan.antManPhaseEnded(s);
+      // God of Lies: Worlds Collide completed during the player phase.
+      if (gol.godOfLiesPlayerPhaseEnded(s, golPorts)) break;
       s.phase = "villain";
       s.villainStep = "threat";
       // Pestilence's blank text boxes end as the villain phase begins.
@@ -41021,6 +41187,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...tb.thunderboltsActions(s, p),
               ...zemo.zemoActions(s, p, zemoPorts),
               ...ench.enchantressActions(s, p, enchantressPorts),
+              ...gol.godOfLiesActions(s, p, golPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -41165,6 +41332,25 @@ export function dispatch(state: GameState, command: Command): GameState {
           ) {
             const selected = db
               .darkBeastActions(s, db.darkBeastActionSource(s, command.id)!)
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
+            add(s, ...selected!.effects);
+          } else if (
+            gol.godOfLiesActionSource(s, command.id) &&
+            gol
+              .godOfLiesActions(
+                s,
+                gol.godOfLiesActionSource(s, command.id)!,
+                golPorts,
+              )
+              .some((o) => !command.action || o.id === command.action)
+          ) {
+            const selected = gol
+              .godOfLiesActions(
+                s,
+                gol.godOfLiesActionSource(s, command.id)!,
+                golPorts,
+              )
               .find((o) => !command.action || o.id === command.action);
             need(selected, "This action needs its printed cost.");
             add(s, ...selected!.effects);
