@@ -76,6 +76,7 @@ import {
   CLAN_AKKABA_CODES,
   EN_SABAH_NUR_SCRIPT_CODES,
 } from "../src/game/en-sabah-nur";
+import { STANDARD_III_CODES } from "../src/game/standard-iii";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -148,6 +149,7 @@ const badoonCodes = new Set<string>([
   ...EN_SABAH_NUR_SCRIPT_CODES,
   ...CELESTIAL_TECH_CODES,
   ...CLAN_AKKABA_CODES,
+  ...STANDARD_III_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -561,9 +563,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(3272);
-    expect(coverage.unsupportedFaces).toBe(1279);
-    expect(coverage.dedicatedFaces).toBe(2834);
+    expect(coverage.executableFaces).toBe(3279);
+    expect(coverage.unsupportedFaces).toBe(1272);
+    expect(coverage.dedicatedFaces).toBe(2841);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -629,14 +631,14 @@ describe("complete expansion rules inventory", () => {
       ).registered,
     ).toBe(true);
   });
-  it("closes the Age of Apocalypse hero slice, Unus, Four Horsemen, Apocalypse, Dark Beast, En Sabah Nur and both complete retail Hero Packs", () => {
+  it("closes the Age of Apocalypse hero slice, Standard III, Unus, Four Horsemen, Apocalypse, Dark Beast, En Sabah Nur and both complete retail Hero Packs", () => {
     const products = inventory.installedRegistryCoverage.products;
     const apocalypse = products.find(
       (pack: { code: string }) => pack.code === "aoa",
     );
     expect(apocalypse).toMatchObject({
       faceCount: 220,
-      executableFaces: 187,
+      executableFaces: 194,
       installedCardClosure: false,
     });
     // Unus with the Infinites and Dystopian Nightmare sets fills positions
@@ -733,6 +735,18 @@ describe("complete expansion rules inventory", () => {
         .map((entry: { code: string }) => entry.code)
         .sort(),
     ).toEqual([...enSabahNurFaces].sort());
+    // Standard III fills positions 75 to 80.
+    expect(
+      cards
+        .filter(
+          (entry: { pack_code: string; position: number }) =>
+            entry.pack_code === "aoa" &&
+            entry.position >= 75 &&
+            entry.position <= 80,
+        )
+        .map((entry: { code: string }) => entry.code)
+        .sort(),
+    ).toEqual([...STANDARD_III_CODES].sort());
     const prelates = new Set<string>(PRELATE_CODES);
     expect(
       cards
@@ -751,8 +765,7 @@ describe("complete expansion rules inventory", () => {
         .filter(
           (entry: { pack_code: string; position: number; code: string }) =>
             entry.pack_code === "aoa" &&
-            entry.position > 74 &&
-            !(entry.position > 80 && entry.position <= 163) &&
+            entry.position > 163 &&
             !(entry.position >= 184 && entry.position <= 186) &&
             !prelates.has(entry.code),
         )
@@ -760,9 +773,11 @@ describe("complete expansion rules inventory", () => {
         .sort(),
     );
     expect(apocalypse.unsupportedFaceCodes).toEqual(
-      expect.arrayContaining(["45075a", "45164", "45179a"]),
+      expect.arrayContaining(["45164", "45166a", "45179a"]),
     );
     for (const code of [
+      "45075a",
+      "45080",
       "45081a",
       "45101a",
       "45118",
@@ -925,6 +940,8 @@ describe("complete expansion rules inventory", () => {
         30 -
         // Age of Apocalypse: En Sabah Nur, Celestial Tech and Clan Akkaba.
         28 -
+        // Age of Apocalypse: Standard III.
+        7 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -1528,7 +1545,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(168);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(169);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

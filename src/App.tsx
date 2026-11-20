@@ -399,6 +399,7 @@ import {
   esnFormLabel,
   esnPower,
 } from "./game/en-sabah-nur";
+import { pursued, pursuedCaption } from "./game/standard-iii";
 import {
   AERIAL_BOMBARDMENT,
   IMPERVIOUS,
@@ -1222,7 +1223,9 @@ export default function App() {
   const [pacing, setPacingState] = useState<Pacing>(readPacing);
   const [heroic, setHeroic] = useState(0);
   // The Hood scenario pack's Standard II and Expert II encounter sets.
-  const [alternativeSets, setAlternativeSets] = useState(false);
+  const [alternativeSets, setAlternativeSets] = useState<
+    "original" | "ii" | "iii"
+  >("original");
   const recommendedSenatorDamage =
     heroic > 0 ? 3 : difficulty === "expert" ? 2 : 1;
   const resolvedCaptureAllocation = team.map((_, index) =>
@@ -1579,6 +1582,7 @@ export default function App() {
                   heroic: game.heroic || 0,
                   standardII: game.standardII,
                   expertII: game.expertII,
+                  standardIII: game.standardIII,
                   seed: sameSeed ? game.startSeed || undefined : undefined,
                 }
               : {
@@ -1603,9 +1607,11 @@ export default function App() {
                     : {}),
                   pacing,
                   heroic,
-                  ...(alternativeSets && villain.moduleCount !== 0
+                  ...(villain.moduleCount !== 0 && alternativeSets === "ii"
                     ? { standardII: true, expertII: true }
-                    : {}),
+                    : villain.moduleCount !== 0 && alternativeSets === "iii"
+                      ? { standardIII: true }
+                      : {}),
                   seed: parseSeed(seedText),
                 },
         ),
@@ -2632,23 +2638,39 @@ export default function App() {
                     <div className="setting-line">
                       <span>Encounter sets</span>
                       <div className="segmented">
-                        {[false, true].map((ii) => (
+                        {(["original", "ii", "iii"] as const).map((sets) => (
                           <button
-                            key={String(ii)}
-                            className={alternativeSets === ii ? "selected" : ""}
-                            aria-pressed={alternativeSets === ii}
-                            onClick={() => setAlternativeSets(ii)}
+                            key={sets}
+                            className={
+                              alternativeSets === sets ? "selected" : ""
+                            }
+                            aria-pressed={alternativeSets === sets}
+                            onClick={() => setAlternativeSets(sets)}
                           >
-                            {ii ? "Standard II" : "Original"}
+                            {sets === "ii"
+                              ? "Standard II"
+                              : sets === "iii"
+                                ? "Standard III"
+                                : "Original"}
                           </button>
                         ))}
                       </div>
                     </div>
-                    {alternativeSets && (
+                    {alternativeSets === "ii" && (
                       <p className="setting-help">
                         Standard II replaces the core Standard set and puts
                         Formidable Foe into play; in Expert, Expert II replaces
                         the Expert set. Both are harder than the originals.
+                      </p>
+                    )}
+                    {alternativeSets === "iii" && (
+                      <p className="setting-help">
+                        Standard III replaces the core Standard set. Pursued by
+                        the Past starts in play and collects pursuit counters;
+                        at 3 more than the number of players, the player who
+                        placed the last one is attacked by their nemesis minion
+                        or brings their nemesis set in. In Expert, the core
+                        Expert set stays.
                       </p>
                     )}
                   </>
@@ -6792,6 +6814,12 @@ function Tabletop({
               <span>·</span> Expert II
             </>
           ) : null}
+          {s.standardIII ? (
+            <>
+              {" "}
+              <span>·</span> Standard III
+            </>
+          ) : null}
           {s.heroic ? (
             <>
               {" "}
@@ -7659,13 +7687,20 @@ function Tabletop({
                                           ? "SETTING · SHOW"
                                           : DARK_BEAST_SETTING_CAPTIONS[p.code]
                                             ? "ENVIRONMENT · SETTING"
-                                            : Object.values(
-                                                  MANHATTAN_FLIPPED,
-                                                ).includes(p.code)
-                                              ? "ENVIRONMENT · SYMBIOTE"
-                                              : "ENVIRONMENT"}
+                                            : p.id === pursued(s)?.id
+                                              ? "ENVIRONMENT · PERMANENT"
+                                              : Object.values(
+                                                    MANHATTAN_FLIPPED,
+                                                  ).includes(p.code)
+                                                ? "ENVIRONMENT · SYMBIOTE"
+                                                : "ENVIRONMENT"}
                         </span>
                         <strong>{card(p).name}</strong>
+                        {p.id === pursued(s)?.id && (
+                          <span className="stat-caption">
+                            {pursuedCaption(s)}
+                          </span>
+                        )}
                         {DARK_BEAST_SETTING_CAPTIONS[p.code] && (
                           <span className="stat-caption">
                             {DARK_BEAST_SETTING_CAPTIONS[p.code]} · another

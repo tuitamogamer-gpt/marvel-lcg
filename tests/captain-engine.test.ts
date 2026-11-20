@@ -246,6 +246,31 @@ describe("Captain America through the actual game dispatcher", () => {
     const h = hand(s, "03006", "03003");
     expect(playable(s, h[0])).toContain("Shield");
   });
+  it("Shield Toss keeps a card in hand for its discard cost when a modifier gives it a resource cost", () => {
+    let s = base();
+    support(s, "03009");
+    // Stryfe's Left to Your Fate: each player card costs 1 more.
+    s.villainId = "stryfe";
+    s.scheme.code = "40167b";
+    let h = hand(s, "03006", "03003");
+    expect(playable(s, h[0])).toContain("discard after paying");
+    h = hand(s, "03006", "03003", "03004");
+    expect(playable(s, h[0])).toBeNull();
+    s = command(s, { type: "PLAY", id: h[0].id });
+    expect(s.prompt?.kind).toBe("payment");
+    expect([...(s.prompt?.retainOneOfIds || [])].sort()).toEqual(
+      [h[1].id, h[2].id].sort(),
+    );
+    const spent = dispatch(s, {
+      type: "PAY",
+      ids: [h[1].id, h[2].id],
+      wildAs: "energy",
+    });
+    expect(spent.error).toMatch(/Keep a card in hand to discard/);
+    s = command(s, { type: "PAY", ids: [h[1].id], wildAs: "energy" });
+    expect(s.prompt?.kind).toBe("select");
+    expect(s.prompt?.options.map((o) => o.id)).toEqual([h[2].id]);
+  });
   it("Shield Block prevents an actual enemy attack, exhausts Shield and discards itself", () => {
     let s = base();
     const sh = support(s, "03009");

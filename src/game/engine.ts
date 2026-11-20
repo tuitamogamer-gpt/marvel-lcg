@@ -35,6 +35,7 @@ import * as horsemen from "./four-horsemen.js";
 import * as apoc from "./apocalypse.js";
 import * as db from "./dark-beast.js";
 import * as esn from "./en-sabah-nur.js";
+import * as std3 from "./standard-iii.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -7670,7 +7671,11 @@ function requestPayment(
       ? warmPack
           .warMachinePackSneakAllies(s, warMachinePackPorts)
           .map((ally) => ally.id)
-      : [];
+      : // Shield Toss: a card must stay in hand for its discard cost when a
+        // modifier gives it a resource cost.
+        !abilityCost && piece?.code === "03006"
+        ? s.player.hand.filter((p) => p.id !== piece.id).map((p) => p.id)
+        : [];
   const retainAlternatives =
     !abilityCost && piece?.code === "26035"
       ? visionPack
@@ -7976,7 +7981,12 @@ function pay(
     sourceRequirementMet,
     p.sourceRequirement?.label || "The additional cost is not funded.",
   );
-  need(retained, "Keep an eligible ally in hand for Sneak Attack.");
+  need(
+    retained,
+    p.card?.code === "03006"
+      ? "Keep a card in hand to discard for Shield Toss."
+      : "Keep an eligible ally in hand for Sneak Attack.",
+  );
   need(
     retainedAlternative,
     "Keep an Avenger and Guardian in hand for Joining Forces.",
@@ -8791,6 +8801,8 @@ export function newGame(config: {
   standardII?: boolean;
   /** Use Expert II instead of the core Expert set. */
   expertII?: boolean;
+  /** Use Age of Apocalypse's Standard III instead of the core Standard set. */
+  standardIII?: boolean;
 }): GameState {
   const team = config.heroes || [
     { heroId: config.heroId, aspect: config.aspect },
@@ -8855,6 +8867,10 @@ export function newGame(config: {
         !v.reservedSets?.includes(id),
     ),
     "This modular set’s complete rules are not implemented yet.",
+  );
+  need(
+    !(config.standardII && config.standardIII),
+    "Choose either Standard II or Standard III.",
   );
   const scenarioPack = card(v.codes[0]).pack_code;
   if (v.id === "project_wideawake" && config.captureAllocation !== undefined)
@@ -9114,10 +9130,14 @@ export function newGame(config: {
             c.pack_code === scenarioPack) ||
           (c.set_code === "standard" &&
             c.pack_code === "core" &&
-            !config.standardII) ||
+            !config.standardII &&
+            !config.standardIII) ||
           (c.set_code === "standard_ii" &&
             c.pack_code === "hood" &&
             !!config.standardII) ||
+          (c.set_code === "standard_iii" &&
+            c.pack_code === "aoa" &&
+            !!config.standardIII) ||
           (difficulty === "expert" &&
             c.set_code === "expert" &&
             c.pack_code === "core" &&
@@ -9148,6 +9168,8 @@ export function newGame(config: {
           !apoc.apocalypseSetupCard(c.code) &&
           // Ancient Ritual (Setup) begins the game in play.
           !esn.esnSetupCard(c.code) &&
+          // Pursued by the Past (Setup) begins the game in play.
+          !std3.standardIIISetupCard(c.code) &&
           !(v.id === "magneto" && ["32144b", "32145b"].includes(c.code)) &&
           (c.type_code !== "environment" ||
             (v.id === "absorbing_man" &&
@@ -9193,6 +9215,9 @@ export function newGame(config: {
     );
   }
   if (config.expertII && difficulty === "expert") s.expertII = true;
+  // Standard III: Pursued by the Past (Permanent, Setup) begins in play.
+  if (config.standardIII && v.id !== "the_wrecking_crew")
+    std3.standardIIISetup(s, { makePiece: (s, code) => makePiece(s, code) });
   if (v.id === "sandman") sandman.sandmanSetup(s, sandmanPorts);
   if (v.id === "venom") venomVillain.venomSetup(s, venomVillainPorts);
   if (v.id === "mysterio") mysterio.mysterioSetup(s, mysterioPorts);
@@ -10318,6 +10343,16 @@ export function playable(s: GameState, p: Piece): string | null {
     p.code === "03006" ? targets(s, "enemy", true).length : undefined,
   );
   if (captainRestriction) return captainRestriction;
+  // Shield Toss: after paying a resource cost (a modifier can give it one),
+  // a card must remain in hand for its discard cost.
+  if (
+    p.code === "03006" &&
+    !s.player.hand.some(
+      (x) =>
+        x.id !== p.id && warMachinePackPorts.canPayKeepingHandAlly(s, p, x),
+    )
+  )
+    return "Shield Toss needs a card left in your hand to discard after paying its cost.";
   const hulkRestriction = hulkPlayRestriction(s, p);
   if (hulkRestriction) return hulkRestriction;
   const hulkPackRestriction = hulkPackPlayRestriction(s, p);
@@ -12165,6 +12200,7 @@ export function abilityOptions(
     ...sty.stryfeActions(s, p, stryfePorts),
     ...unus.unusActions(s, p),
     ...db.darkBeastActions(s, p),
+    ...std3.standardIIIActions(s, p, standardIIIPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -17127,6 +17163,60 @@ const darkBeastPorts: db.DarkBeastPorts = {
   },
   indirect: (s, playerId, amount, sourceId, title) =>
     hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+};
+const standardIIIPorts: std3.StandardIIIPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  nemesisArrives: (s, playerId) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    const before = s.queue.length;
+    let surged = false;
+    shadowOfThePast(s, () => {
+      surged = true;
+    });
+    // Its own surge (the nemesis set already entered) is not Pursued by the
+    // Past's: the player finds their nemesis minion and reveals it instead.
+    const added = s.queue.slice(0, s.queue.length - before);
+    const kept = added.filter((e) => e.type !== "surge");
+    if (kept.length < added.length) surged = true;
+    s.queue.splice(
+      0,
+      added.length,
+      ...kept.map((e) => ({ ...e, actorId: e.actorId ?? playerId })),
+    );
+    if (surged) {
+      const minion = takeNemesisCard(s, playerId, "minion");
+      if (minion) add(s, E("reveal", { piece: minion, actorId: playerId }));
+    }
+    activateSeat(s, previous);
+  },
+  mill: (s, playerId, n) => mysterioPorts.millPlayer(s, playerId, n),
+  discardUpgradeOrSupport: (s, playerId) => {
+    const view = seatView(s, playerId);
+    if (
+      view.player.inPlay.some(
+        (p) =>
+          ["support", "upgrade"].includes(card(p).type_code) &&
+          !isPermanent(card(p)) &&
+          valkyrie.valkyrieCanDiscardAttachment(s, p) &&
+          !Object.values(spectrum.SPECTRUM_FORM_CODES).some(
+            (code) => code === p.code,
+          ),
+      )
+    )
+      add(
+        s,
+        E("chooseDiscard", { filter: "supportUpgrade", actorId: playerId }),
+      );
+  },
+  discardFromHand: (s, playerId, id) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    if (s.player.hand.some((p) => p.id === id)) discardHand(s, id);
+    activateSeat(s, previous);
+  },
+  identitySpecific: (p) => !!heroRuntime(card(p).set_code || ""),
 };
 const enSabahNurPorts: esn.EnSabahNurPorts = {
   ...mutagenPorts,
@@ -25669,6 +25759,7 @@ function boostEffects(s: GameState, p: Piece) {
     apoc.apocalypseBoost(s, p) ??
     db.darkBeastBoost(s, p) ??
     esn.esnBoost(s, p) ??
+    std3.standardIIIBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -27937,6 +28028,7 @@ function reveal(
         ...esn.EN_SABAH_NUR_SCRIPT_CODES,
         ...esn.CELESTIAL_TECH_CODES,
         ...esn.CLAN_AKKABA_CODES,
+        ...std3.STANDARD_III_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -28003,7 +28095,10 @@ function reveal(
         (sin.SINISTER_IN_PLAY_OBLIGATIONS as readonly string[]).includes(
           p.code,
         ) ||
-        (unus.UNUS_IN_PLAY_OBLIGATIONS as readonly string[]).includes(p.code))
+        (unus.UNUS_IN_PLAY_OBLIGATIONS as readonly string[]).includes(p.code) ||
+        (std3.STANDARD_III_IN_PLAY_OBLIGATIONS as readonly string[]).includes(
+          p.code,
+        ))
     ) {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       if (!s.player.inPlay.some((x) => x.id === p.id)) s.player.inPlay.push(p);
@@ -28191,6 +28286,7 @@ function reveal(
       ...esn.EN_SABAH_NUR_SCRIPT_CODES,
       ...esn.CELESTIAL_TECH_CODES,
       ...esn.CLAN_AKKABA_CODES,
+      ...std3.STANDARD_III_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -28263,6 +28359,7 @@ function reveal(
       apoc.apocalypseReveal(s, p) ??
       db.darkBeastReveal(s, p) ??
       esn.esnReveal(s, p) ??
+      std3.standardIIIReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -28370,6 +28467,7 @@ function reveal(
     apoc.apocalypseReveal(s, p) ??
     db.darkBeastReveal(s, p) ??
     esn.esnReveal(s, p) ??
+    std3.standardIIIReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -28776,6 +28874,213 @@ function obligation(s: GameState, p: Piece) {
     opts,
   );
 }
+/** Shadow of the Past (and Pursued by the Past's B side): the active
+ * player's nemesis minion and side scheme are revealed and the rest of their
+ * set-aside nemesis set is shuffled into the encounter deck; `surge` runs
+ * when the nemesis set has already entered. */
+function shadowOfThePast(s: GameState, surge: () => void) {
+  const nightcrawlerNemesis =
+    nightcrawlerEncounter.nightcrawlerEncounterShadows(s);
+  if (nightcrawlerNemesis !== null) {
+    add(s, ...nightcrawlerNemesis);
+    return;
+  }
+  const magneticNemesis = magnetoHero.magnetoHeroShadows(s);
+  if (magneticNemesis !== null) {
+    add(s, ...magneticNemesis);
+    return;
+  }
+  const magikNemesis = magik.magikShadows(s);
+  if (magikNemesis !== null) {
+    add(s, ...magikNemesis);
+    return;
+  }
+  const mariaNemesis = mariaHill.mariaHillShadows(s);
+  if (mariaNemesis) {
+    add(s, ...mariaNemesis);
+    return;
+  }
+  const icemanNemesis = iceman.icemanShadows(s);
+  if (icemanNemesis !== null) {
+    add(s, ...icemanNemesis);
+    return;
+  }
+  const dominoNemesis = domino.dominoShadows(s);
+  if (dominoNemesis !== null) {
+    add(s, ...dominoNemesis);
+    return;
+  }
+  const deadpoolNemesis = deadpool.deadpoolShadows(s);
+  if (deadpoolNemesis !== null) {
+    add(s, ...deadpoolNemesis);
+    return;
+  }
+  const gambitNemesis = gambit.gambitShadows(s);
+  if (gambitNemesis !== null) {
+    add(s, ...gambitNemesis);
+    return;
+  }
+  const rogueNemesis = rogue.rogueShadows(s);
+  if (rogueNemesis !== null) {
+    add(s, ...rogueNemesis);
+    return;
+  }
+  const cyclopsNemesis = cyclops.cyclopsShadowOfPast(s);
+  if (cyclopsNemesis !== null) {
+    add(s, ...cyclopsNemesis);
+    return;
+  }
+  const phoenixNemesis = phoenix.phoenixShadowOfPast(s);
+  if (phoenixNemesis !== null) {
+    add(s, ...phoenixNemesis);
+    return;
+  }
+  const psyNemesis = psylocke.psylockeShadowOfPast(s);
+  if (psyNemesis !== null) {
+    add(s, ...psyNemesis);
+    return;
+  }
+  const wolverineNemesis = wolverine.wolverineShadowOfPast(s);
+  if (wolverineNemesis !== null) {
+    add(s, ...wolverineNemesis);
+    return;
+  }
+  const bishopNemesis = bishop.bishopShadows(s);
+  if (bishopNemesis !== null) {
+    add(s, ...bishopNemesis);
+    return;
+  }
+  const cableNemesis = cable.cableShadows(s);
+  if (cableNemesis !== null) {
+    add(s, ...cableNemesis);
+    return;
+  }
+  const nnemesis = nickFury.nickFuryShadows(s);
+  if (nnemesis !== null) {
+    add(s, ...nnemesis);
+    return;
+  }
+  const jnemesis = jubilee.jubileeShadows(s);
+  if (jnemesis !== null) {
+    add(s, ...jnemesis);
+    return;
+  }
+  const xnemesis = x23.x23Shadows(s);
+  if (xnemesis !== null) {
+    add(s, ...xnemesis);
+    return;
+  }
+  const angelNemesis = angel.angelShadows(s);
+  if (angelNemesis !== null) {
+    add(s, ...angelNemesis);
+    return;
+  }
+  const stormNemesis = storm.stormShadows(s);
+  if (stormNemesis !== null) {
+    add(s, ...stormNemesis);
+    return;
+  }
+  const colossusNemesis = colossus.colossusShadowOfPast(s);
+  if (colossusNemesis !== null) {
+    add(s, ...colossusNemesis);
+    return;
+  }
+  const spdrNemesis = spdr.spdrShadowOfPast(s);
+  if (spdrNemesis !== null) {
+    add(s, ...spdrNemesis);
+    return;
+  }
+  const spiderHamNemesis = spiderHam.spiderHamShadowOfPast(s);
+  if (spiderHamNemesis !== null) {
+    add(s, ...spiderHamNemesis);
+    return;
+  }
+  const novaNemesis = nova.novaShadowOfPast(s);
+  if (novaNemesis !== null) {
+    add(s, ...novaNemesis);
+    return;
+  }
+  const ironheartNemesis = ironheart.ironheartShadowOfPast(s);
+  if (ironheartNemesis !== null) {
+    add(s, ...ironheartNemesis);
+    return;
+  }
+  const ghostNemesis = ghostSpider.ghostSpiderShadowOfPast(s);
+  if (ghostNemesis !== null) {
+    add(s, ...ghostNemesis);
+    return;
+  }
+  const visionNemesis = vision.visionShadowOfPast(s);
+  const shadowcatNemesis = shadowcat.shadowcatShadowOfPast(s);
+  if (shadowcatNemesis !== null) {
+    add(s, ...shadowcatNemesis);
+    return;
+  }
+  if (visionNemesis !== null) {
+    add(s, ...visionNemesis);
+    return;
+  }
+  const valkyrieNemesis = valkyrie.valkyrieShadowOfPast(s);
+  if (valkyrieNemesis !== null) {
+    add(s, ...valkyrieNemesis);
+    return;
+  }
+  const warMachineNemesis = warMachine.warMachineShadowOfPast(s);
+  const milesNemesis = miles.milesShadowOfPast(s);
+  if (milesNemesis !== null) {
+    add(s, ...milesNemesis);
+    return;
+  }
+  if (warMachineNemesis !== null) {
+    add(s, ...warMachineNemesis);
+    return;
+  }
+  const warlockNemesis = warlock.warlockShadowOfPast(s);
+  if (warlockNemesis !== null) {
+    add(s, ...warlockNemesis);
+    log(
+      s,
+      "Adam Warlock's actual set-aside nemesis cards enter the fight!",
+      "bad",
+    );
+    return;
+  }
+  const venomNemesis = venom.venomShadowOfPast(s);
+  if (venomNemesis !== null) {
+    add(s, ...venomNemesis);
+    log(s, "Venom's remaining set-aside nemesis cards enter the fight!", "bad");
+    return;
+  }
+  if (s.flags.nemesis) {
+    surge();
+    return;
+  }
+  s.flags.nemesis = true;
+  const set = CATALOG_CARDS.filter(
+    (c) =>
+      c.set_code === `${s.heroId}_nemesis` &&
+      c.pack_code === heroCard(s).pack_code,
+  );
+  const minion = set.find((c) => c.type_code === "minion")!;
+  const scheme = set.find((c) => c.type_code === "side_scheme")!;
+  s.encounter.deck.push(
+    ...set
+      .filter((c) => c !== minion && c !== scheme)
+      .flatMap((c) =>
+        Array.from({ length: c.quantity }, () => makePiece(s, c.code)),
+      ),
+  );
+  shuffle(s, s.encounter.deck);
+  add(
+    s,
+    ...(s.kang?.nemesisOut?.includes(s.activePlayerId) ||
+    s.flags.nemesisMinionOut
+      ? []
+      : [E("reveal", { piece: makePiece(s, minion.code) })]),
+    E("reveal", { piece: makePiece(s, scheme.code) }),
+  );
+  log(s, `Your nemesis enters the fight!`, "bad");
+}
 function treachery(s: GameState, p: Piece) {
   const nightcrawlerReveal = nightcrawlerEncounter.nightcrawlerEncounter(s, p);
   if (nightcrawlerReveal !== null) {
@@ -29119,214 +29424,9 @@ function treachery(s: GameState, p: Piece) {
         add(s, att(), ...engaged(s).map((p) => E("enemyAttack", { id: p.id })));
       else surge();
       break;
-    case "01190": {
-      const nightcrawlerNemesis =
-        nightcrawlerEncounter.nightcrawlerEncounterShadows(s);
-      if (nightcrawlerNemesis !== null) {
-        add(s, ...nightcrawlerNemesis);
-        break;
-      }
-      const magneticNemesis = magnetoHero.magnetoHeroShadows(s);
-      if (magneticNemesis !== null) {
-        add(s, ...magneticNemesis);
-        return;
-      }
-      const magikNemesis = magik.magikShadows(s);
-      if (magikNemesis !== null) {
-        add(s, ...magikNemesis);
-        break;
-      }
-      const mariaNemesis = mariaHill.mariaHillShadows(s);
-      if (mariaNemesis) {
-        add(s, ...mariaNemesis);
-        break;
-      }
-      const icemanNemesis = iceman.icemanShadows(s);
-      if (icemanNemesis !== null) {
-        add(s, ...icemanNemesis);
-        break;
-      }
-      const dominoNemesis = domino.dominoShadows(s);
-      if (dominoNemesis !== null) {
-        add(s, ...dominoNemesis);
-        break;
-      }
-      const deadpoolNemesis = deadpool.deadpoolShadows(s);
-      if (deadpoolNemesis !== null) {
-        add(s, ...deadpoolNemesis);
-        break;
-      }
-      const gambitNemesis = gambit.gambitShadows(s);
-      if (gambitNemesis !== null) {
-        add(s, ...gambitNemesis);
-        break;
-      }
-      const rogueNemesis = rogue.rogueShadows(s);
-      if (rogueNemesis !== null) {
-        add(s, ...rogueNemesis);
-        break;
-      }
-      const cyclopsNemesis = cyclops.cyclopsShadowOfPast(s);
-      if (cyclopsNemesis !== null) {
-        add(s, ...cyclopsNemesis);
-        break;
-      }
-      const phoenixNemesis = phoenix.phoenixShadowOfPast(s);
-      if (phoenixNemesis !== null) {
-        add(s, ...phoenixNemesis);
-        break;
-      }
-      const psyNemesis = psylocke.psylockeShadowOfPast(s);
-      if (psyNemesis !== null) {
-        add(s, ...psyNemesis);
-        return;
-      }
-      const wolverineNemesis = wolverine.wolverineShadowOfPast(s);
-      if (wolverineNemesis !== null) {
-        add(s, ...wolverineNemesis);
-        return;
-      }
-      const bishopNemesis = bishop.bishopShadows(s);
-      if (bishopNemesis !== null) {
-        add(s, ...bishopNemesis);
-        break;
-      }
-      const cableNemesis = cable.cableShadows(s);
-      if (cableNemesis !== null) {
-        add(s, ...cableNemesis);
-        break;
-      }
-      const nnemesis = nickFury.nickFuryShadows(s);
-      if (nnemesis !== null) {
-        add(s, ...nnemesis);
-        break;
-      }
-      const jnemesis = jubilee.jubileeShadows(s);
-      if (jnemesis !== null) {
-        add(s, ...jnemesis);
-        break;
-      }
-      const xnemesis = x23.x23Shadows(s);
-      if (xnemesis !== null) {
-        add(s, ...xnemesis);
-        break;
-      }
-      const angelNemesis = angel.angelShadows(s);
-      if (angelNemesis !== null) {
-        add(s, ...angelNemesis);
-        break;
-      }
-      const stormNemesis = storm.stormShadows(s);
-      if (stormNemesis !== null) {
-        add(s, ...stormNemesis);
-        break;
-      }
-      const colossusNemesis = colossus.colossusShadowOfPast(s);
-      if (colossusNemesis !== null) {
-        add(s, ...colossusNemesis);
-        break;
-      }
-      const spdrNemesis = spdr.spdrShadowOfPast(s);
-      if (spdrNemesis !== null) {
-        add(s, ...spdrNemesis);
-        break;
-      }
-      const spiderHamNemesis = spiderHam.spiderHamShadowOfPast(s);
-      if (spiderHamNemesis !== null) {
-        add(s, ...spiderHamNemesis);
-        break;
-      }
-      const novaNemesis = nova.novaShadowOfPast(s);
-      if (novaNemesis !== null) {
-        add(s, ...novaNemesis);
-        break;
-      }
-      const ironheartNemesis = ironheart.ironheartShadowOfPast(s);
-      if (ironheartNemesis !== null) {
-        add(s, ...ironheartNemesis);
-        break;
-      }
-      const ghostNemesis = ghostSpider.ghostSpiderShadowOfPast(s);
-      if (ghostNemesis !== null) {
-        add(s, ...ghostNemesis);
-        break;
-      }
-      const visionNemesis = vision.visionShadowOfPast(s);
-      const shadowcatNemesis = shadowcat.shadowcatShadowOfPast(s);
-      if (shadowcatNemesis !== null) {
-        add(s, ...shadowcatNemesis);
-        break;
-      }
-      if (visionNemesis !== null) {
-        add(s, ...visionNemesis);
-        break;
-      }
-      const valkyrieNemesis = valkyrie.valkyrieShadowOfPast(s);
-      if (valkyrieNemesis !== null) {
-        add(s, ...valkyrieNemesis);
-        break;
-      }
-      const warMachineNemesis = warMachine.warMachineShadowOfPast(s);
-      const milesNemesis = miles.milesShadowOfPast(s);
-      if (milesNemesis !== null) {
-        add(s, ...milesNemesis);
-        break;
-      }
-      if (warMachineNemesis !== null) {
-        add(s, ...warMachineNemesis);
-        break;
-      }
-      const warlockNemesis = warlock.warlockShadowOfPast(s);
-      if (warlockNemesis !== null) {
-        add(s, ...warlockNemesis);
-        log(
-          s,
-          "Adam Warlock's actual set-aside nemesis cards enter the fight!",
-          "bad",
-        );
-        break;
-      }
-      const venomNemesis = venom.venomShadowOfPast(s);
-      if (venomNemesis !== null) {
-        add(s, ...venomNemesis);
-        log(
-          s,
-          "Venom's remaining set-aside nemesis cards enter the fight!",
-          "bad",
-        );
-        break;
-      }
-      if (s.flags.nemesis) {
-        surge();
-        break;
-      }
-      s.flags.nemesis = true;
-      const set = CATALOG_CARDS.filter(
-        (c) =>
-          c.set_code === `${s.heroId}_nemesis` &&
-          c.pack_code === heroCard(s).pack_code,
-      );
-      const minion = set.find((c) => c.type_code === "minion")!;
-      const scheme = set.find((c) => c.type_code === "side_scheme")!;
-      s.encounter.deck.push(
-        ...set
-          .filter((c) => c !== minion && c !== scheme)
-          .flatMap((c) =>
-            Array.from({ length: c.quantity }, () => makePiece(s, c.code)),
-          ),
-      );
-      shuffle(s, s.encounter.deck);
-      add(
-        s,
-        ...(s.kang?.nemesisOut?.includes(s.activePlayerId) ||
-        s.flags.nemesisMinionOut
-          ? []
-          : [E("reveal", { piece: makePiece(s, minion.code) })]),
-        E("reveal", { piece: makePiece(s, scheme.code) }),
-      );
-      log(s, `Your nemesis enters the fight!`, "bad");
+    case "01190":
+      shadowOfThePast(s, surge);
       break;
-    }
     case "01191":
       s.player.exhausted = true;
       break;
@@ -29837,6 +29937,7 @@ function resolve(s: GameState, e: Effect) {
           apoc.apocalypseReveal(state, piece) ??
           db.darkBeastReveal(state, piece) ??
           esn.esnReveal(state, piece) ??
+          std3.standardIIIReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -30000,6 +30101,7 @@ function resolve(s: GameState, e: Effect) {
   if (apoc.resolveApocalypseEffect(s, e, apocalypsePorts)) return;
   if (db.resolveDarkBeastEffect(s, e, darkBeastPorts)) return;
   if (esn.resolveEnSabahNurEffect(s, e, enSabahNurPorts)) return;
+  if (std3.resolveStandardIIIEffect(s, e, standardIIIPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -38656,6 +38758,7 @@ function resolve(s: GameState, e: Effect) {
       add(s, ...captainPackTurnStart(s));
       add(s, ...nebula.nebulaTurnBegan(s, s.turnPlayerId, nebulaPorts));
       add(s, ...collector.collectorTurnBegan(s, s.turnPlayerId));
+      add(s, ...std3.standardIIITurnBegan(s, s.turnPlayerId));
       break;
     case "prepareDiscard": {
       if (e.selected) {
@@ -39885,6 +39988,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...sty.stryfeActions(s, p, stryfePorts),
               ...unus.unusActions(s, p),
               ...db.darkBeastActions(s, p),
+              ...std3.standardIIIActions(s, p, standardIIIPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -40029,6 +40133,25 @@ export function dispatch(state: GameState, command: Command): GameState {
           ) {
             const selected = db
               .darkBeastActions(s, db.darkBeastActionSource(s, command.id)!)
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
+            add(s, ...selected!.effects);
+          } else if (
+            std3.standardIIIActionSource(s, command.id) &&
+            std3
+              .standardIIIActions(
+                s,
+                std3.standardIIIActionSource(s, command.id)!,
+                standardIIIPorts,
+              )
+              .some((o) => !command.action || o.id === command.action)
+          ) {
+            const selected = std3
+              .standardIIIActions(
+                s,
+                std3.standardIIIActionSource(s, command.id)!,
+                standardIIIPorts,
+              )
               .find((o) => !command.action || o.id === command.action);
             need(selected, "This action needs its printed cost.");
             add(s, ...selected!.effects);

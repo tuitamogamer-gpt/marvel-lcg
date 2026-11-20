@@ -125,8 +125,9 @@ interface MissionConfig {
   difficulty: "standard" | "expert";
   module: string;
   seed: number;
-  /** The Hood scenario pack's Standard II and Expert II encounter sets. */
-  variant?: "ii";
+  /** The Hood scenario pack's Standard II and Expert II encounter sets, or
+   * Age of Apocalypse's Standard III with the core Expert set. */
+  variant?: "ii" | "iii";
 }
 const grid: MissionConfig[] = heroIds.flatMap((heroId, hi) =>
   VILLAINS.flatMap((scenario, vi) =>
@@ -163,7 +164,23 @@ const alternativeSets: MissionConfig[] = heroIds.flatMap((heroId, hi) =>
       })),
   ),
 );
-const missions = [...grid, ...alternativeSets];
+// Age of Apocalypse's Standard III replaces the core Standard set (the
+// Expert set stays) in every scenario that uses it, with its recommended
+// module.
+const standardIIISets: MissionConfig[] = heroIds.flatMap((heroId, hi) =>
+  VILLAINS.filter((scenario) => scenario.moduleCount !== 0).flatMap(
+    (scenario, vi) =>
+      (["standard", "expert"] as const).map((difficulty, di) => ({
+        heroId,
+        villainId: scenario.id,
+        difficulty,
+        module: scenario.id === "the_hood" ? "bomb_scare" : scenario.module,
+        seed: 700000 + hi * 1000 + vi * 10 + di,
+        variant: "iii" as const,
+      })),
+  ),
+);
+const missions = [...grid, ...alternativeSets, ...standardIIISets];
 
 // Build the complete grid before partitioning so every existing configuration
 // keeps the original global hero/scenario/module indexes and seeded shuffle.
@@ -524,7 +541,11 @@ function runMission(config: (typeof missions)[number]) {
     aspect,
     pacing: "expert",
     heroes: [{ heroId: hero.id, aspect, deckCards: codes }],
-    ...(variant === "ii" ? { standardII: true, expertII: true } : {}),
+    ...(variant === "ii"
+      ? { standardII: true, expertII: true }
+      : variant === "iii"
+        ? { standardIII: true }
+        : {}),
   });
   const initial = [
     ...s.player.hand,
@@ -949,10 +970,11 @@ describe("published expansion starters across every supported mission setting", 
         2 *
         VILLAINS.filter((scenario) => scenario.moduleCount !== 0).length,
     );
+    expect(standardIIISets).toHaveLength(alternativeSets.length);
     expect(VILLAINS).toHaveLength(46);
     expect(MODULES).toHaveLength(84);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(387712);
+    expect(missions).toHaveLength(392288);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -964,27 +986,39 @@ describe("published expansion starters across every supported mission setting", 
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
-    // Age of Apocalypse's En Sabah Nur joins as the forty-sixth scenario,
-    // with every modular set as the first of his two, and the Celestial Tech
-    // and Clan Akkaba modular sets join every other scenario with modular
-    // sets. Every earlier name and seed stays in place: the 369,928
-    // configurations before them hash identically to the complete grid of
-    // 7fcdac2.
+    // Age of Apocalypse's Standard III joins as a third choice of encounter
+    // sets, with one configuration per hero, difficulty and scenario that
+    // uses the Standard set. Every earlier name and seed stays in place: the
+    // 387,712 configurations before them hash identically to the complete
+    // grid of 8387e99.
+    expect(missions.filter((m) => m.variant === "iii")).toHaveLength(4576);
+    const enSabahNurGrid = missions.filter((m) => m.variant !== "iii");
+    expect(enSabahNurGrid).toHaveLength(387712);
+    expect(
+      createHash("sha256")
+        .update(manifest(enSabahNurGrid).join("\n"))
+        .digest("hex"),
+    ).toBe("4e4f41bf3009288a1f35fa2168ca05be5851bcd769bec6cc1dc0ac3a3fa4cac1");
+    // Age of Apocalypse's En Sabah Nur joined as the forty-sixth scenario
+    // before that, with every modular set as the first of his two, and the
+    // Celestial Tech and Clan Akkaba modular sets joined every other scenario
+    // with modular sets: the 369,928 configurations before them hash
+    // identically to the complete grid of 7fcdac2.
     const enSabahNurSets = ["celestial_tech", "clan_akkaba"];
-    expect(missions.filter((m) => m.villainId === "en_sabah_nur")).toHaveLength(
-      52 * 2 * 84 + 52 * 2,
-    );
+    expect(
+      enSabahNurGrid.filter((m) => m.villainId === "en_sabah_nur"),
+    ).toHaveLength(52 * 2 * 84 + 52 * 2);
     for (const scenario of VILLAINS.filter(
       (v) => v.moduleCount !== 0 && v.id !== "en_sabah_nur",
     ))
       for (const module of enSabahNurSets)
         expect(
-          missions.filter(
+          enSabahNurGrid.filter(
             (m) => m.villainId === scenario.id && m.module === module,
           ),
           `${scenario.id}/${module}`,
         ).toHaveLength(52 * 2);
-    const darkBeastGrid = missions.filter(
+    const darkBeastGrid = enSabahNurGrid.filter(
       (m) =>
         m.villainId !== "en_sabah_nur" && !enSabahNurSets.includes(m.module),
     );
@@ -1547,6 +1581,7 @@ describe("published expansion starters across every supported mission setting", 
     expect(horsemenGrid.filter((m) => m.variant === "ii")).toHaveLength(4264);
     expect(apocalypseGrid.filter((m) => m.variant === "ii")).toHaveLength(4368);
     expect(darkBeastGrid.filter((m) => m.variant === "ii")).toHaveLength(4472);
+    expect(enSabahNurGrid.filter((m) => m.variant === "ii")).toHaveLength(4576);
     expect(missions.filter((m) => m.variant === "ii")).toHaveLength(4576);
     // Kang and the Temporal, Master of Time and Anachronauts modular sets
     // extended the grid before that: the 103,584 configurations before it
@@ -2115,11 +2150,15 @@ describe("published expansion starters across every supported mission setting", 
     expect(perShard((mission) => mission.variant === "ii")).toEqual(
       Array(16).fill(286),
     );
-    expect(new Set(missions.map(key)).size).toBe(387712);
-    expect(new Set(combined.map(key)).size).toBe(387712);
+    expect(perShard((mission) => mission.variant === "iii")).toEqual([
+      286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286, 286,
+      286,
+    ]);
+    expect(new Set(missions.map(key)).size).toBe(392288);
+    expect(new Set(combined.map(key)).size).toBe(392288);
     expect(manifest(combined)).toEqual(manifest(missions));
     expect(partitions.map((partition) => partition.length)).toEqual(
-      Array(16).fill(24232),
+      Array(16).fill(24518),
     );
     for (const partition of partitions)
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
@@ -2128,14 +2167,14 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBeGreaterThanOrEqual(465);
-      expect(Math.max(...perShard)).toBeLessThanOrEqual(467);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(7456);
+      expect(Math.min(...perShard)).toBeGreaterThanOrEqual(470);
+      expect(Math.max(...perShard)).toBeLessThanOrEqual(473);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(7544);
     }
     expect(selectedMissions).toHaveLength(
-      isSharded ? partitions[Number(shardIndex)].length : 387712,
+      isSharded ? partitions[Number(shardIndex)].length : 392288,
     );
-    // Hashing every layer of the 387,712-configuration manifest takes a few
+    // Hashing every layer of the 392,288-configuration manifest takes a few
     // seconds on its own.
   }, 60000);
   for (const mission of selectedMissions)

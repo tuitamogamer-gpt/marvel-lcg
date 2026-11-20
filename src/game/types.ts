@@ -405,6 +405,8 @@ export interface GameState {
   heroic?: number;
   /** The Hood scenario pack's alternative encounter sets are in use. */
   standardII?: boolean;
+  /** Age of Apocalypse's Standard III replaces the core Standard set. */
+  standardIII?: boolean;
   expertII?: boolean;
   /** Increases whenever hidden information is revealed or the RNG advances; undo stops there. */
   hiddenInfo?: number;

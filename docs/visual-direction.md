@@ -231,3 +231,7 @@ Dark Beast's label carries his stage and the Setting in play, and the caption na
 ## En Sabah Nur's forms, 2026-11-20
 
 Apocalypse's label carries his stage and current form, and the caption names that form's keyword and what changing to it does, with his stage as X, so a form change reads at a glance. The main scheme's one-line note counts the power counters toward the next Superpower, and on The Rise of Apocalypse adds that completing it loses. Ancient Ritual carries a caption with its threshold and what it does.
+
+## Standard III's pursuit, 2026-11-20
+
+The Encounter sets choice becomes three segments, Original, Standard II and Standard III, each with its own one-line explanation, and the mission line names Standard III when it is in play. Pursued by the Past sits with the environments, labelled as permanent, and its caption counts the pursuit counters against the number it takes and says what happens then. Drawing Near shows its Alter-Ego Action as a button on the card, like the other in-play obligations.

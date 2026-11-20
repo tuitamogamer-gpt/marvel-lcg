@@ -1151,6 +1151,7 @@ export async function generateAudit(
     "src/game/apocalypse.ts",
     "src/game/dark-beast.ts",
     "src/game/en-sabah-nur.ts",
+    "src/game/standard-iii.ts",
     "src/game/reveal-window.ts",
     "src/game/black-widow.ts",
     "src/game/doctor-strange.ts",
