@@ -192,7 +192,7 @@ describe("Dark Beast: original source", () => {
       ...BLUE_MOON_CODES,
     ])
       expect(hasExecutableScript(code), code).toBe(true);
-    expect(MODULES.slice(-16, -13).map((m) => m.id)).toEqual([
+    expect(MODULES.slice(-17, -14).map((m) => m.id)).toEqual([
       "savage_land",
       "genosha",
       "blue_moon",

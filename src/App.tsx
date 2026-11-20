@@ -451,6 +451,17 @@ import {
   zemoObjective,
 } from "./game/baron-zemo";
 import {
+  CROWN as ENCHANTRESS_CROWN,
+  TEMPTATIONS,
+  TRANCES,
+  TRIANGLE as LOVE_TRIANGLE,
+  enchantmentCaption,
+  enchantressCaption,
+  enchantressMainNote,
+  enchantressObjective,
+  GAZES as HYPNOTIC_GAZES,
+} from "./game/enchantress-villain";
+import {
   AERIAL_BOMBARDMENT,
   IMPERVIOUS,
   OUT_OF_REACH,
@@ -2959,6 +2970,17 @@ export default function App() {
                       A board member with 4 secret counters (3 in Expert) joins
                       Zemo, and with all three on his side you lose. Scientist
                       Supreme and S.H.I.E.L.D. are preselected.
+                    </p>
+                  )}
+                  {villain.id === "enchantress_villain" && (
+                    <p className="setting-help">
+                      Each hero starts with a random Hypnotic Gaze. Enchantress
+                      and her minions place charm counters on it, and at five it
+                      flips to a Trance: your hero becomes Enthralled, and every
+                      charm counter after that is threat on the main scheme.
+                      Trances and Temptations have Forced Actions, resolved
+                      before your turn ends. Defeat the Trickster Magic minions
+                      to turn them into allies. Trickster Magic is preselected.
                     </p>
                   )}
                   {villain.id === "thunderbolts" && (
@@ -6520,6 +6542,13 @@ function AttachedCards({
                 {p.counters} {p.counters === 1 ? "secret" : "secrets"}
               </small>
             )}
+            {(!!HYPNOTIC_GAZES[p.code] ||
+              TRANCES.includes(p.code) ||
+              TEMPTATIONS.includes(p.code)) && (
+              <small aria-label={`${card(p).name}: ${enchantmentCaption(p)}`}>
+                {enchantmentCaption(p)}
+              </small>
+            )}
             {p.code === HEAD_OF_STEAM && (
               <small aria-label={`Head of Steam: retaliate ${momentum(game)}`}>
                 retaliate {momentum(game)}
@@ -6665,6 +6694,13 @@ function AttachedCards({
                 STUN_NET,
                 // Baron Zemo's Sword.
                 ZEMO_SWORD,
+                // Enchantress: the Trances, Temptations, Seduced, her Crown;
+                // Trickster Magic's Love Triangle.
+                ...TRANCES,
+                ...TEMPTATIONS,
+                "55015",
+                ENCHANTRESS_CROWN,
+                LOVE_TRIANGLE,
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -7033,33 +7069,35 @@ function Tabletop({
                         ? thunderboltsObjective(s)
                         : s.zemo
                           ? zemoObjective(s)
-                          : s.hela
-                            ? helaOdinCaptive(s)
-                              ? "Free Odin, then defeat Hela"
-                              : "Defeat Hela's Mystic side"
-                            : s.loki
-                              ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
-                              : s.horsemen
-                                ? `Bring all four Horsemen to 0 · ${horsemenVillains(s).filter((v) => !horsemanStanding(s, v)).length} of 4 at 0`
-                                : apocalypse(s)
-                                  ? noLongerWorthy(s)
-                                    ? "Defeat Apocalypse · No Longer Worthy"
-                                    : `Storm the citadel · ${apocalypseCitadel(s)} of 3 cleared`
-                                  : s.sinisterSix
-                                    ? "Escape: clear the Light at the End"
-                                    : s.wreckingCrew
-                                      ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
-                                      : s.kang
-                                        ? kangObjective(s)
-                                        : magogScenario(s)
-                                          ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
-                                          : s.spiral
-                                            ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
-                                            : s.morlockSiege
-                                              ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
-                                              : onTheRun(s)
-                                                ? `Defeat ${card(s.villain).name} twice · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? 0 : 1} of 2`
-                                                : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                          : s.enchantress
+                            ? enchantressObjective(s)
+                            : s.hela
+                              ? helaOdinCaptive(s)
+                                ? "Free Odin, then defeat Hela"
+                                : "Defeat Hela's Mystic side"
+                              : s.loki
+                                ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
+                                : s.horsemen
+                                  ? `Bring all four Horsemen to 0 · ${horsemenVillains(s).filter((v) => !horsemanStanding(s, v)).length} of 4 at 0`
+                                  : apocalypse(s)
+                                    ? noLongerWorthy(s)
+                                      ? "Defeat Apocalypse · No Longer Worthy"
+                                      : `Storm the citadel · ${apocalypseCitadel(s)} of 3 cleared`
+                                    : s.sinisterSix
+                                      ? "Escape: clear the Light at the End"
+                                      : s.wreckingCrew
+                                        ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
+                                        : s.kang
+                                          ? kangObjective(s)
+                                          : magogScenario(s)
+                                            ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
+                                            : s.spiral
+                                              ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
+                                              : s.morlockSiege
+                                                ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
+                                                : onTheRun(s)
+                                                  ? `Defeat ${card(s.villain).name} twice · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? 0 : 1} of 2`
+                                                  : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
             <span
@@ -7441,6 +7479,11 @@ function Tabletop({
                     {!!s.zemo && zemoCaption(s) && (
                       <span className="stat-caption">{zemoCaption(s)}</span>
                     )}
+                    {!!s.enchantress && enchantressCaption(s) && (
+                      <span className="stat-caption">
+                        {enchantressCaption(s)}
+                      </span>
+                    )}
                     {misterSinister(s) && (
                       <span className="stat-caption">
                         {(["Aerial", "Brute", "Psionic"] as const)
@@ -7572,7 +7615,7 @@ function Tabletop({
                   <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
-                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen || apocalypse(s) || enSabahNur(s) || blackWidowVillain(s) || batroc(s) || modok(s) || thunderbolts(s) || !!s.zemo ? " magog-scheme" : ""}`}
+                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen || apocalypse(s) || enSabahNur(s) || blackWidowVillain(s) || batroc(s) || modok(s) || thunderbolts(s) || !!s.zemo || !!s.enchantress ? " magog-scheme" : ""}`}
                     style={
                       {
                         "--scheme-actions": mainActionPiece
@@ -7707,6 +7750,11 @@ function Tabletop({
                     )}
                     {!!s.zemo && zemoMainNote(s) && (
                       <p className="magog-scheme-note">{zemoMainNote(s)}</p>
+                    )}
+                    {!!s.enchantress && enchantressMainNote(s) && (
+                      <p className="magog-scheme-note">
+                        {enchantressMainNote(s)}
+                      </p>
                     )}
 
                     {batroc(s) && batrocMainNote(s) && (

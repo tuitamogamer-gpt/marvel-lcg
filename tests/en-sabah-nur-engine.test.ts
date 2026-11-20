@@ -240,7 +240,7 @@ describe("En Sabah Nur: original source", () => {
       ...CLAN_AKKABA_CODES,
     ])
       expect(hasExecutableScript(code), code).toBe(true);
-    expect(MODULES.slice(-13, -11).map((m) => m.id)).toEqual([
+    expect(MODULES.slice(-14, -12).map((m) => m.id)).toEqual([
       "celestial_tech",
       "clan_akkaba",
     ]);

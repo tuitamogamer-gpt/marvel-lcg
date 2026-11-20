@@ -153,10 +153,11 @@ function onIdentity(s: GameState, p: Piece, id = s.activePlayerId) {
 }
 /** The Enchantress modular set of The Mad Titan's Shadow reprints three of
  * these nemesis cards with identical rules: Enchantress, Beguiled and
- * Seduced. Each printing keeps its own code. */
+ * Seduced; Trickster Takeover's Enchantress set reprints Seduced again.
+ * Each printing keeps its own code. */
 const ENCHANTRESS_PRINTINGS = ["25029", "21177"];
 const BEGUILED_PRINTINGS = ["25031", "21178"];
-const SEDUCED_PRINTINGS = ["25032", "21179"];
+const SEDUCED_PRINTINGS = ["25032", "21179", "55015"];
 export const isEnchantressCard = (code: string) =>
   ENCHANTRESS_PRINTINGS.includes(code);
 export const isBeguiledCard = (code: string) =>

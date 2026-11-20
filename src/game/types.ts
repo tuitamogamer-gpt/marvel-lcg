@@ -329,6 +329,9 @@ export interface GameState {
   /** The S.H.I.E.L.D. Executive Board in play, in Baron Zemo or added to any
    * other scenario. */
   executiveBoard?: import("./baron-zemo.js").ExecutiveBoardState;
+  enchantress?: import("./enchantress-villain.js").EnchantressState;
+  /** Trickster Magic: its linked allies, set aside. */
+  tricksterMagic?: import("./enchantress-villain.js").TricksterMagicState;
   venomGoblin?: import("./venom-goblin.js").VenomGoblinState;
   /** Across the Mojoverse: the show deck. */
   spiral?: import("./spiral.js").SpiralState;

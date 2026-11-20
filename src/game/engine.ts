@@ -41,6 +41,7 @@ import * as btc from "./batroc.js";
 import * as mdk from "./modok.js";
 import * as tb from "./thunderbolts.js";
 import * as zemo from "./baron-zemo.js";
+import * as ench from "./enchantress-villain.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -640,6 +641,7 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
     !!(s && typeof p !== "string" && btc.batrocKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && mdk.modokKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && tb.thunderboltsKeyword(s, p, name) > 0) ||
+    !!(s && typeof p !== "string" && ench.enchantressKeyword(s, p, name) > 0) ||
     !!(
       s &&
       typeof p !== "string" &&
@@ -684,7 +686,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     jug.jugKeyword(s, piece, "Stalwart") > 0 ||
     sty.stryfeStalwart(s, piece) ||
     unus.unusKeyword(s, piece, "Stalwart") > 0 ||
-    apoc.apocalypseKeyword(s, piece, "Stalwart") > 0
+    apoc.apocalypseKeyword(s, piece, "Stalwart") > 0 ||
+    ench.enchantressKeyword(s, piece, "Stalwart") > 0
       ? { stalwart: true }
       : {}),
     ...(piece.code === "50060" && !isTextBlank(s, piece)
@@ -1019,7 +1022,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           ronan.ronanKeyword(s, p, "Stalwart") ||
           hela.helaKeyword(s, p, "Stalwart") ||
           mdk.modokKeyword(s, p, "Stalwart") > 0 ||
-          magog.magogKeyword(s, p, "Stalwart") > 0),
+          magog.magogKeyword(s, p, "Stalwart") > 0 ||
+          ench.enchantressKeyword(s, p, "Stalwart") > 0),
     ),
     Number(
       name === "Quickstrike" &&
@@ -1045,6 +1049,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           taskmaster.taskmasterKeyword(s, p, "Piercing") ||
           btc.batrocKeyword(s, p, "Piercing") > 0 ||
           mdk.modokKeyword(s, p, "Piercing") > 0 ||
+          ench.enchantressKeyword(s, p, "Piercing") > 0 ||
           storm.stormPiercing(s, p) ||
           redSkullModules.redSkullPiercing(s, p.id) ||
           crossbones.crossbonesPiercing(s, p.id, card) ||
@@ -1108,6 +1113,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           mojoGenres.mojoGenreOverkill(s, p) ||
           mdk.modokKeyword(s, p, "Overkill") > 0 ||
           tb.thunderboltsKeyword(s, p, "Overkill") > 0 ||
+          ench.enchantressKeyword(s, p, "Overkill") > 0 ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
             .overkill)
       ),
@@ -1403,6 +1409,7 @@ export function allyCount(s: GameState) {
       !(p.code === mojoVillain.LONGSHOT && !isTextBlank(s, p)) &&
       !morlock.morlockAllyExcluded(s, p) &&
       !btc.batrocAllyExcluded(s, p) &&
+      !ench.enchantressAllyExcluded(s, p) &&
       !mdk.modokAllyExcluded(s, p) &&
       !jug.jugAllyExcluded(s, p) &&
       !antPack.antManPackAllyExcluded(s, p) &&
@@ -1800,6 +1807,9 @@ function removedByPlayerElimination(s: GameState, p: Piece) {
     (seat) =>
       seat.eliminated &&
       (p.ownerId === seat.id ||
+        // An encounter attachment, such as a permanent Enchantment, on the
+        // eliminated player's identity leaves with them.
+        p.attachedTo === `hero:${seat.id}` ||
         seatView(s, seat).player.inPlay.some((q) => q.id === p.id)),
   );
 }
@@ -2161,6 +2171,13 @@ function movePieceFromPlay(
   // Rescued Captive: Victory -1.
   else if (p.code === btc.CAPTIVE && victory)
     (s.victoryDisplay ||= []).push(resetPiece(p));
+  // The Trickster Magic allies: Victory 0; linked, they never join a deck.
+  else if (ench.LINKED_ALLIES.includes(p.code))
+    (victory ? (s.victoryDisplay ||= []) : s.removed).push(resetPiece(p));
+  // An Enchantment leaving with its eliminated player is set aside again.
+  else if (ench.enchantressSetAside(s, resetPiece(p))) {
+    // Set aside.
+  }
   // An Inhuman goes back to the bottom of the Holding Cell deck.
   else if (mdk.INHUMANS.includes(p.code))
     mdk.modokInhumanLeft(s, resetPiece(p), modokPorts);
@@ -2310,6 +2327,51 @@ function advanceZemoMain(s: GameState) {
       .map((e) => ({ ...e, actorId: s.firstPlayerId })),
     E("clearMainCompletion"),
   );
+}
+/** The active player ends their turn. */
+function endPlayerTurn(s: GameState, discard?: string[]) {
+  // Discard/refill happens after the entire team has finished its turns.
+  const seat = s.players.find((p) => p.id === s.activePlayerId)!;
+  antMan.antManTurnEnded(s);
+  quicksilver.quicksilverTurnEnded(s);
+  rocket.rocketTurnEnded(s);
+  gamora.gamoraTurnEnded(s);
+  gmwPack.gmwPlayerPackTurnEnded(s);
+  sandman.sandmanTurnEnded(s);
+  seat.ended = true;
+  log(s, `${heroCard(s).name} ends their turn.`, "phase");
+  const wolverineTurnEnd = wolverine.wolverineTurnEnded(s);
+  const next = playerOrder(s).find((p) => !p.ended);
+  if (next) add(s, E("beginTurn", { actorId: next.id }));
+  else {
+    const order = playerOrder(s);
+    add(
+      s,
+      ...order.map((p) =>
+        E("prepareDiscard", {
+          actorId: p.id,
+          selected: s.playerCount === 1 ? discard || [] : undefined,
+        }),
+      ),
+      E("allReady", { actorId: s.firstPlayerId }),
+      E("beginVillain", { actorId: s.firstPlayerId }),
+    );
+  }
+  add(s, ...deadpool.deadpoolTurnEnded(s));
+  add(s, ...hulkTurnEnds(s));
+  add(s, ...mojoVillain.mojoTurnEnded(s, s.activePlayerId));
+  if (s.player.inPlay.some((p) => p.code === "32099"))
+    add(
+      s,
+      ...wideawake.projectWideawakeEndPlayerTurn(
+        s,
+        s.activePlayerId,
+        `turn-end:${s.nextId++}`,
+        { isTextBlank },
+      ),
+    );
+  add(s, ...spectrum.spectrumTurnEnded(s, s.turnPlayerId, spectrumPorts));
+  add(s, ...wolverineTurnEnd, ...x23.x23TurnEnd(s));
 }
 function endGame(s: GameState, won: boolean, reason: string) {
   // A saved Mystique callback owns the outer activation's real facedown
@@ -2712,6 +2774,8 @@ function syncVillainTextHealth(s: GameState) {
     advanceVillain(s);
 }
 function check(s: GameState) {
+  // Ulik's attacks wait for the card or activation in progress.
+  if (s.enchantress?.ulik?.length) add(s, ...ench.enchantressFlush(s));
   for (const p of allInPlay(s).filter(
     (p) =>
       (p.code === "40021" && !allInPlay(s).some((q) => q.code === "40015")) ||
@@ -3604,6 +3668,7 @@ function dealDamage(
     (mojoGenres.mojoGenreVillainImmune(s, target) ||
       spiral.spiralVillainImmune(s, target) ||
       jug.jugImmune(s, target) ||
+      ench.enchantressImmune(s, target) ||
       apoc.apocalypseImmune(s, target) ||
       db.darkBeastImmune(s, target) ||
       sin.sinisterImmune(s, target, {
@@ -4389,6 +4454,20 @@ function applyDamage(
     log(s, `${card(s.villain).name} takes ${n} damage.`, "good");
     // Mental Transferal: the attached character takes as much damage.
     add(s, ...sty.stryfeVillainDamaged(s, target, n));
+    // Ulik's Forced Response after a player damages Enchantress.
+    add(
+      s,
+      ...ench.enchantressDamaged(
+        s,
+        target,
+        n,
+        nativePlayerCardSource(s, source)
+          ? source.startsWith("hero:")
+            ? source.slice(5)
+            : controller(s, source)?.id || s.activePlayerId
+          : undefined,
+      ),
+    );
     if (s.villain.hp <= 0) {
       if (s.flags.waspDeferDefeats) return result;
       advanceVillain(s, source, attack);
@@ -4868,11 +4947,17 @@ function defeatCharacter(
   // The Elite Thunderbolt minions: Victory 1.
   else if (minion && tb.thunderboltsVictoryMinion(m) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
+  // The beguiled Trickster Magic minions: Victory 1.
+  else if (minion && ench.enchantressVictoryMinion(m) && !textWasBlank)
+    movePieceFromPlay(s, m.id, false, undefined, true);
   // Morlock: Victory -1.
   else if (!minion && morlock.morlockVictoryAlly(s, m) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
   // Rescued Captive: Victory -1.
   else if (!minion && btc.batrocVictoryAlly(s, m) && !textWasBlank)
+    movePieceFromPlay(s, m.id, false, undefined, true);
+  // The Trickster Magic allies: Victory 0.
+  else if (!minion && ench.enchantressVictoryAlly(s, m) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
   else discardPiece(s, m.id);
   if (!textWasBlank)
@@ -4944,6 +5029,16 @@ function defeatCharacter(
       ...(minion ? mdk.modokMinionDefeated(s, m, textWasBlank) : []),
       ...(minion ? tb.thunderboltsMinionDefeated(s, m, textWasBlank) : []),
       ...(minion ? zemo.zemoMinionDefeated(s, m, textWasBlank) : []),
+      ...(minion
+        ? ench.enchantressMinionDefeated(
+            s,
+            m,
+            textWasBlank,
+            source.startsWith("hero:")
+              ? source.slice(5)
+              : controller(s, source)?.id || s.activePlayerId,
+          )
+        : []),
     );
     add(
       s,
@@ -5646,6 +5741,7 @@ function villainSetup(s: GameState) {
     ...sty.stryfeVillainRevealed(s),
     ...db.darkBeastVillainRevealed(s),
     ...bwv.blackWidowVillainRevealed(s),
+    ...ench.enchantressVillainRevealed(s),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -6246,9 +6342,11 @@ function threat(
                   .map((e) => ({ ...e, actorId: s.firstPlayerId }))
               : s.villainId === "morlock_siege"
                 ? morlock.morlockMainAdvanced(s)
-                : s.villainId === "en_sabah_nur"
-                  ? esn.esnMainAdvanced(s)
-                  : eachPlayer(s, E("drone"))),
+                : s.villainId === "enchantress_villain"
+                  ? ench.enchantressMainAdvanced(s)
+                  : s.villainId === "en_sabah_nur"
+                    ? esn.esnMainAdvanced(s)
+                    : eachPlayer(s, E("drone"))),
       );
     }
   } else {
@@ -7140,6 +7238,7 @@ function captainPackHasTrait(
   if (trait === "Aerial" && horsemen.horsemenAerial(s, target)) return true;
   if (db.darkBeastTrait(s, target, trait)) return true;
   if (mdk.modokTrait(s, target, trait)) return true;
+  if (ench.enchantressTrait(s, target, trait.replace(/\.$/, ""))) return true;
   if (jubilee.jubileeEnemyTrait(s, target, trait)) return true;
   if (
     (target === "hero" || target === `hero:${s.activePlayerId}`) &&
@@ -9397,50 +9496,56 @@ export function newGame(config: {
                                       ...zemo.ZEMO_MODULAR_SETS,
                                     ].some((set) => set === c.set_code)
                                   ? "aos"
-                                  : [
-                                        "temporal",
-                                        "anachronauts",
-                                        "mot",
-                                      ].includes(c.set_code || "")
-                                    ? "toafk"
-                                    : c.set_code === "exodus"
-                                      ? "gambit"
-                                      : c.set_code === "sauron"
-                                        ? "iceman"
-                                        : c.set_code === "crazy_gang"
-                                          ? "ncrawler"
-                                          : c.set_code === "hellfire"
-                                            ? "magneto"
-                                            : c.set_code === "arcade"
-                                              ? "jubilee"
-                                              : c.set_code === "reavers"
-                                                ? "rogue"
-                                                : c.set_code === "deathstrike"
-                                                  ? "wolv"
-                                                  : c.set_code === "shadow_king"
-                                                    ? "storm"
+                                  : (
+                                        ench.ENCHANTRESS_MODULAR_SETS as readonly string[]
+                                      ).includes(c.set_code || "")
+                                    ? "tt"
+                                    : [
+                                          "temporal",
+                                          "anachronauts",
+                                          "mot",
+                                        ].includes(c.set_code || "")
+                                      ? "toafk"
+                                      : c.set_code === "exodus"
+                                        ? "gambit"
+                                        : c.set_code === "sauron"
+                                          ? "iceman"
+                                          : c.set_code === "crazy_gang"
+                                            ? "ncrawler"
+                                            : c.set_code === "hellfire"
+                                              ? "magneto"
+                                              : c.set_code === "arcade"
+                                                ? "jubilee"
+                                                : c.set_code === "reavers"
+                                                  ? "rogue"
+                                                  : c.set_code === "deathstrike"
+                                                    ? "wolv"
                                                     : c.set_code ===
-                                                        "ironspider_sinister"
-                                                      ? "spdr"
+                                                        "shadow_king"
+                                                      ? "storm"
                                                       : c.set_code ===
-                                                          "inheritors"
-                                                        ? "spiderham"
-                                                        : c.set_code === "zzzax"
-                                                          ? "ironheart"
+                                                          "ironspider_sinister"
+                                                        ? "spdr"
+                                                        : c.set_code ===
+                                                            "inheritors"
+                                                          ? "spiderham"
                                                           : c.set_code ===
-                                                              "armadillo"
-                                                            ? "nova"
-                                                            : [
-                                                                  "goblin_gimmicks",
-                                                                  "a_mess_of_things",
-                                                                  "power_drain",
-                                                                  "running_interference",
-                                                                ].includes(
-                                                                  c.set_code ||
-                                                                    "",
-                                                                )
-                                                              ? "gob"
-                                                              : "core")) ||
+                                                              "zzzax"
+                                                            ? "ironheart"
+                                                            : c.set_code ===
+                                                                "armadillo"
+                                                              ? "nova"
+                                                              : [
+                                                                    "goblin_gimmicks",
+                                                                    "a_mess_of_things",
+                                                                    "power_drain",
+                                                                    "running_interference",
+                                                                  ].includes(
+                                                                    c.set_code ||
+                                                                      "",
+                                                                  )
+                                                                ? "gob"
+                                                                : "core")) ||
           (c.set_code ===
             (v.id === "magneto"
               ? "magneto_villain"
@@ -9578,6 +9683,12 @@ export function newGame(config: {
   // other scenario with modular sets can add.
   if (v.id === "baron_zemo") zemo.zemoSetup(s, zemoPorts);
   else if (executiveBoard) zemo.boardSetup(s, zemoPorts);
+  // Enchantress: Future of Despair is set aside and each identity gets a
+  // Hypnotic Gaze. Trickster Magic's linked allies are set aside.
+  if (v.id === "enchantress_villain")
+    ench.enchantressSetup(s, enchantressPorts);
+  if (selectedModules.includes("trickster_magic"))
+    ench.tricksterMagicSetup(s, enchantressPorts);
   if (v.id === "modok")
     mdk.modokSetup(s, {
       makePiece: (s, code) => makePiece(s, code),
@@ -11646,6 +11757,11 @@ function allyEnter(
   if (mojoGenres.mojoGenreToughOnEntry(s)) giveCharacterStatus(s, p, "tough");
   if (isTextBlank(s, p)) return;
   add(s, ...magnetoHero.magnetoHeroEntered(s, p, magnetoHeroPorts));
+  // The Trickster Magic allies: Zzzax's Response after it enters play.
+  if (ench.LINKED_ALLIES.includes(p.code)) {
+    add(s, ...ench.enchantressAllyEntered(s, p));
+    return;
+  }
   if (p.code === "41003") {
     add(s, ...psylocke.psylockeCardEntered(s, p, fromHand));
     return;
@@ -12558,6 +12674,7 @@ export function abilityOptions(
     ...mdk.modokActions(s, p, modokPorts),
     ...tb.thunderboltsActions(s, p),
     ...zemo.zemoActions(s, p, zemoPorts),
+    ...ench.enchantressActions(s, p, enchantressPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -17700,6 +17817,55 @@ const thunderboltsPorts: tb.ThunderboltsPorts = {
   endGame: (s, won, reason) => endGame(s, won, reason),
   heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
 };
+const enchantressPorts: ench.EnchantressPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  reveal: (s, p, playerId) => blackWidowVillainPorts.reveal(s, p, playerId),
+  heal: (s, target, n) => {
+    heal(s, target, n, "encounter");
+  },
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  discardFromHand: (s, playerId, id) =>
+    blackWidowVillainPorts.discardFromHand(s, playerId, id),
+  randomDiscard: (s, playerId) => hoodModularPorts.randomDiscard(s, playerId),
+  mill: (s, playerId, n) => mysterioPorts.millPlayer(s, playerId, n),
+  controlledCards: (s, playerId) =>
+    seatView(s, playerId).player.inPlay.filter(
+      (p) => card(p).faction_code !== "encounter" && !isPermanent(card(p)),
+    ),
+  canAddStatus: (s, target, status) => dsPorts.canAddStatus(s, target, status),
+  removeThreat: (s, target, n, source) => thwart(s, target, n, false, source),
+  shuffle: (s, items) => shuffle(s, items),
+  makePiece: (s, code) => makePiece(s, code),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+  draw: (s, n) => {
+    draw(s, n);
+  },
+  playable: (s, p, discount) =>
+    antPackPorts.playableWithDiscount(s, p, discount),
+  play: (s, id, discount) => antPackPorts.playFromHand(s, id, discount),
+  putAlly: (s, p, playerId) => {
+    Object.assign(p, resetPiece(p, true));
+    p.ownerId = playerId;
+    if (uniqueConflict(s, card(p))) {
+      s.removed.push(p);
+      return;
+    }
+    seatView(s, playerId).player.inPlay.push(p);
+    add(
+      s,
+      E("allyLimit", { actorId: playerId }),
+      E("allyEnter", { id: p.id, actorId: playerId, fromHand: false }),
+    );
+  },
+  revealBoostCard: (s, p) => warlockPorts.revealBoostCard(s, p),
+  endTurn: (s, discard) => endPlayerTurn(s, discard),
+  shufflePlayerDeck: (s) => {
+    s.player.deck = shuffle(s, s.player.deck);
+    recyclePlayer(s);
+  },
+};
 const zemoPorts: zemo.ZemoPorts = {
   ...mutagenPorts,
   log: (s, text, kind) => log(s, text, kind),
@@ -21736,7 +21902,8 @@ function niAllyTargets(s: GameState, p: Piece, kind: "attack" | "thwart") {
       (kind === "attack"
         ? magnetoHero.magnetoHeroCanAttack(s, t.id, p.id)
         : jubilee.jubileeCanRemoveThreat(s, t.id, p.id)) &&
-      sty.stryfeHopeTarget(s, p, kind, t.id),
+      sty.stryfeHopeTarget(s, p, kind, t.id) &&
+      ench.enchantressAllyCanTarget(s, p, kind, t.id),
   );
 }
 function niAllyTargetsRaw(s: GameState, p: Piece, kind: "attack" | "thwart") {
@@ -25940,6 +26107,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     mysterio.mysterioEnemyBonus(s, p) +
     sinisterSix.sixEnemyModifier(s, p, "attack") +
     btc.batrocEnemyStat(s, p, "attack") +
+    ench.enchantressEnemyStat(s, p, "attack") +
     mdk.modokEnemyStat(s, p, "attack") +
     tb.thunderboltsEnemyStat(
       s,
@@ -26176,6 +26344,7 @@ function declareDefense(s: GameState) {
         !p.exhausted &&
         !a.angelTauntPlayerId &&
         (p.code !== "50022" || isTextBlank(s, p)) &&
+        ench.enchantressAllyCanDefend(s, p, a.attacker) &&
         (!divided || canPay(view, divided)),
     ))
       opts.push(
@@ -26392,6 +26561,7 @@ function boostEffects(s: GameState, p: Piece) {
     mdk.modokBoost(s, p) ??
     tb.thunderboltsBoost(s, p) ??
     zemo.zemoBoost(s, p) ??
+    ench.enchantressBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -26883,6 +27053,7 @@ function finishScheme(s: GameState) {
     ...apoc.apocalypseActivated(s, id, s.activePlayerId),
     ...mdk.modokActivated(s, id),
     ...tb.thunderboltsSchemed(s, id, s.activePlayerId),
+    ...ench.enchantressSchemed(s, id, s.activePlayerId),
     ...tb.thunderboltsActivated(s, id, s.activePlayerId),
     ...hood
       .hoodAfterActivation(s, {
@@ -27156,7 +27327,8 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
       hoodModular.hoodModularIndirectAttack(s, p.id) ||
       sandman.sandmanIndirectAttack(s, p.id) ||
       venomGoblin.venomGoblinIndirectAttack(s, p.id) ||
-      btc.batrocIndirectAttack(s, p.id))
+      btc.batrocIndirectAttack(s, p.id) ||
+      ench.enchantressIndirectAttack(s, p.id))
   ) {
     add(
       s,
@@ -27173,7 +27345,9 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
                 ? "Symbiotic Monstrosity"
                 : btc.batrocIndirectAttack(s, p.id)
                   ? "Rapido"
-                  : "Hook, Line, and Sinker",
+                  : ench.enchantressIndirectAttack(s, p.id)
+                    ? "Sindr"
+                    : "Hook, Line, and Sinker",
         zzzaxBatchId: `angel-attack:${s.nextId++}`,
         zzzaxBatchOwner: s.activePlayerId,
         attackDamage: true,
@@ -27183,7 +27357,8 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
           !hoodModular.hoodModularIndirectAttack(s, p.id) &&
           !sandman.sandmanIndirectAttack(s, p.id) &&
           !venomGoblin.venomGoblinIndirectAttack(s, p.id) &&
-          !btc.batrocIndirectAttack(s, p.id),
+          !btc.batrocIndirectAttack(s, p.id) &&
+          !ench.enchantressIndirectAttack(s, p.id),
         zzzaxAfter: E("ironspiderAttackComplete", {
           attack: structuredClone(a),
           target,
@@ -27628,6 +27803,7 @@ function finishAttackAfterDamage(
     ...apoc.apocalypseActivated(s, a.attacker, recipientId),
     ...mdk.modokActivated(s, a.attacker),
     ...tb.thunderboltsAttackedYou(s, a.attacker, recipientId),
+    ...ench.enchantressAttacked(s, a.attacker, recipientId),
     ...tb.thunderboltsActivated(s, a.attacker, recipientId),
     ...db.darkBeastAttacked(
       s,
@@ -28473,9 +28649,13 @@ function reveal(
           btc.batrocRevealCard(
             s,
             p,
-            knifeSurge || moduleSurge
-              ? { ...c, text: `Surge.\n${c.text || ""}` }
-              : c,
+            ench.enchantressRevealCard(
+              s,
+              p,
+              knifeSurge || moduleSurge
+                ? { ...c, text: `Surge.\n${c.text || ""}` }
+                : c,
+            ),
           ),
         ),
       ),
@@ -28717,6 +28897,7 @@ function reveal(
         ...tb.THUNDERBOLTS_CODES,
         ...tb.ELITE_THUNDERBOLT_CODES,
         ...zemo.ZEMO_CODES,
+        ...ench.ENCHANTRESS_SCRIPT_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -28992,6 +29173,7 @@ function reveal(
       ...tb.THUNDERBOLTS_CODES,
       ...tb.ELITE_THUNDERBOLT_CODES,
       ...zemo.ZEMO_CODES,
+      ...ench.ENCHANTRESS_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -29070,6 +29252,7 @@ function reveal(
       mdk.modokReveal(s, p) ??
       tb.thunderboltsReveal(s, p) ??
       zemo.zemoReveal(s, p) ??
+      ench.enchantressReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -29188,6 +29371,7 @@ function reveal(
     mdk.modokReveal(s, p) ??
     tb.thunderboltsReveal(s, p) ??
     zemo.zemoReveal(s, p) ??
+    ench.enchantressReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -30663,6 +30847,7 @@ function resolve(s: GameState, e: Effect) {
           mdk.modokReveal(state, piece) ??
           tb.thunderboltsReveal(state, piece) ??
           zemo.zemoReveal(state, piece) ??
+          ench.enchantressReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -30832,6 +31017,7 @@ function resolve(s: GameState, e: Effect) {
   if (mdk.resolveModokEffect(s, e, modokPorts)) return;
   if (tb.resolveThunderboltsEffect(s, e, thunderboltsPorts)) return;
   if (zemo.resolveZemoEffect(s, e, zemoPorts)) return;
+  if (ench.resolveEnchantressEffect(s, e, enchantressPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -35702,6 +35888,32 @@ function resolve(s: GameState, e: Effect) {
           break;
         }
       }
+      // Absorbing Man and Whirlwind: interrupts as the ally attacks or
+      // thwarts.
+      if (!e.enchAllyHandled && !(attack ? p.stunned : p.confused)) {
+        const packet = {
+          ...e,
+          amount: e.amount ?? allyStat(s, p, attack ? "attack" : "thwart"),
+        };
+        const options = ench.enchantressAllyOptions(s, p, packet);
+        if (options.length) {
+          p.exhausted = true;
+          choose(
+            s,
+            card(p).name,
+            attack
+              ? "Use this ally's interrupt as it attacks?"
+              : "Use this ally's interrupt as it thwarts?",
+            [
+              ...options,
+              option("continue", "Continue", [
+                { ...packet, enchAllyHandled: true },
+              ]),
+            ],
+          );
+          break;
+        }
+      }
       if (attack && !e.mtsMarvelBoyHandled && !p.stunned) {
         const packet = { ...e, amount: e.amount ?? allyStat(s, p, "attack") };
         const options = mtsPlayerPack.mtsPlayerPackAllyBasicOptions(
@@ -39616,6 +39828,8 @@ function resolve(s: GameState, e: Effect) {
         p.bonusThw = 0;
       }
       readyIdentity(s);
+      // The Trance and Temptations in your play area ready too.
+      ench.enchantressReady(s, s.activePlayerId);
       delete s.flags.helaReadyStep;
       add(s, ...zemo.zemoReadySupports(s, s.activePlayerId, undermined));
       s.flags.lead = 0;
@@ -40806,6 +41020,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...mdk.modokActions(s, p, modokPorts),
               ...tb.thunderboltsActions(s, p),
               ...zemo.zemoActions(s, p, zemoPorts),
+              ...ench.enchantressActions(s, p, enchantressPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -40950,6 +41165,25 @@ export function dispatch(state: GameState, command: Command): GameState {
           ) {
             const selected = db
               .darkBeastActions(s, db.darkBeastActionSource(s, command.id)!)
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
+            add(s, ...selected!.effects);
+          } else if (
+            ench.enchantressActionSource(s, command.id) &&
+            ench
+              .enchantressActions(
+                s,
+                ench.enchantressActionSource(s, command.id)!,
+                enchantressPorts,
+              )
+              .some((o) => !command.action || o.id === command.action)
+          ) {
+            const selected = ench
+              .enchantressActions(
+                s,
+                ench.enchantressActionSource(s, command.id)!,
+                enchantressPorts,
+              )
               .find((o) => !command.action || o.id === command.action);
             need(selected, "This action needs its printed cost.");
             add(s, ...selected!.effects);
@@ -41178,52 +41412,15 @@ export function dispatch(state: GameState, command: Command): GameState {
                 ),
               "Choose distinct cards currently in your hand.",
             );
-          // Discard/refill happens after the entire team has finished its turns.
-          const seat = s.players.find((p) => p.id === s.activePlayerId)!;
-          antMan.antManTurnEnded(s);
-          quicksilver.quicksilverTurnEnded(s);
-          rocket.rocketTurnEnded(s);
-          gamora.gamoraTurnEnded(s);
-          gmwPack.gmwPlayerPackTurnEnded(s);
-          sandman.sandmanTurnEnded(s);
-          seat.ended = true;
-          log(s, `${heroCard(s).name} ends their turn.`, "phase");
-          const wolverineTurnEnd = wolverine.wolverineTurnEnded(s);
-          const next = playerOrder(s).find((p) => !p.ended);
-          if (next) add(s, E("beginTurn", { actorId: next.id }));
-          else {
-            const order = playerOrder(s);
-            add(
-              s,
-              ...order.map((p) =>
-                E("prepareDiscard", {
-                  actorId: p.id,
-                  selected:
-                    s.playerCount === 1 ? command.discard || [] : undefined,
-                }),
-              ),
-              E("allReady", { actorId: s.firstPlayerId }),
-              E("beginVillain", { actorId: s.firstPlayerId }),
-            );
-          }
-          add(s, ...deadpool.deadpoolTurnEnded(s));
-          add(s, ...hulkTurnEnds(s));
-          add(s, ...mojoVillain.mojoTurnEnded(s, s.activePlayerId));
-          if (s.player.inPlay.some((p) => p.code === "32099"))
-            add(
-              s,
-              ...wideawake.projectWideawakeEndPlayerTurn(
-                s,
-                s.activePlayerId,
-                `turn-end:${s.nextId++}`,
-                { isTextBlank },
-              ),
-            );
-          add(
+          // Trickster Takeover: each Forced Action resolves before the
+          // turn ends.
+          const forced = ench.enchantressTurnEnding(
             s,
-            ...spectrum.spectrumTurnEnded(s, s.turnPlayerId, spectrumPorts),
+            s.activePlayerId,
+            command.discard || [],
           );
-          add(s, ...wolverineTurnEnd, ...x23.x23TurnEnd(s));
+          if (forced.length) add(s, ...forced);
+          else endPlayerTurn(s, command.discard);
         }
       }
     }

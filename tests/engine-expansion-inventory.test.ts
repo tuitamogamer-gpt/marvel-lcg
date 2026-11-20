@@ -89,6 +89,10 @@ import {
   THUNDERBOLTS_CODES,
 } from "../src/game/thunderbolts";
 import { ZEMO_CODES } from "../src/game/baron-zemo";
+import {
+  ENCHANTRESS_CODES,
+  TRICKSTER_MAGIC_CODES,
+} from "../src/game/enchantress-villain";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -172,6 +176,8 @@ const badoonCodes = new Set<string>([
   ...THUNDERBOLTS_CODES,
   ...ELITE_THUNDERBOLT_CODES,
   ...ZEMO_CODES,
+  ...ENCHANTRESS_CODES,
+  ...TRICKSTER_MAGIC_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -555,7 +561,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(95);
+    expect(MODULES).toHaveLength(96);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "temporal",
@@ -585,9 +591,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(3434);
-    expect(coverage.unsupportedFaces).toBe(1117);
-    expect(coverage.dedicatedFaces).toBe(2996);
+    expect(coverage.executableFaces).toBe(3478);
+    expect(coverage.unsupportedFaces).toBe(1073);
+    expect(coverage.dedicatedFaces).toBe(3040);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -821,6 +827,54 @@ describe("complete expansion rules inventory", () => {
         unsupportedFaceCodes: [],
         installedCardClosure: true,
       });
+  });
+  it("registers Trickster Takeover's Enchantress scenario and the Trickster Magic set; God of Lies remains", () => {
+    const coverage = inventory.installedRegistryCoverage;
+    const trickster = coverage.products.find(
+      (pack: { code: string }) => pack.code === "tt",
+    );
+    expect(trickster).toMatchObject({
+      faceCount: 81,
+      executableFaces: 44,
+      installedCardClosure: false,
+    });
+    const faces = new Set<string>([
+      ...ENCHANTRESS_CODES,
+      ...TRICKSTER_MAGIC_CODES,
+    ]);
+    expect(faces.size).toBe(44);
+    expect(
+      cards
+        .filter(
+          (entry: { pack_code: string; set_code: string }) =>
+            entry.pack_code === "tt" &&
+            ["enchantress_villain", "trickster_magic"].includes(entry.set_code),
+        )
+        .map((entry: { code: string }) => entry.code)
+        .sort(),
+    ).toEqual([...faces].sort());
+    for (const code of faces)
+      expect(audited.get(code)?.installedRegistry, code).toMatchObject({
+        executable: true,
+        mechanism: "dedicated-module",
+      });
+    // Every unsupported face belongs to the God of Lies scenario.
+    for (const code of trickster.unsupportedFaceCodes)
+      expect(
+        cards.find((entry: { code: string }) => entry.code === code)?.set_code,
+        code,
+      ).not.toMatch(/^(enchantress_villain|trickster_magic)$/);
+    expect(trickster.unsupportedFaceCodes).toHaveLength(37);
+    expect(
+      coverage.registeredScenarios.find(
+        (entry: { id: string }) => entry.id === "enchantress_villain",
+      ),
+    ).toBeTruthy();
+    expect(
+      coverage.registeredModules.find(
+        (entry: { id: string }) => entry.id === "trickster_magic",
+      ),
+    ).toMatchObject({ faceCount: 7, installedCardClosure: true });
   });
   it("closes all 148 fifth-batch source faces and every Agents of SHIELD scenario: Black Widow, Batroc, M.O.D.O.K., Thunderbolts and Baron Zemo", () => {
     const coverage = inventory.installedRegistryCoverage;
@@ -1077,6 +1131,8 @@ describe("complete expansion rules inventory", () => {
         // Agents of S.H.I.E.L.D.: Baron Zemo, S.H.I.E.L.D., the Executive
         // Board and the evidence.
         39 -
+        // Trickster Takeover: Enchantress and Trickster Magic.
+        44 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -1249,7 +1305,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(95);
+    expect(coverage.registeredModules).toHaveLength(96);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -1433,7 +1489,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(51);
+    ).toHaveLength(52);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "venom_goblin",
@@ -1680,7 +1736,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(174);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(175);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

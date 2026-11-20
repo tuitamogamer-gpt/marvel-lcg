@@ -29,7 +29,7 @@ jobs:
   missions:
     name: Source missions (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    # Each shard now runs about 30,550 configurations; the slowest took about
+    # Each shard now runs about 31,505 configurations; the slowest took about
     # 75 minutes at 26,500.
     timeout-minutes: 120
     strategy:
@@ -187,6 +187,8 @@ jobs:
             scripts: test:thunderbolts
           - group: baron-zemo
             scripts: test:baron-zemo
+          - group: enchantress
+            scripts: test:enchantress
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

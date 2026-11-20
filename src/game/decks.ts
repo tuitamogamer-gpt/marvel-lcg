@@ -2,6 +2,7 @@ import { ASPECTS, CATALOG_CARDS, HEROES, card, deckCodes } from "./cards.js";
 import { identityMatch, uniqueMatches } from "./unique.js";
 import { hasExecutableScript } from "./script-registry.js";
 import { CAPTAIN_AMERICA_SCRIPT_CODES } from "./captain-america.js";
+import { LINKED_ALLIES } from "./enchantress-villain.js";
 import {
   heroDeckAspects,
   heroRequiredCards,
@@ -83,6 +84,8 @@ function computeDeckOptions(
         "49035",
         "49036",
       ].includes(c.code) &&
+      // Linked cards are set aside, never included in a deck.
+      !LINKED_ALLIES.includes(c.code) &&
       !identityCodes.has(c.code) &&
       !identityMatch(heroId, c) &&
       (hasExecutableScript(c) ||

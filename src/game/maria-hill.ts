@@ -208,9 +208,14 @@ export function mariaHillOrgResources(
     .replace(/\.$/, "")
     .split(/\.\s+/)
     .map(normalize);
+  // Support Staff with a staff counter is its own wild resource: counting
+  // its printed resource here too would advertise a payment no choice can
+  // realize, since each use exhausts it.
+  const staff = new Set(mariaHillResourceSources(s).map((q) => q.id));
   const candidates = s.player.inPlay.filter(
     (q) =>
       !q.exhausted &&
+      !staff.has(q.id) &&
       ["ally", "support"].includes(card(q).type_code) &&
       (printedTraits(q).some((t) => identityTraits.includes(t)) ||
         (mariaHillTrait(s, q.id, "S.H.I.E.L.D.") &&
@@ -248,6 +253,9 @@ export function mariaHillOrgPreflight(
       queue,
       returnActor: s.activePlayerId,
       ids: [],
+      // A card spent as its own resource in this payment, such as Support
+      // Staff, cannot also be exhausted for Organizational Support.
+      spent: sources.map((q) => q.localId || q.id),
     }),
   );
   s.prompt = null;
@@ -1303,8 +1311,9 @@ export function resolveMariaHillEffect(
     }
     case "org-choose": {
       const ids = e.ids as string[],
+        spent = (e.spent as string[] | undefined) || [],
         possible = mariaHillOrgEligible(s, ports).filter(
-          (q) => !ids.includes(q.id),
+          (q) => !ids.includes(q.id) && !spent.includes(q.id),
         );
       ports.choose(
         s,

@@ -70,6 +70,7 @@ import { thunderboltsIdentityStats } from "./thunderbolts.js";
 import { unusHealth } from "./unus.js";
 import { apocalypseHealth } from "./apocalypse.js";
 import { darkBeastHealth } from "./dark-beast.js";
+import { enchantressHealth } from "./enchantress-villain.js";
 import { venomGoblinHealth } from "./venom-goblin.js";
 import {
   mojoGenreGlobal,
@@ -1776,6 +1777,22 @@ export const VILLAINS = [
       "Gather the evidence that unmasks the mole on the S.H.I.E.L.D. Executive Board before Baron Zemo turns it against you, then make your accusation and bring Zemo down unmasked.",
     color: "#5b2a6e",
   },
+  {
+    id: "enchantress_villain",
+    name: "Enchantress",
+    // Enchantress (I) and (II) in Standard, (II) and (III) in Expert.
+    codes: ["55001", "55002", "55003"],
+    schemes: ["55004b", "55005b"],
+    module: "trickster_magic",
+    moduleCount: 1,
+    defaultModules: ["trickster_magic"],
+    difficulty: 3,
+    title: "Prime Real Estate",
+    location: "South America",
+    description:
+      "Enchantress casts a hypnotic gaze on every hero. Break free before her charm puts you in a trance, and stop her from crowning herself queen.",
+    color: "#2f7d4f",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1885,6 +1902,7 @@ export const MODULES = [
   { id: "supersonic", name: "Supersonic", difficulty: 3 },
   { id: "the_leaper", name: "The Leaper", difficulty: 3 },
   { id: "s.h.i.e.l.d.", name: "S.H.I.E.L.D.", difficulty: 2 },
+  { id: "trickster_magic", name: "Trickster Magic", difficulty: 3 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(
@@ -2579,6 +2597,7 @@ export function pieceHP(s: GameState, p: Piece) {
     mojoGenreHealth(s, p) +
     unusHealth(s, p) +
     apocalypseHealth(s, p) +
-    darkBeastHealth(s, p)
+    darkBeastHealth(s, p) +
+    enchantressHealth(s, p)
   );
 }
