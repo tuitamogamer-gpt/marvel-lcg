@@ -100,7 +100,8 @@
     "test:apocalypse": "node scripts/apocalypse-check.mjs",
     "test:dark-beast": "node scripts/dark-beast-check.mjs",
     "test:en-sabah-nur": "node scripts/en-sabah-nur-check.mjs",
-    "test:standard-iii": "node scripts/standard-iii-check.mjs"
+    "test:standard-iii": "node scripts/standard-iii-check.mjs",
+    "test:black-widow-villain": "node scripts/black-widow-villain-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

@@ -235,3 +235,7 @@ Apocalypse's label carries his stage and current form, and the caption names tha
 ## Standard III's pursuit, 2026-11-20
 
 The Encounter sets choice becomes three segments, Original, Standard II and Standard III, each with its own one-line explanation, and the mission line names Standard III when it is in play. Pursued by the Past sits with the environments, labelled as permanent, and its caption counts the pursuit counters against the number it takes and says what happens then. Drawing Near shows its Alter-Ego Action as a button on the card, like the other in-play obligations.
+
+## Black Widow's Preparations, 2026-11-20
+
+Black Widow's caption says what attacking her does: 1 threat off the main scheme, then the top encounter card's Preparation. The Widow's Web carries a one-line note with the threat it gains each villain phase at her stage. Stun Net shows its Hero Action as a button on the card, and an identity caught in it has its basic attack button disabled with the reason in its title. Abduct Superhumans names the allies tucked under it, so the players can see whom they free by defeating it.

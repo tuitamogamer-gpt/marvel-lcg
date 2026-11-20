@@ -30,6 +30,7 @@ import { heroRequiredCards, heroRuntime } from "../src/game/hero-runtime";
 import { visionCanAttack } from "../src/game/vision";
 import { cyclopsCanAttack } from "../src/game/cyclops";
 import { valkyrieCannotBasicAttack } from "../src/game/valkyrie";
+import { stunNetted } from "../src/game/black-widow-villain";
 import { captainThwartBlocked } from "../src/game/captain-america";
 function base(
   heroId = "spider_man",
@@ -734,7 +735,9 @@ describe("complete seeded missions", () => {
             const cannotAttack =
               !visionCanAttack(s) ||
               !cyclopsCanAttack(s) ||
-              valkyrieCannotBasicAttack(s);
+              valkyrieCannotBasicAttack(s) ||
+              // Black Widow's Stun Net.
+              stunNetted(s, `hero:${s.activePlayerId}`);
             const canThwart =
               !captainThwartBlocked(s) &&
               (s.player.confused ||

@@ -1673,6 +1673,22 @@ export const VILLAINS = [
       "The first mutant rises: Apocalypse shifts between his Biomorph, Cyberpath and Giant forms while power counters on his pyramid dig out his Superpowers.",
     color: "#a8792a",
   },
+  {
+    id: "black_widow_villain",
+    name: "Black Widow",
+    // Black Widow (I) and (II) in Standard, (II) and (III) in Expert.
+    codes: ["50064", "50065", "50066"],
+    schemes: ["50067b"],
+    module: "a.i.m._abduction",
+    moduleCount: 2,
+    defaultModules: ["a.i.m._abduction", "a.i.m._science"],
+    difficulty: 3,
+    title: "The Widow's Web",
+    location: "A disused subway tunnel",
+    description:
+      "Yelena Belova is always one step ahead: every attack on her draws a Preparation from the encounter deck, while A.I.M. abducts your allies.",
+    color: "#7a2230",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1771,6 +1787,8 @@ export const MODULES = [
   { id: "blue_moon", name: "Blue Moon", difficulty: 3 },
   { id: "celestial_tech", name: "Celestial Tech", difficulty: 3 },
   { id: "clan_akkaba", name: "Clan Akkaba", difficulty: 3 },
+  { id: "a.i.m._abduction", name: "A.I.M. Abduction", difficulty: 3 },
+  { id: "a.i.m._science", name: "A.I.M. Science", difficulty: 2 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(

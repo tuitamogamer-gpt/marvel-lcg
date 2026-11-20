@@ -401,6 +401,15 @@ import {
 } from "./game/en-sabah-nur";
 import { pursued, pursuedCaption } from "./game/standard-iii";
 import {
+  ABDUCT_SUPERHUMANS,
+  BLACK_WIDOW_CAPTION,
+  STUN_NET,
+  WIDOWS_WEB,
+  blackWidowVillain,
+  stunNetted,
+  widowsWebNote,
+} from "./game/black-widow-villain";
+import {
   AERIAL_BOMBARDMENT,
   IMPERVIOUS,
   OUT_OF_REACH,
@@ -2855,6 +2864,19 @@ export default function App() {
                       becomes the Living Bomb, and Stryfe cannot be defeated
                       until it is gone. Extreme Measures and Mutant Insurrection
                       are preselected.
+                    </p>
+                  )}
+                  {villain.id === "black_widow_villain" && (
+                    <p className="setting-help">
+                      Whenever a hero or ally attacks Black Widow, she removes 1
+                      threat from her main scheme and the attacking player
+                      discards the top encounter card and resolves its
+                      Preparation before the attack: her gadgets, her A.I.M.
+                      guards or a trick that stops the attack. Each villain
+                      phase her scheme gains threat equal to her stage per
+                      player. Each player starts with a minion from the
+                      encounter deck engaged with them. A.I.M. Abduction and
+                      A.I.M. Science are preselected.
                     </p>
                   )}
                   {villain.id === "en_sabah_nur" && (
@@ -6502,6 +6524,8 @@ function AttachedCards({
                 "45122",
                 "45123",
                 "45137",
+                // Black Widow's Stun Net.
+                STUN_NET,
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -7241,6 +7265,11 @@ function Tabletop({
                     {enSabahNur(s) && (
                       <span className="stat-caption">{esnCaption(s)}</span>
                     )}
+                    {blackWidowVillain(s) && (
+                      <span className="stat-caption">
+                        {BLACK_WIDOW_CAPTION}
+                      </span>
+                    )}
                     {misterSinister(s) && (
                       <span className="stat-caption">
                         {(["Aerial", "Brute", "Psionic"] as const)
@@ -7372,7 +7401,7 @@ function Tabletop({
                   <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
-                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen || apocalypse(s) || enSabahNur(s) ? " magog-scheme" : ""}`}
+                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen || apocalypse(s) || enSabahNur(s) || blackWidowVillain(s) ? " magog-scheme" : ""}`}
                     style={
                       {
                         "--scheme-actions": mainActionPiece
@@ -7496,6 +7525,9 @@ function Tabletop({
                         {card(horsemanVillain(s, s.horsemen.active)!).name} ·
                         moves on after each activation
                       </p>
+                    )}
+                    {blackWidowVillain(s) && s.scheme.code === WIDOWS_WEB && (
+                      <p className="magog-scheme-note">{widowsWebNote(s)}</p>
                     )}
                     {enSabahNur(s) &&
                       [PYRAMID, RISE].includes(s.scheme.code) && (
@@ -7993,6 +8025,13 @@ function Tabletop({
                       {p.code === ANCIENT_RITUAL && (
                         <span className="stat-caption">
                           {ANCIENT_RITUAL_CAPTION}
+                        </span>
+                      )}
+                      {p.code === ABDUCT_SUPERHUMANS && (
+                        <span className="stat-caption">
+                          {p.storedCards?.length
+                            ? `Abducted: ${p.storedCards.map((q) => card(q).name).join(", ")} · freed when it is defeated`
+                            : "Allies that leave play are tucked here"}
                         </span>
                       )}
                       {apocalypseThwartLocked(s, p.id) && (
@@ -9477,7 +9516,9 @@ function Tabletop({
                                 ? "Permanently Phased prevents attack abilities."
                                 : !cyclopsCanAttack(s)
                                   ? "Lost Visor prevents attack abilities."
-                                  : "Attack an enemy. Exhaust your identity."
+                                  : stunNetted(s, `hero:${s.activePlayerId}`)
+                                    ? "Stun Net: your identity cannot attack."
+                                    : "Attack an enemy. Exhaust your identity."
                       }
                       disabled={
                         !acting ||
@@ -9486,7 +9527,8 @@ function Tabletop({
                         valkyrieCannotBasicAttack(s) ||
                         !visionCanAttack(s) ||
                         !shadowcatCanAttack(s) ||
-                        !cyclopsCanAttack(s)
+                        !cyclopsCanAttack(s) ||
+                        stunNetted(s, `hero:${s.activePlayerId}`)
                       }
                       onClick={() => send({ type: "BASIC", action: "attack" })}
                     >

@@ -1,6 +1,7 @@
 import { magikTopPlayable } from "./magik.js";
 import { icemanSchemeIcon } from "./iceman.js";
 import { valkyrieCannotBasicAttack } from "./valkyrie.js";
+import { stunNetted } from "./black-widow-villain.js";
 import { visionCanAttack } from "./vision.js";
 import { TOWER_OTHER_MAIN, towerDefenseSchemeLimit } from "./tower-defense.js";
 import { HELA_VICTORY_SCHEMES, helaSchemeLocked, helaWounded } from "./hela.js";
@@ -227,7 +228,8 @@ function allyAction(s: GameState): Advice | null {
     // Keep the last ready ally as a blocker while the next hit is dangerous.
     if (needsBlocker(s) && ready.length <= 1 && !finishes && !pressed) continue;
     const wantThwart = pressed && (c.thwart || 0) > 0 && schemes.length;
-    const wantAttack = (c.attack || 0) > 0 && enemies.length;
+    const wantAttack =
+      (c.attack || 0) > 0 && enemies.length && !stunNetted(s, ally.id);
     if (!wantThwart && !wantAttack) continue;
     // Keep a one-hit-point ally as a blocker unless it can finish a minion.
     if (
@@ -401,6 +403,7 @@ export function adviseAction(s: GameState): Advice | null {
       };
     if (
       !valkyrieCannotBasicAttack(s) &&
+      !stunNetted(s, `hero:${s.activePlayerId}`) &&
       visionCanAttack(s) &&
       (enemies.length || s.player.stunned)
     )

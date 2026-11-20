@@ -175,6 +175,8 @@ jobs:
             scripts: test:en-sabah-nur
           - group: standard-iii
             scripts: test:standard-iii
+          - group: black-widow-villain
+            scripts: test:black-widow-villain
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

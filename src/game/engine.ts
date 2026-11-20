@@ -36,6 +36,7 @@ import * as apoc from "./apocalypse.js";
 import * as db from "./dark-beast.js";
 import * as esn from "./en-sabah-nur.js";
 import * as std3 from "./standard-iii.js";
+import * as bwv from "./black-widow-villain.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -631,6 +632,7 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
     ) ||
     !!(s && typeof p !== "string" && apoc.apocalypseKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && db.darkBeastKeyword(s, p, name) > 0) ||
+    !!(s && typeof p !== "string" && bwv.blackWidowKeyword(s, p, name) > 0) ||
     !!(
       s &&
       typeof p !== "string" &&
@@ -1124,7 +1126,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         unus.unusKeyword(s, p, "Retaliate") +
         horsemen.horsemenKeyword(s, p, "Retaliate") +
         apoc.apocalypseKeyword(s, p, "Retaliate") +
-        db.darkBeastKeyword(s, p, "Retaliate")
+        db.darkBeastKeyword(s, p, "Retaliate") +
+        bwv.blackWidowKeyword(s, p, "Retaliate")
     : Math.max(intrinsic, grantedValue);
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
@@ -1205,6 +1208,7 @@ function beginResolution(s: GameState, p: Piece) {
 }
 function finishResolution(s: GameState, id: string) {
   delete s.flags[`taskmasterReflex:${id}`];
+  bwv.blackWidowAttackEnded(s, id);
   delete s.flags[`nightcrawlerCost:${id}`];
   delete s.flags[`nightcrawlerMinionCostPaid:${id}`];
   delete s.flags[`nightcrawlerMinionCostMinion:${id}`];
@@ -2039,6 +2043,8 @@ function movePieceFromPlay(
           ) || []
         ).map((e) => ({ ...e, actorId: seat.id })),
       );
+  if (leaveReceipt && !removed)
+    add(s, ...bwv.blackWidowAllyLeftPlay(s, p, leaveReceipt.playerId));
   if (leaveReceipt)
     add(
       s,
@@ -2970,6 +2976,8 @@ export function escalation(s: GameState) {
   if (value) return value.escalation;
   const evasion = nebulaVillain.nebulaEscalation(s);
   if (evasion !== undefined) return evasion;
+  const widow = bwv.blackWidowEscalation(s);
+  if (widow !== undefined) return widow;
   return (
     (card(s.scheme.code).escalation_threat || 0) *
     (card(s.scheme.code).escalation_threat_fixed ? 1 : s.playerCount)
@@ -3374,6 +3382,31 @@ function dealDamage(
     return horsemen.withHorsemenFocus(s, horsemanDamageKey, () =>
       dealDamage(s, target, n, source, attack, overkill, panther, traits),
     );
+  // Black Widow: a character attacking her triggers her Forced Interrupt
+  // before the attack. A Preparation can prevent all damage from the attack
+  // or resolve it against A.I.M. Grunt instead.
+  if (attack && s.blackWidowVillain) {
+    const widow = bwv.blackWidowAttacked(
+      s,
+      target,
+      source,
+      n,
+      s.currentAttackProgramId || s.currentEventId,
+      blackWidowVillainPorts,
+    );
+    if (widow.redirect && widow.redirect !== target && find(s, widow.redirect))
+      return dealDamage(
+        s,
+        widow.redirect,
+        n,
+        source,
+        attack,
+        overkill,
+        panther,
+        traits,
+      );
+    if (widow.prevent) n = 0;
+  }
   const raySource = source === "hero" ? `hero:${s.activePlayerId}` : source;
   const ray =
     attack &&
@@ -3921,6 +3954,7 @@ function dealDamage(
           horsemen.horsemenKeyword(s, retaliationTarget, "Retaliate") +
           apoc.apocalypseKeyword(s, retaliationTarget, "Retaliate") +
           db.darkBeastKeyword(s, retaliationTarget, "Retaliate") +
+          bwv.blackWidowKeyword(s, retaliationTarget, "Retaliate") +
           (retaliationTarget.id === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -5408,6 +5442,7 @@ function villainSetup(s: GameState) {
     ...sin.sinisterVillainRevealed(s),
     ...sty.stryfeVillainRevealed(s),
     ...db.darkBeastVillainRevealed(s),
+    ...bwv.blackWidowVillainRevealed(s),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -6275,6 +6310,7 @@ function defeatScheme(
             ? source.slice(5)
             : controller(s, source)?.id || s.activePlayerId,
         ),
+        ...bwv.blackWidowSchemeDefeated(s, p),
         ...esn.esnSchemeDefeated(
           s,
           p,
@@ -6569,6 +6605,7 @@ export function targets(
               !wreckingCrew.wreckingCrewAttackForbidden(s, t.id) &&
               !sinisterSix.sixAttackForbidden(s, t.id) &&
               !kang.kangAttackForbidden(s, t.id) &&
+              !bwv.blackWidowAttackForbidden(s, t.id) &&
               (t.id !== s.villain.id ||
                 !mystique.mystiqueVillainAttackProhibited(s, mystiquePorts)))),
       );
@@ -7159,6 +7196,16 @@ function attackAction(
       !cyclops.cyclopsCanAttack(s))
   )
     return;
+  if (
+    bwv.stunNetted(
+      s,
+      source === "hero" ? `hero:${s.activePlayerId}` : String(source),
+    ) &&
+    !traits.initiated
+  ) {
+    log(s, "Stun Net: the attached character cannot attack.");
+    return;
+  }
   if (
     source === "hero" &&
     !traits.initiated &&
@@ -9082,48 +9129,54 @@ export function newGame(config: {
                                     ...esn.EN_SABAH_NUR_MODULAR_SETS,
                                   ].some((set) => set === c.set_code)
                                 ? "aoa"
-                                : ["temporal", "anachronauts", "mot"].includes(
-                                      c.set_code || "",
+                                : bwv.BLACK_WIDOW_MODULAR_SETS.some(
+                                      (set) => set === c.set_code,
                                     )
-                                  ? "toafk"
-                                  : c.set_code === "exodus"
-                                    ? "gambit"
-                                    : c.set_code === "sauron"
-                                      ? "iceman"
-                                      : c.set_code === "crazy_gang"
-                                        ? "ncrawler"
-                                        : c.set_code === "hellfire"
-                                          ? "magneto"
-                                          : c.set_code === "arcade"
-                                            ? "jubilee"
-                                            : c.set_code === "reavers"
-                                              ? "rogue"
-                                              : c.set_code === "deathstrike"
-                                                ? "wolv"
-                                                : c.set_code === "shadow_king"
-                                                  ? "storm"
-                                                  : c.set_code ===
-                                                      "ironspider_sinister"
-                                                    ? "spdr"
+                                  ? "aos"
+                                  : [
+                                        "temporal",
+                                        "anachronauts",
+                                        "mot",
+                                      ].includes(c.set_code || "")
+                                    ? "toafk"
+                                    : c.set_code === "exodus"
+                                      ? "gambit"
+                                      : c.set_code === "sauron"
+                                        ? "iceman"
+                                        : c.set_code === "crazy_gang"
+                                          ? "ncrawler"
+                                          : c.set_code === "hellfire"
+                                            ? "magneto"
+                                            : c.set_code === "arcade"
+                                              ? "jubilee"
+                                              : c.set_code === "reavers"
+                                                ? "rogue"
+                                                : c.set_code === "deathstrike"
+                                                  ? "wolv"
+                                                  : c.set_code === "shadow_king"
+                                                    ? "storm"
                                                     : c.set_code ===
-                                                        "inheritors"
-                                                      ? "spiderham"
-                                                      : c.set_code === "zzzax"
-                                                        ? "ironheart"
-                                                        : c.set_code ===
-                                                            "armadillo"
-                                                          ? "nova"
-                                                          : [
-                                                                "goblin_gimmicks",
-                                                                "a_mess_of_things",
-                                                                "power_drain",
-                                                                "running_interference",
-                                                              ].includes(
-                                                                c.set_code ||
-                                                                  "",
-                                                              )
-                                                            ? "gob"
-                                                            : "core")) ||
+                                                        "ironspider_sinister"
+                                                      ? "spdr"
+                                                      : c.set_code ===
+                                                          "inheritors"
+                                                        ? "spiderham"
+                                                        : c.set_code === "zzzax"
+                                                          ? "ironheart"
+                                                          : c.set_code ===
+                                                              "armadillo"
+                                                            ? "nova"
+                                                            : [
+                                                                  "goblin_gimmicks",
+                                                                  "a_mess_of_things",
+                                                                  "power_drain",
+                                                                  "running_interference",
+                                                                ].includes(
+                                                                  c.set_code ||
+                                                                    "",
+                                                                )
+                                                              ? "gob"
+                                                              : "core")) ||
           (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
@@ -9246,6 +9299,7 @@ export function newGame(config: {
     apoc.apocalypseSetup(s, { makePiece: (s, code) => makePiece(s, code) });
   if (v.id === "dark_beast") db.darkBeastSetup(s);
   if (v.id === "en_sabah_nur") esn.esnSetup(s);
+  if (v.id === "black_widow_villain") bwv.blackWidowSetup(s);
   // Ancient Ritual (Permanent, Setup) begins the game in play with the
   // Clan Akkaba set.
   if (selectedModules.includes("clan_akkaba"))
@@ -10141,6 +10195,7 @@ function initialSetup(s: GameState) {
   setup.push(...apoc.apocalypseSetupEffects(s));
   setup.push(...db.darkBeastSetupEffects(s));
   setup.push(...esn.esnSetupEffects(s));
+  setup.push(...bwv.blackWidowSetupEffects(s));
   // Queue stage setup after scenario setup and before the first turn.
   add(
     s,
@@ -10224,6 +10279,12 @@ export function playable(s: GameState, p: Piece): string | null {
       !cyclops.cyclopsCanAttack(s))
   )
     return "This identity cannot attack in its current form.";
+  if (
+    c.type_code === "event" &&
+    c.text?.includes("(attack)") &&
+    bwv.stunNetted(s, `hero:${s.activePlayerId}`)
+  )
+    return "Stun Net: your identity cannot attack.";
   if (
     c.type_code === "event" &&
     c.text?.includes("(defense)") &&
@@ -12201,6 +12262,7 @@ export function abilityOptions(
     ...unus.unusActions(s, p),
     ...db.darkBeastActions(s, p),
     ...std3.standardIIIActions(s, p, standardIIIPorts),
+    ...bwv.blackWidowActions(s, p, blackWidowVillainPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -12242,15 +12304,17 @@ export function abilityOptions(
             ? "A printed dash prevents attacking."
             : p.exhausted
               ? "Exhausted"
-              : p.code === "03014" && !s.player.hand.length
-                ? "Discard one card from hand to attack."
-                : p.code === "18019" &&
-                    !p.stunned &&
-                    !targets(s, "enemy", true).some((target) =>
-                      gamoraPack.gamoraPackAllyCanAttack(s, p, target.id),
-                    )
-                  ? "No legal enemy to attack."
-                  : undefined,
+              : bwv.stunNetted(s, p.id)
+                ? "Stun Net: this ally cannot attack."
+                : p.code === "03014" && !s.player.hand.length
+                  ? "Discard one card from hand to attack."
+                  : p.code === "18019" &&
+                      !p.stunned &&
+                      !targets(s, "enemy", true).some((target) =>
+                        gamoraPack.gamoraPackAllyCanAttack(s, p, target.id),
+                      )
+                    ? "No legal enemy to attack."
+                    : undefined,
       },
       {
         id: "thwart",
@@ -17163,6 +17227,57 @@ const darkBeastPorts: db.DarkBeastPorts = {
   },
   indirect: (s, playerId, amount, sourceId, title) =>
     hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+};
+const blackWidowVillainPorts: bwv.BlackWidowVillainPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  reveal: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    wreckingCrewPorts.reveal(s, p, playerId);
+  },
+  characters: (s, playerId) => [
+    `hero:${playerId}`,
+    ...friends(seatView(s, playerId)).map((p) => p.id),
+  ],
+  remainingHP: (s, id) => {
+    const p = find(s, id);
+    return p ? pieceHP(s, p) - p.damage : 0;
+  },
+  mill: (s, playerId, n) => mysterioPorts.millPlayer(s, playerId, n),
+  discardFromHand: (s, playerId, id) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    if (s.player.hand.some((p) => p.id === id)) discardHand(s, id);
+    activateSeat(s, previous);
+  },
+  attachToCharacter: (s, p, target) => {
+    removeEncounterInstance(s, p.id);
+    p.attachedTo = target;
+    if (!s.attachments.some((q) => q.id === p.id)) s.attachments.push(p);
+  },
+  allyLeavesPlay: (s, id) => discardPiece(s, id),
+  putAllyIntoPlay: (s, p, ownerId) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, ownerId);
+    if (uniqueConflict(s, card(p))) s.player.discard.push(resetPiece(p));
+    else {
+      Object.assign(p, resetPiece(p, true));
+      s.player.inPlay.push(p);
+      add(
+        s,
+        { ...E("allyLimit"), actorId: ownerId },
+        { ...E("allyEnter", { id: p.id }), actorId: ownerId },
+      );
+    }
+    activateSeat(s, previous);
+  },
+  removeMainThreat: (s) => {
+    if (s.scheme.threat <= 0) return 0;
+    s.scheme.threat -= 1;
+    return 1;
+  },
+  changeToHero: (s, playerId) =>
+    add(s, { ...E("flip", { counts: false }), actorId: playerId }),
 };
 const standardIIIPorts: std3.StandardIIIPorts = {
   ...mutagenPorts,
@@ -25469,7 +25584,8 @@ function prepareAttackBoosts(s: GameState) {
     : normal +
       mutagenAdditionalBoosts(s, a.attacker) +
       morlock.morlockAdditionalBoosts(s) +
-      (a.isVillain ? db.darkBeastAdditionalBoosts(s) : 0);
+      (a.isVillain ? db.darkBeastAdditionalBoosts(s) : 0) +
+      (a.isVillain ? bwv.blackWidowAdditionalBoosts(s) : 0);
   for (let i = 0; i < n; i++) {
     const p = drawEncounter(s);
     if (p) a.pendingBoosts.push(p);
@@ -28029,6 +28145,9 @@ function reveal(
         ...esn.CELESTIAL_TECH_CODES,
         ...esn.CLAN_AKKABA_CODES,
         ...std3.STANDARD_III_CODES,
+        ...bwv.BLACK_WIDOW_VILLAIN_CODES,
+        ...bwv.AIM_ABDUCTION_CODES,
+        ...bwv.AIM_SCIENCE_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -28287,6 +28406,9 @@ function reveal(
       ...esn.CELESTIAL_TECH_CODES,
       ...esn.CLAN_AKKABA_CODES,
       ...std3.STANDARD_III_CODES,
+      ...bwv.BLACK_WIDOW_VILLAIN_CODES,
+      ...bwv.AIM_ABDUCTION_CODES,
+      ...bwv.AIM_SCIENCE_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -28360,6 +28482,7 @@ function reveal(
       db.darkBeastReveal(s, p) ??
       esn.esnReveal(s, p) ??
       std3.standardIIIReveal(s, p) ??
+      bwv.blackWidowReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -28391,6 +28514,11 @@ function reveal(
       colossus.colossusEncounterReveal(s, p) ??
       spiderHam.spiderHamEncounterReveal(s, p);
     need(entry !== null, "No native encounter attachment entry handler.");
+    // Destroy Evidence: each other encounter card, attachments too, gains
+    // incite 1.
+    const evidence =
+      whenRevealedOnly || repeat ? 0 : bwv.blackWidowIncite(s, p);
+    if (evidence) add(s, E("threat", { target: "main", amount: evidence }));
     add(s, ...entry!.map((e) => ({ ...e, revealWindowId: p.id })), ...window);
     return;
   }
@@ -28413,7 +28541,7 @@ function reveal(
     return;
   const incite = whenRevealedOnly
     ? 0
-    : scaledKeyword(c, "Incite", s.playerCount);
+    : scaledKeyword(c, "Incite", s.playerCount) + bwv.blackWidowIncite(s, p);
   if (incite) add(s, E("threat", { target: "main", amount: incite }));
   const ds = doctorStrangeEncounterReveal(s, p);
   const milesReveal = miles.milesEncounterReveal(s, p);
@@ -28468,6 +28596,7 @@ function reveal(
     db.darkBeastReveal(s, p) ??
     esn.esnReveal(s, p) ??
     std3.standardIIIReveal(s, p) ??
+    bwv.blackWidowReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -29938,6 +30067,7 @@ function resolve(s: GameState, e: Effect) {
           db.darkBeastReveal(state, piece) ??
           esn.esnReveal(state, piece) ??
           std3.standardIIIReveal(state, piece) ??
+          bwv.blackWidowReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -30102,6 +30232,7 @@ function resolve(s: GameState, e: Effect) {
   if (db.resolveDarkBeastEffect(s, e, darkBeastPorts)) return;
   if (esn.resolveEnSabahNurEffect(s, e, enSabahNurPorts)) return;
   if (std3.resolveStandardIIIEffect(s, e, standardIIIPorts)) return;
+  if (bwv.resolveBlackWidowVillainEffect(s, e, blackWidowVillainPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -30494,6 +30625,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     case "attackProgramEnd":
       delete s.flags[`taskmasterReflex:${e.id}`];
+      bwv.blackWidowAttackEnded(s, e.id);
       delete s.flags[`taskmasterAttackSource:${e.id}`];
       if (!e.eventId && s.flags[`shadowcatProgramPerformed:${e.id}`]) {
         delete s.flags[`shadowcatProgramPerformed:${e.id}`];
@@ -30728,6 +30860,15 @@ function resolve(s: GameState, e: Effect) {
           s,
           E("damage", { target: stryfe.id, amount: 1, source: stryfe.id }),
         );
+        break;
+      }
+      // Grappling Hook's Forced Interrupt: the event's effects are canceled,
+      // then the Hook is discarded.
+      const hook = bwv.grapplingHook(s);
+      if (hook && c.type_code === "event") {
+        s.flags[`ghostCancelled:${p.id}`] = true;
+        log(s, `Grappling Hook cancels ${c.name}.`, "bad");
+        discardPiece(s, hook.id);
         break;
       }
       if (
@@ -38726,6 +38867,8 @@ function resolve(s: GameState, e: Effect) {
       else if (jug.juggernaut(s)) villainSetup(s);
       // Dark Beast (I) also resolves its When Revealed ability at setup.
       else if (db.darkBeast(s)) villainSetup(s);
+      // Black Widow (II) also resolves its When Revealed ability at setup.
+      else if (bwv.blackWidowVillain(s)) villainSetup(s);
       break;
     case "wolverinePlayerPhase":
       add(
@@ -38979,6 +39122,7 @@ function resolve(s: GameState, e: Effect) {
             ).length +
             deadpool.deadpoolPlayerIcons(s, "scheme_acceleration") +
             mojoGenres.mojoGenreAcceleration(s) +
+            bwv.blackWidowAcceleration(s) +
             s.sideSchemes.reduce(
               (n, p) =>
                 n +
@@ -39909,6 +40053,11 @@ export function dispatch(state: GameState, command: Command): GameState {
               );
             if (command.action === "attack")
               need(
+                !bwv.stunNetted(s, `hero:${s.activePlayerId}`),
+                "Stun Net: your identity cannot attack.",
+              );
+            if (command.action === "attack")
+              need(
                 vision.visionCanAttack(s),
                 "Vision cannot attack in Intangible mass form.",
               );
@@ -39989,6 +40138,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...unus.unusActions(s, p),
               ...db.darkBeastActions(s, p),
               ...std3.standardIIIActions(s, p, standardIIIPorts),
+              ...bwv.blackWidowActions(s, p, blackWidowVillainPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -40133,6 +40283,25 @@ export function dispatch(state: GameState, command: Command): GameState {
           ) {
             const selected = db
               .darkBeastActions(s, db.darkBeastActionSource(s, command.id)!)
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
+            add(s, ...selected!.effects);
+          } else if (
+            bwv.blackWidowActionSource(s, command.id) &&
+            bwv
+              .blackWidowActions(
+                s,
+                bwv.blackWidowActionSource(s, command.id)!,
+                blackWidowVillainPorts,
+              )
+              .some((o) => !command.action || o.id === command.action)
+          ) {
+            const selected = bwv
+              .blackWidowActions(
+                s,
+                bwv.blackWidowActionSource(s, command.id)!,
+                blackWidowVillainPorts,
+              )
               .find((o) => !command.action || o.id === command.action);
             need(selected, "This action needs its printed cost.");
             add(s, ...selected!.effects);
