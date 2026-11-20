@@ -38,6 +38,7 @@ import * as esn from "./en-sabah-nur.js";
 import * as std3 from "./standard-iii.js";
 import * as bwv from "./black-widow-villain.js";
 import * as btc from "./batroc.js";
+import * as mdk from "./modok.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -635,6 +636,7 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
     !!(s && typeof p !== "string" && db.darkBeastKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && bwv.blackWidowKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && btc.batrocKeyword(s, p, name) > 0) ||
+    !!(s && typeof p !== "string" && mdk.modokKeyword(s, p, name) > 0) ||
     !!(
       s &&
       typeof p !== "string" &&
@@ -1006,6 +1008,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           nebulaVillain.nebulaVillainKeyword(s, p, "Stalwart") ||
           ronan.ronanKeyword(s, p, "Stalwart") ||
           hela.helaKeyword(s, p, "Stalwart") ||
+          mdk.modokKeyword(s, p, "Stalwart") > 0 ||
           magog.magogKeyword(s, p, "Stalwart") > 0),
     ),
     Number(
@@ -1031,6 +1034,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           ronan.ronanKeyword(s, p, "Piercing") ||
           taskmaster.taskmasterKeyword(s, p, "Piercing") ||
           btc.batrocKeyword(s, p, "Piercing") > 0 ||
+          mdk.modokKeyword(s, p, "Piercing") > 0 ||
           storm.stormPiercing(s, p) ||
           redSkullModules.redSkullPiercing(s, p.id) ||
           crossbones.crossbonesPiercing(s, p.id, card) ||
@@ -1062,6 +1066,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           taskmaster.taskmasterKeyword(s, p, "Ranged") ||
           hoodModular.hoodModularKeyword(s, p, "Ranged") > 0 ||
           btc.batrocKeyword(s, p, "Ranged") > 0 ||
+          mdk.modokKeyword(s, p, "Ranged") > 0 ||
           granted.ranged ||
           (s.attack?.attacker === p.id && s.attack.experimentalWeaponsRanged) ||
           (s.attack?.attacker === p.id && s.attack.redSkullModulesRanged) ||
@@ -1090,6 +1095,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           sinisterModulars.sinisterModularKeyword(s, p, "Overkill") > 0 ||
           kreeFanatic.kreeFanaticOverkill(s, p.id) ||
           mojoGenres.mojoGenreOverkill(s, p) ||
+          mdk.modokKeyword(s, p, "Overkill") > 0 ||
           niPack.novaIronheartPackCharacterModifiers(s, p.id, niPackPorts)
             .overkill)
       ),
@@ -1385,6 +1391,7 @@ export function allyCount(s: GameState) {
       !(p.code === mojoVillain.LONGSHOT && !isTextBlank(s, p)) &&
       !morlock.morlockAllyExcluded(s, p) &&
       !btc.batrocAllyExcluded(s, p) &&
+      !mdk.modokAllyExcluded(s, p) &&
       !jug.jugAllyExcluded(s, p) &&
       !antPack.antManPackAllyExcluded(s, p) &&
       !magnetoHero.magnetoHeroNewModifiers(s, p, captainPackHasTrait)
@@ -2066,6 +2073,8 @@ function movePieceFromPlay(
   visionPack.visionPackCardLeftPlay(s, p);
   niPack.novaIronheartPackCardLeftPlay(s, p);
   add(s, ...valkyrie.valkyrieAttachmentDiscarded(s, p));
+  // Automated Mobile Unit takes its hit points with it.
+  mdk.modokAttachmentLeft(s, p);
   if (
     p.code === "13029" &&
     p.attachedTo === s.villain.id &&
@@ -2091,6 +2100,11 @@ function movePieceFromPlay(
   );
   for (const stored of [...(p.storedCards || []), ...(p.captured || [])]) {
     const owner = s.players.find((seat) => seat.id === stored.ownerId);
+    // A hostage Inhuman goes back to the Holding Cell deck.
+    if (mdk.INHUMANS.includes(stored.code)) {
+      mdk.modokInhumanLeft(s, resetPiece(stored), modokPorts);
+      continue;
+    }
     if (["32088b", "32172b"].includes(stored.code))
       s.removed.push(resetPiece(stored));
     else if (
@@ -2135,6 +2149,9 @@ function movePieceFromPlay(
   // Rescued Captive: Victory -1.
   else if (p.code === btc.CAPTIVE && victory)
     (s.victoryDisplay ||= []).push(resetPiece(p));
+  // An Inhuman goes back to the bottom of the Holding Cell deck.
+  else if (mdk.INHUMANS.includes(p.code))
+    mdk.modokInhumanLeft(s, resetPiece(p), modokPorts);
   else if (isPlayerSideScheme(p) && victory)
     (s.victoryDisplay ||= []).push(resetPiece(p));
   else if (
@@ -3437,6 +3454,9 @@ function dealDamage(
       );
     if (widow.prevent) n = 0;
   }
+  // M.O.D.O.K.: Hostage Situation keeps him from taking damage, and Psionic
+  // Force Field takes the damage to the enemy it is attached to.
+  if (s.modok && n > 0) n = mdk.modokDamageTaken(s, target, n, modokPorts);
   const raySource = source === "hero" ? `hero:${s.activePlayerId}` : source;
   const ray =
     attack &&
@@ -4765,6 +4785,9 @@ function defeatCharacter(
   // The Prelates: Victory 3.
   else if (minion && apoc.apocalypseVictoryMinion(m) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
+  // Scientist Supreme and Monica Rappaccini: Victory -1.
+  else if (minion && mdk.modokVictoryMinion(m) && !textWasBlank)
+    movePieceFromPlay(s, m.id, false, undefined, true);
   // Morlock: Victory -1.
   else if (!minion && morlock.morlockVictoryAlly(s, m) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
@@ -4838,6 +4861,7 @@ function defeatCharacter(
       ...darkBeastDefeat,
       ...(minion ? esn.esnMinionDefeated(s, m) : []),
       ...(minion ? btc.batrocMinionDefeated(s, m, textWasBlank) : []),
+      ...(minion ? mdk.modokMinionDefeated(s, m, textWasBlank) : []),
     );
     add(
       s,
@@ -5106,6 +5130,18 @@ function advanceVillain(
   if (batrocReset) {
     log(s, "Batroc's hit points reset instead of his defeat.", "good");
     add(s, ...batrocReset);
+    return;
+  }
+  // M.O.D.O.K.: with a Holding Cell in play, 2 lock counters come off it and
+  // his hit points reset instead; otherwise the players win.
+  const modokReset = mdk.modokWouldBeDefeated(s, modokPorts);
+  if (modokReset === "won") {
+    endGame(s, true, "M.O.D.O.K. is defeated with every Inhuman free.");
+    return;
+  }
+  if (modokReset) {
+    log(s, "M.O.D.O.K.'s hit points reset instead of his defeat.", "good");
+    add(s, ...modokReset);
     return;
   }
   const priorityKey = `cyclopsPriority:${s.villain.id}:${s.villain.stage}`;
@@ -6009,6 +6045,19 @@ function threat(
         }
         return;
       }
+      const adaptoidUpgrade = mdk.modokMainCompleted(s);
+      if (adaptoidUpgrade) {
+        if (!s.pendingMainCompletion) {
+          s.pendingMainCompletion = true;
+          log(
+            s,
+            "Upgrading Adaptoids would be completed: another Adaptoid upgrade enters play instead.",
+            "bad",
+          );
+          add(s, ...adaptoidUpgrade, E("clearMainCompletion"));
+        }
+        return;
+      }
       const juggernautCharge = jug.jugMainCompleted(s);
       if (juggernautCharge) {
         if (!s.pendingMainCompletion) {
@@ -6366,6 +6415,14 @@ function defeatScheme(
         ),
         ...bwv.blackWidowSchemeDefeated(s, p),
         ...btc.batrocSchemeDefeated(s, p),
+        ...mdk.modokSchemeDefeated(
+          s,
+          p,
+          source.startsWith("hero:")
+            ? source.slice(5)
+            : controller(s, source)?.id || s.activePlayerId,
+          modokPorts,
+        ),
         ...esn.esnSchemeDefeated(
           s,
           p,
@@ -6967,6 +7024,7 @@ function captainPackHasTrait(
   if (mariaHill.mariaHillTrait(s, target, trait)) return true;
   if (trait === "Aerial" && horsemen.horsemenAerial(s, target)) return true;
   if (db.darkBeastTrait(s, target, trait)) return true;
+  if (mdk.modokTrait(s, target, trait)) return true;
   if (jubilee.jubileeEnemyTrait(s, target, trait)) return true;
   if (
     (target === "hero" || target === `hero:${s.activePlayerId}`) &&
@@ -9187,6 +9245,7 @@ export function newGame(config: {
                                 : [
                                       ...bwv.BLACK_WIDOW_MODULAR_SETS,
                                       ...btc.BATROC_MODULAR_SETS,
+                                      ...mdk.MODOK_MODULAR_SETS,
                                     ].some((set) => set === c.set_code)
                                   ? "aos"
                                   : [
@@ -9233,7 +9292,12 @@ export function newGame(config: {
                                                                 )
                                                               ? "gob"
                                                               : "core")) ||
-          (c.set_code === (v.id === "magneto" ? "magneto_villain" : v.id) &&
+          (c.set_code ===
+            (v.id === "magneto"
+              ? "magneto_villain"
+              : v.id === "modok"
+                ? "m.o.d.o.k."
+                : v.id) &&
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
             c.pack_code === scenarioPack) ||
@@ -9356,6 +9420,12 @@ export function newGame(config: {
   if (v.id === "dark_beast") db.darkBeastSetup(s);
   if (v.id === "en_sabah_nur") esn.esnSetup(s);
   if (v.id === "black_widow_villain") bwv.blackWidowSetup(s);
+  if (v.id === "modok")
+    mdk.modokSetup(s, {
+      makePiece: (s, code) => makePiece(s, code),
+      putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+      shuffle: (s, items) => shuffle(s, items),
+    });
   if (v.id === "batroc")
     btc.batrocSetup(s, {
       makePiece: (s, code) => makePiece(s, code),
@@ -10257,6 +10327,7 @@ function initialSetup(s: GameState) {
   setup.push(...db.darkBeastSetupEffects(s));
   setup.push(...esn.esnSetupEffects(s));
   setup.push(...bwv.blackWidowSetupEffects(s));
+  setup.push(...mdk.modokSetupEffects(s));
   // Queue stage setup after scenario setup and before the first turn.
   add(
     s,
@@ -12325,6 +12396,7 @@ export function abilityOptions(
     ...std3.standardIIIActions(s, p, standardIIIPorts),
     ...bwv.blackWidowActions(s, p, blackWidowVillainPorts),
     ...btc.batrocActions(s, p, batrocPorts),
+    ...mdk.modokActions(s, p, modokPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -13897,7 +13969,8 @@ function countActivationBoost(s: GameState, id: string, after: Effect[]): void {
             iceman.icemanBoostExtra(s, p.id) +
             db.darkBeastBoostIcons(s, p) +
             esn.esnBoostIcons(s, p) +
-            btc.batrocBoostIcons(s, p),
+            btc.batrocBoostIcons(s, p) +
+            mdk.modokBoostIcons(s, p),
         ],
       },
     ),
@@ -13962,6 +14035,7 @@ const bwPorts: BlackWidowPorts = {
             db.darkBeastBoostIcons(s, p) +
             esn.esnBoostIcons(s, p) +
             btc.batrocBoostIcons(s, p) +
+            mdk.modokBoostIcons(s, p) +
             scarletWitch.scarletWitchBoostIconBonus(textActiveState(s)) +
             activationAmplify(s));
   },
@@ -17376,6 +17450,54 @@ const batrocPorts: btc.BatrocPorts = {
     s.attachments.push(p!);
   },
   advanceMain: (s) => advanceBatrocMain(s),
+  endGame: (s, won, reason) => endGame(s, won, reason),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+};
+const modokPorts: mdk.ModokPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  reveal: (s, p, playerId) => blackWidowVillainPorts.reveal(s, p, playerId),
+  characters: (s, playerId) => blackWidowVillainPorts.characters(s, playerId),
+  allies: (s, playerId) => friends(seatView(s, playerId)),
+  remainingHP: (s, id) => blackWidowVillainPorts.remainingHP(s, id),
+  putInhuman: (s, p, playerId) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    Object.assign(p, resetPiece(p, true));
+    s.player.inPlay.push(p);
+    add(s, { ...E("allyEnter", { id: p.id }), actorId: playerId });
+    activateSeat(s, previous);
+  },
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  attachBoost: (s, id, enemyId) => {
+    const p = sinisterNativePiece(s, id);
+    need(
+      p &&
+        (enemyId === s.villain.id || s.minions.some((m) => m.id === enemyId)),
+      "Psionic Force Field requires its actual card and a live enemy.",
+    );
+    const activation = s.scheming || s.attack;
+    need(activation, "The actual boost activation is unavailable.");
+    if (!activation!.retainedBoostIds?.includes(id))
+      (activation!.retainedBoostIds ||= []).push(id);
+    // Remove its zones only; the activation keeps its boost receipts.
+    removeEncounterInstance(s, id);
+    p!.attachedTo = enemyId;
+    p!.damage = 0;
+    s.attachments.push(p!);
+  },
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  discardFromHand: (s, playerId, id) =>
+    blackWidowVillainPorts.discardFromHand(s, playerId, id),
+  shuffle: (s, items) => shuffle(s, items),
+  heal: (s, target, n) => {
+    heal(s, target, n, "encounter");
+  },
+  schemeValue: (s, id) => {
+    const p = find(s, id);
+    return p ? enemySCH(s, p, s.activePlayerId) : 0;
+  },
   endGame: (s, won, reason) => endGame(s, won, reason),
   heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
 };
@@ -25585,6 +25707,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     mysterio.mysterioEnemyBonus(s, p) +
     sinisterSix.sixEnemyModifier(s, p, "attack") +
     btc.batrocEnemyStat(s, p, "attack") +
+    mdk.modokEnemyStat(s, p, "attack") +
     wreckingCrew.wreckingCrewAttackBonus(s, p) +
     kang.kangEnemyStat(s, p, "attack", originalPlayerId) +
     nebulaVillain.nebulaEnemyAttack(s, p) +
@@ -26018,6 +26141,7 @@ function boostEffects(s: GameState, p: Piece) {
     esn.esnBoost(s, p) ??
     std3.standardIIIBoost(s, p) ??
     btc.batrocBoost(s, p) ??
+    mdk.modokBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -26380,6 +26504,7 @@ function enemySCH(s: GameState, p: Piece, playerId: string): number {
     mysterio.mysterioEnemyBonus(s, p) +
     sinisterSix.sixEnemyModifier(s, p, "scheme") +
     btc.batrocEnemyStat(s, p, "scheme") +
+    mdk.modokEnemyStat(s, p, "scheme") +
     kang.kangEnemyStat(s, p, "scheme", playerId) +
     sin.sinisterStatBonus(s, p, "scheme") +
     sty.stryfeStatBonus(s, p, "scheme", playerId)
@@ -26500,6 +26625,7 @@ function finishScheme(s: GameState) {
     ...horsemen.horsemenActivated(s, id),
     ...apoc.apocalypseSchemed(s, id),
     ...apoc.apocalypseActivated(s, id, s.activePlayerId),
+    ...mdk.modokActivated(s, id),
     ...hood
       .hoodAfterActivation(s, {
         token: (activation.id ||= `scheme${s.nextId++}`),
@@ -27242,6 +27368,7 @@ function finishAttackAfterDamage(
         !find(s, target),
     ),
     ...apoc.apocalypseActivated(s, a.attacker, recipientId),
+    ...mdk.modokActivated(s, a.attacker),
     ...db.darkBeastAttacked(
       s,
       a.attacker,
@@ -28066,12 +28193,16 @@ function reveal(
       jug.jugRevealCard(
         s,
         p,
-        btc.batrocRevealCard(
+        mdk.modokRevealCard(
           s,
           p,
-          knifeSurge || moduleSurge
-            ? { ...c, text: `Surge.\n${c.text || ""}` }
-            : c,
+          btc.batrocRevealCard(
+            s,
+            p,
+            knifeSurge || moduleSurge
+              ? { ...c, text: `Surge.\n${c.text || ""}` }
+              : c,
+          ),
         ),
       ),
     ),
@@ -28307,6 +28438,8 @@ function reveal(
         ...bwv.AIM_SCIENCE_CODES,
         ...btc.BATROC_CODES,
         ...btc.BATROCS_BRIGADE_CODES,
+        ...mdk.MODOK_CODES,
+        ...mdk.SCIENTIST_SUPREME_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -28570,6 +28703,8 @@ function reveal(
       ...bwv.AIM_SCIENCE_CODES,
       ...btc.BATROC_CODES,
       ...btc.BATROCS_BRIGADE_CODES,
+      ...mdk.MODOK_CODES,
+      ...mdk.SCIENTIST_SUPREME_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -28645,6 +28780,7 @@ function reveal(
       std3.standardIIIReveal(s, p) ??
       bwv.blackWidowReveal(s, p) ??
       btc.batrocReveal(s, p) ??
+      mdk.modokReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -28760,6 +28896,7 @@ function reveal(
     std3.standardIIIReveal(s, p) ??
     bwv.blackWidowReveal(s, p) ??
     btc.batrocReveal(s, p) ??
+    mdk.modokReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -30232,6 +30369,7 @@ function resolve(s: GameState, e: Effect) {
           std3.standardIIIReveal(state, piece) ??
           bwv.blackWidowReveal(state, piece) ??
           btc.batrocReveal(state, piece) ??
+          mdk.modokReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -30398,6 +30536,7 @@ function resolve(s: GameState, e: Effect) {
   if (std3.resolveStandardIIIEffect(s, e, standardIIIPorts)) return;
   if (bwv.resolveBlackWidowVillainEffect(s, e, blackWidowVillainPorts)) return;
   if (btc.resolveBatrocEffect(s, e, batrocPorts)) return;
+  if (mdk.resolveModokEffect(s, e, modokPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -35615,6 +35754,9 @@ function resolve(s: GameState, e: Effect) {
           );
       } else {
         const removed = thwartAction(s, e.target, amount, p.id);
+        // Flying Inhuman and Psionic Inhuman: after this ally thwarts.
+        if (Number(removed) > 0)
+          add(s, ...mdk.modokAllyThwarted(s, p, e.target));
         if (p.code === "50036" && !isTextBlank(s, p) && Number(removed) > 0) {
           const suit = nickFury.nickFurySuit(s);
           if (suit) suit.counters += Number(removed);
@@ -40305,6 +40447,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...std3.standardIIIActions(s, p, standardIIIPorts),
               ...bwv.blackWidowActions(s, p, blackWidowVillainPorts),
               ...btc.batrocActions(s, p, batrocPorts),
+              ...mdk.modokActions(s, p, modokPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -40449,6 +40592,25 @@ export function dispatch(state: GameState, command: Command): GameState {
           ) {
             const selected = db
               .darkBeastActions(s, db.darkBeastActionSource(s, command.id)!)
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
+            add(s, ...selected!.effects);
+          } else if (
+            mdk.modokActionSource(s, command.id) &&
+            mdk
+              .modokActions(
+                s,
+                mdk.modokActionSource(s, command.id)!,
+                modokPorts,
+              )
+              .some((o) => !command.action || o.id === command.action)
+          ) {
+            const selected = mdk
+              .modokActions(
+                s,
+                mdk.modokActionSource(s, command.id)!,
+                modokPorts,
+              )
               .find((o) => !command.action || o.id === command.action);
             need(selected, "This action needs its printed cost.");
             add(s, ...selected!.effects);

@@ -243,3 +243,7 @@ Black Widow's caption says what attacking her does: 1 threat off the main scheme
 ## Batroc's embassy, 2026-11-20
 
 The objective reads "Clear all threat · stage N of 3", since defeating Batroc is not the goal, and his label shows his side and that he resets. Each main scheme stage carries a one-line note on how it is won and lost, with the captives left to free or in play. Alert Level is labelled Low or High Alert, captioned with its threat against the limit, and offers its Hero Action as a button; each Rescued Captive shows its Hero Action on the card.
+
+## M.O.D.O.K.'s holding cells, 2026-11-20
+
+The objective counts the Inhumans freed, "Free the Inhumans · N of 4 free", and reads "Defeat M.O.D.O.K." once all four are free; his caption says that he resets while a Holding Cell is in play and that 2 locks come off it. The Holding Cell is labelled as such and captioned with its locks, the Inhumans still held and the one it frees. Its Hero Action is two buttons, "Spend Energy + Energy · remove a lock" and "Spend 3 · remove a lock", each with the full ability as its accessible name. Each Adaptoid upgrade is labelled and captioned with what it gives every Adaptoid, the main scheme's note counts the upgrades left, and Hostage Situation names the ally it holds.

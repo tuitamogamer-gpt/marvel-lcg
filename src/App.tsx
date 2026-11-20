@@ -419,6 +419,17 @@ import {
   batrocStage,
 } from "./game/batroc";
 import {
+  ADAPTOID_UPGRADE_CAPTIONS,
+  CELLS,
+  HOSTAGE_SITUATION,
+  MODOK_CAPTION,
+  cellCaption,
+  hostageCaption,
+  modok,
+  modokMainNote,
+  modokObjective,
+} from "./game/modok";
+import {
   AERIAL_BOMBARDMENT,
   IMPERVIOUS,
   OUT_OF_REACH,
@@ -2873,6 +2884,19 @@ export default function App() {
                       becomes the Living Bomb, and Stryfe cannot be defeated
                       until it is gone. Extreme Measures and Mutant Insurrection
                       are preselected.
+                    </p>
+                  )}
+                  {villain.id === "modok" && (
+                    <p className="setting-help">
+                      Four Inhumans are locked in the Holding Cell deck, each
+                      Holding Cell with 2 lock counters per player. Remove the
+                      locks with each Holding Cell&apos;s Hero Action, by
+                      defeating Adaptoids, or by knocking M.O.D.O.K. to 0: with
+                      a Holding Cell in play he resets instead and 2 locks come
+                      off. Each freed Inhuman fights beside you; with every
+                      Inhuman free, defeat M.O.D.O.K. to win. Each completed
+                      main scheme brings in another Adaptoid upgrade, and the
+                      last one loses the game. Scientist Supreme is preselected.
                     </p>
                   )}
                   {villain.id === "batroc" && (
@@ -6903,33 +6927,35 @@ function Tabletop({
                   ? `Clear all threat · stage ${escapeStage(s)} of 3`
                   : s.batroc
                     ? `Clear all threat · stage ${batrocStage(s)} of 3`
-                    : s.hela
-                      ? helaOdinCaptive(s)
-                        ? "Free Odin, then defeat Hela"
-                        : "Defeat Hela's Mystic side"
-                      : s.loki
-                        ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
-                        : s.horsemen
-                          ? `Bring all four Horsemen to 0 · ${horsemenVillains(s).filter((v) => !horsemanStanding(s, v)).length} of 4 at 0`
-                          : apocalypse(s)
-                            ? noLongerWorthy(s)
-                              ? "Defeat Apocalypse · No Longer Worthy"
-                              : `Storm the citadel · ${apocalypseCitadel(s)} of 3 cleared`
-                            : s.sinisterSix
-                              ? "Escape: clear the Light at the End"
-                              : s.wreckingCrew
-                                ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
-                                : s.kang
-                                  ? kangObjective(s)
-                                  : magogScenario(s)
-                                    ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
-                                    : s.spiral
-                                      ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
-                                      : s.morlockSiege
-                                        ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
-                                        : onTheRun(s)
-                                          ? `Defeat ${card(s.villain).name} twice · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? 0 : 1} of 2`
-                                          : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                    : s.modok
+                      ? modokObjective(s)
+                      : s.hela
+                        ? helaOdinCaptive(s)
+                          ? "Free Odin, then defeat Hela"
+                          : "Defeat Hela's Mystic side"
+                        : s.loki
+                          ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
+                          : s.horsemen
+                            ? `Bring all four Horsemen to 0 · ${horsemenVillains(s).filter((v) => !horsemanStanding(s, v)).length} of 4 at 0`
+                            : apocalypse(s)
+                              ? noLongerWorthy(s)
+                                ? "Defeat Apocalypse · No Longer Worthy"
+                                : `Storm the citadel · ${apocalypseCitadel(s)} of 3 cleared`
+                              : s.sinisterSix
+                                ? "Escape: clear the Light at the End"
+                                : s.wreckingCrew
+                                  ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
+                                  : s.kang
+                                    ? kangObjective(s)
+                                    : magogScenario(s)
+                                      ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
+                                      : s.spiral
+                                        ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
+                                        : s.morlockSiege
+                                          ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
+                                          : onTheRun(s)
+                                            ? `Defeat ${card(s.villain).name} twice · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? 0 : 1} of 2`
+                                            : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
             <span
@@ -7155,31 +7181,33 @@ function Tabletop({
                           ? `VILLAIN · ${s.difficulty === "expert" ? "B1" : "A1"}${escapeWounded(s) ? " · WOUNDED" : ""}`
                           : s.batroc
                             ? `VILLAIN · ${s.difficulty === "expert" ? "B" : "A"} · RESETS`
-                            : s.hela
-                              ? `VILLAIN · ${s.difficulty === "expert" ? "B" : "A"} · ${helaWounded(s) ? "WOUNDED" : "MYSTIC"}`
-                              : magogScenario(s)
-                                ? `VILLAIN · ${s.villain.code === "39001b" ? "B" : "A"}`
-                                : s.spiral
-                                  ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${spiralCornered(s) ? "CORNERED" : "ESCAPED"}`
-                                  : s.morlockSiege
-                                    ? `VILLAIN · ${s.villain.code.endsWith("b") ? "B" : "A"} · ${morlockRouted(s)} OF ${ROUTED_TO_WIN} ROUTED`
-                                    : onTheRun(s)
-                                      ? `VILLAIN · ${s.villain.code.endsWith("b") ? "B" : "A"} · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? "CONFIDENT" : "DESPERATE"}`
-                                      : juggernaut(s)
-                                        ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${momentum(s)} MOMENTUM`
-                                        : stryfe(s)
-                                          ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · +${commonType(s, s.activePlayerId)} ATK VS YOU`
-                                          : unus(s)
-                                            ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · GENE POOL ${genePoolThreat(s)}`
-                                            : apocalypse(s)
-                                              ? `VILLAIN · STAGE ${apocalypseRoman(apocalypseStage(s))} · ${noLongerWorthy(s) ? "NO LONGER WORTHY" : "REGENERATES"}`
-                                              : enSabahNur(s)
-                                                ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${esnFormLabel(s)}`
-                                                : darkBeast(s)
-                                                  ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${darkBeastSettingLabel(s)}`
-                                                  : misterSinister(s)
-                                                    ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${superpowers(s)} ${superpowers(s) === 1 ? "SUPERPOWER" : "SUPERPOWERS"}`
-                                                    : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
+                            : s.modok
+                              ? `VILLAIN · ${s.difficulty === "expert" ? "B" : "A"}`
+                              : s.hela
+                                ? `VILLAIN · ${s.difficulty === "expert" ? "B" : "A"} · ${helaWounded(s) ? "WOUNDED" : "MYSTIC"}`
+                                : magogScenario(s)
+                                  ? `VILLAIN · ${s.villain.code === "39001b" ? "B" : "A"}`
+                                  : s.spiral
+                                    ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${spiralCornered(s) ? "CORNERED" : "ESCAPED"}`
+                                    : s.morlockSiege
+                                      ? `VILLAIN · ${s.villain.code.endsWith("b") ? "B" : "A"} · ${morlockRouted(s)} OF ${ROUTED_TO_WIN} ROUTED`
+                                      : onTheRun(s)
+                                        ? `VILLAIN · ${s.villain.code.endsWith("b") ? "B" : "A"} · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? "CONFIDENT" : "DESPERATE"}`
+                                        : juggernaut(s)
+                                          ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${momentum(s)} MOMENTUM`
+                                          : stryfe(s)
+                                            ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · +${commonType(s, s.activePlayerId)} ATK VS YOU`
+                                            : unus(s)
+                                              ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · GENE POOL ${genePoolThreat(s)}`
+                                              : apocalypse(s)
+                                                ? `VILLAIN · STAGE ${apocalypseRoman(apocalypseStage(s))} · ${noLongerWorthy(s) ? "NO LONGER WORTHY" : "REGENERATES"}`
+                                                : enSabahNur(s)
+                                                  ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${esnFormLabel(s)}`
+                                                  : darkBeast(s)
+                                                    ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${darkBeastSettingLabel(s)}`
+                                                    : misterSinister(s)
+                                                      ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${superpowers(s)} ${superpowers(s) === 1 ? "SUPERPOWER" : "SUPERPOWERS"}`
+                                                      : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
                     {s.kang ? (
                       <h2>
@@ -7297,6 +7325,9 @@ function Tabletop({
                     )}
                     {batroc(s) && (
                       <span className="stat-caption">{BATROC_CAPTION}</span>
+                    )}
+                    {modok(s) && (
+                      <span className="stat-caption">{MODOK_CAPTION}</span>
                     )}
                     {misterSinister(s) && (
                       <span className="stat-caption">
@@ -7429,7 +7460,7 @@ function Tabletop({
                   <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
-                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen || apocalypse(s) || enSabahNur(s) || blackWidowVillain(s) || batroc(s) ? " magog-scheme" : ""}`}
+                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen || apocalypse(s) || enSabahNur(s) || blackWidowVillain(s) || batroc(s) || modok(s) ? " magog-scheme" : ""}`}
                     style={
                       {
                         "--scheme-actions": mainActionPiece
@@ -7553,6 +7584,9 @@ function Tabletop({
                         {card(horsemanVillain(s, s.horsemen.active)!).name} ·
                         moves on after each activation
                       </p>
+                    )}
+                    {modok(s) && modokMainNote(s) && (
+                      <p className="magog-scheme-note">{modokMainNote(s)}</p>
                     )}
                     {batroc(s) && batrocMainNote(s) && (
                       <p className="magog-scheme-note">{batrocMainNote(s)}</p>
@@ -7750,17 +7784,23 @@ function Tabletop({
                                           ? "SETTING · SHOW"
                                           : DARK_BEAST_SETTING_CAPTIONS[p.code]
                                             ? "ENVIRONMENT · SETTING"
-                                            : p.code === ALERT_LOW
-                                              ? "ENVIRONMENT · LOW ALERT"
-                                              : p.code === ALERT_HIGH
-                                                ? "ENVIRONMENT · HIGH ALERT"
-                                                : p.id === pursued(s)?.id
-                                                  ? "ENVIRONMENT · PERMANENT"
-                                                  : Object.values(
-                                                        MANHATTAN_FLIPPED,
-                                                      ).includes(p.code)
-                                                    ? "ENVIRONMENT · SYMBIOTE"
-                                                    : "ENVIRONMENT"}
+                                            : CELLS.includes(p.code)
+                                              ? "ENVIRONMENT · HOLDING CELL"
+                                              : ADAPTOID_UPGRADE_CAPTIONS[
+                                                    p.code
+                                                  ]
+                                                ? "ENVIRONMENT · ADAPTOID UPGRADE"
+                                                : p.code === ALERT_LOW
+                                                  ? "ENVIRONMENT · LOW ALERT"
+                                                  : p.code === ALERT_HIGH
+                                                    ? "ENVIRONMENT · HIGH ALERT"
+                                                    : p.id === pursued(s)?.id
+                                                      ? "ENVIRONMENT · PERMANENT"
+                                                      : Object.values(
+                                                            MANHATTAN_FLIPPED,
+                                                          ).includes(p.code)
+                                                        ? "ENVIRONMENT · SYMBIOTE"
+                                                        : "ENVIRONMENT"}
                         </span>
                         <strong>{card(p).name}</strong>
                         {p.id === pursued(s)?.id && (
@@ -7908,6 +7948,38 @@ function Tabletop({
                               </button>
                             ))}
                           </>
+                        )}
+                        {CELLS.includes(p.code) && (
+                          <>
+                            <span className="stat-caption">
+                              {cellCaption(s)}
+                            </span>
+                            {abilityOptions(s, p).map((a) => (
+                              <button
+                                key={a.id}
+                                className="ability-button"
+                                disabled={!canUseAction}
+                                aria-label={a.label}
+                                title={a.label}
+                                onClick={() =>
+                                  sendAction({
+                                    type: "ABILITY",
+                                    id: p.id,
+                                    action: a.id,
+                                  })
+                                }
+                              >
+                                {a.id === "unlock-any"
+                                  ? "Spend 3 · remove a lock"
+                                  : `${a.label.replace(/^Hero Action · spend /, "Spend ").replace(/ · remove 1 lock counter$/, "")} · remove a lock`}
+                              </button>
+                            ))}
+                          </>
+                        )}
+                        {ADAPTOID_UPGRADE_CAPTIONS[p.code] && (
+                          <span className="stat-caption">
+                            {ADAPTOID_UPGRADE_CAPTIONS[p.code]}
+                          </span>
                         )}
                         {(p.code === ALERT_LOW || p.code === ALERT_HIGH) && (
                           <>
@@ -8085,6 +8157,11 @@ function Tabletop({
                       {p.code === ANCIENT_RITUAL && (
                         <span className="stat-caption">
                           {ANCIENT_RITUAL_CAPTION}
+                        </span>
+                      )}
+                      {p.code === HOSTAGE_SITUATION && (
+                        <span className="stat-caption">
+                          {hostageCaption(s, p)}
                         </span>
                       )}
                       {p.code === ABDUCT_SUPERHUMANS && (

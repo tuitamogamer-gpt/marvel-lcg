@@ -1705,6 +1705,22 @@ export const VILLAINS = [
       "Batroc cannot be beaten, only slowed down: break into the A.I.M. embassy, free the captives and escape with them before the Alert Level peaks.",
     color: "#2f5d8a",
   },
+  {
+    id: "modok",
+    name: "M.O.D.O.K.",
+    // M.O.D.O.K. (A) in Standard, (B) in Expert: the two sides of one card.
+    codes: ["50103a", "50103b"],
+    schemes: ["50104b"],
+    module: "scientist_supreme",
+    moduleCount: 1,
+    defaultModules: ["scientist_supreme"],
+    difficulty: 4,
+    title: "Upgrading Adaptoids",
+    location: "A.I.M. Island",
+    description:
+      "Free the four Inhumans from M.O.D.O.K.'s Holding Cells before his Adaptoids copy every one of their powers, then bring him down for good.",
+    color: "#6b5a1e",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1806,6 +1822,7 @@ export const MODULES = [
   { id: "a.i.m._abduction", name: "A.I.M. Abduction", difficulty: 3 },
   { id: "a.i.m._science", name: "A.I.M. Science", difficulty: 2 },
   { id: "batrocs_brigade", name: "Batroc's Brigade", difficulty: 3 },
+  { id: "scientist_supreme", name: "Scientist Supreme", difficulty: 3 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(

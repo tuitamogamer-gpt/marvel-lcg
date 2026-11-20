@@ -179,6 +179,8 @@ jobs:
             scripts: test:black-widow-villain
           - group: batroc
             scripts: test:batroc
+          - group: modok
+            scripts: test:modok
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

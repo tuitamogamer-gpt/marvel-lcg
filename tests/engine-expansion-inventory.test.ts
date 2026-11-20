@@ -83,6 +83,7 @@ import {
   BLACK_WIDOW_VILLAIN_CODES,
 } from "../src/game/black-widow-villain";
 import { BATROC_CODES, BATROCS_BRIGADE_CODES } from "../src/game/batroc";
+import { MODOK_CODES, SCIENTIST_SUPREME_CODES } from "../src/game/modok";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -161,6 +162,8 @@ const badoonCodes = new Set<string>([
   ...AIM_SCIENCE_CODES,
   ...BATROC_CODES,
   ...BATROCS_BRIGADE_CODES,
+  ...MODOK_CODES,
+  ...SCIENTIST_SUPREME_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -544,7 +547,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(87);
+    expect(MODULES).toHaveLength(88);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "temporal",
@@ -574,9 +577,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(3324);
-    expect(coverage.unsupportedFaces).toBe(1227);
-    expect(coverage.dedicatedFaces).toBe(2886);
+    expect(coverage.executableFaces).toBe(3356);
+    expect(coverage.unsupportedFaces).toBe(1195);
+    expect(coverage.dedicatedFaces).toBe(2918);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -811,14 +814,14 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
       });
   });
-  it("closes all 148 fifth-batch source faces, Black Widow and Batroc while retaining the other Agents of SHIELD scenario and campaign gaps", () => {
+  it("closes all 148 fifth-batch source faces, Black Widow, Batroc and M.O.D.O.K. while retaining the other Agents of SHIELD scenario and campaign gaps", () => {
     const coverage = inventory.installedRegistryCoverage;
     const shield = coverage.products.find(
       (pack: { code: string }) => pack.code === "aos",
     );
     expect(shield).toMatchObject({
       faceCount: 221,
-      executableFaces: 111,
+      executableFaces: 143,
       installedCardClosure: false,
     });
     // Black Widow with the A.I.M. Abduction and A.I.M. Science sets fills
@@ -867,16 +870,38 @@ describe("complete expansion rules inventory", () => {
         executable: true,
         mechanism: "dedicated-module",
       });
+    // M.O.D.O.K. with the Scientist Supreme set fills positions 103 to 128.
+    const modokFaces = new Set<string>([
+      ...MODOK_CODES,
+      ...SCIENTIST_SUPREME_CODES,
+    ]);
+    expect(modokFaces.size).toBe(32);
+    expect(
+      cards
+        .filter(
+          (entry: { pack_code: string; position: number }) =>
+            entry.pack_code === "aos" &&
+            entry.position >= 103 &&
+            entry.position <= 128,
+        )
+        .map((entry: { code: string }) => entry.code)
+        .sort(),
+    ).toEqual([...modokFaces].sort());
+    for (const code of modokFaces)
+      expect(audited.get(code)?.installedRegistry, code).toMatchObject({
+        executable: true,
+        mechanism: "dedicated-module",
+      });
     expect(shield.unsupportedFaceCodes).toEqual(
       cards
         .filter(
           (entry: { pack_code: string; position: number }) =>
-            entry.pack_code === "aos" && entry.position > 102,
+            entry.pack_code === "aos" && entry.position > 128,
         )
         .map((entry: { code: string }) => entry.code)
         .sort(),
     );
-    expect(shield.unsupportedFaceCodes).toHaveLength(110);
+    expect(shield.unsupportedFaceCodes).toHaveLength(78);
     const slice = cards.filter(
       (entry: { pack_code: string; position: number }) =>
         ["ncrawler", "magneto"].includes(entry.pack_code) ||
@@ -1004,6 +1029,8 @@ describe("complete expansion rules inventory", () => {
         23 -
         // Agents of S.H.I.E.L.D.: Batroc and Batroc's Brigade.
         22 -
+        // Agents of S.H.I.E.L.D.: M.O.D.O.K. and Scientist Supreme.
+        32 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -1176,7 +1203,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(87);
+    expect(coverage.registeredModules).toHaveLength(88);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -1360,7 +1387,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(48);
+    ).toHaveLength(49);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "venom_goblin",
@@ -1607,7 +1634,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(171);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(172);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))
