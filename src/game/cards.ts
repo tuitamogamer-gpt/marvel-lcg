@@ -1689,6 +1689,22 @@ export const VILLAINS = [
       "Yelena Belova is always one step ahead: every attack on her draws a Preparation from the encounter deck, while A.I.M. abducts your allies.",
     color: "#7a2230",
   },
+  {
+    id: "batroc",
+    name: "Batroc",
+    // Batroc (A) in Standard, (B) in Expert: the two sides of one card.
+    codes: ["50086a", "50086b"],
+    schemes: ["50087b"],
+    module: "a.i.m._science",
+    moduleCount: 2,
+    defaultModules: ["a.i.m._science", "batrocs_brigade"],
+    difficulty: 3,
+    title: "Infiltrate A.I.M. Island Embassy",
+    location: "The A.I.M. Island embassy, Washington, D.C.",
+    description:
+      "Batroc cannot be beaten, only slowed down: break into the A.I.M. embassy, free the captives and escape with them before the Alert Level peaks.",
+    color: "#2f5d8a",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1789,6 +1805,7 @@ export const MODULES = [
   { id: "clan_akkaba", name: "Clan Akkaba", difficulty: 3 },
   { id: "a.i.m._abduction", name: "A.I.M. Abduction", difficulty: 3 },
   { id: "a.i.m._science", name: "A.I.M. Science", difficulty: 2 },
+  { id: "batrocs_brigade", name: "Batroc's Brigade", difficulty: 3 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(

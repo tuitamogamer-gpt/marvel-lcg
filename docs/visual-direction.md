@@ -239,3 +239,7 @@ The Encounter sets choice becomes three segments, Original, Standard II and Stan
 ## Black Widow's Preparations, 2026-11-20
 
 Black Widow's caption says what attacking her does: 1 threat off the main scheme, then the top encounter card's Preparation. The Widow's Web carries a one-line note with the threat it gains each villain phase at her stage. Stun Net shows its Hero Action as a button on the card, and an identity caught in it has its basic attack button disabled with the reason in its title. Abduct Superhumans names the allies tucked under it, so the players can see whom they free by defeating it.
+
+## Batroc's embassy, 2026-11-20
+
+The objective reads "Clear all threat · stage N of 3", since defeating Batroc is not the goal, and his label shows his side and that he resets. Each main scheme stage carries a one-line note on how it is won and lost, with the captives left to free or in play. Alert Level is labelled Low or High Alert, captioned with its threat against the limit, and offers its Hero Action as a button; each Rescued Captive shows its Hero Action on the card.

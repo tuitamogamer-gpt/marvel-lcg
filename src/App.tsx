@@ -410,6 +410,15 @@ import {
   widowsWebNote,
 } from "./game/black-widow-villain";
 import {
+  ALERT_HIGH,
+  ALERT_LOW,
+  BATROC_CAPTION,
+  alertCaption,
+  batroc,
+  batrocMainNote,
+  batrocStage,
+} from "./game/batroc";
+import {
   AERIAL_BOMBARDMENT,
   IMPERVIOUS,
   OUT_OF_REACH,
@@ -2864,6 +2873,18 @@ export default function App() {
                       becomes the Living Bomb, and Stryfe cannot be defeated
                       until it is gone. Extreme Measures and Mutant Insurrection
                       are preselected.
+                    </p>
+                  )}
+                  {villain.id === "batroc" && (
+                    <p className="setting-help">
+                      Batroc cannot be defeated: when he would be, his hit
+                      points reset and 6 threat comes off the main scheme. Win
+                      by removing every threat from each stage: break into the
+                      embassy, free the Rescued Captives, then escape with at
+                      least one of them. Alert Level rises as characters fall
+                      and Batroc attacks; at 4 threat per player it flips to
+                      High, and on High it loses the game. A.I.M. Science and
+                      Batroc&apos;s Brigade are preselected.
                     </p>
                   )}
                   {villain.id === "black_widow_villain" && (
@@ -6880,33 +6901,35 @@ function Tabletop({
               <b>
                 {s.escape
                   ? `Clear all threat · stage ${escapeStage(s)} of 3`
-                  : s.hela
-                    ? helaOdinCaptive(s)
-                      ? "Free Odin, then defeat Hela"
-                      : "Defeat Hela's Mystic side"
-                    : s.loki
-                      ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
-                      : s.horsemen
-                        ? `Bring all four Horsemen to 0 · ${horsemenVillains(s).filter((v) => !horsemanStanding(s, v)).length} of 4 at 0`
-                        : apocalypse(s)
-                          ? noLongerWorthy(s)
-                            ? "Defeat Apocalypse · No Longer Worthy"
-                            : `Storm the citadel · ${apocalypseCitadel(s)} of 3 cleared`
-                          : s.sinisterSix
-                            ? "Escape: clear the Light at the End"
-                            : s.wreckingCrew
-                              ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
-                              : s.kang
-                                ? kangObjective(s)
-                                : magogScenario(s)
-                                  ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
-                                  : s.spiral
-                                    ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
-                                    : s.morlockSiege
-                                      ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
-                                      : onTheRun(s)
-                                        ? `Defeat ${card(s.villain).name} twice · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? 0 : 1} of 2`
-                                        : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                  : s.batroc
+                    ? `Clear all threat · stage ${batrocStage(s)} of 3`
+                    : s.hela
+                      ? helaOdinCaptive(s)
+                        ? "Free Odin, then defeat Hela"
+                        : "Defeat Hela's Mystic side"
+                      : s.loki
+                        ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
+                        : s.horsemen
+                          ? `Bring all four Horsemen to 0 · ${horsemenVillains(s).filter((v) => !horsemanStanding(s, v)).length} of 4 at 0`
+                          : apocalypse(s)
+                            ? noLongerWorthy(s)
+                              ? "Defeat Apocalypse · No Longer Worthy"
+                              : `Storm the citadel · ${apocalypseCitadel(s)} of 3 cleared`
+                            : s.sinisterSix
+                              ? "Escape: clear the Light at the End"
+                              : s.wreckingCrew
+                                ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
+                                : s.kang
+                                  ? kangObjective(s)
+                                  : magogScenario(s)
+                                    ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
+                                    : s.spiral
+                                      ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
+                                      : s.morlockSiege
+                                        ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
+                                        : onTheRun(s)
+                                          ? `Defeat ${card(s.villain).name} twice · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? 0 : 1} of 2`
+                                          : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
             <span
@@ -7130,31 +7153,33 @@ function Tabletop({
                         ? `VILLAIN · SIDE ${s.difficulty === "expert" ? "B" : "A"}`
                         : s.escape
                           ? `VILLAIN · ${s.difficulty === "expert" ? "B1" : "A1"}${escapeWounded(s) ? " · WOUNDED" : ""}`
-                          : s.hela
-                            ? `VILLAIN · ${s.difficulty === "expert" ? "B" : "A"} · ${helaWounded(s) ? "WOUNDED" : "MYSTIC"}`
-                            : magogScenario(s)
-                              ? `VILLAIN · ${s.villain.code === "39001b" ? "B" : "A"}`
-                              : s.spiral
-                                ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${spiralCornered(s) ? "CORNERED" : "ESCAPED"}`
-                                : s.morlockSiege
-                                  ? `VILLAIN · ${s.villain.code.endsWith("b") ? "B" : "A"} · ${morlockRouted(s)} OF ${ROUTED_TO_WIN} ROUTED`
-                                  : onTheRun(s)
-                                    ? `VILLAIN · ${s.villain.code.endsWith("b") ? "B" : "A"} · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? "CONFIDENT" : "DESPERATE"}`
-                                    : juggernaut(s)
-                                      ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${momentum(s)} MOMENTUM`
-                                      : stryfe(s)
-                                        ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · +${commonType(s, s.activePlayerId)} ATK VS YOU`
-                                        : unus(s)
-                                          ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · GENE POOL ${genePoolThreat(s)}`
-                                          : apocalypse(s)
-                                            ? `VILLAIN · STAGE ${apocalypseRoman(apocalypseStage(s))} · ${noLongerWorthy(s) ? "NO LONGER WORTHY" : "REGENERATES"}`
-                                            : enSabahNur(s)
-                                              ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${esnFormLabel(s)}`
-                                              : darkBeast(s)
-                                                ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${darkBeastSettingLabel(s)}`
-                                                : misterSinister(s)
-                                                  ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${superpowers(s)} ${superpowers(s) === 1 ? "SUPERPOWER" : "SUPERPOWERS"}`
-                                                  : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
+                          : s.batroc
+                            ? `VILLAIN · ${s.difficulty === "expert" ? "B" : "A"} · RESETS`
+                            : s.hela
+                              ? `VILLAIN · ${s.difficulty === "expert" ? "B" : "A"} · ${helaWounded(s) ? "WOUNDED" : "MYSTIC"}`
+                              : magogScenario(s)
+                                ? `VILLAIN · ${s.villain.code === "39001b" ? "B" : "A"}`
+                                : s.spiral
+                                  ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${spiralCornered(s) ? "CORNERED" : "ESCAPED"}`
+                                  : s.morlockSiege
+                                    ? `VILLAIN · ${s.villain.code.endsWith("b") ? "B" : "A"} · ${morlockRouted(s)} OF ${ROUTED_TO_WIN} ROUTED`
+                                    : onTheRun(s)
+                                      ? `VILLAIN · ${s.villain.code.endsWith("b") ? "B" : "A"} · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? "CONFIDENT" : "DESPERATE"}`
+                                      : juggernaut(s)
+                                        ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${momentum(s)} MOMENTUM`
+                                        : stryfe(s)
+                                          ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · +${commonType(s, s.activePlayerId)} ATK VS YOU`
+                                          : unus(s)
+                                            ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · GENE POOL ${genePoolThreat(s)}`
+                                            : apocalypse(s)
+                                              ? `VILLAIN · STAGE ${apocalypseRoman(apocalypseStage(s))} · ${noLongerWorthy(s) ? "NO LONGER WORTHY" : "REGENERATES"}`
+                                              : enSabahNur(s)
+                                                ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${esnFormLabel(s)}`
+                                                : darkBeast(s)
+                                                  ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${darkBeastSettingLabel(s)}`
+                                                  : misterSinister(s)
+                                                    ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${superpowers(s)} ${superpowers(s) === 1 ? "SUPERPOWER" : "SUPERPOWERS"}`
+                                                    : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
                     {s.kang ? (
                       <h2>
@@ -7269,6 +7294,9 @@ function Tabletop({
                       <span className="stat-caption">
                         {BLACK_WIDOW_CAPTION}
                       </span>
+                    )}
+                    {batroc(s) && (
+                      <span className="stat-caption">{BATROC_CAPTION}</span>
                     )}
                     {misterSinister(s) && (
                       <span className="stat-caption">
@@ -7401,7 +7429,7 @@ function Tabletop({
                   <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
-                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen || apocalypse(s) || enSabahNur(s) || blackWidowVillain(s) ? " magog-scheme" : ""}`}
+                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen || apocalypse(s) || enSabahNur(s) || blackWidowVillain(s) || batroc(s) ? " magog-scheme" : ""}`}
                     style={
                       {
                         "--scheme-actions": mainActionPiece
@@ -7525,6 +7553,9 @@ function Tabletop({
                         {card(horsemanVillain(s, s.horsemen.active)!).name} ·
                         moves on after each activation
                       </p>
+                    )}
+                    {batroc(s) && batrocMainNote(s) && (
+                      <p className="magog-scheme-note">{batrocMainNote(s)}</p>
                     )}
                     {blackWidowVillain(s) && s.scheme.code === WIDOWS_WEB && (
                       <p className="magog-scheme-note">{widowsWebNote(s)}</p>
@@ -7719,13 +7750,17 @@ function Tabletop({
                                           ? "SETTING · SHOW"
                                           : DARK_BEAST_SETTING_CAPTIONS[p.code]
                                             ? "ENVIRONMENT · SETTING"
-                                            : p.id === pursued(s)?.id
-                                              ? "ENVIRONMENT · PERMANENT"
-                                              : Object.values(
-                                                    MANHATTAN_FLIPPED,
-                                                  ).includes(p.code)
-                                                ? "ENVIRONMENT · SYMBIOTE"
-                                                : "ENVIRONMENT"}
+                                            : p.code === ALERT_LOW
+                                              ? "ENVIRONMENT · LOW ALERT"
+                                              : p.code === ALERT_HIGH
+                                                ? "ENVIRONMENT · HIGH ALERT"
+                                                : p.id === pursued(s)?.id
+                                                  ? "ENVIRONMENT · PERMANENT"
+                                                  : Object.values(
+                                                        MANHATTAN_FLIPPED,
+                                                      ).includes(p.code)
+                                                    ? "ENVIRONMENT · SYMBIOTE"
+                                                    : "ENVIRONMENT"}
                         </span>
                         <strong>{card(p).name}</strong>
                         {p.id === pursued(s)?.id && (
@@ -7870,6 +7905,31 @@ function Tabletop({
                                 }
                               >
                                 Exhaust a character · remove sand
+                              </button>
+                            ))}
+                          </>
+                        )}
+                        {(p.code === ALERT_LOW || p.code === ALERT_HIGH) && (
+                          <>
+                            <span className="stat-caption">
+                              {alertCaption(s)}
+                            </span>
+                            {abilityOptions(s, p).map((a) => (
+                              <button
+                                key={a.id}
+                                className="ability-button"
+                                disabled={!canUseAction}
+                                aria-label={a.label}
+                                title={a.label}
+                                onClick={() =>
+                                  sendAction({
+                                    type: "ABILITY",
+                                    id: p.id,
+                                    action: a.id,
+                                  })
+                                }
+                              >
+                                Spend 1 resource · remove 1 threat
                               </button>
                             ))}
                           </>

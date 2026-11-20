@@ -75,6 +75,7 @@ import {
   AIM_SCIENCE_CODES,
   BLACK_WIDOW_VILLAIN_CODES,
 } from "./black-widow-villain.js";
+import { BATROC_CODES, BATROCS_BRIGADE_CODES } from "./batroc.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -382,6 +383,8 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...BLACK_WIDOW_VILLAIN_CODES,
   ...AIM_ABDUCTION_CODES,
   ...AIM_SCIENCE_CODES,
+  ...BATROC_CODES,
+  ...BATROCS_BRIGADE_CODES,
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

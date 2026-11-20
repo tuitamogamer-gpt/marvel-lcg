@@ -314,6 +314,7 @@ export interface GameState {
   darkBeast?: import("./dark-beast.js").DarkBeastState;
   enSabahNur?: import("./en-sabah-nur.js").EnSabahNurState;
   blackWidowVillain?: import("./black-widow-villain.js").BlackWidowVillainState;
+  batroc?: import("./batroc.js").BatrocState;
   venomGoblin?: import("./venom-goblin.js").VenomGoblinState;
   /** Across the Mojoverse: the show deck. */
   spiral?: import("./spiral.js").SpiralState;

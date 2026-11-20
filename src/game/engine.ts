@@ -37,6 +37,7 @@ import * as db from "./dark-beast.js";
 import * as esn from "./en-sabah-nur.js";
 import * as std3 from "./standard-iii.js";
 import * as bwv from "./black-widow-villain.js";
+import * as btc from "./batroc.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -633,6 +634,7 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
     !!(s && typeof p !== "string" && apoc.apocalypseKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && db.darkBeastKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && bwv.blackWidowKeyword(s, p, name) > 0) ||
+    !!(s && typeof p !== "string" && btc.batrocKeyword(s, p, name) > 0) ||
     !!(
       s &&
       typeof p !== "string" &&
@@ -1028,6 +1030,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           badoon.badoonKeyword(s, p, "Piercing") ||
           ronan.ronanKeyword(s, p, "Piercing") ||
           taskmaster.taskmasterKeyword(s, p, "Piercing") ||
+          btc.batrocKeyword(s, p, "Piercing") > 0 ||
           storm.stormPiercing(s, p) ||
           redSkullModules.redSkullPiercing(s, p.id) ||
           crossbones.crossbonesPiercing(s, p.id, card) ||
@@ -1058,6 +1061,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           badoon.badoonKeyword(s, p, "Ranged") ||
           taskmaster.taskmasterKeyword(s, p, "Ranged") ||
           hoodModular.hoodModularKeyword(s, p, "Ranged") > 0 ||
+          btc.batrocKeyword(s, p, "Ranged") > 0 ||
           granted.ranged ||
           (s.attack?.attacker === p.id && s.attack.experimentalWeaponsRanged) ||
           (s.attack?.attacker === p.id && s.attack.redSkullModulesRanged) ||
@@ -1380,6 +1384,7 @@ export function allyCount(s: GameState) {
       !p.pendingDefeat &&
       !(p.code === mojoVillain.LONGSHOT && !isTextBlank(s, p)) &&
       !morlock.morlockAllyExcluded(s, p) &&
+      !btc.batrocAllyExcluded(s, p) &&
       !jug.jugAllyExcluded(s, p) &&
       !antPack.antManPackAllyExcluded(s, p) &&
       !magnetoHero.magnetoHeroNewModifiers(s, p, captainPackHasTrait)
@@ -2127,6 +2132,9 @@ function movePieceFromPlay(
   // Morlock: Victory -1.
   else if (p.code === morlock.MORLOCK && victory)
     (s.victoryDisplay ||= []).push(resetPiece(p));
+  // Rescued Captive: Victory -1.
+  else if (p.code === btc.CAPTIVE && victory)
+    (s.victoryDisplay ||= []).push(resetPiece(p));
   else if (isPlayerSideScheme(p) && victory)
     (s.victoryDisplay ||= []).push(resetPiece(p));
   else if (
@@ -2230,6 +2238,26 @@ function advanceEscapeMain(s: GameState, next: Piece) {
       .escapeMainRevealed(s, next)
       .map((e) => ({ ...e, actorId: s.firstPlayerId })),
     E("escape:main-back", { actorId: s.firstPlayerId }),
+    E("clearMainCompletion"),
+  );
+}
+/** Batroc: the players advance the main scheme to its next stage. */
+function advanceBatrocMain(s: GameState) {
+  const next = btc.batrocNextMain(s);
+  if (!next || !s.batroc) return;
+  s.pendingMainCompletion = true;
+  discardMainAttachments(s);
+  s.removed.push(resetPiece(s.batroc.currentMain));
+  s.batroc.currentMain = next;
+  s.scheme.index++;
+  s.scheme.code = next.code;
+  s.scheme.threat = 0;
+  log(s, `The players advance the main scheme: ${card(next).name}.`, "good");
+  add(
+    s,
+    ...btc
+      .batrocMainRevealed(s, next)
+      .map((e) => ({ ...e, actorId: s.firstPlayerId })),
     E("clearMainCompletion"),
   );
 }
@@ -2685,6 +2713,7 @@ function check(s: GameState) {
   const escapeNext = escape.escapeLastThreatRemoved(s, escapePorts);
   if (escapeNext === "won") return;
   if (escapeNext) advanceEscapeMain(s, escapeNext);
+  if (s.batroc && btc.batrocCheck(s, batrocPorts)) return;
   if (zeroTolerance.zeroToleranceCheckLoss(s, zeroTolerancePorts)) return;
   // Simultaneous Spectrum batches place every prepared packet before checking
   // hero elimination. This flag exists only during the synchronous commit.
@@ -2828,6 +2857,7 @@ function check(s: GameState) {
     seat.eliminated = true;
     seat.ended = true;
     nebulaVillain.nebulaPlayerEliminated(s, seat.id);
+    add(s, ...btc.batrocCharacterDefeated(s, "hero"));
     ebonyMaw.ebonyMawPlayerEliminated(s, seat.id, discardPiece);
     removeDefeatedIronheartIdentities(s, seat);
     removeDefeatedSpdrIdentities(s, seat);
@@ -4252,6 +4282,9 @@ function applyDamage(
       n = mojoReplaced.amount;
       if (!n) return none;
     }
+    // Heightened Reflexes: 2 of the damage Batroc would take is prevented.
+    n = btc.batrocDamageTaken(s, target, n, batrocPorts);
+    if (!n) return none;
     const infinite = hela.helaInfiniteHp(s);
     const excess = infinite ? 0 : Math.max(0, n - s.villain.hp);
     const result = {
@@ -4683,6 +4716,8 @@ function defeatCharacter(
           : controller(s, source)?.id || s.activePlayerId,
       )
     : [];
+  // Zaran: the card tucked under him goes to its owner's discard pile.
+  if (minion) btc.batrocMinionDefeating(s, m);
   // Abyss: his facedown cards go to their owners' discard piles.
   if (minion && m.storedCards?.length && m.code === apoc.ABYSS)
     for (const q of m.storedCards.splice(0)) {
@@ -4733,6 +4768,9 @@ function defeatCharacter(
   // Morlock: Victory -1.
   else if (!minion && morlock.morlockVictoryAlly(s, m) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
+  // Rescued Captive: Victory -1.
+  else if (!minion && btc.batrocVictoryAlly(s, m) && !textWasBlank)
+    movePieceFromPlay(s, m.id, false, undefined, true);
   else discardPiece(s, m.id);
   if (!textWasBlank)
     add(s, ...deadpool.deadpoolDefeated(s, m, source, allyController));
@@ -4740,6 +4778,9 @@ function defeatCharacter(
   // Gene Pool and Prelate Sidearm: after an ally is defeated.
   if (!minion && card(m).type_code === "ally")
     add(s, ...unus.unusAllyDefeated(s, source, enemyAttack));
+  // Alert Level: after a character is defeated, except by consequential
+  // damage.
+  add(s, ...btc.batrocCharacterDefeated(s, source));
   if (!minion && enemyAttack && sabretoothDefeat?.attackerId === source) {
     delete (m as SabretoothAttackDefeatPiece).sabretoothAttackDefeatReceipt;
     add(
@@ -4796,6 +4837,7 @@ function defeatCharacter(
       ...geneticExperiments,
       ...darkBeastDefeat,
       ...(minion ? esn.esnMinionDefeated(s, m) : []),
+      ...(minion ? btc.batrocMinionDefeated(s, m, textWasBlank) : []),
     );
     add(
       s,
@@ -5052,6 +5094,18 @@ function advanceVillain(
   if (escaped === "immune") return;
   if (escaped === "defeated") {
     endGame(s, true, "Collector is defeated. The heroes escape the museum.");
+    return;
+  }
+  // Batroc: his hit points reset instead of his defeat, and 6 threat comes
+  // off the main scheme.
+  const batrocReset = btc.batrocWouldBeDefeated(s);
+  if (batrocReset === "defeated") {
+    endGame(s, true, "Batroc is defeated. The embassy is open to the heroes.");
+    return;
+  }
+  if (batrocReset) {
+    log(s, "Batroc's hit points reset instead of his defeat.", "good");
+    add(s, ...batrocReset);
     return;
   }
   const priorityKey = `cyclopsPriority:${s.villain.id}:${s.villain.stage}`;
@@ -6311,6 +6365,7 @@ function defeatScheme(
             : controller(s, source)?.id || s.activePlayerId,
         ),
         ...bwv.blackWidowSchemeDefeated(s, p),
+        ...btc.batrocSchemeDefeated(s, p),
         ...esn.esnSchemeDefeated(
           s,
           p,
@@ -9129,9 +9184,10 @@ export function newGame(config: {
                                     ...esn.EN_SABAH_NUR_MODULAR_SETS,
                                   ].some((set) => set === c.set_code)
                                 ? "aoa"
-                                : bwv.BLACK_WIDOW_MODULAR_SETS.some(
-                                      (set) => set === c.set_code,
-                                    )
+                                : [
+                                      ...bwv.BLACK_WIDOW_MODULAR_SETS,
+                                      ...btc.BATROC_MODULAR_SETS,
+                                    ].some((set) => set === c.set_code)
                                   ? "aos"
                                   : [
                                         "temporal",
@@ -9300,6 +9356,11 @@ export function newGame(config: {
   if (v.id === "dark_beast") db.darkBeastSetup(s);
   if (v.id === "en_sabah_nur") esn.esnSetup(s);
   if (v.id === "black_widow_villain") bwv.blackWidowSetup(s);
+  if (v.id === "batroc")
+    btc.batrocSetup(s, {
+      makePiece: (s, code) => makePiece(s, code),
+      putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+    });
   // Ancient Ritual (Permanent, Setup) begins the game in play with the
   // Clan Akkaba set.
   if (selectedModules.includes("clan_akkaba"))
@@ -12263,6 +12324,7 @@ export function abilityOptions(
     ...db.darkBeastActions(s, p),
     ...std3.standardIIIActions(s, p, standardIIIPorts),
     ...bwv.blackWidowActions(s, p, blackWidowVillainPorts),
+    ...btc.batrocActions(s, p, batrocPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -13834,7 +13896,8 @@ function countActivationBoost(s: GameState, id: string, after: Effect[]): void {
           (card(p).boost || 0) +
             iceman.icemanBoostExtra(s, p.id) +
             db.darkBeastBoostIcons(s, p) +
-            esn.esnBoostIcons(s, p),
+            esn.esnBoostIcons(s, p) +
+            btc.batrocBoostIcons(s, p),
         ],
       },
     ),
@@ -13898,6 +13961,7 @@ const bwPorts: BlackWidowPorts = {
             iceman.icemanBoostExtra(s, p.id) +
             db.darkBeastBoostIcons(s, p) +
             esn.esnBoostIcons(s, p) +
+            btc.batrocBoostIcons(s, p) +
             scarletWitch.scarletWitchBoostIconBonus(textActiveState(s)) +
             activationAmplify(s));
   },
@@ -17278,6 +17342,42 @@ const blackWidowVillainPorts: bwv.BlackWidowVillainPorts = {
   },
   changeToHero: (s, playerId) =>
     add(s, { ...E("flip", { counts: false }), actorId: playerId }),
+};
+const batrocPorts: btc.BatrocPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  reveal: (s, p, playerId) => blackWidowVillainPorts.reveal(s, p, playerId),
+  characters: (s, playerId) => blackWidowVillainPorts.characters(s, playerId),
+  allies: (s, playerId) => friends(seatView(s, playerId)),
+  remainingHP: (s, id) => blackWidowVillainPorts.remainingHP(s, id),
+  putCaptive: (s, p, playerId) => {
+    const previous = s.activePlayerId;
+    activateSeat(s, playerId);
+    Object.assign(p, resetPiece(p, true));
+    p.exhausted = true;
+    s.player.inPlay.push(p);
+    add(s, { ...E("allyEnter", { id: p.id }), actorId: playerId });
+    activateSeat(s, previous);
+  },
+  attachBoost: (s, id, enemyId) => {
+    const p = sinisterNativePiece(s, id);
+    need(
+      p?.code === btc.REFLEXES && enemyId === s.villain.id,
+      "Heightened Reflexes requires its actual card and the villain.",
+    );
+    const activation = s.scheming || s.attack;
+    need(activation, "The actual boost activation is unavailable.");
+    if (!activation!.retainedBoostIds?.includes(id))
+      (activation!.retainedBoostIds ||= []).push(id);
+    // Remove its zones only; the activation keeps its boost receipts.
+    removeEncounterInstance(s, id);
+    p!.attachedTo = enemyId;
+    p!.counters = 4;
+    s.attachments.push(p!);
+  },
+  advanceMain: (s) => advanceBatrocMain(s),
+  endGame: (s, won, reason) => endGame(s, won, reason),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
 };
 const standardIIIPorts: std3.StandardIIIPorts = {
   ...mutagenPorts,
@@ -25154,6 +25254,45 @@ function enemyAttack(
       }
     }
   }
+  // Extract Captives: an enemy attack goes to a Rescued Captive instead.
+  if (!friendlySource) {
+    const captives = btc.batrocAttackRedirect(s, originalTarget);
+    if (captives.length) {
+      const resume = (c: { p: Piece; playerId: string }) =>
+        E("enemyAttack", {
+          id,
+          extra,
+          activation: activation
+            ? { ...activation, playerId: c.playerId }
+            : undefined,
+          originalTarget: c.p.id,
+          actorId: c.playerId,
+        });
+      if (captives.length === 1 && captives[0].playerId === s.activePlayerId)
+        originalTarget = captives[0].p.id;
+      else {
+        if (captives.length === 1) add(s, resume(captives[0]));
+        else
+          choose(
+            s,
+            "Extract Captives",
+            `${card(p).name} attacks a Rescued Captive instead. Choose the captive.`,
+            captives.map((c) =>
+              option(
+                c.p.id,
+                s.playerCount > 1
+                  ? `Rescued Captive · ${heroCard(seatView(s, c.playerId)).name}`
+                  : "Rescued Captive",
+                [resume(c)],
+                undefined,
+                c.p.code,
+              ),
+            ),
+          );
+        return;
+      }
+    }
+  }
   // Morlock: when an enemy attacks you, it attacks a Morlock you control
   // instead.
   if (!friendlySource && !originalTarget) {
@@ -25368,6 +25507,7 @@ function enemyAttack(
       ...apoc.apocalypseAttackInitiated(s, id, s.attack.originalPlayerId!),
       ...db.darkBeastAttackInitiated(s, id, s.attack.originalPlayerId!),
       ...db.darkBeastMinionAttackInitiated(s, id, s.attack.originalPlayerId!),
+      ...btc.batrocAttackInitiated(s, id),
       ...esn.esnActivationInitiated(
         s,
         id,
@@ -25444,6 +25584,7 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     hela.helaVillainStat(s, p) +
     mysterio.mysterioEnemyBonus(s, p) +
     sinisterSix.sixEnemyModifier(s, p, "attack") +
+    btc.batrocEnemyStat(s, p, "attack") +
     wreckingCrew.wreckingCrewAttackBonus(s, p) +
     kang.kangEnemyStat(s, p, "attack", originalPlayerId) +
     nebulaVillain.nebulaEnemyAttack(s, p) +
@@ -25876,6 +26017,7 @@ function boostEffects(s: GameState, p: Piece) {
     db.darkBeastBoost(s, p) ??
     esn.esnBoost(s, p) ??
     std3.standardIIIBoost(s, p) ??
+    btc.batrocBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -26237,6 +26379,7 @@ function enemySCH(s: GameState, p: Piece, playerId: string): number {
     hela.helaVillainStat(s, p) +
     mysterio.mysterioEnemyBonus(s, p) +
     sinisterSix.sixEnemyModifier(s, p, "scheme") +
+    btc.batrocEnemyStat(s, p, "scheme") +
     kang.kangEnemyStat(s, p, "scheme", playerId) +
     sin.sinisterStatBonus(s, p, "scheme") +
     sty.stryfeStatBonus(s, p, "scheme", playerId)
@@ -26628,7 +26771,8 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
       collector.collectorIndirectAttack(s, p) ||
       hoodModular.hoodModularIndirectAttack(s, p.id) ||
       sandman.sandmanIndirectAttack(s, p.id) ||
-      venomGoblin.venomGoblinIndirectAttack(s, p.id))
+      venomGoblin.venomGoblinIndirectAttack(s, p.id) ||
+      btc.batrocIndirectAttack(s, p.id))
   ) {
     add(
       s,
@@ -26643,7 +26787,9 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
               ? "Sand Blast"
               : venomGoblin.venomGoblinIndirectAttack(s, p.id)
                 ? "Symbiotic Monstrosity"
-                : "Hook, Line, and Sinker",
+                : btc.batrocIndirectAttack(s, p.id)
+                  ? "Rapido"
+                  : "Hook, Line, and Sinker",
         zzzaxBatchId: `angel-attack:${s.nextId++}`,
         zzzaxBatchOwner: s.activePlayerId,
         attackDamage: true,
@@ -26652,7 +26798,8 @@ function finishAttack(s: GameState, effect: Effect = E("finishAttack")) {
           !collector.collectorIndirectAttack(s, p) &&
           !hoodModular.hoodModularIndirectAttack(s, p.id) &&
           !sandman.sandmanIndirectAttack(s, p.id) &&
-          !venomGoblin.venomGoblinIndirectAttack(s, p.id),
+          !venomGoblin.venomGoblinIndirectAttack(s, p.id) &&
+          !btc.batrocIndirectAttack(s, p.id),
         zzzaxAfter: E("ironspiderAttackComplete", {
           attack: structuredClone(a),
           target,
@@ -27105,6 +27252,7 @@ function finishAttackAfterDamage(
         a.gmwReturnedDefender !== target &&
         !find(s, target),
     ),
+    ...btc.batrocAttacked(s, a.attacker),
     ...esn.esnAttacked(
       s,
       a.attacker,
@@ -27871,6 +28019,11 @@ function reveal(
         );
     }
     opts.push(
+      ...btc.batrocRevealInterrupts(s, p, s.activePlayerId, (s, playerId, n) =>
+        affordable(seatView(s, playerId), n),
+      ),
+    );
+    opts.push(
       ...ronan.ronanRevealInterrupts(
         s,
         p,
@@ -27913,9 +28066,13 @@ function reveal(
       jug.jugRevealCard(
         s,
         p,
-        knifeSurge || moduleSurge
-          ? { ...c, text: `Surge.\n${c.text || ""}` }
-          : c,
+        btc.batrocRevealCard(
+          s,
+          p,
+          knifeSurge || moduleSurge
+            ? { ...c, text: `Surge.\n${c.text || ""}` }
+            : c,
+        ),
       ),
     ),
   );
@@ -28148,6 +28305,8 @@ function reveal(
         ...bwv.BLACK_WIDOW_VILLAIN_CODES,
         ...bwv.AIM_ABDUCTION_CODES,
         ...bwv.AIM_SCIENCE_CODES,
+        ...btc.BATROC_CODES,
+        ...btc.BATROCS_BRIGADE_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -28409,6 +28568,8 @@ function reveal(
       ...bwv.BLACK_WIDOW_VILLAIN_CODES,
       ...bwv.AIM_ABDUCTION_CODES,
       ...bwv.AIM_SCIENCE_CODES,
+      ...btc.BATROC_CODES,
+      ...btc.BATROCS_BRIGADE_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -28483,6 +28644,7 @@ function reveal(
       esn.esnReveal(s, p) ??
       std3.standardIIIReveal(s, p) ??
       bwv.blackWidowReveal(s, p) ??
+      btc.batrocReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -28597,6 +28759,7 @@ function reveal(
     esn.esnReveal(s, p) ??
     std3.standardIIIReveal(s, p) ??
     bwv.blackWidowReveal(s, p) ??
+    btc.batrocReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -30068,6 +30231,7 @@ function resolve(s: GameState, e: Effect) {
           esn.esnReveal(state, piece) ??
           std3.standardIIIReveal(state, piece) ??
           bwv.blackWidowReveal(state, piece) ??
+          btc.batrocReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -30233,6 +30397,7 @@ function resolve(s: GameState, e: Effect) {
   if (esn.resolveEnSabahNurEffect(s, e, enSabahNurPorts)) return;
   if (std3.resolveStandardIIIEffect(s, e, standardIIIPorts)) return;
   if (bwv.resolveBlackWidowVillainEffect(s, e, blackWidowVillainPorts)) return;
+  if (btc.resolveBatrocEffect(s, e, batrocPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -40139,6 +40304,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...db.darkBeastActions(s, p),
               ...std3.standardIIIActions(s, p, standardIIIPorts),
               ...bwv.blackWidowActions(s, p, blackWidowVillainPorts),
+              ...btc.batrocActions(s, p, batrocPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -40283,6 +40449,25 @@ export function dispatch(state: GameState, command: Command): GameState {
           ) {
             const selected = db
               .darkBeastActions(s, db.darkBeastActionSource(s, command.id)!)
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
+            add(s, ...selected!.effects);
+          } else if (
+            btc.batrocActionSource(s, command.id) &&
+            btc
+              .batrocActions(
+                s,
+                btc.batrocActionSource(s, command.id)!,
+                batrocPorts,
+              )
+              .some((o) => !command.action || o.id === command.action)
+          ) {
+            const selected = btc
+              .batrocActions(
+                s,
+                btc.batrocActionSource(s, command.id)!,
+                batrocPorts,
+              )
               .find((o) => !command.action || o.id === command.action);
             need(selected, "This action needs its printed cost.");
             add(s, ...selected!.effects);
