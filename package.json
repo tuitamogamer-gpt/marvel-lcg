@@ -97,7 +97,8 @@
     "test:stryfe": "node scripts/stryfe-check.mjs",
     "test:unus": "node scripts/unus-check.mjs",
     "test:four-horsemen": "node scripts/four-horsemen-check.mjs",
-    "test:apocalypse": "node scripts/apocalypse-check.mjs"
+    "test:apocalypse": "node scripts/apocalypse-check.mjs",
+    "test:dark-beast": "node scripts/dark-beast-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

@@ -65,6 +65,12 @@ import {
   DARK_RIDERS_CODES,
   PRELATE_CODES,
 } from "../src/game/apocalypse";
+import {
+  BLUE_MOON_CODES,
+  DARK_BEAST_SCRIPT_CODES,
+  GENOSHA_CODES,
+  SAVAGE_LAND_CODES,
+} from "../src/game/dark-beast";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -130,6 +136,10 @@ const badoonCodes = new Set<string>([
   ...APOCALYPSE_SCRIPT_CODES,
   ...PRELATE_CODES,
   ...DARK_RIDERS_CODES,
+  ...DARK_BEAST_SCRIPT_CODES,
+  ...SAVAGE_LAND_CODES,
+  ...GENOSHA_CODES,
+  ...BLUE_MOON_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -513,7 +523,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(79);
+    expect(MODULES).toHaveLength(82);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "temporal",
@@ -543,9 +553,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(3214);
-    expect(coverage.unsupportedFaces).toBe(1337);
-    expect(coverage.dedicatedFaces).toBe(2776);
+    expect(coverage.executableFaces).toBe(3244);
+    expect(coverage.unsupportedFaces).toBe(1307);
+    expect(coverage.dedicatedFaces).toBe(2806);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -611,14 +621,14 @@ describe("complete expansion rules inventory", () => {
       ).registered,
     ).toBe(true);
   });
-  it("closes the Age of Apocalypse hero slice, Unus, Four Horsemen, Apocalypse and both complete retail Hero Packs", () => {
+  it("closes the Age of Apocalypse hero slice, Unus, Four Horsemen, Apocalypse, Dark Beast and both complete retail Hero Packs", () => {
     const products = inventory.installedRegistryCoverage.products;
     const apocalypse = products.find(
       (pack: { code: string }) => pack.code === "aoa",
     );
     expect(apocalypse).toMatchObject({
       faceCount: 220,
-      executableFaces: 129,
+      executableFaces: 159,
       installedCardClosure: false,
     });
     // Unus with the Infinites and Dystopian Nightmare sets fills positions
@@ -676,6 +686,26 @@ describe("complete expansion rules inventory", () => {
         .map((entry: { code: string }) => entry.code)
         .sort(),
     ).toEqual([...apocalypseFaces].sort());
+    // Dark Beast with the Savage Land, Genosha and Blue Moon sets fills
+    // positions 118 to 146.
+    const darkBeastFaces = new Set<string>([
+      ...DARK_BEAST_SCRIPT_CODES,
+      ...SAVAGE_LAND_CODES,
+      ...GENOSHA_CODES,
+      ...BLUE_MOON_CODES,
+    ]);
+    expect(darkBeastFaces.size).toBe(30);
+    expect(
+      cards
+        .filter(
+          (entry: { pack_code: string; position: number }) =>
+            entry.pack_code === "aoa" &&
+            entry.position > 117 &&
+            entry.position <= 146,
+        )
+        .map((entry: { code: string }) => entry.code)
+        .sort(),
+    ).toEqual([...darkBeastFaces].sort());
     const prelates = new Set<string>(PRELATE_CODES);
     expect(
       cards
@@ -695,16 +725,16 @@ describe("complete expansion rules inventory", () => {
           (entry: { pack_code: string; position: number; code: string }) =>
             entry.pack_code === "aoa" &&
             entry.position > 74 &&
-            !(entry.position > 80 && entry.position <= 117) &&
+            !(entry.position > 80 && entry.position <= 146) &&
             !prelates.has(entry.code),
         )
         .map((entry: { code: string }) => entry.code)
         .sort(),
     );
     expect(apocalypse.unsupportedFaceCodes).toEqual(
-      expect.arrayContaining(["45075a", "45118", "45179a"]),
+      expect.arrayContaining(["45075a", "45147a", "45179a"]),
     );
-    for (const code of ["45081a", "45101a", "45179b"])
+    for (const code of ["45081a", "45101a", "45118", "45179b"])
       expect(apocalypse.unsupportedFaceCodes).not.toContain(code);
     for (const [code, count] of [
       ["iceman", 33],
@@ -855,6 +885,8 @@ describe("complete expansion rules inventory", () => {
         25 -
         // Age of Apocalypse: Apocalypse, the Prelates and Dark Riders.
         27 -
+        // Age of Apocalypse: Dark Beast, Savage Land, Genosha and Blue Moon.
+        30 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -1027,7 +1059,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(79);
+    expect(coverage.registeredModules).toHaveLength(82);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -1211,7 +1243,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(44);
+    ).toHaveLength(45);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "venom_goblin",
@@ -1458,7 +1490,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(166);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(167);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

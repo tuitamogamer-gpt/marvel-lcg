@@ -68,6 +68,7 @@ import { mysterioHandSize } from "./mysterio.js";
 import { stryfeHandSize, stryfeIdentityPenalty } from "./stryfe.js";
 import { unusHealth } from "./unus.js";
 import { apocalypseHealth } from "./apocalypse.js";
+import { darkBeastHealth } from "./dark-beast.js";
 import { venomGoblinHealth } from "./venom-goblin.js";
 import {
   mojoGenreGlobal,
@@ -1636,6 +1637,25 @@ export const VILLAINS = [
       "Apocalypse heals instead of falling and grows stronger each time his scheme is completed, until you fight through his citadel and prove him No Longer Worthy.",
     color: "#4a3a6b",
   },
+  {
+    id: "dark_beast",
+    name: "Dark Beast",
+    // Dark Beast (I) and (II) in Standard, (II) and (III) in Expert. The
+    // Savage Land, Genosha and Blue Moon sets are set aside; each stage
+    // brings one of them in.
+    codes: ["45118", "45119", "45120"],
+    schemes: ["45121b"],
+    module: "dystopian_nightmare",
+    moduleCount: 1,
+    defaultModules: ["dystopian_nightmare"],
+    fixedSets: ["savage_land", "genosha", "blue_moon"],
+    difficulty: 4,
+    title: "Dark Beast's Bogus Journey",
+    location: "Adrift through time",
+    description:
+      "Dark Beast drags the heroes through time: each of his stages reveals the Savage Land, Genosha or the Blue Area of the Moon, whose Special ability his attacks keep unleashing.",
+    color: "#2f5d50",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1729,6 +1749,9 @@ export const MODULES = [
   { id: "dystopian_nightmare", name: "Dystopian Nightmare", difficulty: 2 },
   { id: "hounds", name: "Hounds", difficulty: 3 },
   { id: "dark_riders", name: "Dark Riders", difficulty: 3 },
+  { id: "savage_land", name: "Savage Land", difficulty: 3 },
+  { id: "genosha", name: "Genosha", difficulty: 3 },
+  { id: "blue_moon", name: "Blue Moon", difficulty: 3 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(
@@ -2403,6 +2426,7 @@ export function pieceHP(s: GameState, p: Piece) {
     venomGoblinHealth(s, p) +
     mojoGenreHealth(s, p) +
     unusHealth(s, p) +
-    apocalypseHealth(s, p)
+    apocalypseHealth(s, p) +
+    darkBeastHealth(s, p)
   );
 }

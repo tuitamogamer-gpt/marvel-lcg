@@ -33,6 +33,7 @@ import * as sty from "./stryfe.js";
 import * as unus from "./unus.js";
 import * as horsemen from "./four-horsemen.js";
 import * as apoc from "./apocalypse.js";
+import * as db from "./dark-beast.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -627,6 +628,7 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
       horsemen.horsemenKeyword(s, p, name) > 0
     ) ||
     !!(s && typeof p !== "string" && apoc.apocalypseKeyword(s, p, name) > 0) ||
+    !!(s && typeof p !== "string" && db.darkBeastKeyword(s, p, name) > 0) ||
     !!(
       s &&
       typeof p !== "string" &&
@@ -682,6 +684,7 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
       ? { steady: true }
       : {}),
     ...(hood.hoodSteady(s, piece) ? { steady: true } : {}),
+    ...(db.darkBeastSteady(s, piece) ? { steady: true } : {}),
     ...(hoodModular.hoodModularSteady(s) ? { steady: true } : {}),
     ...(morlock.morlockStatusModifiers(s, piece).steady ||
     otr.otrStatusModifiers(s, piece).steady ||
@@ -1118,7 +1121,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
         sin.sinisterKeyword(s, p, "Retaliate") +
         unus.unusKeyword(s, p, "Retaliate") +
         horsemen.horsemenKeyword(s, p, "Retaliate") +
-        apoc.apocalypseKeyword(s, p, "Retaliate")
+        apoc.apocalypseKeyword(s, p, "Retaliate") +
+        db.darkBeastKeyword(s, p, "Retaliate")
     : Math.max(intrinsic, grantedValue);
 }
 // A card that leaves play loses all memory of its previous instance (RRG 27).
@@ -3444,6 +3448,7 @@ function dealDamage(
       spiral.spiralVillainImmune(s, target) ||
       jug.jugImmune(s, target) ||
       apoc.apocalypseImmune(s, target) ||
+      db.darkBeastImmune(s, target) ||
       sin.sinisterImmune(s, target, {
         aerial: damageSourceAerial(s, source),
         ranged:
@@ -3913,6 +3918,7 @@ function dealDamage(
           unus.unusKeyword(s, retaliationTarget, "Retaliate") +
           horsemen.horsemenKeyword(s, retaliationTarget, "Retaliate") +
           apoc.apocalypseKeyword(s, retaliationTarget, "Retaliate") +
+          db.darkBeastKeyword(s, retaliationTarget, "Retaliate") +
           (retaliationTarget.id === s.villain.id
             ? villainAt(s, "01119").length + villainAt(s, "01153").length
             : 0);
@@ -4631,6 +4637,16 @@ function defeatCharacter(
   const bounty = minion ? mojoGenres.mojoGenreDeadOrAlive(s, m) : [];
   // Genetic Experiments leaves play with its minion: read it first.
   const geneticExperiments = minion ? unus.unusMinionDefeating(s, m) : [];
+  // Giant Ape, Magistrate and Imperial Guardsman: read before they leave.
+  const darkBeastDefeat = minion
+    ? db.darkBeastMinionDefeating(
+        s,
+        m,
+        source.startsWith("hero:")
+          ? source.slice(5)
+          : controller(s, source)?.id || s.activePlayerId,
+      )
+    : [];
   // Abyss: his facedown cards go to their owners' discard piles.
   if (minion && m.storedCards?.length && m.code === apoc.ABYSS)
     for (const q of m.storedCards.splice(0)) {
@@ -4737,7 +4753,7 @@ function defeatCharacter(
     if (!textWasBlank) add(s, ...sandman.sandmanMinionDefeated(s, m));
     if (!textWasBlank) add(s, ...magog.magogMinionDefeated(s, m));
     add(s, ...kreeFanatic.kreeFanaticMinionDefeated(s, m));
-    add(s, ...bounty, ...underToad, ...geneticExperiments);
+    add(s, ...bounty, ...underToad, ...geneticExperiments, ...darkBeastDefeat);
     add(
       s,
       ...mojoGenres.mojoGenreMinionDefeated(
@@ -5382,6 +5398,7 @@ function villainSetup(s: GameState) {
     ...jug.jugVillainRevealed(s),
     ...sin.sinisterVillainRevealed(s),
     ...sty.stryfeVillainRevealed(s),
+    ...db.darkBeastVillainRevealed(s),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -6239,6 +6256,13 @@ function defeatScheme(
             : controller(s, source)?.id || s.activePlayerId,
         ),
         ...apoc.apocalypseSchemeDefeated(s, p),
+        ...db.darkBeastSchemeDefeated(
+          s,
+          p,
+          source.startsWith("hero:")
+            ? source.slice(5)
+            : controller(s, source)?.id || s.activePlayerId,
+        ),
       ]
     : [];
   const helaFlip = hela.helaSideSchemeDefeated(s);
@@ -6831,6 +6855,7 @@ function captainPackHasTrait(
     return true;
   if (mariaHill.mariaHillTrait(s, target, trait)) return true;
   if (trait === "Aerial" && horsemen.horsemenAerial(s, target)) return true;
+  if (db.darkBeastTrait(s, target, trait)) return true;
   if (jubilee.jubileeEnemyTrait(s, target, trait)) return true;
   if (
     (target === "hero" || target === `hero:${s.activePlayerId}`) &&
@@ -9019,6 +9044,7 @@ export function newGame(config: {
                                     ...unus.AOA_MODULAR_SETS,
                                     ...horsemen.HORSEMEN_MODULAR_SETS,
                                     ...apoc.APOCALYPSE_MODULAR_SETS,
+                                    ...db.DARK_BEAST_MODULAR_SETS,
                                   ].some((set) => set === c.set_code)
                                 ? "aoa"
                                 : ["temporal", "anachronauts", "mot"].includes(
@@ -9115,6 +9141,11 @@ export function newGame(config: {
             // Setup searches the encounter deck for City Streets.
             (v.id === "sandman" && c.code === sandman.CITY_STREETS) ||
             (v.id === "venom" && c.code === venomVillain.BELL_TOWER) ||
+            // Dark Beast sets aside his three sets with their Settings.
+            (v.id === "dark_beast" &&
+              (db.DARK_BEAST_MODULAR_SETS as readonly string[]).includes(
+                c.set_code || "",
+              )) ||
             selectedModules.includes(c.set_code || ""))) ||
           (v.id !== "kang" &&
             team.some(
@@ -9167,6 +9198,7 @@ export function newGame(config: {
     });
   if (v.id === "apocalypse")
     apoc.apocalypseSetup(s, { makePiece: (s, code) => makePiece(s, code) });
+  if (v.id === "dark_beast") db.darkBeastSetup(s);
   // Gene Pool (Setup) begins the game in play with the Infinites set.
   if (
     v.fixedSets?.includes("infinites") ||
@@ -10056,6 +10088,7 @@ function initialSetup(s: GameState) {
   setup.push(...unus.unusSetupEffects(s));
   setup.push(...horsemen.horsemenSetupEffects(s));
   setup.push(...apoc.apocalypseSetupEffects(s));
+  setup.push(...db.darkBeastSetupEffects(s));
   // Queue stage setup after scenario setup and before the first turn.
   add(
     s,
@@ -12104,6 +12137,7 @@ export function abilityOptions(
     ...sin.sinisterActions(s, p, sinPorts),
     ...sty.stryfeActions(s, p, stryfePorts),
     ...unus.unusActions(s, p),
+    ...db.darkBeastActions(s, p),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -13670,7 +13704,9 @@ function countActivationBoost(s: GameState, id: string, after: Effect[]): void {
         sourceTitle: "Boost icons",
         amplify: activationAmplify(s),
         numericOverrides: [
-          (card(p).boost || 0) + iceman.icemanBoostExtra(s, p.id),
+          (card(p).boost || 0) +
+            iceman.icemanBoostExtra(s, p.id) +
+            db.darkBeastBoostIcons(s, p),
         ],
       },
     ),
@@ -13732,6 +13768,7 @@ const bwPorts: BlackWidowPorts = {
       : ((s.scheming || s.attack)?.boostValues?.[id] ??
           (card(p).boost || 0) +
             iceman.icemanBoostExtra(s, p.id) +
+            db.darkBeastBoostIcons(s, p) +
             scarletWitch.scarletWitchBoostIconBonus(textActiveState(s)) +
             activationAmplify(s));
   },
@@ -17032,6 +17069,36 @@ const apocalypsePorts: apoc.ApocalypsePorts = {
     heal(s, target, n, "encounter");
   },
 };
+const darkBeastPorts: db.DarkBeastPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  pick: (s, n) => Math.floor(random(s) * n),
+  shuffle: (s, pieces) => shuffle(s, pieces),
+  reveal: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    wreckingCrewPorts.reveal(s, p, playerId);
+  },
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  mill: (s, playerId, n) => mysterioPorts.millPlayer(s, playerId, n),
+  dealFacedown: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    p.dealtTo = playerId;
+    s.encounter.dealt.push(p);
+  },
+  exhaustIdentity: (s, playerId) => {
+    const player = seatView(s, playerId).player;
+    if (player.exhausted) return false;
+    player.exhausted = true;
+    return true;
+  },
+  attachToIdentity: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    p.attachedTo = `hero:${playerId}`;
+    if (!s.attachments.some((q) => q.id === p.id)) s.attachments.push(p);
+  },
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+};
 const horsemenPorts: horsemen.HorsemenPorts = {
   ...mutagenPorts,
   log: (s, text, kind) => log(s, text, kind),
@@ -20193,6 +20260,7 @@ function minionEntered(s: GameState, p: Piece) {
     ...acolytes.acolytesEngaged(s, p),
     ...otr.otrEngaged(s, p),
     ...apoc.apocalypseEngaged(s, p),
+    ...db.darkBeastEngaged(s, p),
     ...ironspider.ironspiderSinisterEngagementResponses(s, p),
     ...spiderHam.spiderHamMinionEngaged(s, p),
     E("valkPackEngagementWindow", { id: p.id }),
@@ -22914,6 +22982,7 @@ const nightcrawlerEncounterPorts: nightcrawlerEncounter.NightcrawlerEncounterPor
           ...acolytes.acolytesEngaged(s, p),
           ...otr.otrEngaged(s, p),
           ...apoc.apocalypseEngaged(s, p),
+          ...db.darkBeastEngaged(s, p),
           ...ironspider.ironspiderSinisterEngagementResponses(s, p),
           ...spiderHam.spiderHamMinionEngaged(s, p),
           E("valkPackEngagementWindow", { id: p.id }),
@@ -25045,6 +25114,8 @@ function enemyAttack(
       ...sty.stryfeAttackInitiated(s, id, s.attack.originalPlayerId!),
       ...horsemen.horsemenAttackInitiated(s, id),
       ...apoc.apocalypseAttackInitiated(s, id, s.attack.originalPlayerId!),
+      ...db.darkBeastAttackInitiated(s, id, s.attack.originalPlayerId!),
+      ...db.darkBeastMinionAttackInitiated(s, id, s.attack.originalPlayerId!),
     );
   if (!friendlySource)
     add(
@@ -25254,7 +25325,8 @@ function prepareAttackBoosts(s: GameState) {
     ? 0
     : normal +
       mutagenAdditionalBoosts(s, a.attacker) +
-      morlock.morlockAdditionalBoosts(s);
+      morlock.morlockAdditionalBoosts(s) +
+      (a.isVillain ? db.darkBeastAdditionalBoosts(s) : 0);
   for (let i = 0; i < n; i++) {
     const p = drawEncounter(s);
     if (p) a.pendingBoosts.push(p);
@@ -25542,6 +25614,7 @@ function boostEffects(s: GameState, p: Piece) {
     unus.unusBoost(s, p) ??
     horsemen.horsemenBoost(s, p) ??
     apoc.apocalypseBoost(s, p) ??
+    db.darkBeastBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -26759,6 +26832,16 @@ function finishAttackAfterDamage(
         !find(s, target),
     ),
     ...apoc.apocalypseActivated(s, a.attacker, recipientId),
+    ...db.darkBeastAttacked(
+      s,
+      a.attacker,
+      recipientId,
+      target !== "hero" &&
+        !target.startsWith("hero:") &&
+        before > 0 &&
+        a.gmwReturnedDefender !== target &&
+        !find(s, target),
+    ),
     ...sty.stryfeActivated(s, a.attacker, recipientId),
     ...sinisterModulars.sinisterModularActivated(s, {
       enemyId: a.attacker,
@@ -27782,6 +27865,10 @@ function reveal(
         ...apoc.APOCALYPSE_SCRIPT_CODES,
         ...apoc.PRELATE_CODES,
         ...apoc.DARK_RIDERS_CODES,
+        ...db.DARK_BEAST_SCRIPT_CODES,
+        ...db.SAVAGE_LAND_CODES,
+        ...db.GENOSHA_CODES,
+        ...db.BLUE_MOON_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -28029,6 +28116,10 @@ function reveal(
       ...apoc.APOCALYPSE_SCRIPT_CODES,
       ...apoc.PRELATE_CODES,
       ...apoc.DARK_RIDERS_CODES,
+      ...db.DARK_BEAST_SCRIPT_CODES,
+      ...db.SAVAGE_LAND_CODES,
+      ...db.GENOSHA_CODES,
+      ...db.BLUE_MOON_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -28099,6 +28190,7 @@ function reveal(
       unus.unusReveal(s, p) ??
       horsemen.horsemenReveal(s, p) ??
       apoc.apocalypseReveal(s, p) ??
+      db.darkBeastReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -28204,6 +28296,7 @@ function reveal(
     unus.unusReveal(s, p) ??
     horsemen.horsemenReveal(s, p) ??
     apoc.apocalypseReveal(s, p) ??
+    db.darkBeastReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -29669,6 +29762,7 @@ function resolve(s: GameState, e: Effect) {
           unus.unusReveal(state, piece) ??
           horsemen.horsemenReveal(state, piece) ??
           apoc.apocalypseReveal(state, piece) ??
+          db.darkBeastReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -29830,6 +29924,7 @@ function resolve(s: GameState, e: Effect) {
   if (unus.resolveUnusEffect(s, e, unusPorts)) return;
   if (horsemen.resolveHorsemenEffect(s, e, horsemenPorts)) return;
   if (apoc.resolveApocalypseEffect(s, e, apocalypsePorts)) return;
+  if (db.resolveDarkBeastEffect(s, e, darkBeastPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -38452,6 +38547,8 @@ function resolve(s: GameState, e: Effect) {
         villainSetup(s);
       // Juggernaut (I) also resolves its When Revealed ability at setup.
       else if (jug.juggernaut(s)) villainSetup(s);
+      // Dark Beast (I) also resolves its When Revealed ability at setup.
+      else if (db.darkBeast(s)) villainSetup(s);
       break;
     case "wolverinePlayerPhase":
       add(
@@ -39711,6 +39808,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...sin.sinisterActions(s, p, sinPorts),
               ...sty.stryfeActions(s, p, stryfePorts),
               ...unus.unusActions(s, p),
+              ...db.darkBeastActions(s, p),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -39844,6 +39942,17 @@ export function dispatch(state: GameState, command: Command): GameState {
                 morlock.morlockActionSource(s, command.id)!,
                 morlockPorts,
               )
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
+            add(s, ...selected!.effects);
+          } else if (
+            db.darkBeastActionSource(s, command.id) &&
+            db
+              .darkBeastActions(s, db.darkBeastActionSource(s, command.id)!)
+              .some((o) => !command.action || o.id === command.action)
+          ) {
+            const selected = db
+              .darkBeastActions(s, db.darkBeastActionSource(s, command.id)!)
               .find((o) => !command.action || o.id === command.action);
             need(selected, "This action needs its printed cost.");
             add(s, ...selected!.effects);

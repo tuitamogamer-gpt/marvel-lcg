@@ -383,6 +383,12 @@ import {
   noLongerWorthy,
 } from "./game/apocalypse";
 import {
+  DARK_BEAST_SETTING_CAPTIONS,
+  darkBeast,
+  darkBeastCaption,
+  darkBeastSettingLabel,
+} from "./game/dark-beast";
+import {
   AERIAL_BOMBARDMENT,
   IMPERVIOUS,
   OUT_OF_REACH,
@@ -2816,6 +2822,18 @@ export default function App() {
                       becomes the Living Bomb, and Stryfe cannot be defeated
                       until it is gone. Extreme Measures and Mutant Insurrection
                       are preselected.
+                    </p>
+                  )}
+                  {villain.id === "dark_beast" && (
+                    <p className="setting-help">
+                      The Savage Land, Genosha and Blue Moon sets are set aside.
+                      Each stage of Dark Beast reveals one of their Setting
+                      environments at random and shuffles the rest of its set
+                      into the encounter deck; stages II and III also deal each
+                      player an encounter card. Only one Setting stays in play,
+                      and its Special ability resolves for you whenever he
+                      attacks you. In Expert, High-Tech Goggles start attached
+                      to him. Dystopian Nightmare is preselected.
                     </p>
                   )}
                   {villain.id === "apocalypse" && (
@@ -6432,6 +6450,11 @@ function AttachedCards({
                 // Stryfe's identity conditions.
                 MIND_TRAP,
                 PSYCHIC_INERTIA,
+                // Dark Beast's High-Tech Goggles and Genetic Enhancement;
+                // Genosha's Escaped Mutant.
+                "45122",
+                "45123",
+                "45137",
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -7048,9 +7071,11 @@ function Tabletop({
                                           ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · GENE POOL ${genePoolThreat(s)}`
                                           : apocalypse(s)
                                             ? `VILLAIN · STAGE ${apocalypseRoman(apocalypseStage(s))} · ${noLongerWorthy(s) ? "NO LONGER WORTHY" : "REGENERATES"}`
-                                            : misterSinister(s)
-                                              ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${superpowers(s)} ${superpowers(s) === 1 ? "SUPERPOWER" : "SUPERPOWERS"}`
-                                              : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
+                                            : darkBeast(s)
+                                              ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${darkBeastSettingLabel(s)}`
+                                              : misterSinister(s)
+                                                ? `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]} · ${superpowers(s)} ${superpowers(s) === 1 ? "SUPERPOWER" : "SUPERPOWERS"}`
+                                                : `VILLAIN · STAGE ${["", "I", "II", "III"][s.villain.stage]}`}
                     </span>
                     {s.kang ? (
                       <h2>
@@ -7151,6 +7176,11 @@ function Tabletop({
                     {apocalypse(s) && (
                       <span className="stat-caption">
                         {apocalypseCaption(s)}
+                      </span>
+                    )}
+                    {darkBeast(s) && (
+                      <span className="stat-caption">
+                        {darkBeastCaption(s)}
                       </span>
                     )}
                     {misterSinister(s) && (
@@ -7587,13 +7617,21 @@ function Tabletop({
                                         ? "ENVIRONMENT · STOPPED"
                                         : MOJO_GENRE_SHOW_CAPTIONS[p.code]
                                           ? "SETTING · SHOW"
-                                          : Object.values(
-                                                MANHATTAN_FLIPPED,
-                                              ).includes(p.code)
-                                            ? "ENVIRONMENT · SYMBIOTE"
-                                            : "ENVIRONMENT"}
+                                          : DARK_BEAST_SETTING_CAPTIONS[p.code]
+                                            ? "ENVIRONMENT · SETTING"
+                                            : Object.values(
+                                                  MANHATTAN_FLIPPED,
+                                                ).includes(p.code)
+                                              ? "ENVIRONMENT · SYMBIOTE"
+                                              : "ENVIRONMENT"}
                         </span>
                         <strong>{card(p).name}</strong>
+                        {DARK_BEAST_SETTING_CAPTIONS[p.code] && (
+                          <span className="stat-caption">
+                            {DARK_BEAST_SETTING_CAPTIONS[p.code]} · another
+                            Setting discards it
+                          </span>
+                        )}
                         {MOJO_GENRE_SHOW_CAPTIONS[p.code] && (
                           <span className="stat-caption">
                             {MOJO_GENRE_SHOW_CAPTIONS[p.code]} · another Setting

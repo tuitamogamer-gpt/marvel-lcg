@@ -223,3 +223,7 @@ The four Horsemen share the villain row used for The Sinister Six and The Wrecki
 ## Apocalypse and his citadel, 2026-11-19
 
 Apocalypse's label carries his stage, I to IV, and whether he still regenerates or is No Longer Worthy; the caption gives the threat The Age of Apocalypse loses when he would be defeated, or says when he can be hurt. The objective counts the citadel schemes cleared until No Longer Worthy is attached, then asks for his defeat. The main scheme's one-line note names the Apocalypse its completion reveals, or the loss at stage IV. Each citadel scheme carries a lock line, like Hela's, while a Prelate is in play, and a caption with what clearing it leads to; Abyss's engagement line counts his facedown cards and the hit points they give him.
+
+## Dark Beast's Settings, 2026-11-20
+
+Dark Beast's label carries his stage and the Setting in play, and the caption names the Special his attacks resolve for the player he attacks. Each Setting environment is labelled as a Setting, with its constant ability, its Special and the reminder that another Setting discards it. High-Tech Goggles, Genetic Enhancement and Escaped Mutant show their actions as buttons on the attached card, like the other attachment actions.
