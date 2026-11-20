@@ -7,6 +7,7 @@ import { TOWER_OTHER_MAIN, towerDefenseSchemeLimit } from "./tower-defense.js";
 import { HELA_VICTORY_SCHEMES, helaSchemeLocked, helaWounded } from "./hela.js";
 import { lokiDamageProhibited } from "./loki.js";
 import { crewSchemeKey, crewVillains } from "./wrecking-crew.js";
+import { MANIPULATIONS, zemoShouldAccuse } from "./baron-zemo.js";
 import {
   doctorStrangeAbilityOptions,
   doctorStrangeTopInvocation,
@@ -504,6 +505,31 @@ export function advisePrompt(s: GameState): Advice | null {
     };
   }
   const ids = p.options.map((o) => o.id);
+  // Zemo's Manipulations: gain evidence whenever a board member is clean,
+  // and accuse once the evidence names one suspect or time runs out.
+  if (
+    s.zemo &&
+    s.scheme.code === MANIPULATIONS &&
+    ids.includes("accuse") &&
+    ids.includes("pass")
+  ) {
+    const evidence = p.options.find((o) => o.id.startsWith("evidence:"));
+    const pick =
+      evidence ||
+      p.options.find(
+        (o) =>
+          o.id === (zemoShouldAccuse(s, schemeLimit(s)) ? "accuse" : "pass"),
+      )!;
+    return {
+      command: { type: "CHOOSE", id: pick.id },
+      title: pick.label,
+      reason: evidence
+        ? "New evidence crosses out combinations."
+        : pick.id === "accuse"
+          ? "The evidence is strong enough, or the scheme is about to be completed."
+          : "Keep gathering evidence before accusing.",
+    };
+  }
   // Organizational Support during a payment that cannot be cancelled:
   // finishing with nothing would leave that payment unpayable, so exhaust a
   // matching card for each resource it still costs. Cancellable payments keep
@@ -512,9 +538,31 @@ export function advisePrompt(s: GameState): Advice | null {
     const save = p.options
       .find((o) => o.id === "done")
       ?.effects.find((e) => e.payment);
-    const payment = save?.payment as { cancelable?: boolean; cost?: number };
+    const payment = save?.payment as {
+      cancelable?: boolean;
+      cost?: number;
+      requirements?: string[];
+    };
     const chosen = ((save?.ids as string[]) || []).length;
-    const pick = p.options.find((o) => o.id !== "done");
+    // A payment that needs a resource type takes a card printing it.
+    const needed = payment?.requirements || [];
+    const prints = (o: Prompt["options"][number]) => {
+      const c = o.image ? card(o.image) : undefined;
+      return (
+        !!c &&
+        ((c.resource_wild || 0) > 0 ||
+          needed.some(
+            (r) =>
+              Number(
+                (c as unknown as Record<string, unknown>)[`resource_${r}`],
+              ) > 0,
+          ))
+      );
+    };
+    const pick =
+      (needed.length
+        ? p.options.find((o) => o.id !== "done" && prints(o))
+        : undefined) || p.options.find((o) => o.id !== "done");
     if (
       payment?.cancelable === false &&
       pick &&

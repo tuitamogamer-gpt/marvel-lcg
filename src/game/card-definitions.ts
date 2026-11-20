@@ -78,6 +78,23 @@ export const card = (piece: Piece | string): Card => {
       scheme_star: false,
       is_unique: false,
     };
+  // Reluctant Foe: a hero treated as an Elite minion with SCH equal to its
+  // printed THW and a new text box.
+  if (typeof piece !== "string" && piece.reluctantFoe)
+    return {
+      ...printed,
+      type_code: "minion",
+      faction_code: "encounter",
+      text: "Villainous.\n<b>When Defeated</b>: Remove this hero and Reluctant Foe from the game.",
+      traits: `${printed.traits || ""} Elite.`.trim(),
+      scheme: printed.thwart || 0,
+      scheme_star: false,
+      cost: undefined,
+      resource_energy: 0,
+      resource_mental: 0,
+      resource_physical: 0,
+      resource_wild: 0,
+    };
   if (typeof piece !== "string" && piece.treatedAsAlly)
     return {
       ...printed,

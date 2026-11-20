@@ -40,6 +40,7 @@ import * as bwv from "./black-widow-villain.js";
 import * as btc from "./batroc.js";
 import * as mdk from "./modok.js";
 import * as tb from "./thunderbolts.js";
+import * as zemo from "./baron-zemo.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -2289,6 +2290,27 @@ function advanceBatrocMain(s: GameState) {
     E("clearMainCompletion"),
   );
 }
+/** Baron Zemo: the players advance to The Accusation, which then
+ * advances to Fighting Zemo. */
+function advanceZemoMain(s: GameState) {
+  const next = zemo.zemoNextMain(s);
+  if (!next || !s.zemo) return;
+  s.pendingMainCompletion = true;
+  discardMainAttachments(s);
+  s.removed.push(resetPiece(s.zemo.currentMain));
+  s.zemo.currentMain = next;
+  s.scheme.index++;
+  s.scheme.code = next.code;
+  s.scheme.threat = 0;
+  log(s, `The players advance the main scheme: ${card(next).name}.`);
+  add(
+    s,
+    ...zemo
+      .zemoMainRevealed(s, next)
+      .map((e) => ({ ...e, actorId: s.firstPlayerId })),
+    E("clearMainCompletion"),
+  );
+}
 function endGame(s: GameState, won: boolean, reason: string) {
   // A saved Mystique callback owns the outer activation's real facedown
   // cards until that activation resumes. Terminal loss clears those callbacks.
@@ -2742,6 +2764,7 @@ function check(s: GameState) {
   if (escapeNext === "won") return;
   if (escapeNext) advanceEscapeMain(s, escapeNext);
   if (s.batroc && btc.batrocCheck(s, batrocPorts)) return;
+  if (s.executiveBoard && zemo.zemoCheck(s, zemoPorts)) return;
   // Citizen V at 0 hit points is defeated once enough Thunderbolts are in
   // the victory display.
   if (tb.thunderboltsDefeatReady(s)) {
@@ -4830,7 +4853,11 @@ function defeatCharacter(
     )
   )
     movePieceFromPlay(s, m.id, true);
-  else if (minion && hela.helaVictoryMinion(m) && !textWasBlank)
+  else if (minion && zemo.zemoRemovedWhenDefeated(m)) {
+    // Reluctant Foe: the hero and Reluctant Foe are removed from the game.
+    zemo.zemoFoeLeaving(s, m);
+    movePieceFromPlay(s, m.id, true);
+  } else if (minion && hela.helaVictoryMinion(m) && !textWasBlank)
     movePieceFromPlay(s, m.id, false, undefined, true);
   // The Prelates: Victory 3.
   else if (minion && apoc.apocalypseVictoryMinion(m) && !textWasBlank)
@@ -4916,6 +4943,7 @@ function defeatCharacter(
       ...(minion ? btc.batrocMinionDefeated(s, m, textWasBlank) : []),
       ...(minion ? mdk.modokMinionDefeated(s, m, textWasBlank) : []),
       ...(minion ? tb.thunderboltsMinionDefeated(s, m, textWasBlank) : []),
+      ...(minion ? zemo.zemoMinionDefeated(s, m, textWasBlank) : []),
     );
     add(
       s,
@@ -5211,6 +5239,22 @@ function advanceVillain(
   }
   if (citizenDefeat === "won") {
     endGame(s, true, "Citizen V is defeated. The Thunderbolts stand down.");
+    return;
+  }
+  // Baron Zemo: masked, his hit points reset instead and 3 secret counters
+  // come off the board members; unmasked, the players win.
+  const zemoReset = zemo.zemoWouldBeDefeated(s);
+  if (zemoReset === "won") {
+    endGame(
+      s,
+      true,
+      "Baron Zemo is defeated. The mole is exposed and the heroes are exonerated.",
+    );
+    return;
+  }
+  if (zemoReset) {
+    log(s, "Baron Zemo's hit points reset instead of his defeat.", "good");
+    add(s, ...zemoReset);
     return;
   }
   const priorityKey = `cyclopsPriority:${s.villain.id}:${s.villain.stage}`;
@@ -6484,6 +6528,7 @@ function defeatScheme(
         ),
         ...bwv.blackWidowSchemeDefeated(s, p),
         ...btc.batrocSchemeDefeated(s, p),
+        ...zemo.zemoSchemeDefeated(s, p),
         ...mdk.modokSchemeDefeated(
           s,
           p,
@@ -7062,6 +7107,7 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
       sandman.sandmanCostIncrease(s, c) +
       mojoGenres.mojoGenreCostIncrease(s, c) +
       sty.stryfeCostIncrease(s, c) +
+      zemo.zemoCostIncrease(s, c) +
       scarletWitch.scarletWitchCardCostBonus(s),
   );
 }
@@ -9058,6 +9104,9 @@ export function newGame(config: {
   expertII?: boolean;
   /** Use Age of Apocalypse's Standard III instead of the core Standard set. */
   standardIII?: boolean;
+  /** Add the S.H.I.E.L.D. Executive Board, which does not count as a
+   * modular set; Baron Zemo always uses it. */
+  executiveBoard?: boolean;
 }): GameState {
   const team = config.heroes || [
     { heroId: config.heroId, aspect: config.aspect },
@@ -9129,6 +9178,8 @@ export function newGame(config: {
     "Choose either Standard II or Standard III.",
   );
   const scenarioPack = card(v.codes[0]).pack_code;
+  const executiveBoard =
+    !!config.executiveBoard && v.moduleCount !== 0 && v.id !== "baron_zemo";
   if (v.id === "project_wideawake" && config.captureAllocation !== undefined)
     need(
       Array.isArray(config.captureAllocation) &&
@@ -9343,6 +9394,7 @@ export function newGame(config: {
                                       ...btc.BATROC_MODULAR_SETS,
                                       ...mdk.MODOK_MODULAR_SETS,
                                       ...tb.THUNDERBOLTS_MODULAR_SETS,
+                                      ...zemo.ZEMO_MODULAR_SETS,
                                     ].some((set) => set === c.set_code)
                                   ? "aos"
                                   : [
@@ -9398,6 +9450,9 @@ export function newGame(config: {
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
             c.pack_code === scenarioPack) ||
+          (executiveBoard &&
+            c.set_code === zemo.EXECUTIVE_BOARD_SET &&
+            c.pack_code === "aos") ||
           (c.set_code === "standard" &&
             c.pack_code === "core" &&
             !config.standardII &&
@@ -9519,6 +9574,10 @@ export function newGame(config: {
   if (v.id === "black_widow_villain") bwv.blackWidowSetup(s);
   if (v.id === "thunderbolts")
     tb.thunderboltsSetup(s, { makePiece: (s, code) => makePiece(s, code) });
+  // Baron Zemo prepares the evidence and the Executive Board, which any
+  // other scenario with modular sets can add.
+  if (v.id === "baron_zemo") zemo.zemoSetup(s, zemoPorts);
+  else if (executiveBoard) zemo.boardSetup(s, zemoPorts);
   if (v.id === "modok")
     mdk.modokSetup(s, {
       makePiece: (s, code) => makePiece(s, code),
@@ -12498,6 +12557,7 @@ export function abilityOptions(
     ...btc.batrocActions(s, p, batrocPorts),
     ...mdk.modokActions(s, p, modokPorts),
     ...tb.thunderboltsActions(s, p),
+    ...zemo.zemoActions(s, p, zemoPorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -12539,17 +12599,19 @@ export function abilityOptions(
             ? "A printed dash prevents attacking."
             : p.exhausted
               ? "Exhausted"
-              : bwv.stunNetted(s, p.id)
-                ? "Stun Net: this ally cannot attack."
-                : p.code === "03014" && !s.player.hand.length
-                  ? "Discard one card from hand to attack."
-                  : p.code === "18019" &&
-                      !p.stunned &&
-                      !targets(s, "enemy", true).some((target) =>
-                        gamoraPack.gamoraPackAllyCanAttack(s, p, target.id),
-                      )
-                    ? "No legal enemy to attack."
-                    : undefined,
+              : zemo.zemoAllyCost(s) && !canPay(s, zemo.zemoAllyCost(s))
+                ? "Divided Loyalties: attacking with an ally costs 1 resource."
+                : bwv.stunNetted(s, p.id)
+                  ? "Stun Net: this ally cannot attack."
+                  : p.code === "03014" && !s.player.hand.length
+                    ? "Discard one card from hand to attack."
+                    : p.code === "18019" &&
+                        !p.stunned &&
+                        !targets(s, "enemy", true).some((target) =>
+                          gamoraPack.gamoraPackAllyCanAttack(s, p, target.id),
+                        )
+                      ? "No legal enemy to attack."
+                      : undefined,
       },
       {
         id: "thwart",
@@ -12559,11 +12621,13 @@ export function abilityOptions(
             ? "A printed dash prevents thwarting."
             : p.exhausted
               ? "Exhausted"
-              : !p.confused &&
-                  s.sideSchemes.some((p) => p.code === "32108") &&
-                  !niAllyTargets(s, p, "thwart").length
-                ? "There are no eligible schemes to thwart."
-                : undefined,
+              : zemo.zemoAllyCost(s) && !canPay(s, zemo.zemoAllyCost(s))
+                ? "Divided Loyalties: thwarting with an ally costs 1 resource."
+                : !p.confused &&
+                    s.sideSchemes.some((p) => p.code === "32108") &&
+                    !niAllyTargets(s, p, "thwart").length
+                  ? "There are no eligible schemes to thwart."
+                  : undefined,
       },
       ...scriptedOptions,
       ...wideawake
@@ -17635,6 +17699,32 @@ const thunderboltsPorts: tb.ThunderboltsPorts = {
   },
   endGame: (s, won, reason) => endGame(s, won, reason),
   heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+};
+const zemoPorts: zemo.ZemoPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  reveal: (s, p, playerId) => blackWidowVillainPorts.reveal(s, p, playerId),
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  heal: (s, target, n) => {
+    heal(s, target, n, "encounter");
+  },
+  characters: (s, playerId) => blackWidowVillainPorts.characters(s, playerId),
+  remainingHP: (s, id) => blackWidowVillainPorts.remainingHP(s, id),
+  shuffle: (s, items) => shuffle(s, items),
+  advanceMain: (s) => advanceZemoMain(s),
+  defeat: (s, id) => {
+    const p = find(s, id);
+    if (p && s.minions.some((m) => m.id === id))
+      defeatCharacter(s, p, s.villain.id);
+  },
+  makePiece: (s, code) => makePiece(s, code),
+  heroCodes: (s) =>
+    HEROES.filter((h) => !s.players.some((seat) => seat.heroId === h.id)).map(
+      (h) => h.code,
+    ),
+  endGame: (s, won, reason) => endGame(s, won, reason),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+  damaged: (s, id) => playerHealingTarget(s, id),
 };
 const standardIIIPorts: std3.StandardIIIPorts = {
   ...mutagenPorts,
@@ -25767,6 +25857,12 @@ function enemyAttack(
       ...db.darkBeastAttackInitiated(s, id, s.attack.originalPlayerId!),
       ...db.darkBeastMinionAttackInitiated(s, id, s.attack.originalPlayerId!),
       ...btc.batrocAttackInitiated(s, id),
+      ...zemo.zemoActivationInitiated(
+        s,
+        id,
+        s.attack.originalPlayerId!,
+        "attack",
+      ),
       ...esn.esnActivationInitiated(
         s,
         id,
@@ -25993,7 +26089,8 @@ function prepareAttackBoosts(s: GameState) {
       morlock.morlockAdditionalBoosts(s) +
       (a.isVillain ? db.darkBeastAdditionalBoosts(s) : 0) +
       (a.isVillain ? bwv.blackWidowAdditionalBoosts(s) : 0) +
-      tb.thunderboltsAdditionalBoosts(s, a.attacker);
+      tb.thunderboltsAdditionalBoosts(s, a.attacker) +
+      zemo.zemoAdditionalBoosts(s);
   for (let i = 0; i < n; i++) {
     const p = drawEncounter(s);
     if (p) a.pendingBoosts.push(p);
@@ -26073,17 +26170,23 @@ function declareDefense(s: GameState) {
           heroCard(view).code,
         ),
       );
+    const divided = zemo.zemoAllyCost(s);
     for (const ally of friends(view).filter(
       (p) =>
         !p.exhausted &&
         !a.angelTauntPlayerId &&
-        (p.code !== "50022" || isTextBlank(s, p)),
+        (p.code !== "50022" || isTextBlank(s, p)) &&
+        (!divided || canPay(view, divided)),
     ))
       opts.push(
         option(
           ally.id,
-          `Defend with ${card(ally).name}`,
+          `Defend with ${card(ally).name}${divided ? ` · spend ${divided} resource${divided === 1 ? "" : "s"}` : ""}`,
           [
+            // Divided Loyalties: 1 resource to defend with an ally.
+            ...(divided
+              ? [E("zemo:defend-pay", { cost: divided, actorId: seat.id })]
+              : []),
             E("defender", { id: ally.id, actorId: seat.id }),
             E("boostAttack", { actorId: seat.id }),
           ],
@@ -26288,6 +26391,7 @@ function boostEffects(s: GameState, p: Piece) {
     btc.batrocBoost(s, p) ??
     mdk.modokBoost(s, p) ??
     tb.thunderboltsBoost(s, p) ??
+    zemo.zemoBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -26632,6 +26736,7 @@ function enemyScheme(
     ...thanos.thanosActivationInitiated(s, id),
     ...hoodModular.hoodModularActivationInitiated(s, id, s.activePlayerId),
     ...esn.esnActivationInitiated(s, id, s.activePlayerId, "scheme"),
+    ...zemo.zemoActivationInitiated(s, id, s.activePlayerId, "scheme"),
     ...masterMold.masterMoldBeforeScheme(s, moldReceipt, { isTextBlank }),
     E(pendingBoosts.length ? "revealSchemeBoost" : "finishScheme"),
   );
@@ -26755,6 +26860,7 @@ function finishScheme(s: GameState) {
           Number(s.flags[`phoenixManipulationBonus:${activation.id}`] || 0),
         additional: !!s.flags[`phoenixManipulation:${activation.id}`],
         ignoreCrisis: true,
+        zemoWits: zemo.zemoWitsPlayer(s),
       },
     ),
     ...(extra === "rage" ? [E("mill", { amount })] : []),
@@ -27534,6 +27640,20 @@ function finishAttackAfterDamage(
         !find(s, target),
     ),
     ...btc.batrocAttacked(s, a.attacker),
+    ...zemo.zemoAttacked(
+      s,
+      a.attacker,
+      (target !== "hero" &&
+        !target.startsWith("hero:") &&
+        before > 0 &&
+        a.gmwReturnedDefender !== target &&
+        !find(s, target)) ||
+        ((target === "hero" || target.startsWith("hero:")) &&
+          !!s.players.find(
+            (seat) =>
+              seat.id === (target === "hero" ? recipientId : target.slice(5)),
+          )?.eliminated),
+    ),
     ...esn.esnAttacked(
       s,
       a.attacker,
@@ -28596,6 +28716,7 @@ function reveal(
         ...mdk.SCIENTIST_SUPREME_CODES,
         ...tb.THUNDERBOLTS_CODES,
         ...tb.ELITE_THUNDERBOLT_CODES,
+        ...zemo.ZEMO_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -28668,7 +28789,8 @@ function reveal(
         ) ||
         (tb.THUNDERBOLTS_IN_PLAY_OBLIGATIONS as readonly string[]).includes(
           p.code,
-        ))
+        ) ||
+        (zemo.ZEMO_IN_PLAY_OBLIGATIONS as readonly string[]).includes(p.code))
     ) {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       if (!s.player.inPlay.some((x) => x.id === p.id)) {
@@ -28869,6 +28991,7 @@ function reveal(
       ...mdk.SCIENTIST_SUPREME_CODES,
       ...tb.THUNDERBOLTS_CODES,
       ...tb.ELITE_THUNDERBOLT_CODES,
+      ...zemo.ZEMO_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -28946,6 +29069,7 @@ function reveal(
       btc.batrocReveal(s, p) ??
       mdk.modokReveal(s, p) ??
       tb.thunderboltsReveal(s, p) ??
+      zemo.zemoReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -29063,6 +29187,7 @@ function reveal(
     btc.batrocReveal(s, p) ??
     mdk.modokReveal(s, p) ??
     tb.thunderboltsReveal(s, p) ??
+    zemo.zemoReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -30537,6 +30662,7 @@ function resolve(s: GameState, e: Effect) {
           btc.batrocReveal(state, piece) ??
           mdk.modokReveal(state, piece) ??
           tb.thunderboltsReveal(state, piece) ??
+          zemo.zemoReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -30705,6 +30831,7 @@ function resolve(s: GameState, e: Effect) {
   if (btc.resolveBatrocEffect(s, e, batrocPorts)) return;
   if (mdk.resolveModokEffect(s, e, modokPorts)) return;
   if (tb.resolveThunderboltsEffect(s, e, thunderboltsPorts)) return;
+  if (zemo.resolveZemoEffect(s, e, zemoPorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -34499,6 +34626,21 @@ function resolve(s: GameState, e: Effect) {
             break;
           }
         }
+        const wits = zemo.zemoThreatOptions(s, e, zemoPorts);
+        if (wits.length) {
+          choose(
+            s,
+            "Battle of Wits",
+            `Prevent some of the incoming ${e.amount} threat?`,
+            [
+              ...wits,
+              option("allow", `Place ${e.amount} threat`, [
+                { ...e, zemoWitsDone: true },
+              ]),
+            ],
+          );
+          break;
+        }
         const options = e.bwThreatDone ? [] : blackWidowThreatOptions(s, e);
         if (options.length)
           choose(
@@ -35318,6 +35460,23 @@ function resolve(s: GameState, e: Effect) {
         e.id !== sabretooth.sabretoothKelly(s)?.id,
         "Robert Kelly has no basic ATK or THW power.",
       );
+      // Divided Loyalties: 1 more resource to attack or thwart with an ally.
+      if (
+        !e.zemoAllyCostPaid &&
+        zemo.zemoAllyCost(s) &&
+        canPay(s, zemo.zemoAllyCost(s))
+      ) {
+        requestPayment(
+          s,
+          "Divided Loyalties · additional cost",
+          zemo.zemoAllyCost(s),
+          [{ ...e, zemoAllyCostPaid: true }],
+          [],
+          undefined,
+          false,
+        );
+        break;
+      }
       if (
         e.kind === "thwart" &&
         !e.spdrThwartCostPaid &&
@@ -39439,13 +39598,26 @@ function resolve(s: GameState, e: Effect) {
       antPack.antManPackPhaseEnded(s);
       // The ready step is a game rule, not a player card effect.
       s.flags.helaReadyStep = true;
+      // Undermine Support: each exhausted support readies for 1 resource.
+      const undermined = zemo.zemoSupportCost(s)
+        ? s.player.inPlay
+            .filter(
+              (p) =>
+                p.exhausted &&
+                card(p).type_code === "support" &&
+                canReadyPiece(s, p),
+            )
+            .map((p) => p.id)
+        : [];
       for (const p of [...s.player.inPlay, ...controlledNPCs(s)]) {
-        if (canReadyPiece(s, p)) p.exhausted = false;
+        if (canReadyPiece(s, p) && !undermined.includes(p.id))
+          p.exhausted = false;
         p.bonusAtk = 0;
         p.bonusThw = 0;
       }
       readyIdentity(s);
       delete s.flags.helaReadyStep;
+      add(s, ...zemo.zemoReadySupports(s, s.activePlayerId, undermined));
       s.flags.lead = 0;
       s.flags.aerial = false;
       s.flags.discount = 0;
@@ -39512,6 +39684,7 @@ function resolve(s: GameState, e: Effect) {
       add(
         s,
         ...towerDefense.towerDefensePlayerPhaseEnded(s),
+        ...zemo.zemoPlayerPhaseEnded(s),
         E("villainPhaseForcedInterrupts", {
           remaining: [
             ...inheritors.inheritorsVillainPhaseInterrupts(s),
@@ -40632,6 +40805,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...btc.batrocActions(s, p, batrocPorts),
               ...mdk.modokActions(s, p, modokPorts),
               ...tb.thunderboltsActions(s, p),
+              ...zemo.zemoActions(s, p, zemoPorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -40776,6 +40950,17 @@ export function dispatch(state: GameState, command: Command): GameState {
           ) {
             const selected = db
               .darkBeastActions(s, db.darkBeastActionSource(s, command.id)!)
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
+            add(s, ...selected!.effects);
+          } else if (
+            zemo.zemoActionSource(s, command.id) &&
+            zemo
+              .zemoActions(s, zemo.zemoActionSource(s, command.id)!, zemoPorts)
+              .some((o) => !command.action || o.id === command.action)
+          ) {
+            const selected = zemo
+              .zemoActions(s, zemo.zemoActionSource(s, command.id)!, zemoPorts)
               .find((o) => !command.action || o.id === command.action);
             need(selected, "This action needs its printed cost.");
             add(s, ...selected!.effects);

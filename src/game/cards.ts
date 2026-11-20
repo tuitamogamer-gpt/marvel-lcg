@@ -1756,6 +1756,26 @@ export const VILLAINS = [
       "Citizen V's Thunderbolts have come to arrest you. Defeat one Thunderbolt per hero to break their ranks before Citizen V can fall.",
     color: "#2b4a7a",
   },
+  {
+    id: "baron_zemo",
+    name: "Baron Zemo",
+    // Baron Zemo (A1) in Standard, (B1) in Expert, each unmasked on his
+    // back when the players reach Fighting Zemo.
+    codes: ["50165a", "50166a"],
+    schemes: ["50167b"],
+    module: "scientist_supreme",
+    moduleCount: 2,
+    defaultModules: ["scientist_supreme", "s.h.i.e.l.d."],
+    // The S.H.I.E.L.D. Executive Board starts in play; the evidence is
+    // prepared at setup.
+    fixedSets: ["s.h.i.e.l.d._executive_board"],
+    difficulty: 5,
+    title: "Zemo's Manipulations",
+    location: "S.H.I.E.L.D. headquarters",
+    description:
+      "Gather the evidence that unmasks the mole on the S.H.I.E.L.D. Executive Board before Baron Zemo turns it against you, then make your accusation and bring Zemo down unmasked.",
+    color: "#5b2a6e",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1864,6 +1884,7 @@ export const MODULES = [
   { id: "power_of_the_atom", name: "Power of the Atom", difficulty: 4 },
   { id: "supersonic", name: "Supersonic", difficulty: 3 },
   { id: "the_leaper", name: "The Leaper", difficulty: 3 },
+  { id: "s.h.i.e.l.d.", name: "S.H.I.E.L.D.", difficulty: 2 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(
@@ -2492,11 +2513,15 @@ export function enemyAttachmentModifier(
   enemyId: string,
   stat: "attack" | "scheme" = "attack",
 ): number {
-  return s.attachments
-    .filter(
+  return [
+    ...s.attachments.filter(
       (p) => p.attachedTo === enemyId && card(p).type_code === "attachment",
-    )
-    .reduce((total, p) => total + Number(card(p)[stat] || 0), 0);
+    ),
+    // The board members who joined the villain: their printed ATK and SCH.
+    ...(s.villain && enemyId === s.villain.id
+      ? s.executiveBoard?.joined || []
+      : []),
+  ].reduce((total, p) => total + Number(card(p)[stat] || 0), 0);
 }
 
 export function pieceHP(s: GameState, p: Piece) {

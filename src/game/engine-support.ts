@@ -78,6 +78,7 @@ import {
 import { BATROC_CODES, BATROCS_BRIGADE_CODES } from "./batroc.js";
 import { MODOK_CODES, SCIENTIST_SUPREME_CODES } from "./modok.js";
 import { ELITE_THUNDERBOLT_CODES, THUNDERBOLTS_CODES } from "./thunderbolts.js";
+import { ZEMO_CODES } from "./baron-zemo.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -391,6 +392,7 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...SCIENTIST_SUPREME_CODES,
   ...THUNDERBOLTS_CODES,
   ...ELITE_THUNDERBOLT_CODES,
+  ...ZEMO_CODES,
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

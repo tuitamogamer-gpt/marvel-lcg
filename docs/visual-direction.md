@@ -36,7 +36,6 @@ The lobby banner uses the existing official artwork, framed with CSS. `public/fa
 
 These automated audits complement visual inspection; they do not constitute comprehensive accessibility certification. The browser test also exercises the complete setup/payment/villain-turn/save-resume flow, resource-card enlargement, cancellation, saved receipts, and the absence of timed advancement.
 
-
 ## Desktop hot-seat and action clarity
 
 A cream-and-yellow focus window opens for each action checkpoint. Card faces occupy the main area; the source, explanation, payment receipt or attack calculation, and before → after values stay alongside them. Proceed and the next-step description remain in a fixed footer, including on 1280×800 laptops. View table returns to the persistent side panel without advancing the game. Card inspection also leaves the step pending. Dialogs render above the navigation through a shared portal. The scrollable action/history regions are keyboard accessible.
@@ -68,14 +67,14 @@ Three related defects are fixed: counter and health tokens rest inside the card'
 The table was drawn for a 1440 × 900 window and kept that size on larger screens, leaving small cards and labels beside a wide empty band of playmat on a 1080p or 1440p monitor. From 1580 × 940 upward the table and its header scale up with CSS `zoom`:
 
 | Window at least | Scale |
-| --- | --- |
-| 1580 × 940 | 1.1 |
-| 1720 × 1030 | 1.2 |
-| 1870 × 1120 | 1.3 |
-| 2090 × 1250 | 1.45 |
-| 2300 × 1380 | 1.6 |
-| 2740 × 1640 | 1.9 |
-| 3310 × 1980 | 2.3 |
+| --------------- | ----- |
+| 1580 × 940      | 1.1   |
+| 1720 × 1030     | 1.2   |
+| 1870 × 1120     | 1.3   |
+| 2090 × 1250     | 1.45  |
+| 2300 × 1380     | 1.6   |
+| 2740 × 1640     | 1.9   |
+| 3310 × 1980     | 2.3   |
 
 Each step leaves the scaled layout at least the 1436 × 854 it was drawn for. The three card-size variables that follow the window height divide that height by the scale. Dialogs, card previews and combat ribbons render through portals outside the table and keep their own size. The rules sit behind `@supports (zoom: 1)`; without it the table keeps its previous size.
 
@@ -107,7 +106,6 @@ Tower Defense is the first scenario with two villains and two main schemes in pl
 - **Main schemes.** Both main schemes sit side by side in a two-column grid, Under Siege (1B) then The Armies of Thanos (2B), each with its threat token and per-phase threat. Focused Defense is a gold "Focused · 1B/2B" chip in the active scheme's heading, which inspects the card; the scheme also gets a gold outline. Each scheme's completion effect is in the title of its threat line.
 - **Avengers Tower** is a full-width strip under the two schemes: a small card, its side ("Stronghold" or "Damaged"), a damage count against the per-player limit with a meter, and what happens at the limit.
 - On phones the rows, the two schemes and the Tower strip stack in the single opposition column; nothing scrolls sideways at 320px. The Tower Defense browser check audits the table at 1280, 768, 390 and 320px.
-
 
 ## Hela's two sides and the Journey Through Hel, 2026-11-18
 
@@ -251,3 +249,7 @@ The objective counts the Inhumans freed, "Free the Inhumans · N of 4 free", and
 ## The Thunderbolts' arrest, 2026-11-20
 
 The objective counts the Thunderbolts still to defeat, "Defeat N Thunderbolts, then Citizen V · X of N", and reads "Defeat Citizen V" once enough are in the victory display; his caption gives that condition and the heal that replaces his activation against a player engaged with a Thunderbolt. Thunderbolt Backup is labelled and captioned with the minion it holds and its end-of-round swap, and that minion's tile reads "On Thunderbolt Backup · engaged with no hero" instead of naming a hero. Jolt's tile shows her parley counters and offers "Parley · exhaust your hero", with the full Hero Action as its accessible name, and Innocent Bystanders is captioned with its counters and its cost in the player's area.
+
+## Baron Zemo's mole hunt, 2026-11-20
+
+The objective counts what the evidence leaves, "Expose the mole · N combinations left · M suspects", and reads "Defeat Baron Zemo, unmasked" on Fighting Zemo. His label shows the side in play, A1 or B1 and then A2 or B2 with "UNMASKED", and his caption gives the reset that replaces his defeat or the interrupt he resolves once unmasked. The main scheme's one-line note lists the evidence gained and the cards left in the S.H.I.E.L.D. envelope, so the threat token stays clear of it. Each board member is labelled "ENVIRONMENT · BOARD MEMBER" and captioned with its secret counters, when it joins the villain and the combinations that still implicate it; its Hero Action is a button, "Spend 2 energy · remove a secret", with the full ability as its accessible name. Board members at the villain's side appear among his attachments with their secrets. Every other scenario with modular sets offers an Executive Board setting, Off or Added, with one line of help.

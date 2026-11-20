@@ -88,6 +88,7 @@ import {
   ELITE_THUNDERBOLT_CODES,
   THUNDERBOLTS_CODES,
 } from "../src/game/thunderbolts";
+import { ZEMO_CODES } from "../src/game/baron-zemo";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -170,6 +171,7 @@ const badoonCodes = new Set<string>([
   ...SCIENTIST_SUPREME_CODES,
   ...THUNDERBOLTS_CODES,
   ...ELITE_THUNDERBOLT_CODES,
+  ...ZEMO_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -553,7 +555,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(94);
+    expect(MODULES).toHaveLength(95);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "temporal",
@@ -583,9 +585,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(3395);
-    expect(coverage.unsupportedFaces).toBe(1156);
-    expect(coverage.dedicatedFaces).toBe(2957);
+    expect(coverage.executableFaces).toBe(3434);
+    expect(coverage.unsupportedFaces).toBe(1117);
+    expect(coverage.dedicatedFaces).toBe(2996);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -820,15 +822,15 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
       });
   });
-  it("closes all 148 fifth-batch source faces, Black Widow, Batroc, M.O.D.O.K. and Thunderbolts while retaining the other Agents of SHIELD scenario and campaign gaps", () => {
+  it("closes all 148 fifth-batch source faces and every Agents of SHIELD scenario: Black Widow, Batroc, M.O.D.O.K., Thunderbolts and Baron Zemo", () => {
     const coverage = inventory.installedRegistryCoverage;
     const shield = coverage.products.find(
       (pack: { code: string }) => pack.code === "aos",
     );
     expect(shield).toMatchObject({
       faceCount: 221,
-      executableFaces: 182,
-      installedCardClosure: false,
+      executableFaces: 221,
+      installedCardClosure: true,
     });
     // Black Widow with the A.I.M. Abduction and A.I.M. Science sets fills
     // positions 64 to 85.
@@ -921,16 +923,25 @@ describe("complete expansion rules inventory", () => {
         executable: true,
         mechanism: "dedicated-module",
       });
-    expect(shield.unsupportedFaceCodes).toEqual(
+    // Baron Zemo with the S.H.I.E.L.D. and Executive Board sets and the
+    // evidence fills positions 165 to 193.
+    const zemoFaces = new Set<string>(ZEMO_CODES);
+    expect(zemoFaces.size).toBe(39);
+    expect(
       cards
         .filter(
           (entry: { pack_code: string; position: number }) =>
-            entry.pack_code === "aos" && entry.position > 164,
+            entry.pack_code === "aos" && entry.position >= 165,
         )
         .map((entry: { code: string }) => entry.code)
         .sort(),
-    );
-    expect(shield.unsupportedFaceCodes).toHaveLength(39);
+    ).toEqual([...zemoFaces].sort());
+    for (const code of zemoFaces)
+      expect(audited.get(code)?.installedRegistry, code).toMatchObject({
+        executable: true,
+        mechanism: "dedicated-module",
+      });
+    expect(shield.unsupportedFaceCodes).toEqual([]);
     const slice = cards.filter(
       (entry: { pack_code: string; position: number }) =>
         ["ncrawler", "magneto"].includes(entry.pack_code) ||
@@ -1062,6 +1073,9 @@ describe("complete expansion rules inventory", () => {
         32 -
         // Agents of S.H.I.E.L.D.: Thunderbolts and the six Elite Thunderbolt
         // sets.
+        39 -
+        // Agents of S.H.I.E.L.D.: Baron Zemo, S.H.I.E.L.D., the Executive
+        // Board and the evidence.
         39 -
         2135,
     ).toBe(137);
@@ -1235,7 +1249,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(94);
+    expect(coverage.registeredModules).toHaveLength(95);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -1419,7 +1433,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(50);
+    ).toHaveLength(51);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "venom_goblin",
@@ -1666,7 +1680,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(173);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(174);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

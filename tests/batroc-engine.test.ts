@@ -225,7 +225,7 @@ describe("Batroc: original source", () => {
     );
     for (const code of [...BATROC_CODES, ...BATROCS_BRIGADE_CODES])
       expect(hasExecutableScript(code), code).toBe(true);
-    expect(MODULES.at(-8)?.id).toBe("batrocs_brigade");
+    expect(MODULES.at(-9)?.id).toBe("batrocs_brigade");
     expect(scenarioModules("batroc")).toHaveLength(MODULES.length);
     expect(VILLAINS.find((v) => v.id === "batroc")).toMatchObject({
       codes: ["50086a", "50086b"],

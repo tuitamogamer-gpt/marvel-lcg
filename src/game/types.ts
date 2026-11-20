@@ -133,6 +133,9 @@ export interface Piece {
   /** The Thunderbolt minion attached to Thunderbolt Backup: in play, engaged
    * with no player. */
   thunderboltBackup?: boolean;
+  /** A hero from the players' collection treated as an Elite minion, with
+   * Reluctant Foe attached. */
+  reluctantFoe?: boolean;
 }
 export interface Effect {
   type: string;
@@ -322,6 +325,10 @@ export interface GameState {
   batroc?: import("./batroc.js").BatrocState;
   modok?: import("./modok.js").ModokState;
   thunderbolts?: import("./thunderbolts.js").ThunderboltsState;
+  zemo?: import("./baron-zemo.js").ZemoState;
+  /** The S.H.I.E.L.D. Executive Board in play, in Baron Zemo or added to any
+   * other scenario. */
+  executiveBoard?: import("./baron-zemo.js").ExecutiveBoardState;
   venomGoblin?: import("./venom-goblin.js").VenomGoblinState;
   /** Across the Mojoverse: the show deck. */
   spiral?: import("./spiral.js").SpiralState;

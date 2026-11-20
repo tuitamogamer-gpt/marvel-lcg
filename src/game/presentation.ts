@@ -13,9 +13,15 @@ export function attachmentsFor(s: GameState, hostId: string) {
     if (aliases.includes(hostId))
       for (const alias of aliases) hostIds.add(alias);
   }
-  return [...allInPlay(s), ...s.attachments].filter(
-    (piece) => !!piece.attachedTo && hostIds.has(piece.attachedTo),
-  );
+  return [
+    ...[...allInPlay(s), ...s.attachments].filter(
+      (piece) => !!piece.attachedTo && hostIds.has(piece.attachedTo),
+    ),
+    // The board members who joined the villain stay attached to it.
+    ...(s.villain && hostId === s.villain.id
+      ? s.executiveBoard?.joined || []
+      : []),
+  ];
 }
 
 export function attackContext(s: GameState, attack: Attack | null = s.attack) {

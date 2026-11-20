@@ -244,7 +244,7 @@ describe("Thunderbolts: original source", () => {
     );
     for (const code of [...THUNDERBOLTS_CODES, ...ELITE_THUNDERBOLT_CODES])
       expect(hasExecutableScript(code), code).toBe(true);
-    expect(MODULES.slice(-6).map((m) => m.id)).toEqual([
+    expect(MODULES.slice(-7, -1).map((m) => m.id)).toEqual([
       ...THUNDERBOLTS_MODULAR_SETS,
     ]);
     expect(scenarioModules("thunderbolts").map((m) => m.id)).toEqual([
