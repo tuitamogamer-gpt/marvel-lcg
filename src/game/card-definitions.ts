@@ -116,7 +116,9 @@ export const card = (piece: Piece | string): Card => {
           ? printed.traits || ""
           : piece.fneConverted
             ? `${printed.traits || ""} Influenced.`
-            : `${printed.traits || ""} ${piece.helaUndead ? "Undead" : piece.deadpoolMinion ? "Pool" : piece.stormControlled ? "Controlled" : "Enthralled"}.`,
+            : piece.fneDeceived
+              ? `${printed.traits || ""} Deceived.`
+              : `${printed.traits || ""} ${piece.helaUndead ? "Undead" : piece.deadpoolMinion ? "Pool" : piece.stormControlled ? "Controlled" : "Enthralled"}.`,
       }
     : printed;
 };

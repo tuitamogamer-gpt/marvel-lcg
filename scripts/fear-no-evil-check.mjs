@@ -28,7 +28,7 @@ await build({
       "export {UNDERLINGS,fneAttachmentCaption,fneEnvironmentCaption,fneInPlayCaption,fneMainNote,fneMinionCaption,fneObjective,fneSideSchemeCaption} from './src/game/fear-no-evil.ts';",
       "export const definition=p=>card(p);",
       "export function fixture(kind){",
-      " const mission=kind==='heist'||kind==='typhoid'?'fne_art_museum_heist':kind==='bugle'||kind==='tracksuit'?'fne_stop_the_presses':'fne_the_getaway';",
+      " const mission=kind==='heist'||kind==='typhoid'?'fne_art_museum_heist':kind==='bugle'||kind==='tracksuit'?'fne_stop_the_presses':kind==='imprisoned'?'fne_the_raft_breakout':'fne_the_getaway';",
       " const underling=kind==='drained'?'electro':kind==='vehicle'?'hammerhead':kind==='bugle'||kind==='converted'?'purple_man':kind==='typhoid'?'typhoid_mary':'bullseye';",
       " const difficulty=kind==='spine'?'expert':'standard';",
       " let s=newGame({heroId:'captain_marvel',aspect:'aggression',villainId:mission,difficulty,seed:60128,pacing:'expert',underling});",
@@ -54,6 +54,8 @@ await build({
       " else if(kind==='bugle'){s.player.form='alter';}",
       " else if(kind==='typhoid'){native([{type:'damage',target:s.villain.id,amount:s.villain.hp,source:'hero'}]);}",
       " else if(kind==='tracksuit'){const p=take('60204');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
+      " else if(kind==='disaster'){const p=makePiece(s,'60179');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
+      " else if(kind==='imprisoned'){const p=take('60150');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
       " else if(kind==='converted'){const ally=makePiece(s,'01030');ally.ownerId='p1';s.player.inPlay.push(ally);const p=take('60100');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
       " else throw Error('Unknown fixture '+kind);",
       " syncSeat(s);return{state:s,...result};",
@@ -138,6 +140,9 @@ const SET_SIZES = {
   fne_stop_the_presses: 8,
   fne_tombstone: 5,
   fne_tracksuit_mafia: 7,
+  // Part three: Master Key, the six Prisoners and Imprisoned.
+  fne_the_raft_breakout: 8,
+  fne_disasters: 5,
 };
 function originals(s, held = []) {
   const all = [...pieces(s), ...held];
@@ -384,6 +389,13 @@ const MISSIONS = {
     modules: ["fne_tombstone", "fne_tracksuit_mafia"],
     threat: 1,
   },
+  fne_the_raft_breakout: {
+    name: "The Raft Breakout",
+    help: /The villain holds the Master Key/,
+    scheme: "60142b",
+    modules: ["fne_the_owl", "fne_tombstone"],
+    threat: 2,
+  },
 };
 const SETUPS = [
   ["fne_the_getaway", "standard", "bullseye"],
@@ -392,6 +404,7 @@ const SETUPS = [
   ["fne_art_museum_heist", "expert", "bullseye"],
   ["fne_stop_the_presses", "standard", "purple_man"],
   ["fne_stop_the_presses", "expert", "typhoid_mary"],
+  ["fne_the_raft_breakout", "standard", "electro"],
 ];
 try {
   for (const width of widths)
@@ -457,7 +470,22 @@ try {
           1,
           "one Art on the villain",
         );
-      else {
+      else if (villainId === "fne_the_raft_breakout") {
+        assert.ok(
+          s.attachments.some(
+            (p) => p.code === "60143" && p.attachedTo === s.villain.id,
+          ),
+          "Master Key on the villain",
+        );
+        assert.ok(
+          s.minions.some((p) =>
+            ["60144", "60145", "60146", "60147", "60148", "60149"].includes(
+              p.code,
+            ),
+          ),
+          "an escaped Prisoner",
+        );
+      } else {
         assert.ok(
           (s.environments || []).some((p) => p.code === "60152"),
           "the Daily Bugle in play",
@@ -630,6 +658,48 @@ try {
     assert.deepEqual(originals(s), owned);
     await resumeExact();
     await audit("tracksuit", width);
+    checks.push({ ...current });
+
+    current = { kind: "disaster", width };
+    f = fixture("disaster");
+    owned = originals(f.state);
+    await open(width, f.state);
+    s = await resolveFixture();
+    const inferno = s.environments.find((p) => p.code === "60179");
+    assert.equal(inferno.counters, 2, "Towering Inferno: 2 civilian counters");
+    await captions(s);
+    await page
+      .getByRole("button", {
+        name: "Hero Action · exhaust your hero: remove civilian counters",
+        exact: true,
+      })
+      .click();
+    s = await until(
+      (next) =>
+        next.environments.find((p) => p.id === inferno.id)?.counters === 1,
+      "the Disaster's Hero Action",
+    );
+    assert.ok(s.player.exhausted, "the hero is exhausted");
+    await captions(s);
+    await artwork(["60179"]);
+    await resumeExact();
+    await audit("disaster", width);
+    checks.push({ ...current });
+
+    current = { kind: "imprisoned", width };
+    f = fixture("imprisoned");
+    owned = originals(f.state, f.pending);
+    await open(width, f.state);
+    s = await resolveFixture();
+    assert.ok(
+      s.player.inPlay.some((p) => p.code === "60150"),
+      "Imprisoned in your play area",
+    );
+    await captions(s);
+    await artwork(["60150"]);
+    assert.deepEqual(originals(s), owned);
+    await resumeExact();
+    await audit("imprisoned", width);
     checks.push({ ...current });
 
     current = { kind: "converted", width };

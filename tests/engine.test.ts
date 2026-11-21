@@ -32,6 +32,7 @@ import { visionCanAttack } from "../src/game/vision";
 import { cyclopsCanAttack } from "../src/game/cyclops";
 import { valkyrieCannotBasicAttack } from "../src/game/valkyrie";
 import { stunNetted } from "../src/game/black-widow-villain";
+import { fneImprisoned } from "../src/game/fear-no-evil";
 import { waspBasicAttackCost } from "../src/game/wasp";
 import { captainThwartBlocked } from "../src/game/captain-america";
 function base(
@@ -732,7 +733,9 @@ describe("complete seeded missions", () => {
           if (
             !s.player.exhausted &&
             s.player.form === "hero" &&
-            !magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
+            !magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank }) &&
+            // Imprisoned: no attack or thwart.
+            !fneImprisoned(s, s.activePlayerId)
           ) {
             const cannotAttack =
               !visionCanAttack(s) ||

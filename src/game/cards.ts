@@ -1859,6 +1859,22 @@ export const VILLAINS = [
       "An Underling wants the Daily Bugle's story buried. Each hero protects a Bugle reporter whose stamina fuels their help; keep every one of them in the game and defend against the attacks that wear them down.",
     color: "#3b5f8a",
   },
+  {
+    id: "fne_the_raft_breakout",
+    name: "The Raft Breakout",
+    // Fear No Evil mission, played against a chosen Underling.
+    codes: ["60065", "60066", "60067"],
+    schemes: ["60142b"],
+    module: "fne_the_owl",
+    moduleCount: 2,
+    defaultModules: ["fne_the_owl", "fne_tombstone"],
+    difficulty: 3,
+    title: "The Raft Breakout",
+    location: "The Raft",
+    description:
+      "An Underling holds the Master Key to every cell in the Raft. Each hero faces an escaped Prisoner from the start; defeat the escapees to pull threat back off the breakout before the prison empties.",
+    color: "#4d5b6e",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1974,6 +1990,7 @@ export const MODULES = [
   { id: "fne_the_owl", name: "The Owl", difficulty: 3 },
   { id: "fne_tombstone", name: "Tombstone", difficulty: 3 },
   { id: "fne_tracksuit_mafia", name: "Tracksuit Mafia", difficulty: 3 },
+  { id: "fne_disasters", name: "Disasters", difficulty: 2 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(

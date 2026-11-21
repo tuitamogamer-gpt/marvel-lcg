@@ -2476,7 +2476,14 @@ function nativeIdentityDamageSource(s: GameState, source: string) {
 }
 function syncValkyrieConvertedCards(s: GameState) {
   phoenix.phoenixSyncControlled(s);
+  // Baron Zemo (Prisoner): each ally with threat on it is a Deceived minion.
+  fne.fneSyncDeceived(s);
   for (const p of [...s.minions]) {
+    // Those still Deceived stay minions.
+    if (p.fneDeceived) {
+      p.treatedAsMinion = true;
+      continue;
+    }
     // Converted: the ally is an Influenced minion while it is attached.
     if (p.fneConverted) {
       if (
@@ -6543,6 +6550,7 @@ function thwart(
       (!ignoreCrisis &&
         !nebula.nebulaIgnoresRestrictions(s).crisis &&
         (deadpool.deadpoolPlayerIcons(s, "scheme_crisis") > 0 ||
+          fne.fneCrisis(s) ||
           s.sideSchemes.some((p) =>
             iceman.icemanSchemeIcon(s, p, "scheme_crisis"),
           ))) ||
@@ -6612,6 +6620,7 @@ function thwart(
         E("defeatScheme", { id: p.id, source }),
       );
     }
+    add(s, ...fne.fneThreatRemoved(s, p, removed));
     return removed;
   }
 }
@@ -7075,6 +7084,7 @@ export function targets(
       return [
         ...((!(
           deadpool.deadpoolPlayerIcons(s, "scheme_crisis") > 0 ||
+          fne.fneCrisis(s) ||
           s.sideSchemes.some((p) =>
             iceman.icemanSchemeIcon(s, p, "scheme_crisis"),
           )
@@ -7535,12 +7545,12 @@ function shadowcatNativeIgnoreReceipts(
         .filter((p) => keyword(p, "Patrol", s))
         .map((p) => p.id),
     );
-    capture(
-      "crisis",
-      s.sideSchemes
+    capture("crisis", [
+      ...s.sideSchemes
         .filter((p) => iceman.icemanSchemeIcon(s, p, "scheme_crisis"))
         .map((p) => p.id),
-    );
+      ...fne.fneCrisisSources(s),
+    ]);
   }
   return receipts;
 }
@@ -7650,6 +7660,7 @@ function attackAction(
   if (
     source === "hero" &&
     (magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank }) ||
+      fne.fneImprisoned(s, s.activePlayerId) ||
       !valkyrie.valkyrieCanAttackTarget(s, target) ||
       !vision.visionCanAttack(s) ||
       !shadowcat.shadowcatCanAttack(s) ||
@@ -7814,7 +7825,8 @@ function thwartAction(
   if (!jubilee.jubileeCanRemoveThreat(s, target, source)) return;
   if (
     source === "hero" &&
-    magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
+    (magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank }) ||
+      fne.fneImprisoned(s, s.activePlayerId))
   )
     return;
   if (
@@ -10807,6 +10819,12 @@ export function playable(s: GameState, p: Piece): string | null {
     magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
   )
     return "Wrapped in Metal prevents this identity from attacking, thwarting, defending or recovering.";
+  if (
+    c.type_code === "event" &&
+    /\([^)]*\b(?:attack|thwart)\b/i.test(c.text || "") &&
+    fne.fneImprisoned(s, s.activePlayerId)
+  )
+    return "Imprisoned: you cannot attack or thwart.";
   const npcRestriction = npcPlayerPlayRestriction(s, p);
   if (npcRestriction) return npcRestriction;
   if (
@@ -11127,9 +11145,10 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
         ? Array(cost).fill("physical")
         : p.code === "15012" &&
             !s.player.confused &&
-            s.sideSchemes.some((scheme) =>
-              iceman.icemanSchemeIcon(s, scheme, "scheme_crisis"),
-            )
+            (fne.fneCrisis(s) ||
+              s.sideSchemes.some((scheme) =>
+                iceman.icemanSchemeIcon(s, scheme, "scheme_crisis"),
+              ))
           ? ["mental"]
           : sinisterPlayRequirements(p);
     const ordinary = canPay(
@@ -11265,9 +11284,10 @@ function requestPlay(s: GameState, p: Piece, discountHandled = false) {
       ? Array(cost).fill("physical")
       : p!.code === "15012" &&
           !s.player.confused &&
-          s.sideSchemes.some((piece) =>
-            iceman.icemanSchemeIcon(s, piece, "scheme_crisis"),
-          )
+          (fne.fneCrisis(s) ||
+            s.sideSchemes.some((piece) =>
+              iceman.icemanSchemeIcon(s, piece, "scheme_crisis"),
+            ))
         ? ["mental"]
         : sinisterPlayRequirements(p!);
   need(
@@ -12525,6 +12545,7 @@ export function canChangeIdentityForm(
     storm.stormCanChangeForm(s, to) &&
     !s.flags.antManCannotChangeUntilTurnEnd &&
     !sandman.sandmanFormLocked(s) &&
+    !(to === "alter" && fne.fneImprisoned(s, s.activePlayerId)) &&
     sentinels.sentinelsCanChangeForm(
       s,
       s.activePlayerId,
@@ -12754,6 +12775,12 @@ export function abilityOptions(
     c.type_code !== "ally" &&
     /\([^)]*\b(?:attack|thwart|defense|recover)\b/i.test(c.text || "") &&
     magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
+  )
+    return [];
+  if (
+    c.type_code !== "ally" &&
+    /\([^)]*\b(?:attack|thwart)\b/i.test(c.text || "") &&
+    fne.fneImprisoned(s, s.activePlayerId)
   )
     return [];
   if (
@@ -13235,6 +13262,15 @@ function ability(s: GameState, id: string, action = "special") {
       magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
     ),
     "Wrapped in Metal prevents this identity from using this ability.",
+  );
+  need(
+    !(
+      actionSource &&
+      card(actionSource).type_code !== "ally" &&
+      /\([^)]*\b(?:attack|thwart)\b/i.test(card(actionSource).text || "") &&
+      fne.fneImprisoned(s, s.activePlayerId)
+    ),
+    "Imprisoned: you cannot attack or thwart.",
   );
   if (!["attack", "thwart"].includes(action)) {
     const native = wideawake.projectWideawakeActionOptions(
@@ -15373,9 +15409,10 @@ const scarletPorts: scarletWitch.ScarletWitchPorts = {
     if (
       p.code === "15012" &&
       !s.player.confused &&
-      s.sideSchemes.some((piece) =>
-        iceman.icemanSchemeIcon(s, piece, "scheme_crisis"),
-      )
+      (fne.fneCrisis(s) ||
+        s.sideSchemes.some((piece) =>
+          iceman.icemanSchemeIcon(s, piece, "scheme_crisis"),
+        ))
     )
       return false;
     return !playable(view, p);
@@ -16538,6 +16575,7 @@ const gmwPorts: gmwPack.GmwPlayerPackPorts = {
     s.scheme.threat > 0 &&
     !(
       deadpool.deadpoolPlayerIcons(s, "scheme_crisis") > 0 ||
+      fne.fneCrisis(s) ||
       s.sideSchemes.some((p) => iceman.icemanSchemeIcon(s, p, "scheme_crisis"))
     ) &&
     rulesCode(s.scheme) !== "01139b" &&
@@ -18111,6 +18149,15 @@ const fnePorts: fne.FearNoEvilPorts = {
   },
   putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
   endGame: (s, won, reason) => endGame(s, won, reason),
+  characterThwart: (s, id) => {
+    if (id.startsWith("hero:")) {
+      const seat = s.players.find((x) => x.id === id.slice(5));
+      return seat && !seat.eliminated ? heroStats(seatView(s, seat)).thwart : 0;
+    }
+    const p = find(s, id);
+    return p ? allyStat(s, p, "thwart") : 0;
+  },
+  characterTrait: (s, id, trait) => captainPackHasTrait(s, id, trait),
 };
 const zemoPorts: zemo.ZemoPorts = {
   ...mutagenPorts,
@@ -22175,8 +22222,11 @@ function niAllyTargetsRaw(s: GameState, p: Piece, kind: "attack" | "thwart") {
         ? t.id !== s.villain.id ||
           !engaged(s).some((m) => keyword(m, "Guard", s))
         : t.id !== "main" ||
-          (!s.sideSchemes.some((ss) =>
-            iceman.icemanSchemeIcon(s, ss, "scheme_crisis"),
+          (!(
+            fne.fneCrisis(s) ||
+            s.sideSchemes.some((ss) =>
+              iceman.icemanSchemeIcon(s, ss, "scheme_crisis"),
+            )
           ) &&
             !engaged(s).some((m) => keyword(m, "Patrol", s))),
     );
@@ -22723,6 +22773,7 @@ const visionPorts: vision.VisionPorts = {
       !ordinary.some((p) => p.id === "main") &&
       (!(
         deadpool.deadpoolPlayerIcons(s, "scheme_crisis") > 0 ||
+        fne.fneCrisis(s) ||
         s.sideSchemes.some((p) =>
           iceman.icemanSchemeIcon(s, p, "scheme_crisis"),
         )
@@ -24810,7 +24861,10 @@ const jubileePorts: jubilee.JubileePorts = {
       if (
         s.player.exhausted ||
         s.player.form !== "hero" ||
-        magneto.magnetoIdentityRestricted(s, s.activePlayerId, { isTextBlank })
+        magneto.magnetoIdentityRestricted(s, s.activePlayerId, {
+          isTextBlank,
+        }) ||
+        fne.fneImprisoned(s, s.activePlayerId)
       )
         return [];
       return (["attack", "thwart"] as const).filter((power) =>
@@ -24854,6 +24908,11 @@ const jubileePorts: jubilee.JubileePorts = {
             isTextBlank,
           }),
         "This hero cannot make a basic power.",
+      );
+      need(
+        !fne.fneImprisoned(s, s.activePlayerId) ||
+          !["attack", "thwart"].includes(power),
+        "Imprisoned: you cannot attack or thwart.",
       );
       need(
         power !== "attack" ||
@@ -29321,7 +29380,10 @@ function reveal(
         s.activePlayerId,
         visionPorts.putEnvironment,
       );
-    else if (c.type_code === "environment") visionPorts.putEnvironment(s, p);
+    else if (c.type_code === "environment") {
+      visionPorts.putEnvironment(s, p);
+      fne.fneEnvironmentEntered(p);
+    }
     if (
       c.type_code === "obligation" &&
       (p.code === "32099" ||
@@ -41358,6 +41420,11 @@ export function dispatch(state: GameState, command: Command): GameState {
             }),
             "Wrapped in Metal prevents basic attacks, thwarts, defenses and recoveries.",
           );
+          if (command.action === "attack" || command.action === "thwart")
+            need(
+              !fne.fneImprisoned(s, s.activePlayerId),
+              "Imprisoned: you cannot attack or thwart.",
+            );
           if (command.action === "thwart")
             need(
               !captainThwartBlocked(s),

@@ -86,6 +86,10 @@ export interface Piece {
   mysterioManipulated?: boolean;
   /** Converted: this ally is treated as an Influenced minion. */
   fneConverted?: boolean;
+  /** Baron Zemo (Prisoner): this ally with threat on it is a Deceived minion. */
+  fneDeceived?: boolean;
+  /** Threat on this ally (Baron Zemo's Deceived allies). */
+  fneThreat?: number;
   /** Mind Control changes the same physical minion into a blank Controlled ally. */
   treatedAsAlly?: boolean;
   /** Possessed turns this physical ally into a Controlled minion. */

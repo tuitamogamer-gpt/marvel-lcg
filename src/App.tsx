@@ -473,8 +473,8 @@ import {
   synergyUse,
 } from "./game/god-of-lies";
 import {
-  BUGLE as FNE_BUGLE,
   FNE_ACTION_CODES,
+  FNE_ENVIRONMENT_ACTION_CODES,
   UNDERLINGS,
   UNDERLING_IDS,
   fneAttachmentCaption,
@@ -3050,7 +3050,9 @@ export default function App() {
                           ? "A Fear No Evil mission against the chosen Underling. Out Front, the villain cannot be hurt: damage removes main scheme threat instead, and with no threat left you pull up Alongside and the villain takes 2 damage per hero. Each round that ends with threat adds speed counters, which drive Burning Rubber, Pedestrians and the Escort Vehicle. Cops and Drive are preselected."
                           : villain.id === "fne_stop_the_presses"
                             ? "A Fear No Evil mission against the chosen Underling. Each hero controls a random Daily Bugle support with 3 stamina counters; if one leaves play, or the main scheme completes, you lose. After an undefended attack against you, place 2 threat on the main scheme (3 in Expert) or spend a stamina counter. In alter-ego form, exhaust a Bugle support at the Daily Bugle to give it a stamina counter back. Tombstone and Tracksuit Mafia are preselected."
-                            : "A Fear No Evil mission against the chosen Underling. One random Art piece starts on the villain, and the main scheme gains 1 more threat each villain phase for every Art on the villain. Use each Art's Hero Action to take it to your hero, and defend: an undefended attack moves an Art back to the villain. Cops and The Owl are preselected."}
+                            : villain.id === "fne_the_raft_breakout"
+                              ? "A Fear No Evil mission against the chosen Underling. The villain holds the Master Key: each hero starts against an escaped Elite Prisoner, and after the villain schemes, its minion boost cards are dealt to you facedown. Every defeated minion takes 1 threat off the breakout (2 for an Elite). The Owl and Tombstone are preselected."
+                              : "A Fear No Evil mission against the chosen Underling. One random Art piece starts on the villain, and the main scheme gains 1 more threat each villain phase for every Art on the villain. Use each Art's Hero Action to take it to your hero, and defend: an undefended attack moves an Art back to the villain. Cops and The Owl are preselected."}
                       </p>
                       {underling === "typhoid_mary" && (
                         <p className="setting-help">
@@ -8193,13 +8195,12 @@ function Tabletop({
                             Setting discards it
                           </span>
                         )}
-                        {!!s.fearNoEvil && fneEnvironmentCaption(s, p) && (
+                        {fneEnvironmentCaption(s, p) && (
                           <span className="stat-caption">
                             {fneEnvironmentCaption(s, p)}
                           </span>
                         )}
-                        {!!s.fearNoEvil &&
-                          p.code === FNE_BUGLE &&
+                        {FNE_ENVIRONMENT_ACTION_CODES.includes(p.code) &&
                           abilityOptions(s, p).map((a) => (
                             <button
                               key={a.id}
@@ -8215,7 +8216,10 @@ function Tabletop({
                                 })
                               }
                             >
-                              {a.label.replace(/^Alter-Ego Action · /, "")}
+                              {a.label.replace(
+                                /^(Alter-Ego|Hero) Action · /,
+                                "",
+                              )}
                             </button>
                           ))}
                         {MOJO_GENRE_SHOW_CAPTIONS[p.code] && (
@@ -8593,7 +8597,7 @@ function Tabletop({
                           {MOJO_GENRE_SCHEME_CAPTIONS[p.code]}
                         </span>
                       )}
-                      {!!s.fearNoEvil && fneSideSchemeCaption(s, p) && (
+                      {fneSideSchemeCaption(s, p) && (
                         <span className="stat-caption">
                           {fneSideSchemeCaption(s, p)}
                         </span>
@@ -8862,7 +8866,7 @@ function Tabletop({
                               {parleyCaption(p)}
                             </span>
                           )}
-                          {!!s.fearNoEvil && fneMinionCaption(s, p) && (
+                          {fneMinionCaption(s, p) && (
                             <span className="engagement-label">
                               {fneMinionCaption(s, p)}
                             </span>
@@ -9664,7 +9668,7 @@ function Tabletop({
                                 {bystanderCaption(s, p)}
                               </span>
                             )}
-                            {!!s.fearNoEvil && fneInPlayCaption(s, p) && (
+                            {fneInPlayCaption(s, p) && (
                               <span className="in-play-caption">
                                 {fneInPlayCaption(s, p)}
                               </span>

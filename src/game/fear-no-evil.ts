@@ -25,7 +25,12 @@ import type {
 export const GETAWAY_ID = "fne_the_getaway";
 export const HEIST_ID = "fne_art_museum_heist";
 /** The mission scenarios, each played against a chosen Underling. */
-export const FNE_MISSION_IDS = [GETAWAY_ID, HEIST_ID, "fne_stop_the_presses"];
+export const FNE_MISSION_IDS = [
+  GETAWAY_ID,
+  HEIST_ID,
+  "fne_stop_the_presses",
+  "fne_the_raft_breakout",
+];
 
 export const UNDERLINGS = {
   bullseye: {
@@ -258,6 +263,50 @@ const PART_TWO_SCRIPT_CODES = [
   TRACKSUIT,
 ];
 
+// The Raft Breakout
+export const RAFT_ID = "fne_the_raft_breakout";
+export const RAFT = "60142b";
+export const MASTER_KEY = "60143";
+const P_ABSORBING = "60144";
+const P_ZEMO = "60145";
+const P_DRANG = "60146";
+const P_MYSTERIO = "60147";
+const P_PROXIMA = "60148";
+const P_RHINO = "60149";
+export const IMPRISONED = "60150";
+// Disasters
+export const DISASTERS = ["60177", "60178", "60179"];
+const BRIDGE = "60180";
+const PERIL = "60181";
+/** Part three's faces. */
+const PART_THREE_CODES = [
+  "60142a",
+  RAFT,
+  MASTER_KEY,
+  P_ABSORBING,
+  P_ZEMO,
+  P_DRANG,
+  P_MYSTERIO,
+  P_PROXIMA,
+  P_RHINO,
+  IMPRISONED,
+  ...DISASTERS,
+  BRIDGE,
+  PERIL,
+];
+const PART_THREE_SCRIPT_CODES = [
+  P_ABSORBING,
+  P_ZEMO,
+  P_DRANG,
+  P_MYSTERIO,
+  P_PROXIMA,
+  P_RHINO,
+  IMPRISONED,
+  ...DISASTERS,
+  BRIDGE,
+  PERIL,
+];
+
 /** Every face registered by this import. */
 export const FEAR_NO_EVIL_CODES = [
   "60065",
@@ -323,6 +372,7 @@ export const FEAR_NO_EVIL_CODES = [
   OWL,
   SWOOP,
   ...PART_TWO_CODES,
+  ...PART_THREE_CODES,
 ] as const;
 
 /** The encounter cards scripted here: everything that can be revealed. */
@@ -371,6 +421,7 @@ export const FNE_SCRIPT_CODES: readonly string[] = [
   OWL,
   SWOOP,
   ...PART_TWO_SCRIPT_CODES,
+  ...PART_THREE_SCRIPT_CODES,
 ];
 /** The attachments among them, which enter play through their own entry. */
 export const FNE_ATTACHMENT_CODES: readonly string[] = [
@@ -411,13 +462,20 @@ export const FNE_MODULAR_SETS = [
   "fne_the_owl",
   "fne_tombstone",
   "fne_tracksuit_mafia",
+  "fne_disasters",
 ] as const;
+/** The environments whose actions their cards offer. */
+export const FNE_ENVIRONMENT_ACTION_CODES: readonly string[] = [
+  "60152",
+  ...DISASTERS,
+];
 /** Wanted and Purple Man's commands stay in their player's play area. */
 export const FNE_IN_PLAY_OBLIGATIONS = [
   WANTED,
   "60105",
   "60106",
   "60107",
+  IMPRISONED,
 ] as const;
 /** Uses (3 command counters): Purple Man's commands enter play with them. */
 export function fneObligationEntered(p: Piece) {
@@ -465,6 +523,8 @@ export interface FearNoEvilState {
   after?: { id: string; kind: "deal"; playerId: string }[];
   /** Tracksuit Mafia: the minions tucked under each copy. */
   tucked?: Record<string, Piece[]>;
+  /** The Raft Breakout: its Prisoners were revealed at setup. */
+  raftSetup?: boolean;
 }
 
 export interface FearNoEvilPorts extends MutagenEnginePorts {
@@ -515,6 +575,10 @@ export interface FearNoEvilPorts extends MutagenEnginePorts {
   dealFacedown(s: GameState, p: Piece, playerId: string): void;
   putEnvironment(s: GameState, p: Piece): void;
   endGame(s: GameState, won: boolean, reason: string): void;
+  /** A hero's or ally's current THW. */
+  characterThwart(s: GameState, id: string): number;
+  /** A hero or ally has this trait. */
+  characterTrait(s: GameState, id: string, trait: string): boolean;
 }
 
 const definitions = new Map(
@@ -662,6 +726,7 @@ export function fneSetupCard(code: string) {
     TRUST,
     MARY_WALKER,
     ...BUGLE_SUPPORTS,
+    MASTER_KEY,
   ].includes(code);
 }
 /** Put the chosen Underling in play as the villain: (I) in Standard, (II)
@@ -709,12 +774,16 @@ export function fearNoEvilSetup(s: GameState, ports: FearNoEvilPorts) {
     if (pick) attachArt(s, pick, s.villain.id, ports);
   }
   partTwoSetup(s, ports);
+  partThreeSetup(s, ports);
 }
 
 // ------------------------------------------------------------- villain
 
 /** The Underling stages' When Revealed abilities. */
 export function fneVillainRevealed(s: GameState): Effect[] {
+  return [...underlingRevealed(s), ...raftPrisoners(s)];
+}
+function underlingRevealed(s: GameState): Effect[] {
   if (!s.fearNoEvil || !s.villain || isTextBlank(s, s.villain)) return [];
   switch (s.villain.code) {
     case "60065":
@@ -767,6 +836,8 @@ export function fneMainNote(s: GameState) {
     return `Acceleration X = 1 + ${artOn(s, s.villain.id).length} Art on the villain`;
   if (s.scheme.code === PRESSES)
     return `Undefended attacks: ${expert(s) ? 3 : 2} threat here or 1 stamina`;
+  if (s.scheme.code === RAFT)
+    return "Each defeated minion removes 1 threat here (Elite: 2)";
   return "";
 }
 /** A caption for the counters and damage on this import's attachments. */
@@ -779,6 +850,8 @@ export function fneAttachmentCaption(s: GameState, p: Piece) {
     return `${p.damage || 0} of ${VEHICLE_LIMIT[p.code]} damage`;
   if (p.code === OUT_FRONT) return "Damage removes main scheme threat";
   if (p.code === MARY_WALKER) return "The villain cannot activate";
+  if (p.code === MASTER_KEY)
+    return "After the villain schemes, its minion boost cards are dealt to you";
   if (p.code === ARMOR)
     return `${p.damage || 0} of ${expert(s) ? 8 : 5} damage`;
   return "";
@@ -791,6 +864,8 @@ export function fneEnvironmentCaption(s: GameState, p: Piece) {
   }
   if (p.code === BUGLE)
     return "Alter-Ego Action: exhaust a Daily Bugle support you control to place 1 stamina counter on it";
+  if (DISASTERS.includes(p.code))
+    return `${plural(p.counters || 0, "civilian counter")} · crisis: no threat comes off the main scheme`;
   return "";
 }
 /** A caption for this import's side schemes. */
@@ -798,6 +873,7 @@ export function fneSideSchemeCaption(s: GameState, p: Piece) {
   if (p.code === TRUST)
     return "Permanent · cleared: 1 threat token on Disturbed Psyche, then Mary Walker";
   if (p.code === INTERVIEW) return "Daily Bugle supports cannot ready";
+  if (p.code === BRIDGE) return "Threat removed from it puts 1 threat back";
   if (p.code === TRACKSUIT) {
     const n = s.fearNoEvil?.tucked?.[p.id]?.length || 0;
     return `${plural(n, "minion")} tucked here · a revealed Tracksuit minion reveals one`;
@@ -810,6 +886,8 @@ export function fneInPlayCaption(s: GameState, p: Piece) {
     return `${plural(p.counters || 0, "stamina counter")}${interviewInPlay(s) ? " · cannot ready" : ""}`;
   if (COMMANDS.includes(p.code))
     return `${plural(p.counters || 0, "command counter")} · Forced Action before your turn ends`;
+  if (p.code === IMPRISONED)
+    return "You cannot thwart, attack or change to alter-ego form";
   return "";
 }
 /** The counters on this import's cards in a player's play area. */
@@ -823,6 +901,11 @@ export function fneMinionCaption(s: GameState, p: Piece) {
   if (p.code === IVAN && (p.accelerationTokens || 0) > 0)
     return `${plural(Number(p.accelerationTokens), "acceleration token")} · +1 threat each per villain phase`;
   if (p.fneConverted) return "Converted ally · an Influenced minion";
+  if (p.fneDeceived) return "Deceived ally · threat on it";
+  if (p.code === P_ABSORBING && p.storedCards?.length)
+    return `${plural(p.storedCards.length, "card")} tucked · +${resourceTypes(p.storedCards)} ATK when he attacks`;
+  if (p.code === P_DRANG && (p.counters || 0) > 0)
+    return plural(p.counters, "barrage counter");
   return "";
 }
 
@@ -1149,6 +1232,7 @@ export function fneActivationInitiated(
     seatView(s, playerId).player.stunned
   )
     effects.push(F("extra-boost", { enemyId: id, source: UNDERBOSS }));
+  effects.push(...partThreeActivation(s, id, playerId, kind));
   const a = s.attack;
   if (!s.villain || id !== s.villain.id || kind !== "attack" || !a)
     return effects;
@@ -1283,7 +1367,10 @@ export function fneAfterAttack(
     respond("bloodlust", name(BLOODLUST), [
       F("bloodlust-reveal", { playerId: r.playerId, actorId }),
     ]);
-  for (const [key, title, effects, sourceId] of partTwoAfterAttack(s, r))
+  for (const [key, title, effects, sourceId] of [
+    ...partTwoAfterAttack(s, r),
+    ...partThreeAfterAttack(s, r),
+  ])
     respond(key, title, effects, sourceId);
   return responses;
 }
@@ -1304,6 +1391,7 @@ export function fneSchemed(
   if (s.fearNoEvil?.bloodlust)
     effects.push(F("bloodlust-reveal", { playerId, actorId: playerId }));
   effects.push(...partTwoSchemed(s, id, playerId));
+  effects.push(...partThreeSchemed(s, id, playerId));
   return effects;
 }
 /** Whiplash's Forced Interrupt when a character attacks him. */
@@ -1346,6 +1434,7 @@ export function fneMinionDefeated(
   if (s.sideSchemes.some((q) => q.code === CONSOLIDATE && active(s, q)))
     effects.push(F("consolidate", { id: m.id }));
   effects.push(...partTwoMinionDefeated(s, m, textWasBlank, defeaterId));
+  effects.push(...partThreeMinionDefeated(s, m));
   return effects;
 }
 /** When Defeated: Charging Up. */
@@ -1400,9 +1489,11 @@ export function fneReadyCost(s: GameState, e: Effect): Effect[] | null {
 export function fneActions(
   s: GameState,
   p: Piece,
-  ports?: Pick<FearNoEvilPorts, "canPay">,
+  ports?: Pick<FearNoEvilPorts, "canPay" | "characterThwart">,
 ): Option[] {
   if (s.phase !== "player" || !active(s, p)) return [];
+  const three = partThreeActions(s, p, ports);
+  if (three) return three;
   const two = partTwoActions(s, p, ports);
   if (two.length) return two;
   const playerId = s.activePlayerId;
@@ -1510,7 +1601,8 @@ export function fneActionSource(s: GameState, id: string): Piece | undefined {
         (ARTS.includes(p.code) || [CHARGE, HARDHEADED, SERUM].includes(p.code)),
     ) ||
     s.player.inPlay.find((p) => p.id === id && p.code === WANTED) ||
-    partTwoActionSource(s, id)
+    partTwoActionSource(s, id) ||
+    partThreeActionSource(s, id)
   );
 }
 
@@ -1590,7 +1682,7 @@ export function fneReveal(s: GameState, p: Piece): Effect[] | null {
     case SWOOP:
       return [F("swoop", { playerId, hero, actorId: playerId })];
     default:
-      return partTwoReveal(s, p) ?? [];
+      return partTwoReveal(s, p) ?? partThreeReveal(s, p) ?? [];
   }
 }
 export function fneBoost(s: GameState, p: Piece): Effect[] | null {
@@ -1598,6 +1690,8 @@ export function fneBoost(s: GameState, p: Piece): Effect[] | null {
   if (isTextBlank(s, p) || !activation(s)) return [];
   const two = partTwoBoost(s, p);
   if (two) return two;
+  const three = partThreeBoost(s, p);
+  if (three) return three;
   const a = s.attack;
   switch (p.code) {
     case BLOODLUST:
@@ -3068,6 +3162,7 @@ export function resolveFearNoEvilEffect(
     }
     default:
       if (resolvePartTwo(s, e, ports)) break;
+      if (resolvePartThree(s, e, ports)) break;
       throw Error(`Unknown Fear No Evil effect: ${e.type}`);
   }
   return true;
@@ -4660,3 +4755,683 @@ function toughAttach(
   if (ports.canAddStatus(s, target, "tough"))
     ports.queue(s, { type: "status", target, status: "tough" });
 }
+
+// ============================================================ part three
+
+/** Fear No Evil, part three: The Raft Breakout mission and the Disasters
+ * modular set. */
+
+const raftActive = (s: GameState) => s.fearNoEvil?.mission === RAFT_ID;
+const prisoner = (p: Piece | string) => printedTraits(p).includes("Prisoner");
+const elite = (p: Piece | string) => printedTraits(p).includes("Elite");
+const disastersInPlay = (s: GameState) =>
+  (s.environments || []).filter(
+    (q) => DISASTERS.includes(q.code) && active(s, q),
+  );
+/** The different resource types printed on these cards. */
+function resourceTypes(cards: Piece[]) {
+  const kinds = ["energy", "physical", "mental", "wild"] as const;
+  return kinds.filter((kind) =>
+    cards.some(
+      (q) =>
+        ((def(q) as Record<string, unknown> | undefined)?.[
+          `resource_${kind}`
+        ] as number) > 0,
+    ),
+  ).length;
+}
+/** This attack gets +n ATK, including an attack still waiting to begin. */
+function addAttackModifier(s: GameState, attackerId: string, n: number) {
+  const a = s.attack;
+  if (!a || a.attacker !== attackerId || !n) return;
+  a.modifier = (a.modifier || 0) + n;
+  const carry = (q: Effect) => {
+    if (
+      q.type === "enemyAttackInitiationWindow" &&
+      q.attacker === attackerId &&
+      typeof q.modifier === "number"
+    )
+      q.modifier += n;
+    for (const next of (q.after as Effect[] | undefined) || []) carry(next);
+  };
+  for (const q of s.queue) carry(q);
+}
+
+// ------------------------------------------------------------- setup
+
+/** The Raft Breakout: Master Key attaches to the villain. */
+function partThreeSetup(s: GameState, ports: FearNoEvilPorts) {
+  if (!raftActive(s) || !s.villain) return;
+  const key = ports.makePiece(s, MASTER_KEY);
+  key.attachedTo = s.villain.id;
+  s.attachments.push(key);
+  ports.log(s, `Master Key attaches to ${name(s.villain.code)}.`);
+}
+/** The Raft Breakout's setup: each player discards cards from the
+ * encounter deck until a Prisoner minion and reveals it. */
+function raftPrisoners(s: GameState): Effect[] {
+  const st = s.fearNoEvil;
+  if (!st || st.mission !== RAFT_ID || st.raftSetup) return [];
+  st.raftSetup = true;
+  return playerOrder(s)
+    .filter((seat) => alive(s, seat.id))
+    .map((seat) => F("raft-prisoner", { playerId: seat.id, actorId: seat.id }));
+}
+
+// ------------------------------------------------------------- rules
+
+/** Crisis: a Disaster environment in play keeps threat on the main
+ * scheme. */
+export function fneCrisis(s: GameState) {
+  return disastersInPlay(s).length > 0;
+}
+/** The cards whose crisis icon is in play, for effects that ignore it. */
+export function fneCrisisSources(s: GameState) {
+  return disastersInPlay(s).map((q) => q.id);
+}
+/** Uses (2 civilian counters): a Disaster environment enters play with
+ * them. */
+export function fneEnvironmentEntered(p: Piece) {
+  if (DISASTERS.includes(p.code) && !p.counters) p.counters = 2;
+}
+/** Collapsing Bridge's Forced Response after threat is removed from it. */
+export function fneThreatRemoved(
+  s: GameState,
+  p: Piece,
+  removed: number,
+): Effect[] {
+  if (removed <= 0 || p.code !== BRIDGE || !active(s, p) || p.counters <= 0)
+    return [];
+  return [F("bridge", { id: p.id })];
+}
+/** Imprisoned: you cannot thwart, attack, or change to alter-ego form. */
+export function fneImprisoned(s: GameState, playerId: string) {
+  return (
+    alive(s, playerId) &&
+    seatView(s, playerId).player.inPlay.some(
+      (q) => q.code === IMPRISONED && active(s, q),
+    )
+  );
+}
+/** Baron Zemo: each ally with threat on it is a Deceived minion while he
+ * is in play. */
+export function fneSyncDeceived(s: GameState) {
+  const zemo = s.minions.some(
+    (m) => m.code === P_ZEMO && active(s, m) && !m.pendingDefeat,
+  );
+  for (const m of [...s.minions]) {
+    if (!m.fneDeceived) continue;
+    if (zemo && (m.fneThreat || 0) > 0) {
+      m.treatedAsMinion = true;
+      continue;
+    }
+    // The ally goes back to its owner's play area.
+    s.minions.splice(s.minions.indexOf(m), 1);
+    delete m.fneDeceived;
+    delete m.treatedAsMinion;
+    const owner = s.players.find(
+      (seat) => seat.id === (m.ownerId || m.engagedWith) && !seat.eliminated,
+    );
+    delete m.engagedWith;
+    if (owner) seatView(s, owner.id).player.inPlay.push(m);
+    else s.removed.push(m);
+  }
+  if (!zemo) return;
+  for (const seat of playerOrder(s)) {
+    if (!alive(s, seat.id)) continue;
+    const view = seatView(s, seat.id).player;
+    for (const p of [...view.inPlay]) {
+      if (typeOf(p) !== "ally" || (p.fneThreat || 0) <= 0) continue;
+      view.inPlay.splice(view.inPlay.indexOf(p), 1);
+      p.treatedAsMinion = true;
+      p.fneDeceived = true;
+      p.ownerId ||= seat.id;
+      p.engagedWith = seat.id;
+      p.exhausted = false;
+      s.minions.push(p);
+    }
+  }
+}
+
+// ------------------------------------------------------------ activations
+
+function partThreeActivation(
+  s: GameState,
+  id: string,
+  playerId: string,
+  kind: "attack" | "scheme",
+): Effect[] {
+  const m = s.minions.find((q) => q.id === id);
+  const a = s.attack;
+  if (!m || !active(s, m) || kind !== "attack" || !a || a.attacker !== id)
+    return [];
+  switch (m.code) {
+    case P_ABSORBING:
+      return alive(s, playerId)
+        ? [F("absorbing", { id, playerId, actorId: playerId })]
+        : [];
+    case P_PROXIMA:
+      return alive(s, playerId)
+        ? [F("proxima", { id, playerId, actorId: playerId })]
+        : [];
+    case P_RHINO:
+      // Rhino's attacks gain overkill.
+      a.overkill = true;
+      return [];
+    default:
+      return [];
+  }
+}
+function partThreeAfterAttack(s: GameState, r: FneAttackReceipt) {
+  const out: [string, string, Effect[], string?][] = [];
+  const m = s.minions.find((q) => q.id === r.attackerId);
+  if (!m || !active(s, m) || !alive(s, r.playerId)) return out;
+  if (m.code === P_DRANG)
+    out.push([
+      "drang",
+      name(P_DRANG),
+      [F("drang", { id: m.id, playerId: r.playerId, actorId: r.playerId })],
+      m.id,
+    ]);
+  if (m.code === P_MYSTERIO) {
+    const ids = (s.attack?.boostIds || []).filter(Boolean);
+    if (ids.length)
+      out.push([
+        "mysterio",
+        name(P_MYSTERIO),
+        [
+          F("deal-boosts", {
+            ids,
+            kind: "treachery",
+            playerId: r.playerId,
+            actorId: r.playerId,
+          }),
+        ],
+        m.id,
+      ]);
+  }
+  return out;
+}
+/** Master Key: after the villain schemes against you, its minion boost
+ * cards are dealt to you facedown. */
+function partThreeSchemed(s: GameState, id: string, playerId: string) {
+  if (!s.villain || id !== s.villain.id || !alive(s, playerId)) return [];
+  if (!attached(s, id, [MASTER_KEY]).length) return [];
+  const ids = (s.scheming?.boostIds || []).filter(Boolean);
+  return ids.length
+    ? [F("deal-boosts", { ids, kind: "minion", playerId, actorId: playerId })]
+    : [];
+}
+/** The Raft Breakout: each minion gains "When Defeated: Remove 1 threat
+ * from the main scheme (2 threat instead if this minion is Elite)." */
+function partThreeMinionDefeated(s: GameState, m: Piece): Effect[] {
+  if (!raftActive(s) || s.scheme.code !== RAFT) return [];
+  return [
+    { type: "thwart", target: "main", amount: elite(m) ? 2 : 1, source: RAFT },
+  ];
+}
+
+// ------------------------------------------------------------ actions
+
+function partThreeActions(
+  s: GameState,
+  p: Piece,
+  ports?: Pick<FearNoEvilPorts, "canPay" | "characterThwart">,
+): Option[] | null {
+  const playerId = s.activePlayerId;
+  const hero = s.player.form === "hero";
+  const canPay = (cost: number, req: Resource[]) =>
+    !ports || ports.canPay(s, cost, req);
+  if (
+    DISASTERS.includes(p.code) &&
+    (s.environments || []).some((q) => q.id === p.id)
+  ) {
+    if (!hero || !active(s, p)) return [];
+    const res = DISASTER_RESOURCE[p.code];
+    const out: Option[] = [];
+    if (canPay(2, [res, res]))
+      out.push(
+        option(
+          "disaster-pay",
+          `Hero Action · spend ${res} ${res}: remove 1 civilian counter`,
+          [F("disaster-pay", { id: p.id, actorId: playerId })],
+          p.code,
+        ),
+      );
+    for (const target of readyCharacters(s, playerId))
+      out.push(
+        option(
+          `disaster-exhaust:${target}`,
+          `Hero Action · exhaust ${target.startsWith("hero:") ? "your hero" : name(findCharacter(s, target) || target)}: remove civilian counters`,
+          [F("disaster-exhaust", { id: p.id, target, actorId: playerId })],
+          p.code,
+        ),
+      );
+    return out;
+  }
+  if (p.code === IMPRISONED && s.player.inPlay.some((q) => q.id === p.id)) {
+    if (!hero || !active(s, p)) return [];
+    const out: Option[] = [];
+    if (canPay(3, []))
+      out.push(
+        option(
+          "imprisoned-pay",
+          "Hero Action · spend 3 resources: discard Imprisoned",
+          [F("imprisoned-pay", { id: p.id, actorId: playerId })],
+          p.code,
+        ),
+      );
+    const total = readyCharacters(s, playerId).reduce(
+      (n, t) => n + (ports ? ports.characterThwart(s, t) : 1),
+      0,
+    );
+    if (total >= 3)
+      out.push(
+        option(
+          "imprisoned-exhaust",
+          "Hero Action · exhaust characters with 3 THW: discard Imprisoned",
+          [
+            F("imprisoned-exhaust", {
+              id: p.id,
+              chosen: [],
+              actorId: playerId,
+            }),
+          ],
+          p.code,
+        ),
+      );
+    return out;
+  }
+  return null;
+}
+const DISASTER_RESOURCE: Record<string, Resource> = {
+  "60177": "mental",
+  "60178": "energy",
+  "60179": "physical",
+};
+/** The ready hero and allies a player controls. */
+function readyCharacters(s: GameState, playerId: string) {
+  if (!alive(s, playerId)) return [];
+  const view = seatView(s, playerId).player;
+  return [
+    ...(view.form === "hero" && !view.exhausted ? [identityOf(playerId)] : []),
+    ...allies(s, playerId)
+      .filter((q) => !q.exhausted)
+      .map((q) => q.id),
+  ];
+}
+function partThreeActionSource(s: GameState, id: string): Piece | undefined {
+  return (
+    (s.environments || []).find(
+      (p) => p.id === id && DISASTERS.includes(p.code),
+    ) || s.player.inPlay.find((p) => p.id === id && p.code === IMPRISONED)
+  );
+}
+
+// ------------------------------------------------------------ reveals
+
+function partThreeReveal(s: GameState, p: Piece): Effect[] | null {
+  const playerId = s.activePlayerId;
+  switch (p.code) {
+    case P_ZEMO:
+      return [F("zemo-deceive", { playerId, actorId: playerId })];
+    case PERIL:
+      return [F("peril", { playerId, actorId: playerId })];
+    default:
+      return PART_THREE_SCRIPT_CODES.includes(p.code) ? [] : null;
+  }
+}
+function partThreeBoost(s: GameState, p: Piece): Effect[] | null {
+  const playerId = boostPlayer(s);
+  switch (p.code) {
+    case P_RHINO: {
+      const a = activation(s);
+      return a ? [{ type: "status", target: a.attacker, status: "tough" }] : [];
+    }
+    case PERIL:
+      return disastersInPlay(s).length
+        ? [F("civilian-add", { actorId: playerId })]
+        : [];
+    case IMPRISONED:
+      return alive(s, playerId)
+        ? [F("reveal-boost", { id: p.id, playerId, actorId: playerId })]
+        : [];
+    default:
+      return PART_THREE_SCRIPT_CODES.includes(p.code) ? [] : null;
+  }
+}
+
+// ------------------------------------------------------------ resolver
+
+function resolvePartThree(
+  s: GameState,
+  e: Effect,
+  ports: FearNoEvilPorts,
+): boolean {
+  switch (e.type) {
+    case "fne:raft-prisoner": {
+      const playerId = String(e.playerId);
+      if (!alive(s, playerId)) return true;
+      const minion = discardUntil(
+        s,
+        ports,
+        (q) => typeOf(q) === "minion" && prisoner(q),
+      );
+      if (!minion) return true;
+      s.encounter.discard = s.encounter.discard.filter(
+        (q) => q.id !== minion.id,
+      );
+      ports.log(
+        s,
+        `The Raft Breakout: ${name(minion)} escapes toward ${ports.heroName(s, playerId)}.`,
+        "bad",
+      );
+      ports.reveal(s, minion, playerId);
+      return true;
+    }
+    case "fne:deal-boosts": {
+      // Master Key's minions and Mysterio's treacheries: that activation's
+      // boost cards are dealt facedown instead of discarded.
+      const playerId = String(e.playerId);
+      if (!alive(s, playerId)) return true;
+      for (const id of (e.ids as string[]) || []) {
+        const p =
+          s.resolving.find((q) => q.id === id) ||
+          s.encounter.discard.find((q) => q.id === id);
+        if (!p || typeOf(p) !== String(e.kind)) continue;
+        s.resolving = s.resolving.filter((q) => q.id !== p.id);
+        ports.dealFacedown(s, p, playerId);
+        ports.log(
+          s,
+          `${name(p)} is dealt to ${ports.heroName(s, playerId)} as a facedown encounter card.`,
+          "bad",
+        );
+      }
+      return true;
+    }
+    case "fne:absorbing": {
+      // Tuck the top card of your deck under Absorbing Man; +1 ATK for each
+      // resource type on the cards tucked under him.
+      const m = s.minions.find((q) => q.id === e.id);
+      const playerId = String(e.playerId);
+      if (!m || !s.attack || s.attack.attacker !== m.id || !alive(s, playerId))
+        return true;
+      const top = seatView(s, playerId).player.deck.shift();
+      if (top) {
+        (m.storedCards ||= []).push(top);
+        ports.log(s, `Absorbing Man absorbs ${name(top)}.`, "bad");
+      }
+      const types = resourceTypes(m.storedCards || []);
+      if (types) {
+        addAttackModifier(s, m.id, types);
+        ports.log(s, `Absorbing Man gets +${types} ATK for this attack.`);
+      }
+      return true;
+    }
+    case "fne:proxima": {
+      const m = s.minions.find((q) => q.id === e.id);
+      if (!m || !s.attack || s.attack.attacker !== m.id) return true;
+      ports.choose(
+        s,
+        name(P_PROXIMA),
+        "Proxima Midnight attacks you. Choose:",
+        [
+          option("threat", "Place 1 threat on the main scheme", [
+            { type: "threat", target: "main", amount: 1 },
+          ]),
+          option("atk", "She gets +2 ATK for this attack", [
+            F("proxima-atk", { id: m.id }),
+          ]),
+        ],
+      );
+      return true;
+    }
+    case "fne:proxima-atk":
+      addAttackModifier(s, String(e.id), 2);
+      return true;
+    case "fne:drang": {
+      // A barrage counter, then 1 indirect damage for each.
+      const m = s.minions.find((q) => q.id === e.id);
+      const playerId = String(e.playerId);
+      if (!m || !alive(s, playerId)) return true;
+      m.counters = (m.counters || 0) + 1;
+      ports.log(s, `Drang gains a barrage counter (${m.counters}).`, "bad");
+      ports.indirect(s, playerId, m.counters, m.id, name(P_DRANG));
+      return true;
+    }
+    case "fne:zemo-deceive": {
+      // Place 1 threat on an ally without threat on it.
+      const candidates = allAllies(s).filter(({ p }) => !(p.fneThreat || 0));
+      if (!candidates.length) return true;
+      if (candidates.length === 1)
+        ports.queue(s, F("deceive", { id: candidates[0].p.id }));
+      else
+        ports.choose(
+          s,
+          name(P_ZEMO),
+          "Place 1 threat on an ally without threat on it. It becomes a Deceived minion engaged with its controller.",
+          candidates.map(({ p, playerId }) =>
+            option(
+              p.id,
+              `${name(p)} (${ports.heroName(s, playerId)})`,
+              [F("deceive", { id: p.id })],
+              p.code,
+            ),
+          ),
+        );
+      return true;
+    }
+    case "fne:deceive": {
+      const p = findCharacter(s, String(e.id));
+      if (!p || typeOf(p) !== "ally") return true;
+      p.fneThreat = (p.fneThreat || 0) + 1;
+      ports.log(
+        s,
+        `Baron Zemo: ${name(p)} is Deceived and engages its controller.`,
+        "bad",
+      );
+      fneSyncDeceived(s);
+      return true;
+    }
+    case "fne:disaster-pay": {
+      const queue = [...s.queue];
+      ports.pay(
+        s,
+        2,
+        [
+          DISASTER_RESOURCE[findEnvCode(s, e.id)],
+          DISASTER_RESOURCE[findEnvCode(s, e.id)],
+        ],
+        [F("civilians", { id: e.id, n: 1 })],
+        name(findEnvCode(s, e.id)),
+        true,
+      );
+      if (s.prompt?.kind === "payment") s.prompt.cancellationQueue = queue;
+      return true;
+    }
+    case "fne:disaster-exhaust": {
+      const env = (s.environments || []).find((q) => q.id === e.id);
+      const target = String(e.target);
+      if (!env) return true;
+      const playerId = target.startsWith("hero:")
+        ? target.slice(5)
+        : allyOwner(s, target);
+      if (!playerId || !readyCharacters(s, playerId).includes(target))
+        return true;
+      const doubled =
+        env.code === "60177"
+          ? ports.characterTrait(s, target, "Mystic")
+          : env.code === "60178"
+            ? ports.characterTrait(s, target, "Aerial")
+            : target.startsWith("hero:")
+              ? !!seatView(s, playerId).player.tough
+              : !!findCharacter(s, target)?.tough;
+      ports.queue(
+        s,
+        target.startsWith("hero:")
+          ? { type: "exhaust", id: "hero", actorId: playerId }
+          : { type: "exhaust", id: target },
+        F("civilians", { id: env.id, n: doubled ? 2 : 1 }),
+      );
+      return true;
+    }
+    case "fne:civilians": {
+      // Remove civilian counters; Uses: with none left, it is discarded.
+      const env = (s.environments || []).find((q) => q.id === e.id);
+      if (!env) return true;
+      const n = Math.min(Number(e.n) || 1, env.counters || 0);
+      env.counters = Math.max(0, (env.counters || 0) - n);
+      ports.log(
+        s,
+        `${name(env)}: ${plural(n, "civilian counter")} removed (${env.counters} left).`,
+        "good",
+      );
+      if (!env.counters) ports.discardPiece(s, env.id);
+      return true;
+    }
+    case "fne:civilian-add": {
+      // Bystanders in Peril: 1 civilian counter on a Disaster environment.
+      const list = disastersInPlay(s);
+      if (!list.length) return true;
+      if (list.length === 1) {
+        list[0].counters = (list[0].counters || 0) + 1;
+        ports.log(
+          s,
+          `${name(list[0])} gains a civilian counter (${list[0].counters}).`,
+          "bad",
+        );
+        return true;
+      }
+      ports.choose(
+        s,
+        name(PERIL),
+        "Place 1 civilian counter on a Disaster environment.",
+        list.map((q) =>
+          option(q.id, name(q), [F("civilian-on", { id: q.id })], q.code),
+        ),
+      );
+      return true;
+    }
+    case "fne:civilian-on": {
+      const env = (s.environments || []).find((q) => q.id === e.id);
+      if (!env) return true;
+      env.counters = (env.counters || 0) + 1;
+      ports.log(
+        s,
+        `${name(env)} gains a civilian counter (${env.counters}).`,
+        "bad",
+      );
+      return true;
+    }
+    case "fne:peril": {
+      // Bystanders in Peril: a civilian counter, or reveal a Disaster.
+      const playerId = String(e.playerId);
+      if (disastersInPlay(s).length) {
+        ports.queue(s, F("civilian-add", { actorId: playerId }));
+        return true;
+      }
+      const { piece, fromDeck } = findEncounter(s, (q) =>
+        DISASTERS.includes(q.code),
+      );
+      if (piece) {
+        s.encounter.deck = s.encounter.deck.filter((q) => q.id !== piece.id);
+        s.encounter.discard = s.encounter.discard.filter(
+          (q) => q.id !== piece.id,
+        );
+        delete s.encounter.knownTop;
+      }
+      if (fromDeck) ports.shuffleEncounter(s);
+      if (piece)
+        ports.reveal(s, piece, alive(s, playerId) ? playerId : s.firstPlayerId);
+      return true;
+    }
+    case "fne:bridge": {
+      // Collapsing Bridge: 1 threat back after threat is removed from it.
+      const p = s.sideSchemes.find((q) => q.id === e.id);
+      if (!p) return true;
+      p.counters += 1;
+      ports.log(s, "Collapsing Bridge: 1 threat is placed back on it.", "bad");
+      return true;
+    }
+    case "fne:imprisoned-pay": {
+      const queue = [...s.queue];
+      ports.pay(
+        s,
+        3,
+        [],
+        [F("discard-imprisoned", { id: e.id })],
+        name(IMPRISONED),
+        true,
+      );
+      if (s.prompt?.kind === "payment") s.prompt.cancellationQueue = queue;
+      return true;
+    }
+    case "fne:imprisoned-exhaust": {
+      // Exhaust characters you control with a total THW of 3 or more.
+      const p = s.player.inPlay.find((q) => q.id === e.id);
+      if (!p) return true;
+      const playerId = s.activePlayerId;
+      const chosen = (e.chosen as string[]) || [];
+      const total = chosen.reduce((n, t) => n + ports.characterThwart(s, t), 0);
+      if (total >= 3) {
+        ports.queue(
+          s,
+          ...chosen.map((t) =>
+            t.startsWith("hero:")
+              ? { type: "exhaust", id: "hero", actorId: playerId }
+              : { type: "exhaust", id: t },
+          ),
+          F("discard-imprisoned", { id: p.id }),
+        );
+        return true;
+      }
+      const rest = readyCharacters(s, playerId).filter(
+        (t) => !chosen.includes(t) && ports.characterThwart(s, t) > 0,
+      );
+      const reachable =
+        total + rest.reduce((n, t) => n + ports.characterThwart(s, t), 0);
+      if (reachable < 3) return true;
+      ports.choose(
+        s,
+        name(IMPRISONED),
+        `Choose characters to exhaust: ${total} of 3 THW so far.`,
+        [
+          ...rest.map((t) =>
+            option(
+              t,
+              `${characterName(s, t, ports)} (THW ${ports.characterThwart(s, t)})`,
+              [F("imprisoned-exhaust", { ...e, chosen: [...chosen, t] })],
+            ),
+          ),
+          option("cancel", "Stop: exhaust nothing", []),
+        ],
+      );
+      return true;
+    }
+    case "fne:discard-imprisoned": {
+      const owner = playerOrder(s).find((seat) =>
+        seatView(s, seat.id).player.inPlay.some((q) => q.id === e.id),
+      );
+      if (!owner) return true;
+      ports.log(s, "Imprisoned is discarded.", "good");
+      ports.discardPiece(s, String(e.id));
+      return true;
+    }
+    case "fne:reveal-boost": {
+      // Imprisoned's boost: reveal this card.
+      const playerId = String(e.playerId);
+      const p =
+        s.resolving.find((q) => q.id === e.id) ||
+        s.encounter.discard.find((q) => q.id === e.id);
+      if (!p || !alive(s, playerId)) return true;
+      s.resolving = s.resolving.filter((q) => q.id !== p.id);
+      s.encounter.discard = s.encounter.discard.filter((q) => q.id !== p.id);
+      ports.reveal(s, p, playerId);
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+const findEnvCode = (s: GameState, id: unknown) =>
+  (s.environments || []).find((q) => q.id === id)?.code || "";

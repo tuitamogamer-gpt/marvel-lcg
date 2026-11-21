@@ -227,7 +227,7 @@ describe("Unus: original source", () => {
       defaultModules: ["dystopian_nightmare"],
       fixedSets: ["infinites"],
     });
-    expect(MODULES.slice(-26, -24).map((m) => m.id)).toEqual([
+    expect(MODULES.slice(-27, -25).map((m) => m.id)).toEqual([
       "infinites",
       "dystopian_nightmare",
     ]);

@@ -239,7 +239,7 @@ describe("Stryfe: original source", () => {
       codes: ["40163", "40164", "40165"],
       defaultModules: ["extreme_measures", "mutant_insurrection"],
     });
-    expect(MODULES.slice(-28, -26).map((m) => m.id)).toEqual([
+    expect(MODULES.slice(-29, -27).map((m) => m.id)).toEqual([
       "extreme_measures",
       "mutant_insurrection",
     ]);

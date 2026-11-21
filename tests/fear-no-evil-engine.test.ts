@@ -1,12 +1,14 @@
-/** Fear No Evil, parts one and two: the missions The Getaway, Art Museum
- * Heist and Stop the Presses! with the Underlings Bullseye, Electro,
- * Hammerhead, Purple Man and Typhoid Mary, and the Cops, Drive, The Owl,
- * Tombstone and Tracksuit Mafia modular sets, exercised with the original
- * physical cards. Every command crosses a JSON save/reload boundary. */
+/** Fear No Evil, parts one to three: the missions The Getaway, Art Museum
+ * Heist, Stop the Presses! and The Raft Breakout with the Underlings
+ * Bullseye, Electro, Hammerhead, Purple Man and Typhoid Mary, and the Cops,
+ * Drive, The Owl, Tombstone, Tracksuit Mafia and Disasters modular sets,
+ * exercised with the original physical cards. Every command crosses a JSON
+ * save/reload boundary. */
 import { describe, expect, it } from "vitest";
 import { CATALOG_CARDS, MODULES, VILLAINS, card } from "../src/game/cards";
 import {
   abilityOptions,
+  canChangeIdentityForm,
   dispatch,
   enemyStats,
   escalation,
@@ -19,8 +21,12 @@ import {
   FEAR_NO_EVIL_CODES,
   fneAcceleration,
   fneCanReady,
+  fneEnvironmentCaption,
+  fneImprisoned,
+  fneInPlayCaption,
   fneKeyword,
   fneMainNote,
+  fneMinionCaption,
   fneObjective,
   fneSideSchemeCaption,
   fneUnderlingFor,
@@ -271,12 +277,14 @@ describe("Fear No Evil registration and setup", () => {
       "fne_stop_the_presses",
       "fne_tombstone",
       "fne_tracksuit_mafia",
+      "fne_the_raft_breakout",
+      "fne_disasters",
     ];
     const faces = CATALOG_CARDS.filter((c) => sets.includes(c.set_code || ""));
     expect(faces.map((c) => c.code).sort()).toEqual(
       [...FEAR_NO_EVIL_CODES].sort(),
     );
-    expect(faces).toHaveLength(108);
+    expect(faces).toHaveLength(123);
     for (const c of faces) expect(hasExecutableScript(c), c.code).toBe(true);
     const getaway = VILLAINS.find((v) => v.id === GETAWAY_ID)!;
     expect(getaway.schemes).toEqual([GETAWAY]);
@@ -290,12 +298,16 @@ describe("Fear No Evil registration and setup", () => {
       "fne_tombstone",
       "fne_tracksuit_mafia",
     ]);
+    const raft = VILLAINS.find((v) => v.id === "fne_the_raft_breakout")!;
+    expect(raft.schemes).toEqual(["60142b"]);
+    expect(raft.defaultModules).toEqual(["fne_the_owl", "fne_tombstone"]);
     for (const id of [
       "fne_cops",
       "fne_drive",
       "fne_the_owl",
       "fne_tombstone",
       "fne_tracksuit_mafia",
+      "fne_disasters",
     ])
       expect(MODULES.some((m) => m.id === id)).toBe(true);
   });
@@ -1595,5 +1607,319 @@ describe("Tombstone and Tracksuit Mafia", () => {
         (p) => card(p).set_code === "fne_tracksuit_mafia",
       ),
     ).toHaveLength(7);
+  }, 30000);
+});
+
+// ------------------------------------------------------------ part three
+
+const RAFT_ID = "fne_the_raft_breakout";
+const RAFT = "60142b";
+const MASTER_KEY = "60143";
+const P_ABSORBING = "60144";
+const P_ZEMO = "60145";
+const P_DRANG = "60146";
+const P_MYSTERIO = "60147";
+const P_PROXIMA = "60148";
+const P_RHINO = "60149";
+const PRISONERS = [
+  P_ABSORBING,
+  P_ZEMO,
+  P_DRANG,
+  P_MYSTERIO,
+  P_PROXIMA,
+  P_RHINO,
+];
+const IMPRISONED = "60150";
+const MYSTIC_INCURSION = "60177";
+const SINKING_FERRY = "60178";
+const TOWERING_INFERNO = "60179";
+const BRIDGE = "60180";
+const PERIL = "60181";
+
+/** The Raft Breakout without the Prisoners revealed at setup. */
+function raft(underling = "bullseye") {
+  const s = started(RAFT_ID, underling);
+  s.encounter.discard.push(
+    ...s.minions.filter((p) => PRISONERS.includes(p.code)),
+  );
+  s.minions = s.minions.filter((p) => !PRISONERS.includes(p.code));
+  return reload(s);
+}
+const env = (s: GameState, code: string) =>
+  (s.environments || []).find((p) => p.code === code);
+
+describe("The Raft Breakout", () => {
+  it("setup: Master Key on the villain, a Prisoner minion for each player, 2 threat per player", () => {
+    const s = opened(RAFT_ID, "bullseye", "standard", 2);
+    expect(s.scheme.code).toBe(RAFT);
+    expect(s.scheme.threat).toBe(4);
+    expect(att(s, MASTER_KEY)!.attachedTo).toBe(s.villain.id);
+    const prisoners = s.minions.filter((p) => PRISONERS.includes(p.code));
+    expect(prisoners.map((p) => p.engagedWith).sort()).toEqual(["p1", "p2"]);
+    expect(s.encounter.deck.some((p) => p.code === MASTER_KEY)).toBe(false);
+    expect(fneMainNote(s)).toBe(
+      "Each defeated minion removes 1 threat here (Elite: 2)",
+    );
+  }, 30000);
+  it("each defeated minion removes 1 threat from the main scheme, an Elite one 2", () => {
+    let s = raft();
+    s.scheme.threat = 6;
+    const bro = minion(s, "60203");
+    s = settle(native(reload(s), hit(bro.id, 3)));
+    expect(s.scheme.threat).toBe(5);
+    const drang = minion(s, P_DRANG);
+    s = settle(native(reload(s), hit(drang.id, 6)));
+    expect(s.scheme.threat).toBe(3);
+  }, 30000);
+  it("Master Key: after the villain schemes against you, its minion boost cards are dealt to you facedown", () => {
+    let s = raft();
+    s.player.form = "alter";
+    const boost = take(s, P_DRANG);
+    s.encounter.deck.unshift(boost);
+    delete s.encounter.knownTop;
+    s = settle(
+      native(reload(s), {
+        type: "enemyScheme",
+        id: s.villain.id,
+        actorId: "p1",
+      }),
+    );
+    expect(s.encounter.dealt.find((p) => p.id === boost.id)?.dealtTo).toBe(
+      "p1",
+    );
+  }, 30000);
+  it("Absorbing Man tucks the top card of your deck and gets +1 ATK for each resource type under him", () => {
+    let s = raft();
+    const m = minion(s, P_ABSORBING);
+    s.player.deck.unshift(playerCard(s, "01088"));
+    blankTop(s, 3);
+    s.player.hp = 30;
+    s = settle(
+      native(reload(s), { type: "enemyAttack", id: m.id, actorId: "p1" }),
+    );
+    const absorbing = s.minions.find((p) => p.id === m.id)!;
+    expect(absorbing.storedCards?.map((p) => p.code)).toEqual(["01088"]);
+    // 1 ATK, +1 for the energy resource.
+    expect(s.player.hp).toBe(28);
+    expect(fneMinionCaption(s, absorbing)).toBe(
+      "1 card tucked · +1 ATK when he attacks",
+    );
+  }, 30000);
+  it("Proxima Midnight: 1 threat on the main scheme, or +2 ATK for her attack", () => {
+    let s = raft();
+    const m = minion(s, P_PROXIMA);
+    blankTop(s, 3);
+    s.player.hp = 30;
+    s = settle(
+      native(reload(s), { type: "enemyAttack", id: m.id, actorId: "p1" }),
+      (v) => (v.prompt?.title === "Proxima Midnight" ? "atk" : undefined),
+    );
+    expect(s.player.hp).toBe(26);
+    const threat = s.scheme.threat;
+    blankTop(s, 3);
+    s = settle(
+      native(reload(s), { type: "enemyAttack", id: m.id, actorId: "p1" }),
+      (v) => (v.prompt?.title === "Proxima Midnight" ? "threat" : undefined),
+    );
+    expect(s.scheme.threat).toBe(threat + 1);
+    expect(s.player.hp).toBe(24);
+  }, 30000);
+  it("Rhino's attacks gain overkill; his boost gives the activating enemy a tough status card", () => {
+    let s = raft();
+    const m = minion(s, P_RHINO);
+    const cat = ally(s, "01002");
+    blankTop(s, 3);
+    const hp = s.player.hp;
+    s = settle(
+      native(reload(s), { type: "enemyAttack", id: m.id, actorId: "p1" }),
+      (v) => v.prompt?.options.find((o) => o.id === cat.id)?.id,
+    );
+    expect(inPlayOf(s, cat.id)).toBeUndefined();
+    // 3 ATK against Black Cat's 2 hit points: 1 excess to the identity.
+    expect(s.player.hp).toBe(hp - 1);
+    s.encounter.deck.unshift(take(s, P_RHINO), makePiece(s, "01098"));
+    delete s.encounter.knownTop;
+    s = villainAttacks(reload(s));
+    expect(s.villain.tough).toBe(true);
+  }, 30000);
+  it("Drang gains a barrage counter after he attacks you, then you take 1 indirect damage for each", () => {
+    let s = raft();
+    const m = minion(s, P_DRANG);
+    blankTop(s, 3);
+    s.player.hp = 30;
+    s = settle(
+      native(reload(s), { type: "enemyAttack", id: m.id, actorId: "p1" }),
+    );
+    expect(s.player.hp).toBe(28);
+    blankTop(s, 3);
+    s = settle(
+      native(reload(s), { type: "enemyAttack", id: m.id, actorId: "p1" }),
+    );
+    expect(s.minions.find((p) => p.id === m.id)!.counters).toBe(2);
+    expect(s.player.hp).toBe(25);
+  }, 30000);
+  it("Mysterio deals the treachery boost cards of his attack to you facedown", () => {
+    let s = raft();
+    const m = minion(s, P_MYSTERIO);
+    const shadow = makePiece(s, "01190");
+    s.encounter.deck.unshift(shadow, makePiece(s, "01098"));
+    delete s.encounter.knownTop;
+    s.player.hp = 30;
+    s = settle(
+      native(reload(s), { type: "enemyAttack", id: m.id, actorId: "p1" }),
+    );
+    // 1 ATK and Shadow of the Past's 2 boost icons.
+    expect(s.player.hp).toBe(27);
+    expect(s.encounter.dealt.find((p) => p.id === shadow.id)?.dealtTo).toBe(
+      "p1",
+    );
+  }, 30000);
+  it("Baron Zemo makes an ally with threat on it a Deceived minion engaged with its controller", () => {
+    let s = raft();
+    const machine = ally(s, "01030");
+    s = settle(reveal(reload(s), P_ZEMO));
+    const deceived = s.minions.find((p) => p.id === machine.id)!;
+    expect(deceived.fneDeceived).toBe(true);
+    expect(deceived.fneThreat).toBe(1);
+    expect(deceived.engagedWith).toBe("p1");
+    expect(card(deceived).traits).toContain("Deceived");
+    const zemo = s.minions.find((p) => p.code === P_ZEMO)!;
+    s = settle(native(s, hit(zemo.id, 6)));
+    expect(inPlayOf(s, machine.id)?.fneDeceived).toBeUndefined();
+    expect(s.minions.some((p) => p.id === machine.id)).toBe(false);
+  }, 30000);
+  it("Imprisoned: you cannot attack, thwart or change to alter-ego form; its Hero Action discards it", () => {
+    let s = raft();
+    s = settle(reveal(s, IMPRISONED));
+    const imprisoned = s.player.inPlay.find((p) => p.code === IMPRISONED)!;
+    expect(fneImprisoned(s, "p1")).toBe(true);
+    expect(fneInPlayCaption(s, imprisoned)).toBe(
+      "You cannot thwart, attack or change to alter-ego form",
+    );
+    s.phase = "player";
+    s.player.exhausted = false;
+    s = reload(s);
+    expect(dispatch(reload(s), { type: "BASIC", action: "attack" }).error).toBe(
+      "Imprisoned: you cannot attack or thwart.",
+    );
+    expect(canChangeIdentityForm(s)).toBe(false);
+    s.player.hand.push(
+      playerCard(s, "01088"),
+      playerCard(s, "01089"),
+      playerCard(s, "01090"),
+    );
+    s = reload(s);
+    const option = abilityOptions(s, imprisoned).find(
+      (o) => o.id === "imprisoned-pay",
+    );
+    expect(option).toBeTruthy();
+    s = command(s, { type: "ABILITY", id: imprisoned.id, action: option!.id });
+    s = settle(pay(s, s.player.hand.slice(-3)));
+    expect(s.player.inPlay.some((p) => p.id === imprisoned.id)).toBe(false);
+    expect(fneImprisoned(s, "p1")).toBe(false);
+  }, 30000);
+  it("Imprisoned's boost reveals it", () => {
+    let s = raft();
+    s.encounter.deck.unshift(take(s, IMPRISONED), makePiece(s, "01098"));
+    delete s.encounter.knownTop;
+    s = villainAttacks(reload(s));
+    expect(s.player.inPlay.some((p) => p.code === IMPRISONED)).toBe(true);
+  }, 30000);
+});
+
+describe("Disasters", () => {
+  it("a Disaster enters play with 2 civilian counters, and its crisis keeps threat on the main scheme", () => {
+    let s = started(GETAWAY_ID, "hammerhead");
+    s = settle(reveal(s, MYSTIC_INCURSION));
+    expect(env(s, MYSTIC_INCURSION)!.counters).toBe(2);
+    expect(fneEnvironmentCaption(s, env(s, MYSTIC_INCURSION)!)).toBe(
+      "2 civilian counters · crisis: no threat comes off the main scheme",
+    );
+    s.scheme.threat = 4;
+    s = settle(
+      native(reload(s), { type: "thwart", target: "main", amount: 2 }),
+    );
+    expect(s.scheme.threat).toBe(4);
+  }, 30000);
+  it("its Hero Action exhausts a character to remove a civilian counter, 2 for the right character; the last one discards it", () => {
+    let s = started(GETAWAY_ID, "hammerhead");
+    s = settle(reveal(s, TOWERING_INFERNO));
+    const inferno = env(s, TOWERING_INFERNO)!;
+    const cat = ally(s, "01002");
+    s = reload(s);
+    s = settle(
+      command(s, {
+        type: "ABILITY",
+        id: inferno.id,
+        action: `disaster-exhaust:${cat.id}`,
+      }),
+    );
+    expect(env(s, TOWERING_INFERNO)!.counters).toBe(1);
+    expect(inPlayOf(s, cat.id)!.exhausted).toBe(true);
+    s.player.tough = true;
+    s.player.exhausted = false;
+    s = reload(s);
+    s = settle(
+      command(s, {
+        type: "ABILITY",
+        id: inferno.id,
+        action: "disaster-exhaust:hero:p1",
+      }),
+    );
+    expect(env(s, TOWERING_INFERNO)).toBeUndefined();
+    expect(s.player.exhausted).toBe(true);
+  }, 30000);
+  it("Sinking Ferry's Hero Action spends 2 energy resources", () => {
+    let s = started(GETAWAY_ID, "hammerhead");
+    s = settle(reveal(s, SINKING_FERRY));
+    const ferry = env(s, SINKING_FERRY)!;
+    s.player.hand.push(playerCard(s, "01088"), makePiece(s, "01088"));
+    s = reload(s);
+    const option = abilityOptions(s, ferry).find(
+      (o) => o.id === "disaster-pay",
+    );
+    expect(option).toBeTruthy();
+    s = command(s, { type: "ABILITY", id: ferry.id, action: option!.id });
+    s = settle(pay(s, s.player.hand.slice(-2)));
+    expect(env(s, SINKING_FERRY)!.counters).toBe(1);
+  }, 30000);
+  it("Collapsing Bridge: hinder 2 per player, and threat removed from it puts 1 threat back", () => {
+    let s = started(GETAWAY_ID, "hammerhead");
+    s = settle(reveal(s, BRIDGE));
+    const bridge = s.sideSchemes.find((p) => p.code === BRIDGE)!;
+    expect(bridge.counters).toBe(3);
+    s = settle(native(s, { type: "thwart", target: bridge.id, amount: 1 }));
+    expect(s.sideSchemes.find((p) => p.id === bridge.id)!.counters).toBe(3);
+    s = settle(native(s, { type: "thwart", target: bridge.id, amount: 3 }));
+    expect(s.sideSchemes.some((p) => p.id === bridge.id)).toBe(false);
+  }, 30000);
+  it("Bystanders in Peril reveals a Disaster, or places a civilian counter on one", () => {
+    let s = started(GETAWAY_ID, "hammerhead");
+    s.encounter.deck.push(take(s, SINKING_FERRY));
+    s = settle(reveal(reload(s), PERIL));
+    expect(env(s, SINKING_FERRY)!.counters).toBe(2);
+    s = settle(
+      native(reload(s), {
+        type: "reveal",
+        piece: makePiece(s, PERIL),
+        actorId: "p1",
+      }),
+    );
+    expect(env(s, SINKING_FERRY)!.counters).toBe(3);
+  }, 30000);
+  it("the modular set joins any scenario", () => {
+    const s = settle(
+      newGame({
+        heroId: "captain_marvel",
+        aspect: "aggression",
+        villainId: "rhino",
+        modules: ["fne_disasters"],
+        seed: 9,
+        pacing: "expert",
+      }),
+    );
+    expect(
+      s.encounter.deck.filter((p) => card(p).set_code === "fne_disasters"),
+    ).toHaveLength(5);
   }, 30000);
 });

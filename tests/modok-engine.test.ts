@@ -241,7 +241,7 @@ describe("M.O.D.O.K.: original source", () => {
     );
     for (const code of [...MODOK_CODES, ...SCIENTIST_SUPREME_CODES])
       expect(hasExecutableScript(code), code).toBe(true);
-    expect(MODULES.at(-14)?.id).toBe("scientist_supreme");
+    expect(MODULES.at(-15)?.id).toBe("scientist_supreme");
     expect(scenarioModules("modok")).toHaveLength(MODULES.length);
     expect(VILLAINS.find((v) => v.id === "modok")).toMatchObject({
       codes: ["50103a", "50103b"],
