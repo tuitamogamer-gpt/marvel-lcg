@@ -71,6 +71,7 @@ import { unusHealth } from "./unus.js";
 import { apocalypseHealth } from "./apocalypse.js";
 import { darkBeastHealth } from "./dark-beast.js";
 import { enchantressHealth } from "./enchantress-villain.js";
+import { fneHealth } from "./fear-no-evil.js";
 import { venomGoblinHealth } from "./venom-goblin.js";
 import {
   mojoGenreGlobal,
@@ -1892,6 +1893,24 @@ export const VILLAINS = [
       "An Underling shakes down the neighborhood's shops. Each hero protects a business of their own, a main scheme with its own trouble; if any of them falls or any hero goes down, the racket wins.",
     color: "#7a4b32",
   },
+  {
+    id: "fne_kingpin",
+    name: "Kingpin",
+    // Fear No Evil's final scenario: Kingpin (A1) in Standard, (B1) in
+    // Expert, each flipping once Public Support is garnered. It uses no
+    // Standard set.
+    codes: ["60159a", "60160a"],
+    schemes: ["60161b"],
+    module: "fne_tombstone",
+    moduleCount: 2,
+    defaultModules: ["fne_tombstone", "fne_tracksuit_mafia"],
+    difficulty: 4,
+    title: "The King's Gambit",
+    location: "Fisk Tower",
+    description:
+      "The Kingpin of crime is untouchable until the city turns against him. Bring down his minions to garner Public Support, then face Wilson Fisk himself before his gambit pays off.",
+    color: "#5b4636",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -2703,6 +2722,7 @@ export function pieceHP(s: GameState, p: Piece) {
     unusHealth(s, p) +
     apocalypseHealth(s, p) +
     darkBeastHealth(s, p) +
-    enchantressHealth(s, p)
+    enchantressHealth(s, p) +
+    fneHealth(s, p)
   );
 }

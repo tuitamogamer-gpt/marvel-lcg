@@ -1036,6 +1036,11 @@ export function resolveDoctorStrangeEffect(
       break;
     }
     case "ds:invocation-finish": {
+      // Open the Dark Dimension, revealed while this Special resolved (by
+      // Kingpin's Influence, for one), placed the top Invocation, this one,
+      // facedown under it: it stays there instead of being discarded.
+      if (s.sideSchemes.some((q) => q.storedCards?.some((c) => c.id === e.id)))
+        break;
       discardResolvedInvocation(s, e.id, ports);
       if (e.master) {
         const z = zones(s);

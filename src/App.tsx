@@ -473,6 +473,7 @@ import {
   synergyUse,
 } from "./game/god-of-lies";
 import {
+  BLACK_CAT,
   FNE_ACTION_CODES,
   FNE_ENVIRONMENT_ACTION_CODES,
   UNDERLINGS,
@@ -481,6 +482,7 @@ import {
   fneCounterLabel,
   fneEnvironmentCaption,
   fneInPlayCaption,
+  fneMainActionPiece,
   fneMainNote,
   fneMinionCaption,
   fneMission,
@@ -1702,9 +1704,13 @@ export default function App() {
                     : {}),
                   pacing,
                   heroic,
-                  ...(villain.moduleCount !== 0 && alternativeSets === "ii"
+                  ...(villain.moduleCount !== 0 &&
+                  villain.id !== "fne_kingpin" &&
+                  alternativeSets === "ii"
                     ? { standardII: true, expertII: true }
-                    : villain.moduleCount !== 0 && alternativeSets === "iii"
+                    : villain.moduleCount !== 0 &&
+                        villain.id !== "fne_kingpin" &&
+                        alternativeSets === "iii"
                       ? { standardIII: true }
                       : {}),
                   ...(villain.moduleCount !== 0 &&
@@ -2734,9 +2740,18 @@ export default function App() {
                     ? "Villain stages II → III. Includes the Expert encounter set."
                     : "Villain stages I → II. Recommended for your first mission."}
                 </p>
+                {villain.id === "fne_kingpin" && (
+                  <p className="setting-help">
+                    Kingpin uses no Standard set; in Expert, the Expert set
+                    stays.
+                  </p>
+                )}
                 {villain.moduleCount !== 0 && (
                   <>
-                    <div className="setting-line">
+                    <div
+                      className="setting-line"
+                      hidden={villain.id === "fne_kingpin"}
+                    >
                       <span>Encounter sets</span>
                       <div className="segmented">
                         {(["original", "ii", "iii"] as const).map((sets) => (
@@ -3069,6 +3084,18 @@ export default function App() {
                         </p>
                       )}
                     </>
+                  )}
+                  {villain.id === "fne_kingpin" && (
+                    <p className="setting-help">
+                      Kingpin cannot be damaged until the heroes garner Public
+                      Support: each defeated minion adds a support counter, and
+                      with 2 per hero plus 2 as a villain phase begins he flips,
+                      the main scheme advances to Endgame and he can be fought.
+                      Each hero starts against their nemesis minion. The
+                      King&apos;s Gambit&apos;s Hero Action removes 5 threat (4
+                      in Expert) but reveals a minion. Tombstone and Tracksuit
+                      Mafia are preselected.
+                    </p>
                   )}
                   {villain.id === "thunderbolts" && (
                     <p className="setting-help">
@@ -7086,7 +7113,8 @@ function Tabletop({
     s.badoon?.currentMain ||
     s.collector?.currentMain ||
     s.escape?.currentMain ||
-    s.ronan?.currentMain;
+    s.ronan?.currentMain ||
+    fneMainActionPiece(s);
   const [pile, setPile] = useState<{ title: string; cards: Piece[] } | null>(
     null,
   );
@@ -8014,13 +8042,15 @@ function Tabletop({
                                 })
                               }
                             >
-                              {a.id === "milano-minion"
-                                ? "Milano · 3 damage to a minion"
-                                : a.id === "release-exhaust"
-                                  ? "Exhaust · free 1 collected card"
-                                  : a.id === "release-pay"
-                                    ? "Pay 2 · free 1 collected card"
-                                    : "Milano · remove 3 threat"}
+                              {a.id === "kp-gambit"
+                                ? a.label
+                                : a.id === "milano-minion"
+                                  ? "Milano · 3 damage to a minion"
+                                  : a.id === "release-exhaust"
+                                    ? "Exhaust · free 1 collected card"
+                                    : a.id === "release-pay"
+                                      ? "Pay 2 · free 1 collected card"
+                                      : "Milano · remove 3 threat"}
                             </button>
                           ))}
                         </div>
@@ -9036,6 +9066,25 @@ function Tabletop({
                             }
                           >
                             Parley · exhaust your hero
+                          </button>
+                        ))}
+                      {/* Kingpin: Black Cat's Hero Action. */}
+                      {p.code === BLACK_CAT &&
+                        abilityOptions(s, p).map((a) => (
+                          <button
+                            key={a.id}
+                            className="ability-button"
+                            disabled={!canUseAction}
+                            title={a.label}
+                            onClick={() =>
+                              sendAction({
+                                type: "ABILITY",
+                                id: p.id,
+                                action: a.id,
+                              })
+                            }
+                          >
+                            {a.label}
                           </button>
                         ))}
                       {/* Down to Earth: Common Criminal's Alter-Ego Action. */}

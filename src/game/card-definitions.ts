@@ -95,6 +95,18 @@ export const card = (piece: Piece | string): Card => {
       resource_physical: 0,
       resource_wild: 0,
     };
+  // Fear No Evil's Black Cat with 4 threat: an ally that takes 2
+  // consequential damage after she attacks or thwarts, still villainous.
+  if (typeof piece !== "string" && piece.fneCatAlly)
+    return {
+      ...printed,
+      type_code: "ally",
+      text: "Villainous.\nWhile there is 4 threat here, treat Black Cat as an ally that takes 2 consequential damage after she attacks or thwarts.",
+      thwart: printed.scheme || 0,
+      attack_cost: 2,
+      thwart_cost: 2,
+      cost: undefined,
+    };
   if (typeof piece !== "string" && piece.treatedAsAlly)
     return {
       ...printed,

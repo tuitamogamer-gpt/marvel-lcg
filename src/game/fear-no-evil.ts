@@ -343,6 +343,72 @@ const PART_FOUR_CODES = [
 ];
 const PART_FOUR_SCRIPT_CODES = [PROPRIETOR, MAN_BULL, VENUE];
 
+// Kingpin
+export const KINGPIN_ID = "fne_kingpin";
+/** Kingpin (A1) and (A2) in standard mode, (B1) and (B2) in expert mode:
+ * the two sides of one card each. */
+const KINGPIN_A1 = "60159a";
+const KINGPIN_A2 = "60159b";
+const KINGPIN_B1 = "60160a";
+const KINGPIN_B2 = "60160b";
+const GAMBIT = "60161b";
+const ENDGAME = "60162b";
+const SUPPORT_LOW = "60163a";
+const SUPPORT_HIGH = "60163b";
+const BEAR_HUG = "60164";
+const WESLEY = "60165";
+const CANE = "60166";
+const MUSCLE = "60167";
+const VANESSA = "60168";
+export const BLACK_CAT = "60169";
+const DIAMONDBACK = "60170";
+const SPOT = "60171";
+const STILT = "60172";
+const INFLUENCE = "60173";
+const ORGANIZED = "60174";
+const TRICKS = "60175";
+const HATE = "60176";
+/** The pseudo card that carries The King's Gambit's Hero Action. */
+const GAMBIT_ACTION_ID = "fne-kingpin-gambit";
+/** Part five's faces. */
+const PART_FIVE_CODES = [
+  KINGPIN_A1,
+  KINGPIN_A2,
+  KINGPIN_B1,
+  KINGPIN_B2,
+  "60161a",
+  GAMBIT,
+  "60162a",
+  ENDGAME,
+  SUPPORT_LOW,
+  SUPPORT_HIGH,
+  BEAR_HUG,
+  WESLEY,
+  CANE,
+  MUSCLE,
+  VANESSA,
+  BLACK_CAT,
+  DIAMONDBACK,
+  SPOT,
+  STILT,
+  INFLUENCE,
+  ORGANIZED,
+  TRICKS,
+  HATE,
+];
+const PART_FIVE_ATTACHMENTS = [BEAR_HUG, WESLEY, CANE, MUSCLE, VANESSA];
+const PART_FIVE_SCRIPT_CODES = [
+  ...PART_FIVE_ATTACHMENTS,
+  BLACK_CAT,
+  DIAMONDBACK,
+  SPOT,
+  STILT,
+  INFLUENCE,
+  ORGANIZED,
+  TRICKS,
+  HATE,
+];
+
 /** Every face registered by this import. */
 export const FEAR_NO_EVIL_CODES = [
   "60065",
@@ -410,6 +476,7 @@ export const FEAR_NO_EVIL_CODES = [
   ...PART_TWO_CODES,
   ...PART_THREE_CODES,
   ...PART_FOUR_CODES,
+  ...PART_FIVE_CODES,
 ] as const;
 
 /** The encounter cards scripted here: everything that can be revealed. */
@@ -460,6 +527,7 @@ export const FNE_SCRIPT_CODES: readonly string[] = [
   ...PART_TWO_SCRIPT_CODES,
   ...PART_THREE_SCRIPT_CODES,
   ...PART_FOUR_SCRIPT_CODES,
+  ...PART_FIVE_SCRIPT_CODES,
 ];
 /** The attachments among them, which enter play through their own entry. */
 export const FNE_ATTACHMENT_CODES: readonly string[] = [
@@ -481,6 +549,7 @@ export const FNE_ATTACHMENT_CODES: readonly string[] = [
   ARMOR,
   COLD,
   MARBLE,
+  ...PART_FIVE_ATTACHMENTS,
 ];
 /** The attachments with a Hero Action, offered on the card. */
 export const FNE_ACTION_CODES: readonly string[] = [
@@ -492,6 +561,8 @@ export const FNE_ACTION_CODES: readonly string[] = [
   "60090",
   "60191",
   "60114",
+  WESLEY,
+  VANESSA,
 ];
 /** The modular sets, usable in any scenario. */
 export const FNE_MODULAR_SETS = [
@@ -542,8 +613,9 @@ const ART_RESOURCE: Record<string, Resource> = {
 export interface FearNoEvilState {
   /** The mission scenario: The Getaway or Art Museum Heist. */
   mission: string;
-  /** The chosen Underling villain and its three stages. */
-  underling: Underling;
+  /** The chosen Underling villain and its three stages; Kingpin's scenario
+   * has none. */
+  underling?: Underling;
   codes: string[];
   /** Speed counters on The Getaway. */
   speed: number;
@@ -577,6 +649,15 @@ export interface FearNoEvilState {
     pawn?: Record<string, number>;
     /** Shop Proprietor and its controller. */
     proprietors?: Record<string, string>;
+  };
+  /** Kingpin: the card carrying The King's Gambit's Hero Action, each
+   * player's nemesis set, and the setup and Bear Hug bookkeeping. */
+  kingpin?: {
+    main: Piece;
+    sets: Record<string, string>;
+    setup?: boolean;
+    flipped?: boolean;
+    hug?: string;
   };
 }
 
@@ -632,6 +713,8 @@ export interface FearNoEvilPorts extends MutagenEnginePorts {
   characterThwart(s: GameState, id: string): number;
   /** A hero or ally has this trait. */
   characterTrait(s: GameState, id: string, trait: string): boolean;
+  /** Set a player's nemesis set aside as physical cards; its set code. */
+  setAsideNemesis(s: GameState, playerId: string): string | undefined;
 }
 
 const definitions = new Map(
@@ -828,6 +911,7 @@ export function fearNoEvilSetup(s: GameState, ports: FearNoEvilPorts) {
   }
   partTwoSetup(s, ports);
   partThreeSetup(s, ports);
+  partFiveSetup(s, ports);
   partFourSetup(s, ports);
 }
 
@@ -835,7 +919,12 @@ export function fearNoEvilSetup(s: GameState, ports: FearNoEvilPorts) {
 
 /** The Underling stages' When Revealed abilities. */
 export function fneVillainRevealed(s: GameState): Effect[] {
-  return [...underlingRevealed(s), ...raftPrisoners(s), ...racketChoices(s)];
+  return [
+    ...underlingRevealed(s),
+    ...raftPrisoners(s),
+    ...racketChoices(s),
+    ...kingpinSetupReveals(s),
+  ];
 }
 function underlingRevealed(s: GameState): Effect[] {
   if (!s.fearNoEvil || !s.villain || isTextBlank(s, s.villain)) return [];
@@ -861,12 +950,13 @@ function underlingRevealed(s: GameState): Effect[] {
 // ------------------------------------------------------------ interface
 
 export function fneUnderlingName(s: GameState) {
-  return s.fearNoEvil ? UNDERLINGS[s.fearNoEvil.underling].name : "";
+  return s.fearNoEvil?.underling ? UNDERLINGS[s.fearNoEvil.underling].name : "";
 }
 /** The objective: the Underling's stage and the mission's counters. */
 export function fneObjective(s: GameState) {
   const st = s.fearNoEvil;
   if (!st) return "";
+  if (st.mission === KINGPIN_ID || !st.underling) return kingpinObjective(s);
   const last = expert(s) ? 3 : 2;
   const parts = [
     st.underling === "typhoid_mary"
@@ -902,6 +992,8 @@ export function fneMainNote(s: GameState) {
     return "First upgrade each round costs 1 less; attachments and upgrades here add 1 threat";
   if (s.scheme.code === PIZZA)
     return "Your character defeats a character or side scheme: it heals 1, 1 threat here";
+  if (s.scheme.code === GAMBIT || s.scheme.code === ENDGAME)
+    return kingpinMainNote(s);
   return "";
 }
 /** A caption for the counters and damage on this import's attachments. */
@@ -918,7 +1010,7 @@ export function fneAttachmentCaption(s: GameState, p: Piece) {
     return "After the villain schemes, its minion boost cards are dealt to you";
   if (p.code === ARMOR)
     return `${p.damage || 0} of ${expert(s) ? 8 : 5} damage`;
-  return "";
+  return kingpinAttachmentCaption(s, p);
 }
 /** A caption for this import's environments. */
 export function fneEnvironmentCaption(s: GameState, p: Piece) {
@@ -930,7 +1022,7 @@ export function fneEnvironmentCaption(s: GameState, p: Piece) {
     return "Alter-Ego Action: exhaust a Daily Bugle support you control to place 1 stamina counter on it";
   if (DISASTERS.includes(p.code))
     return `${plural(p.counters || 0, "civilian counter")} · crisis: no threat comes off the main scheme`;
-  return "";
+  return kingpinEnvironmentCaption(s, p);
 }
 /** A caption for this import's side schemes. */
 export function fneSideSchemeCaption(s: GameState, p: Piece) {
@@ -942,7 +1034,7 @@ export function fneSideSchemeCaption(s: GameState, p: Piece) {
     const n = s.fearNoEvil?.tucked?.[p.id]?.length || 0;
     return `${plural(n, "minion")} tucked here · a revealed Tracksuit minion reveals one`;
   }
-  return "";
+  return kingpinSideSchemeCaption(s, p);
 }
 /** A caption for this import's cards in a player's play area. */
 export function fneInPlayCaption(s: GameState, p: Piece) {
@@ -954,7 +1046,7 @@ export function fneInPlayCaption(s: GameState, p: Piece) {
     return "You cannot thwart, attack or change to alter-ego form";
   if (p.code === PROPRIETOR)
     return "Leaves play: 4 threat on the main scheme in your play area";
-  return "";
+  return kingpinInPlayCaption(s, p);
 }
 /** The counters on this import's cards in a player's play area. */
 export function fneCounterLabel(code: string) {
@@ -972,7 +1064,7 @@ export function fneMinionCaption(s: GameState, p: Piece) {
     return `${plural(p.storedCards.length, "card")} tucked · +${resourceTypes(p.storedCards)} ATK when he attacks`;
   if (p.code === P_DRANG && (p.counters || 0) > 0)
     return plural(p.counters, "barrage counter");
-  return "";
+  return kingpinMinionCaption(s, p);
 }
 
 // ---------------------------------------------------------------- rules
@@ -989,7 +1081,8 @@ export function fneKeyword(
   p: { id: string; code: string },
   keyword: string,
 ): number {
-  const granted = partTwoKeyword(s, p, keyword);
+  const granted =
+    partTwoKeyword(s, p, keyword) || partFiveKeyword(s, p, keyword);
   if (granted) return granted;
   const minion = s.minions.find((m) => m.id === p.id);
   if (minion) {
@@ -1059,6 +1152,8 @@ export function fneEnemyStat(
     hasTrait(id: string, trait: string): boolean;
   },
 ): number {
+  const stilts = partFiveEnemyStat(s, p);
+  if (stilts) return stilts;
   if (kind !== "scheme" || !s.minions.some((m) => m.id === p.id)) return 0;
   if (!active(s, p)) return 0;
   if (p.code === CHAMELEON) return Math.max(0, ports.highestThwart());
@@ -1084,7 +1179,8 @@ export function fneRevealCard(s: GameState, p: Piece, c: Card): Card {
 }
 function gainsSurge(s: GameState, p: Piece) {
   const playerId = s.activePlayerId;
-  if (partTwoSurge(s, p) || partFourSurge(s, p)) return true;
+  if (partTwoSurge(s, p) || partFourSurge(s, p) || partFiveSurge(s, p))
+    return true;
   switch (p.code) {
     case ESCORT:
       return speed(s) >= 9;
@@ -1136,6 +1232,8 @@ export function fneDamageProhibited(
   s: GameState,
   target: string,
 ): string | undefined {
+  const shielded = kingpinDamageProhibited(s, target);
+  if (shielded) return shielded;
   if (!s.villain || target !== s.villain.id) return undefined;
   const truck = s.sideSchemes.find((q) => q.code === TANKER && active(s, q));
   return truck
@@ -1171,6 +1269,8 @@ export function fneDamageTaken(
   ports: Pick<FearNoEvilPorts, "log" | "discardPiece">,
 ): number {
   if (n <= 0) return n;
+  const kingpin = kingpinDamageTaken(s, target, n, ports);
+  if (kingpin !== undefined) return kingpin;
   const armored = armorTakes(s, target, n, ports);
   if (armored !== undefined) return armored;
   const vehicle = attached(s, target, VEHICLES)[0];
@@ -1207,6 +1307,7 @@ export function fneCheck(s: GameState, ports: FearNoEvilPorts) {
   if (!s.fearNoEvil || over(s) || !s.villain) return;
   partTwoCheck(s, ports);
   partFourCheck(s, ports);
+  partFiveCheck(s);
   if (over(s)) return;
   const out = villainAttachment(s, OUT_FRONT);
   if (!out || s.scheme.threat > 0) return;
@@ -1300,6 +1401,7 @@ export function fneActivationInitiated(
   )
     effects.push(F("extra-boost", { enemyId: id, source: UNDERBOSS }));
   effects.push(...partThreeActivation(s, id, playerId, kind));
+  effects.push(...partFiveActivation(s, id, playerId, kind));
   const a = s.attack;
   if (!s.villain || id !== s.villain.id || kind !== "attack" || !a)
     return effects;
@@ -1438,6 +1540,7 @@ export function fneAfterAttack(
     ...partTwoAfterAttack(s, r),
     ...partThreeAfterAttack(s, r),
     ...partFourAfterAttack(s, r),
+    ...partFiveAfterAttack(s, r),
   ])
     respond(key, title, effects, sourceId);
   return responses;
@@ -1505,6 +1608,7 @@ export function fneMinionDefeated(
   effects.push(...partTwoMinionDefeated(s, m, textWasBlank, defeaterId));
   effects.push(...partThreeMinionDefeated(s, m));
   effects.push(...racketDefeated(s, source));
+  effects.push(...partFiveMinionDefeated(s));
   return effects;
 }
 /** When Defeated: Charging Up. */
@@ -1520,6 +1624,7 @@ export function fneSchemeDefeated(
   if (p.code === TRACKSUIT && s.fearNoEvil?.tucked?.[p.id]?.length)
     effects.push(F("untuck", { id: p.id }));
   effects.push(...racketDefeated(s, source));
+  effects.push(...partFiveSchemeDefeated(s, p, source));
   return effects;
 }
 
@@ -1568,6 +1673,8 @@ export function fneActions(
   ports?: Pick<FearNoEvilPorts, "canPay" | "characterThwart">,
 ): Option[] {
   if (s.phase !== "player" || !active(s, p)) return [];
+  const five = partFiveActions(s, p, ports);
+  if (five) return five;
   const three = partThreeActions(s, p, ports);
   if (three) return three;
   const two = partTwoActions(s, p, ports);
@@ -1678,7 +1785,8 @@ export function fneActionSource(s: GameState, id: string): Piece | undefined {
     ) ||
     s.player.inPlay.find((p) => p.id === id && p.code === WANTED) ||
     partTwoActionSource(s, id) ||
-    partThreeActionSource(s, id)
+    partThreeActionSource(s, id) ||
+    partFiveActionSource(s, id)
   );
 }
 
@@ -1762,6 +1870,7 @@ export function fneReveal(s: GameState, p: Piece): Effect[] | null {
         partTwoReveal(s, p) ??
         partThreeReveal(s, p) ??
         partFourReveal(s, p) ??
+        partFiveReveal(s, p) ??
         []
       );
   }
@@ -1775,6 +1884,8 @@ export function fneBoost(s: GameState, p: Piece): Effect[] | null {
   if (three) return three;
   const four = partFourBoost(s, p);
   if (four) return four;
+  const five = partFiveBoost(s, p);
+  if (five) return five;
   const a = s.attack;
   switch (p.code) {
     case BLOODLUST:
@@ -3247,6 +3358,7 @@ export function resolveFearNoEvilEffect(
       if (resolvePartTwo(s, e, ports)) break;
       if (resolvePartThree(s, e, ports)) break;
       if (resolvePartFour(s, e, ports)) break;
+      if (resolvePartFive(s, e, ports)) break;
       throw Error(`Unknown Fear No Evil effect: ${e.type}`);
   }
   return true;
@@ -3374,6 +3486,37 @@ function resolveAttach(s: GameState, e: Effect, ports: FearNoEvilPorts) {
           ]),
         ),
       );
+    }
+    case BEAR_HUG:
+      // Bear Hug: attach to your hero if Kingpin is a Martial Artist.
+      if (!martialArtist(s) || !alive(s, playerId)) return discard();
+      p.counters = 3;
+      return attachTo(s, p, identityOf(playerId), ports);
+    case MUSCLE:
+      // Mountain of Muscle: attach to Kingpin if he is a Martial Artist.
+      if (!martialArtist(s) || !s.villain) return discard();
+      return attachTo(s, p, s.villain.id, ports);
+    case WESLEY:
+      // James Wesley: attach to Kingpin and give him a facedown boost card.
+      if (!s.villain) return discard();
+      attachTo(s, p, s.villain.id, ports);
+      ports.giveBoost(s, s.villain.id, "next");
+      ports.log(s, "James Wesley gives Kingpin a facedown boost card.", "bad");
+      return;
+    case CANE:
+    case VANESSA: {
+      // Kingpin's Cane (you are stunned) and Vanessa Fisk (you are
+      // confused) attach to Kingpin.
+      if (!s.villain) return discard();
+      attachTo(s, p, s.villain.id, ports);
+      const status = p.code === CANE ? "stunned" : "confused";
+      if (alive(s, playerId))
+        ports.queue(s, {
+          type: "status",
+          target: identityOf(playerId),
+          status,
+        });
+      return;
     }
     default:
       // Attach to the villain (Bullseye, Electro or Hammerhead).
@@ -3507,6 +3650,14 @@ export function fneVillainWouldBeDefeated(
   s: GameState,
   ports: FearNoEvilPorts,
 ): boolean {
+  if (kingpinState(s) && !over(s)) {
+    ports.endGame(
+      s,
+      true,
+      "Kingpin is defeated. His empire crumbles, and the city is free of him.",
+    );
+    return true;
+  }
   if (!typhoidActive(s) || isTextBlank(s, s.villain)) return false;
   const st = s.fearNoEvil!;
   st.psyche = st.psyche || { damage: 0, threat: 0 };
@@ -3690,9 +3841,11 @@ export function fneCanReady(s: GameState, p: Piece) {
 }
 /** Hit List's Forced Response after the villain phase begins. */
 export function fneVillainPhaseBegins(s: GameState): Effect[] {
+  const flip = partFiveVillainPhase(s);
   const list = s.sideSchemes.find((q) => q.code === HIT_LIST && active(s, q));
-  if (!list || !alive(s, s.firstPlayerId)) return [];
+  if (!list || !alive(s, s.firstPlayerId)) return flip;
   return [
+    ...flip,
     F("hit-list", {
       id: list.id,
       playerId: s.firstPlayerId,
@@ -3709,6 +3862,7 @@ export function fneAcceleration(s: GameState) {
 /** Teamwork (Tracksuit): the entering minion activates against you if
  * another Tracksuit minion is in play. */
 export function fneEngaged(s: GameState, p: Piece): Effect[] {
+  partFiveEntered(p);
   const entered = racketMinionEntered(s, p);
   if (!tracksuit(p) || !active(s, p)) return entered;
   return [...entered, F("teamwork", { id: p.id })];
@@ -6109,6 +6263,1065 @@ function resolvePartFour(
         `Change of Venue: ${name(old)} gives way to ${name(next)}, with its ${scheme.threat} threat.`,
         "bad",
       );
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
+// ============================================================ part five
+
+/** Fear No Evil, part five: the Kingpin scenario. Kingpin cannot be dealt
+ * damage on his first side; each defeated minion garners Public Support,
+ * and enough of it flips him and advances the main scheme to Endgame. */
+
+const kingpinState = (s: GameState) =>
+  s.fearNoEvil?.mission === KINGPIN_ID ? s.fearNoEvil.kingpin : undefined;
+/** The Kingpin scenario: not a mission, and played without an Underling. */
+export const fneKingpinScenario = (villainId: string) =>
+  villainId === KINGPIN_ID;
+/** Kingpin on his first side cannot be dealt damage or have upgrades
+ * attached, and schemes instead of attacking. */
+const kingpinShielded = (s: GameState) =>
+  !!kingpinState(s) &&
+  !!s.villain &&
+  [KINGPIN_A1, KINGPIN_B1].includes(s.villain.code) &&
+  active(s, s.villain);
+const martialArtist = (s: GameState) =>
+  !!s.villain && printedTraits(s.villain.code).includes("Martial Artist");
+const publicSupport = (s: GameState) =>
+  (s.environments || []).find(
+    (q) => q.code === SUPPORT_LOW || q.code === SUPPORT_HIGH,
+  );
+/** Public Support flips Kingpin at 2 support counters per player, plus 2. */
+const supportNeeded = (s: GameState) => 2 * s.playerCount + 2;
+const isUnderlingMinion = (p: Piece) =>
+  typeOf(p) === "minion" && printedTraits(p).includes("Underling");
+const setCode = (p: Piece) => def(p)?.set_code || "";
+
+/** Put the Kingpin scenario's state in place: Kingpin (A1) in standard
+ * mode, (B1) in expert mode, with no Underling. */
+export function fneInitKingpin(s: GameState) {
+  s.fearNoEvil = {
+    mission: KINGPIN_ID,
+    codes: [s.villain.code],
+    speed: 0,
+    setAside: [],
+    kingpin: {
+      main: {
+        id: GAMBIT_ACTION_ID,
+        code: GAMBIT,
+        exhausted: false,
+        damage: 0,
+        counters: 0,
+        tough: false,
+        stunned: false,
+        confused: false,
+      },
+      sets: {},
+    },
+  };
+}
+/** Setup: each player's nemesis set is set aside as physical cards, and
+ * The King's Gambit puts Public Support into play, Low side faceup. */
+function partFiveSetup(s: GameState, ports: FearNoEvilPorts) {
+  const k = kingpinState(s);
+  if (!k) return;
+  for (const seat of playerOrder(s)) {
+    const set = ports.setAsideNemesis(s, seat.id);
+    if (set) k.sets[seat.id] = set;
+  }
+  const support = ports.makePiece(s, SUPPORT_LOW);
+  delete support.ownerId;
+  support.counters = 0;
+  ports.putEnvironment(s, support);
+  ports.log(
+    s,
+    "The King's Gambit: Public Support enters play, Low side faceup.",
+  );
+}
+/** Setup: each player reveals their set-aside nemesis minion. */
+function kingpinSetupReveals(s: GameState): Effect[] {
+  const k = kingpinState(s);
+  if (!k || k.setup) return [];
+  k.setup = true;
+  return playerOrder(s)
+    .filter((seat) => alive(s, seat.id))
+    .map((seat) =>
+      F("kp-nemesis-setup", { playerId: seat.id, actorId: seat.id }),
+    );
+}
+
+// --------------------------------------------------------- nemesis cards
+
+/** A player's set-aside nemesis cards. */
+function setAsideNemesis(s: GameState, playerId: string) {
+  if (!alive(s, playerId)) return [];
+  return (seatView(s, playerId).player.setAside || []).filter((p) =>
+    setCode(p).endsWith("_nemesis"),
+  );
+}
+function takeSetAside(s: GameState, playerId: string, id: string) {
+  const player = seatView(s, playerId).player;
+  const p = (player.setAside || []).find((q) => q.id === id);
+  if (p) player.setAside = (player.setAside || []).filter((q) => q !== p);
+  return p;
+}
+/** The player's nemesis minion: the first minion of their nemesis set. */
+function nemesisMinionCode(s: GameState, playerId: string) {
+  const set = kingpinState(s)?.sets[playerId];
+  if (!set) return undefined;
+  return [...definitions.values()]
+    .filter((c) => c.set_code === set && c.type_code === "minion")
+    .map((c) => c.code)
+    .sort()[0];
+}
+const nemesisMinionInPlay = (s: GameState, playerId: string) => {
+  const code = nemesisMinionCode(s, playerId);
+  return code ? s.minions.find((m) => m.code === code) : undefined;
+};
+/** Find a card of the player's that is not in play: in the encounter deck,
+ * its discard pile or their set-aside nemesis cards. It leaves that area,
+ * and a searched encounter deck is shuffled. */
+function findOutOfPlay(
+  s: GameState,
+  playerId: string,
+  test: (p: Piece) => boolean,
+  ports: FearNoEvilPorts,
+): Piece | undefined {
+  const inDeck = s.encounter.deck.find(test);
+  if (inDeck) {
+    s.encounter.deck = s.encounter.deck.filter((q) => q !== inDeck);
+    ports.shuffleEncounter(s);
+    return inDeck;
+  }
+  const inDiscard = s.encounter.discard.find(test);
+  if (inDiscard) {
+    s.encounter.discard = s.encounter.discard.filter((q) => q !== inDiscard);
+    return inDiscard;
+  }
+  const aside = setAsideNemesis(s, playerId).find(test);
+  if (aside) return takeSetAside(s, playerId, aside.id);
+  ports.shuffleEncounter(s);
+  return undefined;
+}
+/** A character in play shares this title. */
+function titleInPlay(s: GameState, title: string, ports: FearNoEvilPorts) {
+  const titles = [
+    ...(s.villain ? [name(s.villain.code)] : []),
+    ...s.minions.map((m) => name(m)),
+    ...playerOrder(s).flatMap((seat) => [
+      ...(alive(s, seat.id) ? [ports.heroName(s, seat.id)] : []),
+      ...(alive(s, seat.id)
+        ? seatView(s, seat.id)
+            .player.inPlay.filter(
+              (q) => typeOf(q) === "ally" || q.fneCatAlly || q.treatedAsAlly,
+            )
+            .map((q) => name(q))
+        : []),
+    ]),
+  ];
+  return titles.some((t) => t.toLowerCase() === title.toLowerCase());
+}
+/** The Underling minions that are not in play, one of each title. */
+function underlingChoices(s: GameState) {
+  const seen = new Set<string>();
+  return [...s.encounter.deck, ...s.encounter.discard].filter((p) => {
+    if (!isUnderlingMinion(p) || seen.has(p.code)) return false;
+    seen.add(p.code);
+    return true;
+  });
+}
+function revealUnderling(
+  s: GameState,
+  id: string,
+  playerId: string,
+  ports: FearNoEvilPorts,
+) {
+  const p = findOutOfPlay(s, playerId, (q) => q.id === id, ports);
+  if (!p || !alive(s, playerId)) return;
+  ports.log(
+    s,
+    `${ports.heroName(s, playerId)} finds ${name(p)}, an Underling minion, and reveals it.`,
+    "bad",
+  );
+  ports.reveal(s, p, playerId);
+}
+
+// ------------------------------------------------------------ interface
+
+/** The objective: Public Support, then Kingpin himself. */
+function kingpinObjective(s: GameState) {
+  const env = publicSupport(s);
+  if (kingpinShielded(s) && env?.code === SUPPORT_LOW)
+    return `Garner Public Support · ${env.counters || 0} of ${supportNeeded(s)} support counters, then defeat Kingpin`;
+  return "Defeat Kingpin";
+}
+/** The main scheme's note. */
+function kingpinMainNote(s: GameState) {
+  if (s.scheme.code === GAMBIT)
+    return `Hero Action: remove ${expert(s) ? 4 : 5} threat here, then discard until a minion and reveal it`;
+  if (s.scheme.code === ENDGAME) return "Each minion gains guard";
+  return "";
+}
+/** The pseudo card for The King's Gambit's Hero Action. */
+export function fneMainActionPiece(s: GameState): Piece | undefined {
+  const k = kingpinState(s);
+  return k && s.scheme.code === GAMBIT ? k.main : undefined;
+}
+function kingpinAttachmentCaption(s: GameState, p: Piece) {
+  if (p.code === BEAR_HUG)
+    return `${plural(p.counters || 0, "grip counter")} · attacking or thwarting removes one instead · no alter-ego form`;
+  if (p.code === MUSCLE)
+    return `${p.damage || 0} of 8 damage · Kingpin's damage goes here · retaliate 1`;
+  if (p.code === CANE) return "A hero Kingpin's attack damages is stunned";
+  return "";
+}
+function kingpinEnvironmentCaption(s: GameState, p: Piece) {
+  if (p.code === SUPPORT_LOW)
+    return `${p.counters || 0} of ${supportNeeded(s)} support counters · each defeated minion adds 1 · then Kingpin flips as the villain phase begins`;
+  if (p.code === SUPPORT_HIGH)
+    return `${plural(p.counters || 0, "support counter")} · ${s.playerCount === 1 ? "1 comes" : `${s.playerCount} come`} off instead of each boost card an enemy would be given`;
+  return "";
+}
+function kingpinSideSchemeCaption(_s: GameState, p: Piece) {
+  if (p.code === ORGANIZED) return "Each minion gets +2 hit points";
+  if (p.code === INFLUENCE)
+    return "When Defeated: 3 threat on the defeating player's nemesis side scheme";
+  return "";
+}
+function kingpinMinionCaption(_s: GameState, p: Piece) {
+  if (p.code === SPOT) return plural(p.counters || 0, "spot counter");
+  if (p.code === STILT)
+    return `${plural(p.counters || 0, "stilt counter")} · +${p.counters || 0} ATK and SCH`;
+  if (p.code === BLACK_CAT)
+    return `${p.fneCatThreat || 0} of 4 threat · at 4 she becomes an ally`;
+  return "";
+}
+function kingpinInPlayCaption(_s: GameState, p: Piece) {
+  if (p.code === BLACK_CAT && p.fneCatAlly)
+    return "Ally · villainous · 2 consequential damage after she attacks or thwarts";
+  return "";
+}
+
+// ------------------------------------------------------------- rules
+
+/** Kingpin on his first side cannot be dealt damage. */
+function kingpinDamageProhibited(s: GameState, target: string) {
+  return s.villain && target === s.villain.id && kingpinShielded(s)
+    ? `${name(s.villain.code)} cannot be dealt damage: the players must garner Public Support to face him.`
+    : undefined;
+}
+/** Kingpin on his first side schemes instead of attacking. */
+export function fneSchemesInstead(s: GameState, id: string) {
+  return !!s.villain && id === s.villain.id && kingpinShielded(s);
+}
+/** Kingpin on his first side cannot have upgrades attached. */
+export function fneCanAttachUpgrade(s: GameState, target: string) {
+  return !(s.villain && target === s.villain.id && kingpinShielded(s));
+}
+/** Mountain of Muscle and Stilt-Man take Kingpin's and Stilt-Man's damage
+ * instead. Returns the damage taken, or undefined. */
+function kingpinDamageTaken(
+  s: GameState,
+  target: string,
+  n: number,
+  ports: Pick<FearNoEvilPorts, "log" | "discardPiece">,
+): number | undefined {
+  if (s.villain && target === s.villain.id) {
+    const muscle = attached(s, target, [MUSCLE])[0];
+    if (!muscle) return undefined;
+    muscle.damage = (muscle.damage || 0) + n;
+    ports.log(s, `Mountain of Muscle takes ${n} damage instead.`);
+    if (muscle.damage >= 8) {
+      ports.log(s, "Mountain of Muscle is discarded.", "good");
+      ports.discardPiece(s, muscle.id);
+    }
+    return 0;
+  }
+  const m = s.minions.find((q) => q.id === target);
+  if (m?.code === STILT && active(s, m) && (m.counters || 0) > 0) {
+    m.counters -= 1;
+    ports.log(
+      s,
+      `Stilt-Man loses a stilt counter instead of taking ${n} damage (${plural(m.counters, "stilt counter")} left).`,
+      "good",
+    );
+    return 0;
+  }
+  return undefined;
+}
+/** Spot: damage his attacker would deal him goes back through a portal
+ * while he has a spot counter; otherwise he gains one. */
+export function fneDamageRedirected(
+  s: GameState,
+  target: string,
+  dealt: number,
+  source: string,
+  attack: boolean,
+  ports: Pick<FearNoEvilPorts, "log" | "queue">,
+): string | undefined {
+  if (!attack || dealt <= 0) return undefined;
+  const m = s.minions.find((q) => q.id === target);
+  if (!m || m.code !== SPOT || !active(s, m)) return undefined;
+  if ((m.counters || 0) <= 0) {
+    m.counters = 1;
+    ports.log(s, "Spot gains a spot counter.");
+    return undefined;
+  }
+  m.counters -= 1;
+  const attacker =
+    source === "hero" ? identityOf(s.activePlayerId) : String(source);
+  ports.queue(s, {
+    type: "damage",
+    target: attacker,
+    amount: dealt,
+    source: m.id,
+    origin: "encounter",
+  });
+  return `Spot spends a spot counter: the ${dealt} damage goes back to the attacker.`;
+}
+/** Organized Crime: each minion gets +2 hit points. */
+export function fneHealth(s: GameState, p: Piece) {
+  return kingpinState(s) &&
+    s.minions.some((m) => m.id === p.id) &&
+    s.sideSchemes.some((q) => q.code === ORGANIZED && active(s, q))
+    ? 2
+    : 0;
+}
+/** Bear Hug: when you would thwart or attack, a grip counter comes off
+ * instead. Returns true when the attack or thwart is replaced. */
+export function fneBearHug(
+  s: GameState,
+  kind: "attack" | "thwart",
+  ports: Pick<FearNoEvilPorts, "log" | "discardPiece" | "heroName">,
+) {
+  const hug = attached(s, identityOf(s.activePlayerId), [BEAR_HUG])[0];
+  if (!hug || (hug.counters || 0) <= 0) return false;
+  const k = kingpinState(s);
+  // One counter for each attack or thwart, however many targets it has.
+  const token = s.currentEventId || s.currentAttackProgramId;
+  const key = token ? `${kind}:${token}` : undefined;
+  if (key && k?.hug === key) return true;
+  if (k) k.hug = key;
+  hug.counters -= 1;
+  ports.log(
+    s,
+    `Bear Hug: instead of ${kind === "attack" ? "attacking" : "thwarting"}, ${ports.heroName(s, s.activePlayerId)} removes a grip counter (${hug.counters} left).`,
+    "good",
+  );
+  if (hug.counters <= 0) {
+    ports.log(s, "Bear Hug is discarded.", "good");
+    ports.discardPiece(s, hug.id);
+  }
+  return true;
+}
+/** Bear Hug: you cannot change to alter-ego form. */
+export function fneBearHugged(s: GameState, playerId: string) {
+  return attached(s, identityOf(playerId), [BEAR_HUG]).some(
+    (p) => (p.counters || 0) > 0,
+  );
+}
+/** Public Support (High): the players remove 1 support counter per player
+ * instead of an enemy being given a facedown boost card. */
+export function fneBoostPrevented(
+  s: GameState,
+  ports: Pick<FearNoEvilPorts, "log">,
+) {
+  const env = publicSupport(s);
+  if (!env || env.code !== SUPPORT_HIGH || !active(s, env)) return false;
+  const cost = s.playerCount;
+  if ((env.counters || 0) < cost) return false;
+  env.counters -= cost;
+  ports.log(
+    s,
+    `Public Support: ${plural(cost, "support counter")} come off instead of a boost card (${env.counters} left).`,
+    "good",
+  );
+  return true;
+}
+/** Black Cat as an ally keeps villainous: each time she attacks or thwarts,
+ * the top encounter card is her boost card. Returns its boost icons. */
+export function fneCatBoost(
+  s: GameState,
+  source: string,
+  ports: Pick<FearNoEvilPorts, "discardTop" | "log">,
+): number {
+  const cat = findCharacter(s, source);
+  if (!cat?.fneCatAlly || !active(s, cat)) return 0;
+  const { piece } = ports.discardTop(s);
+  if (!piece) return 0;
+  const icons = def(piece)?.boost || 0;
+  ports.log(
+    s,
+    `Black Cat (villainous): ${name(piece)} is her boost card, +${icons}.`,
+  );
+  return icons;
+}
+/** Take control of Black Cat as an ally. */
+function catControl(
+  s: GameState,
+  m: Piece,
+  playerId: string,
+  ports: FearNoEvilPorts,
+) {
+  s.minions = s.minions.filter((q) => q.id !== m.id);
+  delete m.engagedWith;
+  m.fneCatAlly = true;
+  seatView(s, playerId).player.inPlay.push(m);
+  ports.log(
+    s,
+    `Black Cat has 4 threat: ${ports.heroName(s, playerId)} takes control of her as an ally.`,
+    "good",
+  );
+  ports.queue(s, { type: "allyLimit" });
+}
+/** State checks: a Black Cat ally with less than 4 threat is a minion
+ * again. */
+function partFiveCheck(s: GameState) {
+  if (!kingpinState(s)) return;
+  for (const seat of playerOrder(s)) {
+    const player = seatView(s, seat.id).player;
+    for (const p of player.inPlay.filter(
+      (q) => q.fneCatAlly && (q.fneCatThreat || 0) < 4,
+    )) {
+      player.inPlay = player.inPlay.filter((q) => q !== p);
+      delete p.fneCatAlly;
+      p.engagedWith = seat.id;
+      s.minions.push(p);
+    }
+  }
+}
+
+// ------------------------------------------------------------ activations
+
+/** Kingpin's second side: an additional boost card when he activates
+ * against a player engaged with no minion (and overkill in expert mode);
+ * Diamondback's Forced Interrupt as he attacks. */
+function partFiveActivation(
+  s: GameState,
+  id: string,
+  playerId: string,
+  kind: "attack" | "scheme",
+): Effect[] {
+  const out: Effect[] = [];
+  const m = s.minions.find((q) => q.id === id);
+  if (
+    m?.code === DIAMONDBACK &&
+    kind === "attack" &&
+    active(s, m) &&
+    alive(s, playerId)
+  )
+    out.push(F("kp-diamondback", { id: m.id, playerId }));
+  if (!kingpinState(s) || !s.villain || id !== s.villain.id) return out;
+  if (![KINGPIN_A2, KINGPIN_B2].includes(s.villain.code)) return out;
+  if (!active(s, s.villain)) return out;
+  if (s.minions.some((q) => q.engagedWith === playerId)) return out;
+  out.push(F("extra-boost", { enemyId: id, source: s.villain.code }));
+  if (
+    s.villain.code === KINGPIN_B2 &&
+    kind === "attack" &&
+    s.attack?.attacker === id
+  )
+    s.attack.overkill = true;
+  return out;
+}
+/** Kingpin's Cane: after Kingpin attacks and damages a hero. */
+function partFiveAfterAttack(s: GameState, r: FneAttackReceipt) {
+  const out: [string, string, Effect[], string?][] = [];
+  if (
+    !s.villain ||
+    r.attackerId !== s.villain.id ||
+    r.damageTaken <= 0 ||
+    !r.targetId.startsWith("hero:")
+  )
+    return out;
+  const cane = attached(s, s.villain.id, [CANE])[0];
+  if (cane)
+    out.push([
+      "cane",
+      name(CANE),
+      [F("kp-cane", { id: cane.id, target: r.targetId })],
+      cane.id,
+    ]);
+  return out;
+}
+/** Public Support's Forced Response after a minion is defeated. */
+function partFiveMinionDefeated(s: GameState): Effect[] {
+  const env = publicSupport(s);
+  return kingpinState(s) && env && active(s, env) ? [F("kp-support")] : [];
+}
+/** Kingpin's Influence: When Defeated. */
+function partFiveSchemeDefeated(
+  s: GameState,
+  p: Piece,
+  source: string | undefined,
+): Effect[] {
+  if (p.code !== INFLUENCE || !kingpinState(s) || isTextBlank(s, p)) return [];
+  const playerId =
+    !source || source === "hero"
+      ? s.activePlayerId
+      : source.startsWith("hero:")
+        ? source.slice(5)
+        : allyOwner(s, source) || s.activePlayerId;
+  return alive(s, playerId)
+    ? [F("kp-influence", { playerId, actorId: playerId })]
+    : [];
+}
+/** Public Support (Low): as the villain phase begins, with enough support
+ * counters, Kingpin flips and the main scheme advances. */
+function partFiveVillainPhase(s: GameState): Effect[] {
+  const env = publicSupport(s);
+  if (
+    !kingpinState(s) ||
+    !env ||
+    env.code !== SUPPORT_LOW ||
+    !active(s, env) ||
+    (env.counters || 0) < supportNeeded(s)
+  )
+    return [];
+  return [F("kp-flip")];
+}
+/** Spot and Stilt-Man enter play with their counters. */
+function partFiveEntered(p: Piece) {
+  if (p.fneArrived) return;
+  if (p.code === SPOT) {
+    p.counters = 1;
+    p.fneArrived = true;
+  } else if (p.code === STILT) {
+    p.counters = 2;
+    p.fneArrived = true;
+  }
+}
+/** Endgame: each minion gains guard. Mountain of Muscle: Kingpin gains
+ * retaliate 1. */
+function partFiveKeyword(
+  s: GameState,
+  p: { id: string; code: string },
+  keyword: string,
+): number {
+  if (!kingpinState(s)) return 0;
+  if (
+    keyword === "Guard" &&
+    s.scheme.code === ENDGAME &&
+    s.minions.some((m) => m.id === p.id)
+  )
+    return 1;
+  if (
+    keyword === "Retaliate" &&
+    s.villain &&
+    p.id === s.villain.id &&
+    attached(s, p.id, [MUSCLE]).length
+  )
+    return 1;
+  return 0;
+}
+/** Stilt-Man: +1 SCH and +1 ATK for each stilt counter on him. */
+function partFiveEnemyStat(s: GameState, p: { id: string; code: string }) {
+  const m = s.minions.find((q) => q.id === p.id);
+  return m?.code === STILT && active(s, m) ? m.counters || 0 : 0;
+}
+function partFiveSurge(s: GameState, p: Piece) {
+  if (p.code === BEAR_HUG || p.code === MUSCLE) return !martialArtist(s);
+  if (p.code === TRICKS) return !setAsideNemesis(s, s.activePlayerId).length;
+  return false;
+}
+
+// ---------------------------------------------------------------- actions
+
+function partFiveActions(
+  s: GameState,
+  p: Piece,
+  ports?: Pick<FearNoEvilPorts, "canPay" | "characterThwart">,
+): Option[] | null {
+  const playerId = s.activePlayerId;
+  const hero = s.player.form === "hero";
+  const k = kingpinState(s);
+  if (k && p.id === GAMBIT_ACTION_ID) {
+    if (!hero || s.scheme.code !== GAMBIT || s.scheme.threat <= 0) return [];
+    return [
+      option(
+        "kp-gambit",
+        `Hero Action · remove ${expert(s) ? 4 : 5} threat from The King's Gambit, then a minion is revealed`,
+        [F("kp-gambit", { playerId, actorId: playerId })],
+        GAMBIT,
+      ),
+    ];
+  }
+  if (
+    (p.code === WESLEY || p.code === VANESSA) &&
+    s.attachments.some((q) => q.id === p.id)
+  ) {
+    if (!hero || !active(s, p)) return [];
+    const trait = p.code === WESLEY ? "Thwart" : "Attack";
+    return s.player.hand
+      .filter((q) => typeOf(q) === "event" && printedTraits(q).includes(trait))
+      .map((q) =>
+        option(
+          `kp-persona:${q.id}`,
+          `Hero Action · discard ${name(q)} from your hand: discard ${name(p)}, then Kingpin ${p.code === WESLEY ? "schemes" : "attacks you"}`,
+          [F("kp-persona", { id: p.id, cardId: q.id, actorId: playerId })],
+          p.code,
+        ),
+      );
+  }
+  if (p.code === BLACK_CAT && s.minions.some((q) => q.id === p.id)) {
+    if (!hero || !active(s, p) || (p.fneCatThreat || 0) >= 4) return [];
+    if (ports && !ports.canPay(s, 1, ["mental"])) return [];
+    return [
+      option(
+        "kp-cat",
+        "Hero Action · spend a mental resource: 1 threat on Black Cat; at 4 she becomes your ally",
+        [F("kp-cat-pay", { id: p.id, actorId: playerId })],
+        p.code,
+      ),
+    ];
+  }
+  return null;
+}
+function partFiveActionSource(s: GameState, id: string): Piece | undefined {
+  const k = kingpinState(s);
+  if (k && id === GAMBIT_ACTION_ID && s.scheme.code === GAMBIT) return k.main;
+  return (
+    s.attachments.find(
+      (p) => p.id === id && (p.code === WESLEY || p.code === VANESSA),
+    ) || s.minions.find((p) => p.id === id && p.code === BLACK_CAT)
+  );
+}
+
+// ------------------------------------------------------------ reveals
+
+function partFiveReveal(s: GameState, p: Piece): Effect[] | null {
+  const playerId = s.activePlayerId;
+  switch (p.code) {
+    case TRICKS:
+      return [F("kp-tricks", { playerId, actorId: playerId })];
+    case HATE:
+      return [F("kp-hate", { playerId, actorId: playerId })];
+    default:
+      return PART_FIVE_SCRIPT_CODES.includes(p.code) ? [] : null;
+  }
+}
+function partFiveBoost(s: GameState, p: Piece): Effect[] | null {
+  const playerId = boostPlayer(s);
+  const a = s.attack;
+  switch (p.code) {
+    case WESLEY:
+      return [F("kp-wesley-boost", { id: p.id })];
+    case CANE:
+      return [F("kp-cane-boost", { playerId, actorId: playerId })];
+    case VANESSA:
+      return [F("kp-vanessa-boost", { playerId, actorId: playerId })];
+    case DIAMONDBACK:
+      return alive(s, playerId)
+        ? [
+            {
+              type: "damage",
+              target: identityOf(playerId),
+              amount: 1,
+              source: p.id,
+              origin: "encounter",
+            },
+          ]
+        : [];
+    case TRICKS:
+      return [F("kp-tricks-boost", { playerId })];
+    case HATE:
+      return a ? [F("attack-keyword", { keyword: "overkill" })] : [];
+    default:
+      return PART_FIVE_SCRIPT_CODES.includes(p.code) ? [] : null;
+  }
+}
+
+// -------------------------------------------------------------- effects
+
+function resolvePartFive(
+  s: GameState,
+  e: Effect,
+  ports: FearNoEvilPorts,
+): boolean {
+  const k = kingpinState(s);
+  switch (e.type) {
+    case "fne:kp-nemesis-setup": {
+      // Setup: reveal your set-aside nemesis minion, unless it shares a
+      // title with a character in play.
+      const playerId = String(e.playerId);
+      const code = nemesisMinionCode(s, playerId);
+      if (!k || !code || !alive(s, playerId)) return true;
+      const p = setAsideNemesis(s, playerId).find((q) => q.code === code);
+      if (!p) return true;
+      takeSetAside(s, playerId, p.id);
+      if (titleInPlay(s, name(p), ports)) {
+        s.removed.push(p);
+        ports.log(
+          s,
+          `${name(p)} shares a title with a character in play: it is removed from the game, and ${ports.heroName(s, playerId)} finds an Underling minion instead.`,
+          "bad",
+        );
+        ports.queue(s, F("kp-underling", { playerId, actorId: playerId }));
+        return true;
+      }
+      ports.log(
+        s,
+        `The King's Gambit: ${ports.heroName(s, playerId)} reveals ${name(p)}, their nemesis minion.`,
+        "bad",
+      );
+      ports.reveal(s, p, playerId);
+      return true;
+    }
+    case "fne:kp-underling": {
+      // Find an Underling minion that is not in play and reveal it.
+      const playerId = String(e.playerId);
+      if (!alive(s, playerId)) return true;
+      const choices = underlingChoices(s);
+      if (!choices.length) {
+        ports.log(s, "No Underling minion is left to find.");
+        return true;
+      }
+      if (choices.length === 1) {
+        revealUnderling(s, choices[0].id, playerId, ports);
+        return true;
+      }
+      ports.choose(
+        s,
+        "Underling",
+        `${ports.heroName(s, playerId)}: find an Underling minion that is not in play and reveal it.`,
+        choices.map((p) =>
+          option(
+            p.id,
+            name(p),
+            [F("kp-underling-pick", { id: p.id, playerId, actorId: playerId })],
+            p.code,
+          ),
+        ),
+      );
+      return true;
+    }
+    case "fne:kp-underling-pick":
+      revealUnderling(s, String(e.id), String(e.playerId), ports);
+      return true;
+    case "fne:kp-support": {
+      const env = publicSupport(s);
+      if (!env) return true;
+      env.counters = (env.counters || 0) + 1;
+      ports.log(
+        s,
+        env.code === SUPPORT_LOW
+          ? `Public Support: a support counter (${env.counters} of ${supportNeeded(s)}).`
+          : `Public Support: a support counter (${env.counters}).`,
+        "good",
+      );
+      return true;
+    }
+    case "fne:kp-flip": {
+      // Flip Kingpin and advance the main scheme to stage 2A. Then flip
+      // Public Support.
+      const env = publicSupport(s);
+      if (!k || !env || env.code !== SUPPORT_LOW || !s.villain) return true;
+      const code = s.villain.code === KINGPIN_B1 ? KINGPIN_B2 : KINGPIN_A2;
+      s.villain.code = code;
+      s.villain.maxHp = (def(code)?.health || 25) * s.playerCount;
+      s.villain.hp = s.villain.maxHp;
+      k.flipped = true;
+      ports.log(
+        s,
+        "Public Support: the city turns against Kingpin. He flips, and the heroes can face him directly.",
+        "good",
+      );
+      s.scheme = { code: ENDGAME, threat: 0, index: 1 };
+      ports.log(s, "The main scheme advances to Endgame.", "bad");
+      const effects: Effect[] = playerOrder(s)
+        .filter((seat) => alive(s, seat.id))
+        .map((seat) =>
+          F("kp-endgame-nemesis", { playerId: seat.id, actorId: seat.id }),
+        );
+      if (expert(s))
+        effects.push(
+          F("kp-organized", {
+            playerId: s.firstPlayerId,
+            actorId: s.firstPlayerId,
+          }),
+        );
+      effects.push(F("kp-support-flip"));
+      ports.queue(s, ...effects);
+      return true;
+    }
+    case "fne:kp-endgame-nemesis": {
+      // Endgame (2A): find your nemesis minion and reveal it, otherwise an
+      // Underling minion.
+      const playerId = String(e.playerId);
+      if (!alive(s, playerId)) return true;
+      const code = nemesisMinionCode(s, playerId);
+      const p = code
+        ? findOutOfPlay(s, playerId, (q) => q.code === code, ports)
+        : undefined;
+      if (p) {
+        ports.log(
+          s,
+          `Endgame: ${ports.heroName(s, playerId)} finds ${name(p)}, their nemesis minion, and reveals it.`,
+          "bad",
+        );
+        ports.reveal(s, p, playerId);
+        return true;
+      }
+      ports.queue(s, F("kp-underling", { playerId, actorId: playerId }));
+      return true;
+    }
+    case "fne:kp-organized": {
+      // Endgame (2A), expert mode: the first player finds and reveals
+      // Organized Crime.
+      const playerId = String(e.playerId);
+      const p = findOutOfPlay(s, playerId, (q) => q.code === ORGANIZED, ports);
+      if (!p || !alive(s, playerId)) return true;
+      ports.log(s, "Endgame: Organized Crime is found and revealed.", "bad");
+      ports.reveal(s, p, playerId);
+      return true;
+    }
+    case "fne:kp-support-flip": {
+      const env = publicSupport(s);
+      if (!env || env.code !== SUPPORT_LOW) return true;
+      env.code = SUPPORT_HIGH;
+      ports.log(s, "Public Support flips to its High side.", "good");
+      return true;
+    }
+    case "fne:kp-gambit": {
+      // The King's Gambit's Hero Action.
+      const playerId = String(e.playerId);
+      if (s.scheme.code !== GAMBIT || !alive(s, playerId)) return true;
+      ports.queue(
+        s,
+        {
+          type: "thwart",
+          target: "main",
+          amount: expert(s) ? 4 : 5,
+          source: GAMBIT,
+        },
+        F("kp-gambit-minion", { playerId, actorId: playerId }),
+      );
+      return true;
+    }
+    case "fne:kp-gambit-minion": {
+      // Shuffle the encounter discard pile into the deck, then discard
+      // until a minion and reveal it.
+      const playerId = String(e.playerId);
+      if (!alive(s, playerId)) return true;
+      s.encounter.deck.push(...s.encounter.discard.splice(0));
+      ports.shuffleEncounter(s);
+      const minion = discardUntil(s, ports, (q) => typeOf(q) === "minion");
+      if (!minion) return true;
+      s.encounter.discard = s.encounter.discard.filter(
+        (q) => q.id !== minion.id,
+      );
+      ports.log(
+        s,
+        `The King's Gambit: ${name(minion)} is revealed for ${ports.heroName(s, playerId)}.`,
+        "bad",
+      );
+      ports.reveal(s, minion, playerId);
+      return true;
+    }
+    case "fne:kp-persona": {
+      // James Wesley and Vanessa Fisk: discard an event to discard them;
+      // then Kingpin schemes, or attacks you.
+      const persona = s.attachments.find((q) => q.id === e.id);
+      const playerId = s.activePlayerId;
+      if (!persona || !s.player.hand.some((q) => q.id === e.cardId))
+        return true;
+      ports.discardHandCard(s, playerId, String(e.cardId));
+      ports.discardPiece(s, persona.id);
+      ports.log(s, `${name(persona)} is discarded.`, "good");
+      if (s.villain && alive(s, playerId))
+        ports.activate(s, {
+          enemyId: s.villain.id,
+          playerId,
+          kind: persona.code === WESLEY ? "scheme" : "attack",
+          modifier: 0,
+        });
+      return true;
+    }
+    case "fne:kp-cat-pay": {
+      const queue = [...s.queue];
+      ports.pay(
+        s,
+        1,
+        ["mental"],
+        [F("kp-cat-threat", { id: e.id, playerId: s.activePlayerId })],
+        name(BLACK_CAT),
+        true,
+      );
+      if (s.prompt?.kind === "payment") s.prompt.cancellationQueue = queue;
+      return true;
+    }
+    case "fne:kp-cat-threat": {
+      const m = s.minions.find((q) => q.id === e.id);
+      const playerId = String(e.playerId);
+      if (!m || !alive(s, playerId)) return true;
+      m.fneCatThreat = Math.min(4, (m.fneCatThreat || 0) + 1);
+      ports.log(s, `Black Cat: ${m.fneCatThreat} of 4 threat.`, "good");
+      if (m.fneCatThreat >= 4) catControl(s, m, playerId, ports);
+      return true;
+    }
+    case "fne:kp-diamondback": {
+      // Diamondback's Forced Interrupt: you take 1 damage.
+      const playerId = String(e.playerId);
+      if (!alive(s, playerId)) return true;
+      ports.log(s, "Diamondback: the attacked player takes 1 damage.", "bad");
+      ports.queue(s, {
+        type: "damage",
+        target: identityOf(playerId),
+        amount: 1,
+        source: String(e.id),
+        origin: "encounter",
+      });
+      return true;
+    }
+    case "fne:kp-cane": {
+      // Kingpin's Cane: stun that hero; if stunned this way, discard it.
+      const cane = s.attachments.find((q) => q.id === e.id);
+      const target = String(e.target);
+      if (!cane) return true;
+      if (!ports.canAddStatus(s, target, "stunned")) return true;
+      ports.queue(s, { type: "status", target, status: "stunned" });
+      ports.discardPiece(s, cane.id);
+      ports.log(s, "Kingpin's Cane stuns the hero and is discarded.", "bad");
+      return true;
+    }
+    case "fne:kp-cane-boost":
+    case "fne:kp-vanessa-boost": {
+      // You are stunned (confused); if you already were, 1 damage (1
+      // threat on the main scheme).
+      const playerId = String(e.playerId);
+      if (!alive(s, playerId)) return true;
+      const stun = e.type === "fne:kp-cane-boost";
+      const status = stun ? "stunned" : "confused";
+      const target = identityOf(playerId);
+      const already = stun
+        ? seatView(s, playerId).player.stunned
+        : seatView(s, playerId).player.confused;
+      ports.queue(
+        s,
+        ...(already
+          ? [
+              stun
+                ? {
+                    type: "damage",
+                    target,
+                    amount: 1,
+                    source: CANE,
+                    origin: "encounter",
+                  }
+                : { type: "threat", target: "main", amount: 1 },
+            ]
+          : [{ type: "status", target, status }]),
+      );
+      return true;
+    }
+    case "fne:kp-wesley-boost": {
+      // James Wesley's boost: attach this card to Kingpin.
+      const p =
+        s.resolving.find((q) => q.id === e.id) ||
+        s.encounter.discard.find((q) => q.id === e.id);
+      if (!p || !s.villain) return true;
+      s.resolving = s.resolving.filter((q) => q.id !== p.id);
+      s.encounter.discard = s.encounter.discard.filter((q) => q.id !== p.id);
+      attachTo(s, p, s.villain.id, ports);
+      return true;
+    }
+    case "fne:kp-tricks": {
+      // Bag of Tricks: reveal a random card from your set-aside nemesis set.
+      const playerId = String(e.playerId);
+      const pool = setAsideNemesis(s, playerId);
+      if (!pool.length) return true;
+      const pick = ports.shuffle(s, [...pool])[0];
+      takeSetAside(s, playerId, pick.id);
+      ports.log(
+        s,
+        `Bag of Tricks: ${name(pick)} comes out of ${ports.heroName(s, playerId)}'s set-aside nemesis set.`,
+        "bad",
+      );
+      ports.reveal(s, pick, playerId);
+      return true;
+    }
+    case "fne:kp-tricks-boost": {
+      // Bag of Tricks' boost: a random set-aside nemesis card is an
+      // additional boost card.
+      const playerId = String(e.playerId);
+      const a = activation(s);
+      const pool = setAsideNemesis(s, playerId);
+      if (!a || !pool.length) return true;
+      const pick = ports.shuffle(s, [...pool])[0];
+      takeSetAside(s, playerId, pick.id);
+      (a.pendingBoosts ||= []).push(pick);
+      ports.log(
+        s,
+        `Bag of Tricks: ${name(pick)}, from ${ports.heroName(s, playerId)}'s set-aside nemesis set, is an additional boost card.`,
+        "bad",
+      );
+      return true;
+    }
+    case "fne:kp-hate": {
+      // Unrelenting Hate: your nemesis minion activates against you; if it
+      // is not in play, find and reveal it, otherwise an Underling minion.
+      const playerId = String(e.playerId);
+      if (!alive(s, playerId)) return true;
+      const inPlay = nemesisMinionInPlay(s, playerId);
+      if (inPlay) {
+        ports.log(
+          s,
+          `Unrelenting Hate: ${name(inPlay)} activates against ${ports.heroName(s, playerId)}.`,
+          "bad",
+        );
+        ports.activate(s, {
+          enemyId: inPlay.id,
+          playerId,
+          kind: isHero(s, playerId) ? "attack" : "scheme",
+          modifier: 0,
+        });
+        return true;
+      }
+      const code = nemesisMinionCode(s, playerId);
+      const p = code
+        ? findOutOfPlay(s, playerId, (q) => q.code === code, ports)
+        : undefined;
+      if (p) {
+        ports.log(
+          s,
+          `Unrelenting Hate: ${ports.heroName(s, playerId)} finds ${name(p)} and reveals it.`,
+          "bad",
+        );
+        ports.reveal(s, p, playerId);
+        return true;
+      }
+      ports.queue(s, F("kp-underling", { playerId, actorId: playerId }));
+      return true;
+    }
+    case "fne:kp-influence": {
+      // Kingpin's Influence: 3 threat on your nemesis side scheme; if it is
+      // not in play, find it and reveal it.
+      const playerId = String(e.playerId);
+      const set = k?.sets[playerId];
+      if (!set || !alive(s, playerId)) return true;
+      const isScheme = (q: Piece) =>
+        setCode(q) === set && typeOf(q) === "side_scheme";
+      const scheme = s.sideSchemes.find(isScheme);
+      if (scheme) {
+        ports.log(
+          s,
+          `Kingpin's Influence: 3 threat on ${name(scheme)}.`,
+          "bad",
+        );
+        ports.queue(s, { type: "threat", target: scheme.id, amount: 3 });
+        return true;
+      }
+      const p = findOutOfPlay(s, playerId, isScheme, ports);
+      if (!p) return true;
+      ports.log(
+        s,
+        `Kingpin's Influence: ${ports.heroName(s, playerId)} finds ${name(p)}, their nemesis side scheme, and reveals it.`,
+        "bad",
+      );
+      ports.reveal(s, p, playerId);
       return true;
     }
     default:

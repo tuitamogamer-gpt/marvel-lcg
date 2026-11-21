@@ -28,7 +28,7 @@ await build({
       "export {UNDERLINGS,fneAttachmentCaption,fneEnvironmentCaption,fneInPlayCaption,fneMainNote,fneMinionCaption,fneObjective,fneRacketNote,fneSideSchemeCaption} from './src/game/fear-no-evil.ts';",
       "export const definition=p=>card(p);",
       "export function fixture(kind){",
-      " const mission=kind==='heist'||kind==='typhoid'?'fne_art_museum_heist':kind==='bugle'||kind==='tracksuit'?'fne_stop_the_presses':kind==='imprisoned'?'fne_the_raft_breakout':kind==='proprietor'?'fne_protection_racket':'fne_the_getaway';",
+      " const mission=kind==='heist'||kind==='typhoid'?'fne_art_museum_heist':kind==='bugle'||kind==='tracksuit'?'fne_stop_the_presses':kind==='imprisoned'?'fne_the_raft_breakout':kind==='proprietor'?'fne_protection_racket':kind==='kingpin'||kind==='endgame'?'fne_kingpin':'fne_the_getaway';",
       " const underling=kind==='drained'?'electro':kind==='vehicle'?'hammerhead':kind==='bugle'||kind==='converted'?'purple_man':kind==='typhoid'?'typhoid_mary':'bullseye';",
       " const difficulty=kind==='spine'?'expert':'standard';",
       " let s=newGame({heroId:'captain_marvel',aspect:'aggression',villainId:mission,difficulty,seed:60128,pacing:'expert',underling});",
@@ -57,6 +57,8 @@ await build({
       " else if(kind==='disaster'){const p=makePiece(s,'60179');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
       " else if(kind==='imprisoned'){const p=take('60150');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
       " else if(kind==='proprietor'){const p=take('60139');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
+      " else if(kind==='kingpin'){s.scheme.threat=8;s.player.hand.push(makePiece(s,'01089'));const p=take('60169');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
+      " else if(kind==='endgame'){s.environments.find(p=>p.code==='60163a').counters=4;native([{type:'fne:kp-flip'}]);}",
       " else if(kind==='converted'){const ally=makePiece(s,'01030');ally.ownerId='p1';s.player.inPlay.push(ally);const p=take('60100');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
       " else throw Error('Unknown fixture '+kind);",
       " syncSeat(s);return{state:s,...result};",
@@ -147,6 +149,9 @@ const SET_SIZES = {
   fne_the_raft_breakout: 8,
   fne_disasters: 5,
   fne_protection_racket: 4,
+  // Part four: Public Support, five attachments, four Underling minions,
+  // two side schemes and six treacheries.
+  fne_kingpin: 18,
 };
 function originals(s, held = []) {
   const all = [...pieces(s), ...held];
@@ -156,7 +161,7 @@ function originals(s, held = []) {
     "Each physical card has one owner",
   );
   const sets = [
-    UNDERLINGS[s.fearNoEvil.underling].set,
+    ...(s.fearNoEvil.underling ? [UNDERLINGS[s.fearNoEvil.underling].set] : []),
     s.villainId,
     ...s.modules,
   ];
@@ -225,6 +230,7 @@ async function settle(stop = () => false) {
       ) ||
       (s.prompt.options.length === 1 ||
       s.prompt.title === "Forced responses" ||
+      s.prompt.title === "Underling" ||
       s.prompt.title === "Discard a card" ||
       /ability order/.test(s.prompt.title)
         ? s.prompt.options[0]
@@ -411,6 +417,13 @@ const MISSIONS = {
   },
 };
 const RACKET_SCHEMES = ["60134b", "60135b", "60136b", "60137b", "60138b"];
+MISSIONS.fne_kingpin = {
+  name: "Kingpin",
+  help: /Kingpin cannot be damaged until the heroes garner Public/,
+  scheme: "60161b",
+  modules: ["fne_tombstone", "fne_tracksuit_mafia"],
+  threat: 3,
+};
 const SETUPS = [
   ["fne_the_getaway", "standard", "bullseye"],
   ["fne_the_getaway", "expert", "electro"],
@@ -421,6 +434,8 @@ const SETUPS = [
   ["fne_the_raft_breakout", "standard", "electro"],
   ["fne_protection_racket", "standard", "hammerhead"],
   ["fne_protection_racket", "expert", "purple_man"],
+  ["fne_kingpin", "standard", null],
+  ["fne_kingpin", "expert", null],
 ];
 try {
   for (const width of widths)
@@ -441,11 +456,16 @@ try {
           exact: true,
         })
         .click();
-      await page
-        .locator(".setting-line")
-        .filter({ has: page.locator("span", { hasText: /^Underling$/ }) })
-        .getByRole("button", { name: UNDERLINGS[underling].name, exact: true })
-        .click();
+      // Kingpin's scenario has no Underling.
+      if (underling)
+        await page
+          .locator(".setting-line")
+          .filter({ has: page.locator("span", { hasText: /^Underling$/ }) })
+          .getByRole("button", {
+            name: UNDERLINGS[underling].name,
+            exact: true,
+          })
+          .click();
       if (underling === "typhoid_mary")
         await page.getByText(/^Typhoid Mary is never defeated/).waitFor();
       await page.locator("#mission-seed").fill("60128");
@@ -469,14 +489,21 @@ try {
       assert.equal(s.phase, "player");
       assert.equal(s.villainId, villainId);
       assert.ok(s.fearNoEvil, "Fear No Evil's rules are on");
-      assert.equal(s.fearNoEvil.underling, underling);
+      assert.equal(s.fearNoEvil.underling, underling ?? undefined);
       assert.deepEqual(s.modules, m.modules);
       const stage = difficulty === "expert" ? 1 : 0;
-      const code = UNDERLINGS[underling].codes[stage];
-      assert.ok(
-        [code, TYPHOID_SIDES[code]].includes(s.villain.code),
-        "the Underling's stage, on either side for Typhoid Mary",
-      );
+      if (underling) {
+        const code = UNDERLINGS[underling].codes[stage];
+        assert.ok(
+          [code, TYPHOID_SIDES[code]].includes(s.villain.code),
+          "the Underling's stage, on either side for Typhoid Mary",
+        );
+      } else
+        assert.equal(
+          s.villain.code,
+          ["60159a", "60160a"][stage],
+          "Kingpin (A1), (B1) in expert mode",
+        );
       if (villainId === "fne_protection_racket" && difficulty === "expert")
         assert.ok(RACKET_SCHEMES.includes(s.scheme.code), "a random shop");
       else assert.equal(s.scheme.code, m.scheme);
@@ -514,6 +541,23 @@ try {
           ),
           "an escaped Prisoner",
         );
+      } else if (villainId === "fne_kingpin") {
+        assert.equal(
+          (s.environments || []).find((p) => p.code === "60163a")?.counters,
+          0,
+          "Public Support, Low side faceup",
+        );
+        assert.ok(
+          s.minions.some((p) =>
+            (definition(p).set_code || "").endsWith("_nemesis"),
+          ),
+          "the nemesis minion revealed at setup",
+        );
+        assert.ok(
+          !s.encounter.deck.some((p) => definition(p).set_code === "standard"),
+          "no Standard set",
+        );
+        await artwork(["60163a"]);
       } else if (villainId === "fne_protection_racket") {
         assert.deepEqual(
           Object.keys(s.fearNoEvil.racket.schemes),
@@ -771,6 +815,62 @@ try {
     assert.deepEqual(originals(s), owned);
     await resumeExact();
     await audit("proprietor", width);
+    checks.push({ ...current });
+
+    current = { kind: "kingpin", width };
+    f = fixture("kingpin");
+    owned = originals(f.state, f.pending);
+    await open(width, f.state);
+    s = await resolveFixture();
+    assert.ok(
+      s.minions.some((p) => p.code === "60169"),
+      "Black Cat engaged",
+    );
+    await captions(s);
+    await shown(fneMainNote(s));
+    await shown(fneObjective(s));
+    await page
+      .getByRole("button", {
+        name: /^Hero Action · spend a mental resource: 1 threat on Black Cat/,
+      })
+      .first()
+      .waitFor();
+    const minions = s.minions.length;
+    await page
+      .getByRole("button", {
+        name: /^Hero Action · remove 5 threat from The King's Gambit/,
+      })
+      .click();
+    s = await until(
+      (next) => next.scheme.threat === 3,
+      "The King's Gambit's Hero Action",
+    );
+    s = await settle();
+    assert.equal(s.minions.length, minions + 1, "a minion is revealed");
+    await artwork(["60169", "60161b", "60163a"]);
+    assert.deepEqual(originals(s), owned);
+    await resumeExact();
+    await audit("kingpin", width);
+    checks.push({ ...current });
+
+    current = { kind: "endgame", width };
+    f = fixture("endgame");
+    owned = originals(f.state);
+    await open(width, f.state);
+    s = await resolveFixture();
+    assert.equal(s.villain.code, "60159b", "Kingpin flips to (A2)");
+    assert.equal(s.scheme.code, "60162b", "Endgame");
+    assert.ok(
+      (s.environments || []).some((p) => p.code === "60163b"),
+      "Public Support, High side faceup",
+    );
+    await shown(fneMainNote(s));
+    await shown(fneObjective(s));
+    await captions(s);
+    await artwork(["60159b", "60162b", "60163b"]);
+    assert.deepEqual(originals(s), owned);
+    await resumeExact();
+    await audit("endgame", width);
     checks.push({ ...current });
   }
   assert.deepEqual(errors, []);

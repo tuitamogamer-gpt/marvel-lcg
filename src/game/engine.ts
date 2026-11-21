@@ -1483,6 +1483,10 @@ function attachPackUpgrade(s: GameState, upgradeId: string, target: string) {
     iceman.icemanCanAttachUpgrade(s, target),
     "Snow Clone cannot have upgrades attached.",
   );
+  need(
+    fne.fneCanAttachUpgrade(s, target),
+    "Kingpin cannot have upgrades attached.",
+  );
   const p = find(s, upgradeId),
     source = controller(s, upgradeId);
   need(
@@ -3307,7 +3311,8 @@ function playerAttachmentTarget(s: GameState, source: Piece, target: string) {
     return false;
   if (
     card(source).type_code === "upgrade" &&
-    !iceman.icemanCanAttachUpgrade(s, target)
+    (!iceman.icemanCanAttachUpgrade(s, target) ||
+      !fne.fneCanAttachUpgrade(s, target))
   )
     return false;
   if (!hela.helaCanAttach(s, target)) return false;
@@ -3800,7 +3805,8 @@ function dealDamage(
         ) ??
         loki.lokiDamageProhibited(s, target) ??
         kang.kangDamageProhibited(s, target) ??
-        fne.fneDamageProhibited(s, target))
+        fne.fneDamageProhibited(s, target) ??
+        fne.fneDamageRedirected(s, target, dealt, source, attack, fnePorts))
       : undefined;
   if (prohibition) {
     log(s, prohibition);
@@ -7700,6 +7706,10 @@ function attackAction(
       !cyclops.cyclopsCanAttack(s))
   )
     return;
+  // Bear Hug: a grip counter comes off instead of the attack.
+  if (source === "hero" && fne.fneBearHug(s, "attack", fnePorts)) return;
+  // Black Cat as an ally is villainous: a boost card for her attack.
+  if (source !== "hero") n += fne.fneCatBoost(s, source, fnePorts);
   if (
     bwv.stunNetted(
       s,
@@ -7862,6 +7872,10 @@ function thwartAction(
       fne.fneImprisoned(s, s.activePlayerId))
   )
     return;
+  // Bear Hug: a grip counter comes off instead of the thwart.
+  if (source === "hero" && fne.fneBearHug(s, "thwart", fnePorts)) return 0;
+  // Black Cat as an ally is villainous: a boost card for her thwart.
+  if (source !== "hero") n += fne.fneCatBoost(s, source, fnePorts);
   if (
     !sentinels.sentinelsCanThwart(s, target, s.activePlayerId, sentinelsPorts)
   )
@@ -9556,6 +9570,8 @@ export function newGame(config: {
   // Fear No Evil: the mission is played against the chosen Underling.
   const fneUnderling = fne.fneUnderlingFor(v.id, config.underling, s.seed);
   if (fneUnderling) fne.fneInitVillain(s, fneUnderling);
+  // Kingpin's scenario uses Fear No Evil's rules without an Underling.
+  else if (fne.fneKingpinScenario(v.id)) fne.fneInitKingpin(s);
   for (const seat of players) {
     activateSeat(s, seat.id);
     const codes =
@@ -9748,7 +9764,7 @@ export function newGame(config: {
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
             c.pack_code === scenarioPack) ||
-          (!!s.fearNoEvil &&
+          (!!s.fearNoEvil?.underling &&
             c.set_code === fne.UNDERLINGS[s.fearNoEvil.underling].set &&
             c.pack_code === "fne") ||
           (executiveBoard &&
@@ -9756,13 +9772,16 @@ export function newGame(config: {
             c.pack_code === "aos") ||
           (c.set_code === "standard" &&
             c.pack_code === "core" &&
+            v.id !== fne.KINGPIN_ID &&
             !config.standardII &&
             !config.standardIII) ||
           (c.set_code === "standard_ii" &&
             c.pack_code === "hood" &&
+            v.id !== fne.KINGPIN_ID &&
             !!config.standardII) ||
           (c.set_code === "standard_iii" &&
             c.pack_code === "aoa" &&
+            v.id !== fne.KINGPIN_ID &&
             !!config.standardIII) ||
           (difficulty === "expert" &&
             c.set_code === "expert" &&
@@ -9830,7 +9849,11 @@ export function newGame(config: {
       Array.from({ length: c.quantity }, () => makePiece(s, c.code)),
     ),
   );
-  if (config.standardII && v.id !== "the_wrecking_crew") {
+  if (
+    config.standardII &&
+    v.id !== "the_wrecking_crew" &&
+    v.id !== fne.KINGPIN_ID
+  ) {
     s.standardII = true;
     (s.environments ||= []).push(
       makePiece(
@@ -9843,7 +9866,11 @@ export function newGame(config: {
   }
   if (config.expertII && difficulty === "expert") s.expertII = true;
   // Standard III: Pursued by the Past (Permanent, Setup) begins in play.
-  if (config.standardIII && v.id !== "the_wrecking_crew")
+  if (
+    config.standardIII &&
+    v.id !== "the_wrecking_crew" &&
+    v.id !== fne.KINGPIN_ID
+  )
     std3.standardIIISetup(s, { makePiece: (s, code) => makePiece(s, code) });
   if (v.id === "sandman") sandman.sandmanSetup(s, sandmanPorts);
   if (v.id === "venom") venomVillain.venomSetup(s, venomVillainPorts);
@@ -12580,7 +12607,11 @@ export function canChangeIdentityForm(
     storm.stormCanChangeForm(s, to) &&
     !s.flags.antManCannotChangeUntilTurnEnd &&
     !sandman.sandmanFormLocked(s) &&
-    !(to === "alter" && fne.fneImprisoned(s, s.activePlayerId)) &&
+    !(
+      to === "alter" &&
+      (fne.fneImprisoned(s, s.activePlayerId) ||
+        fne.fneBearHugged(s, s.activePlayerId))
+    ) &&
     sentinels.sentinelsCanChangeForm(
       s,
       s.activePlayerId,
@@ -14286,6 +14317,8 @@ const mutagenPorts: MutagenEnginePorts = {
   dealEncounter,
   giveBoost: (s, villainId, scope) => {
     if (scope === "current" && !canDealCurrentBoost(s)) return;
+    // Public Support (High): support counters instead of a boost card.
+    if (fne.fneBoostPrevented(s, fnePorts)) return;
     const p = drawEncounter(s);
     if (!p) return;
     if (scope === "next") (s.encounter.storedBoosts ||= []).push(p);
@@ -17274,6 +17307,36 @@ function takeNemesisCard(
   view.flags[flag] = true;
   return makePiece(s, printed.code);
 }
+/** Kingpin: a player's nemesis set is set aside as physical cards, so
+ * encounter cards can bring them into play one at a time. Heroes whose
+ * nemesis cards are already set aside keep them. Returns the set code. */
+function setAsideNemesisSet(
+  s: GameState,
+  playerId: string,
+): string | undefined {
+  const view = seatView(s, playerId);
+  const zone = (view.player.setAside ||= []);
+  const stored = zone.find((p) =>
+    (card(p).set_code || "").endsWith("_nemesis"),
+  );
+  if (stored) return card(stored).set_code;
+  if (view.flags.nemesis) return undefined;
+  const set = `${view.heroId}_nemesis`;
+  const printed = CATALOG_CARDS.filter(
+    (c) => c.set_code === set && c.pack_code === heroCard(view).pack_code,
+  );
+  if (!printed.length) return undefined;
+  for (const c of printed) {
+    if (c.type_code === "minion" && view.flags.nemesisMinionOut) continue;
+    if (c.type_code === "side_scheme" && view.flags.nemesisSchemeOut) continue;
+    for (let i = 0; i < c.quantity; i++) {
+      const p = makePiece(s, c.code);
+      delete p.ownerId;
+      zone.push(p);
+    }
+  }
+  return set;
+}
 function putNemesisMinion(s: GameState, playerId: string): boolean {
   const view = seatView(s, playerId);
   const set = `${view.heroId}_nemesis`;
@@ -18198,6 +18261,7 @@ const fnePorts: fne.FearNoEvilPorts = {
     return p ? allyStat(s, p, "thwart") : 0;
   },
   characterTrait: (s, id, trait) => captainPackHasTrait(s, id, trait),
+  setAsideNemesis: (s, playerId) => setAsideNemesisSet(s, playerId),
 };
 const zemoPorts: zemo.ZemoPorts = {
   ...mutagenPorts,
@@ -26008,6 +26072,17 @@ function enemyAttack(
       originalTarget = hope.piece.id;
     }
   }
+  // Kingpin: on his first side, he schemes instead of attacking.
+  if (fne.fneSchemesInstead(s, id)) {
+    log(s, "Kingpin schemes instead of attacking.");
+    enemyScheme(
+      s,
+      id,
+      extra,
+      activation ? { ...activation, kind: "scheme" } : undefined,
+    );
+    return;
+  }
   // Across the Mojoverse: an Escaped Spiral schemes instead of attacking.
   if (!originalTarget && spiral.spiralSchemesInstead(s, id)) {
     log(s, "Spiral is Escaped: she schemes instead of attacking.");
@@ -26518,6 +26593,11 @@ function enemyATK(s: GameState, p: Piece, originalPlayerId: string): number {
     jug.jugAttackBonus(s, p) +
     sin.sinisterStatBonus(s, p, "attack", attackTargetAerial(s)) +
     sty.stryfeStatBonus(s, p, "attack", originalPlayerId) +
+    // Stilt-Man: +1 ATK for each stilt counter on him.
+    fne.fneEnemyStat(s, p, "attack", {
+      highestThwart: () => fneHighestThwart(s),
+      hasTrait: (id, trait) => captainPackHasTrait(s, id, trait),
+    }) +
     mansionAttack.mansionAttackModifiers(s, p, { isTextBlank }).attack;
   const attachments = enemyAttachmentModifier(s, p.id, "attack");
   const base =
@@ -26656,6 +26736,8 @@ function prepareAttackBoosts(s: GameState) {
       zemo.zemoAdditionalBoosts(s) +
       (a.fneExtraBoosts || 0);
   for (let i = 0; i < n; i++) {
+    // Public Support (High): support counters instead of a boost card.
+    if (fne.fneBoostPrevented(s, fnePorts)) continue;
     const p = drawEncounter(s);
     if (p) a.pendingBoosts.push(p);
   }
@@ -27292,6 +27374,8 @@ function enemyScheme(
       mutagenAdditionalBoosts(s, id) +
       tb.thunderboltsAdditionalBoosts(s, id);
   for (let i = 0; i < n; i++) {
+    // Public Support (High): support counters instead of a boost card.
+    if (fne.fneBoostPrevented(s, fnePorts)) continue;
     const boost = drawEncounter(s);
     if (boost) pendingBoosts.push(boost);
   }
@@ -30447,6 +30531,31 @@ function shadowOfThePast(s: GameState, surge: () => void) {
     return;
   }
   s.flags.nemesis = true;
+  // Kingpin sets each nemesis set aside as physical cards: those still set
+  // aside come into play, not new copies.
+  const stored = (s.player.setAside || []).filter(
+    (p) => card(p).set_code === `${s.heroId}_nemesis`,
+  );
+  if (stored.length) {
+    s.player.setAside = (s.player.setAside || []).filter(
+      (p) => !stored.includes(p),
+    );
+    const storedMinion = stored.find((p) => card(p).type_code === "minion");
+    const storedScheme = stored.find(
+      (p) => card(p).type_code === "side_scheme",
+    );
+    s.encounter.deck.push(
+      ...stored.filter((p) => p !== storedMinion && p !== storedScheme),
+    );
+    shuffle(s, s.encounter.deck);
+    add(
+      s,
+      ...(storedMinion ? [E("reveal", { piece: storedMinion })] : []),
+      ...(storedScheme ? [E("reveal", { piece: storedScheme })] : []),
+    );
+    log(s, `Your nemesis enters the fight!`, "bad");
+    return;
+  }
   const set = CATALOG_CARDS.filter(
     (c) =>
       c.set_code === `${s.heroId}_nemesis` &&

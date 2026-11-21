@@ -1,10 +1,9 @@
-/** Fear No Evil, parts one to three: the missions The Getaway, Art Museum
+/** Fear No Evil, parts one to four: the missions The Getaway, Art Museum
  * Heist, Stop the Presses!, The Raft Breakout and Protection Racket with the
- * Underlings
- * Bullseye, Electro, Hammerhead, Purple Man and Typhoid Mary, and the Cops,
- * Drive, The Owl, Tombstone, Tracksuit Mafia and Disasters modular sets,
- * exercised with the original physical cards. Every command crosses a JSON
- * save/reload boundary. */
+ * Underlings Bullseye, Electro, Hammerhead, Purple Man and Typhoid Mary, the
+ * Kingpin scenario, and the Cops, Drive, The Owl, Tombstone, Tracksuit Mafia
+ * and Disasters modular sets, exercised with the original physical cards.
+ * Every command crosses a JSON save/reload boundary. */
 import { describe, expect, it } from "vitest";
 import { CATALOG_CARDS, MODULES, VILLAINS, card } from "../src/game/cards";
 import {
@@ -23,11 +22,13 @@ import { activateSeat, seatView } from "../src/game/team";
 import {
   FEAR_NO_EVIL_CODES,
   fneAcceleration,
+  fneCanAttachUpgrade,
   fneCanReady,
   fneEnvironmentCaption,
   fneImprisoned,
   fneInPlayCaption,
   fneKeyword,
+  fneMainActionPiece,
   fneMainNote,
   fneMinionCaption,
   fneObjective,
@@ -284,12 +285,13 @@ describe("Fear No Evil registration and setup", () => {
       "fne_the_raft_breakout",
       "fne_disasters",
       "fne_protection_racket",
+      "fne_kingpin",
     ];
     const faces = CATALOG_CARDS.filter((c) => sets.includes(c.set_code || ""));
     expect(faces.map((c) => c.code).sort()).toEqual(
       [...FEAR_NO_EVIL_CODES].sort(),
     );
-    expect(faces).toHaveLength(136);
+    expect(faces).toHaveLength(159);
     for (const c of faces) expect(hasExecutableScript(c), c.code).toBe(true);
     const getaway = VILLAINS.find((v) => v.id === GETAWAY_ID)!;
     expect(getaway.schemes).toEqual([GETAWAY]);
@@ -2113,5 +2115,560 @@ describe("Protection Racket", () => {
     expect(s.scheme.code).not.toBe(BODEGA);
     expect(s.scheme.threat).toBe(5);
     expect(s.fearNoEvil!.racket!.setAside).toContain(BODEGA);
+  }, 30000);
+});
+
+const KINGPIN_ID = "fne_kingpin";
+const KP_A1 = "60159a";
+const KP_A2 = "60159b";
+const KP_B1 = "60160a";
+const KP_B2 = "60160b";
+const GAMBIT = "60161b";
+const ENDGAME = "60162b";
+const SUPPORT_LOW = "60163a";
+const SUPPORT_HIGH = "60163b";
+const BEAR_HUG = "60164";
+const WESLEY = "60165";
+const CANE = "60166";
+const MUSCLE = "60167";
+const VANESSA = "60168";
+const BLACK_CAT = "60169";
+const DIAMONDBACK = "60170";
+const SPOT = "60171";
+const STILT = "60172";
+const INFLUENCE = "60173";
+const ORGANIZED = "60174";
+const TRICKS = "60175";
+const HATE = "60176";
+const YON_ROGG = "01177";
+const MAGNITRON = "01176";
+/** A Kingpin game in the hero phase, with the nemesis minions revealed at
+ * setup parked in the encounter discard pile. */
+function kingpin(difficulty: "standard" | "expert" = "standard", players = 1) {
+  const s = started(KINGPIN_ID, "bullseye", difficulty, players);
+  s.encounter.discard.push(...s.minions.splice(0));
+  return reload(s);
+}
+const support = (s: GameState) =>
+  (s.environments || []).find((p) =>
+    [SUPPORT_LOW, SUPPORT_HIGH].includes(p.code),
+  )!;
+const nemesisAside = (s: GameState, playerId = "p1") =>
+  (seatView(s, playerId).player.setAside || []).filter((p) =>
+    (card(p).set_code || "").endsWith("_nemesis"),
+  );
+/** Kingpin flipped by Public Support; the minions it brings are removed. */
+function flipped(difficulty: "standard" | "expert" = "standard") {
+  let s = kingpin(difficulty);
+  support(s).counters = 2 * s.playerCount + 2;
+  s = settle(native(reload(s), { type: "fne:kp-flip" }));
+  s.encounter.discard.push(...s.minions.splice(0));
+  // The support counters that flipped him stay; spend them for clarity.
+  support(s).counters = 0;
+  return reload(s);
+}
+/** Cards with 3 boost icons and no Boost ability on top of the deck. */
+function spotTop(s: GameState, n = 1) {
+  for (let i = 0; i < n; i++) s.encounter.deck.unshift(makePiece(s, SPOT));
+  delete s.encounter.knownTop;
+}
+
+describe("Kingpin", () => {
+  it("setup: Kingpin (A1), 3 threat per player on The King's Gambit, Public Support Low, each player's nemesis minion and no Standard set", () => {
+    const s = opened(KINGPIN_ID, "bullseye", "standard", 2);
+    expect(s.villain.code).toBe(KP_A1);
+    expect(s.villain.hp).toBe(50);
+    expect(s.scheme.code).toBe(GAMBIT);
+    expect(s.scheme.threat).toBe(6);
+    expect(support(s).code).toBe(SUPPORT_LOW);
+    expect(support(s).counters).toBe(0);
+    const nemeses = s.minions.filter((m) =>
+      (card(m).set_code || "").endsWith("_nemesis"),
+    );
+    expect(nemeses.map((m) => m.engagedWith).sort()).toEqual(["p1", "p2"]);
+    expect(nemesisAside(s, "p1").length).toBeGreaterThan(0);
+    expect(
+      s.encounter.deck.some((p) =>
+        ["standard", "standard_ii", "standard_iii"].includes(
+          card(p).set_code || "",
+        ),
+      ),
+    ).toBe(false);
+    expect(fneObjective(s)).toBe(
+      "Garner Public Support · 0 of 6 support counters, then defeat Kingpin",
+    );
+    expect(fneMainNote(s)).toBe(
+      "Hero Action: remove 5 threat here, then discard until a minion and reveal it",
+    );
+    expect(fneEnvironmentCaption(s, support(s))).toMatch(
+      /^0 of 6 support counters/,
+    );
+    const registered = VILLAINS.find((v) => v.id === KINGPIN_ID)!;
+    expect(registered.defaultModules).toEqual([
+      "fne_tombstone",
+      "fne_tracksuit_mafia",
+    ]);
+  }, 30000);
+  it("expert: Kingpin (B1), the Expert set, and the Hero Action removes 4 threat", () => {
+    const s = opened(KINGPIN_ID, "bullseye", "expert");
+    expect(s.villain.code).toBe(KP_B1);
+    expect(s.villain.hp).toBe(28);
+    expect(s.encounter.deck.some((p) => card(p).set_code === "expert")).toBe(
+      true,
+    );
+    expect(fneMainNote(s)).toMatch(/^Hero Action: remove 4 threat/);
+  }, 30000);
+  it("Kingpin (A1) cannot be dealt damage or have upgrades attached, and schemes instead of attacking", () => {
+    let s = kingpin();
+    s = settle(native(s, hit(s.villain.id, 5)));
+    expect(s.villain.hp).toBe(25);
+    expect(fneCanAttachUpgrade(s, s.villain.id)).toBe(false);
+    const threat = s.scheme.threat;
+    const hp = s.player.hp;
+    blankTop(s, 2);
+    s = villainAttacks(reload(s));
+    expect(s.player.hp).toBe(hp);
+    expect(s.scheme.threat).toBe(threat + 2);
+  }, 30000);
+  it("Public Support: each defeated minion places a support counter", () => {
+    let s = kingpin();
+    const m = minion(s, DIAMONDBACK);
+    s = settle(native(reload(s), hit(m.id, 6)));
+    expect(support(s).counters).toBe(1);
+  }, 30000);
+  it("Public Support: with 2 per player plus 2 as the villain phase begins, Kingpin flips, Endgame follows with the nemesis minions, and Public Support flips", () => {
+    let s = kingpin();
+    support(s).counters = 3;
+    expect(fneVillainPhaseBegins(s).map((e) => e.type)).not.toContain(
+      "fne:kp-flip",
+    );
+    support(s).counters = 4;
+    expect(fneVillainPhaseBegins(s).map((e) => e.type)).toContain(
+      "fne:kp-flip",
+    );
+    s = settle(native(reload(s), { type: "fne:kp-flip" }));
+    expect(s.villain.code).toBe(KP_A2);
+    expect(s.villain.hp).toBe(25);
+    expect(s.scheme.code).toBe(ENDGAME);
+    expect(s.scheme.threat).toBe(0);
+    expect(support(s).code).toBe(SUPPORT_HIGH);
+    expect(s.minions.some((m) => m.code === YON_ROGG)).toBe(true);
+    expect(fneObjective(s)).toBe("Defeat Kingpin");
+    expect(fneMainNote(s)).toBe("Each minion gains guard");
+  }, 30000);
+  it("Endgame, expert: the first player also finds and reveals Organized Crime", () => {
+    let s = kingpin("expert");
+    support(s).counters = 4;
+    s = settle(native(reload(s), { type: "fne:kp-flip" }));
+    expect(s.villain.code).toBe(KP_B2);
+    expect(s.sideSchemes.some((p) => p.code === ORGANIZED)).toBe(true);
+  }, 30000);
+  it("Endgame: each minion gains guard; Kingpin (A2) takes damage and his defeat wins", () => {
+    let s = flipped();
+    const m = minion(s, DIAMONDBACK);
+    expect(fneKeyword(s, m, "Guard")).toBe(1);
+    s.encounter.discard.push(...s.minions.splice(0));
+    s = settle(native(reload(s), hit(s.villain.id, 25)));
+    expect(s.phase).toBe("won");
+  }, 30000);
+  it("Kingpin (A2): an additional boost card against a player engaged with no minion", () => {
+    let s = flipped();
+    let hp = s.player.hp;
+    spotTop(s, 2);
+    s = villainAttacks(reload(s));
+    // 2 ATK and two boost cards of 3.
+    expect(hp - s.player.hp).toBe(8);
+    s = flipped();
+    s.player.hp = hp = 20;
+    minion(s, DIAMONDBACK);
+    spotTop(s, 2);
+    s = villainAttacks(reload(s));
+    expect(hp - s.player.hp).toBe(5);
+  }, 30000);
+  it("Public Support (High): support counters come off instead of boost cards", () => {
+    let s = flipped();
+    support(s).counters = 2;
+    const hp = s.player.hp;
+    spotTop(s, 2);
+    s = villainAttacks(reload(s));
+    expect(hp - s.player.hp).toBe(2);
+    expect(support(s).counters).toBe(0);
+  }, 30000);
+  it("The King's Gambit's Hero Action removes 5 threat and reveals a minion", () => {
+    let s = kingpin();
+    s.scheme.threat = 8;
+    s.phase = "player";
+    s = reload(s);
+    const main = fneMainActionPiece(s)!;
+    const option = abilityOptions(s, main).find((o) => o.id === "kp-gambit");
+    expect(option).toBeTruthy();
+    const before = s.minions.length;
+    s = settle(
+      command(s, { type: "ABILITY", id: main.id, action: "kp-gambit" }),
+    );
+    expect(s.scheme.threat).toBe(3);
+    expect(s.minions.length).toBe(before + 1);
+  }, 30000);
+  it("Bear Hug: on Kingpin's second side it holds your hero; attacks and thwarts remove grip counters instead, and you cannot change to alter-ego form", () => {
+    let s = flipped();
+    s = settle(reveal(s, BEAR_HUG));
+    const hug = att(s, BEAR_HUG)!;
+    expect(hug.attachedTo).toBe("hero:p1");
+    expect(hug.counters).toBe(3);
+    expect(canChangeIdentityForm(s, "alter")).toBe(false);
+    s = settle(
+      native(reload(s), {
+        type: "damage",
+        target: s.villain.id,
+        amount: 5,
+        source: "hero",
+        attack: true,
+      }),
+    );
+    expect(s.villain.hp).toBe(25);
+    expect(att(s, BEAR_HUG)!.counters).toBe(2);
+    s.scheme.threat = 3;
+    s = settle(
+      native(reload(s), {
+        type: "thwart",
+        target: "main",
+        amount: 2,
+        source: "hero",
+        action: true,
+      }),
+    );
+    expect(s.scheme.threat).toBe(3);
+    expect(att(s, BEAR_HUG)!.counters).toBe(1);
+  }, 30000);
+  it("Bear Hug and Mountain of Muscle surge and leave on Kingpin's first side", () => {
+    let s = kingpin();
+    blankTop(s, 2);
+    s = settle(reveal(reload(s), BEAR_HUG));
+    expect(att(s, BEAR_HUG)).toBeUndefined();
+    expect(s.encounter.discard.some((p) => p.code === BEAR_HUG)).toBe(true);
+  }, 30000);
+  it("Mountain of Muscle takes Kingpin's damage until 8 and gives him retaliate 1", () => {
+    let s = flipped();
+    s = settle(reveal(s, MUSCLE));
+    const muscle = att(s, MUSCLE)!;
+    expect(muscle.attachedTo).toBe(s.villain.id);
+    expect(fneKeyword(s, s.villain, "Retaliate")).toBe(1);
+    s = settle(native(reload(s), hit(s.villain.id, 5)));
+    expect(s.villain.hp).toBe(25);
+    expect(att(s, MUSCLE)!.damage).toBe(5);
+    s = settle(native(reload(s), hit(s.villain.id, 3)));
+    expect(att(s, MUSCLE)).toBeUndefined();
+    expect(s.villain.hp).toBe(25);
+  }, 30000);
+  it("Kingpin's Cane: you are stunned; after Kingpin's attack damages a hero, it stuns and is discarded", () => {
+    let s = flipped();
+    s = settle(reveal(s, CANE));
+    expect(att(s, CANE)!.attachedTo).toBe(s.villain.id);
+    expect(s.player.stunned).toBe(true);
+    s.player.stunned = false;
+    s.player.stunCards = 0;
+    blankTop(s, 2);
+    s = villainAttacks(reload(s));
+    expect(s.player.stunned).toBe(true);
+    expect(att(s, CANE)).toBeUndefined();
+  }, 30000);
+  it("James Wesley gives Kingpin a facedown boost card; discarding a Thwart event discards him and Kingpin schemes", () => {
+    let s = kingpin();
+    s = settle(reveal(s, WESLEY));
+    const wesley = att(s, WESLEY)!;
+    expect(wesley.attachedTo).toBe(s.villain.id);
+    expect(s.encounter.storedBoosts?.length).toBe(1);
+    s.player.hand.push(playerCard(s, "01052"));
+    s.phase = "player";
+    blankTop(s, 2);
+    s = reload(s);
+    const threat = s.scheme.threat;
+    const option = abilityOptions(s, wesley).find((o) =>
+      o.id.startsWith("kp-persona"),
+    );
+    expect(option).toBeTruthy();
+    s = settle(
+      command(s, { type: "ABILITY", id: wesley.id, action: option!.id }),
+    );
+    expect(att(s, WESLEY)).toBeUndefined();
+    expect(s.scheme.threat).toBeGreaterThan(threat);
+  }, 30000);
+  it("Vanessa Fisk confuses you; discarding an Attack event discards her and Kingpin attacks (schemes on his first side)", () => {
+    let s = kingpin();
+    s = settle(reveal(s, VANESSA));
+    const vanessa = att(s, VANESSA)!;
+    expect(s.player.confused).toBe(true);
+    s.player.confused = false;
+    s.player.confuseCards = 0;
+    s.player.hand.push(playerCard(s, "01013"));
+    s.phase = "player";
+    blankTop(s, 2);
+    s = reload(s);
+    const threat = s.scheme.threat;
+    const option = abilityOptions(s, vanessa).find((o) =>
+      o.id.startsWith("kp-persona"),
+    );
+    expect(option).toBeTruthy();
+    s = settle(
+      command(s, { type: "ABILITY", id: vanessa.id, action: option!.id }),
+    );
+    expect(att(s, VANESSA)).toBeUndefined();
+    expect(s.scheme.threat).toBe(threat + 2);
+  }, 30000);
+  it("Black Cat: her Hero Action places threat on her; at 4 she is your villainous ally", () => {
+    let s = kingpin();
+    const cat = minion(s, BLACK_CAT);
+    s.player.hand.push(playerCard(s, "01089"));
+    s.phase = "player";
+    s = reload(s);
+    expect(abilityOptions(s, cat).some((o) => o.id === "kp-cat")).toBe(true);
+    s = command(s, { type: "ABILITY", id: cat.id, action: "kp-cat" });
+    s = settle(pay(s, s.player.hand.slice(-1)));
+    expect(s.minions.find((m) => m.id === cat.id)!.fneCatThreat).toBe(1);
+    s.minions.find((m) => m.id === cat.id)!.fneCatThreat = 3;
+    s = settle(
+      native(reload(s), {
+        type: "fne:kp-cat-threat",
+        id: cat.id,
+        playerId: "p1",
+      }),
+    );
+    const ally = s.player.inPlay.find((p) => p.id === cat.id)!;
+    expect(ally.fneCatAlly).toBe(true);
+    expect(card(ally).type_code).toBe("ally");
+    expect(card(ally).attack_cost).toBe(2);
+    expect(s.minions.some((m) => m.id === cat.id)).toBe(false);
+    expect(fneInPlayCaption(s, ally)).toMatch(/^Ally · villainous/);
+    // Villainous: her attack gets a boost card.
+    const target = minion(s, STILT);
+    target.counters = 0;
+    target.fneArrived = true;
+    spotTop(s);
+    s = settle(
+      native(reload(s), {
+        type: "damage",
+        target: target.id,
+        amount: 1,
+        source: cat.id,
+        attack: true,
+      }),
+    );
+    expect(s.minions.some((m) => m.id === target.id)).toBe(false);
+  }, 30000);
+  it("Diamondback: when he attacks you, you take 1 damage", () => {
+    let s = kingpin();
+    const m = minion(s, DIAMONDBACK);
+    const hp = s.player.hp;
+    blankTop(s, 2);
+    s = settle(
+      native(reload(s), { type: "enemyAttack", id: m.id, actorId: "p1" }),
+    );
+    expect(hp - s.player.hp).toBe(2);
+  }, 30000);
+  it("Spot sends an attack's damage back while he has a spot counter; otherwise he gains one", () => {
+    let s = kingpin();
+    s = settle(reveal(s, SPOT));
+    const spot = s.minions.find((m) => m.code === SPOT)!;
+    expect(spot.counters).toBe(1);
+    const hp = s.player.hp;
+    s = settle(
+      native(reload(s), {
+        type: "damage",
+        target: spot.id,
+        amount: 3,
+        source: "hero",
+        attack: true,
+      }),
+    );
+    expect(s.minions.find((m) => m.id === spot.id)!.damage).toBe(0);
+    expect(s.minions.find((m) => m.id === spot.id)!.counters).toBe(0);
+    expect(hp - s.player.hp).toBe(3);
+    s = settle(
+      native(reload(s), {
+        type: "damage",
+        target: spot.id,
+        amount: 2,
+        source: "hero",
+        attack: true,
+      }),
+    );
+    expect(s.minions.find((m) => m.id === spot.id)!.damage).toBe(2);
+    expect(s.minions.find((m) => m.id === spot.id)!.counters).toBe(1);
+    expect(
+      fneMinionCaption(
+        s,
+        s.minions.find((m) => m.id === spot.id)!,
+      ),
+    ).toBe("1 spot counter");
+  }, 30000);
+  it("Stilt-Man enters with 2 stilt counters: +1 ATK and SCH each, and each damage he would take removes one", () => {
+    let s = kingpin();
+    s = settle(reveal(s, STILT));
+    const stilt = s.minions.find((m) => m.code === STILT)!;
+    expect(stilt.counters).toBe(2);
+    expect(enemyStats(s, stilt).attack).toBe(3);
+    expect(enemyStats(s, stilt).scheme).toBe(3);
+    s = settle(native(reload(s), hit(stilt.id, 3)));
+    const after = s.minions.find((m) => m.id === stilt.id)!;
+    expect(after.damage).toBe(0);
+    expect(after.counters).toBe(1);
+  }, 30000);
+  it("Organized Crime: each minion gets +2 hit points", () => {
+    let s = kingpin();
+    const m = minion(s, DIAMONDBACK);
+    sideScheme(s, ORGANIZED);
+    s = settle(native(reload(s), hit(m.id, 6)));
+    expect(s.minions.some((q) => q.id === m.id)).toBe(true);
+    expect(
+      fneSideSchemeCaption(
+        s,
+        s.sideSchemes.find((p) => p.code === ORGANIZED)!,
+      ),
+    ).toBe("Each minion gets +2 hit points");
+  }, 30000);
+  it("Kingpin's Influence: its defeater's nemesis side scheme is revealed, or gains 3 threat", () => {
+    let s = kingpin();
+    const influence = sideScheme(s, INFLUENCE, 1);
+    s = settle(
+      native(reload(s), {
+        type: "thwart",
+        target: influence.id,
+        amount: 1,
+        source: "hero",
+        action: true,
+      }),
+    );
+    const magnitron = s.sideSchemes.find((p) => p.code === MAGNITRON)!;
+    expect(magnitron).toBeTruthy();
+    const threat = magnitron.counters;
+    const again = sideScheme(s, INFLUENCE, 1);
+    s = settle(
+      native(reload(s), {
+        type: "thwart",
+        target: again.id,
+        amount: 1,
+        source: "hero",
+        action: true,
+      }),
+    );
+    expect(s.sideSchemes.find((p) => p.code === MAGNITRON)!.counters).toBe(
+      threat + 3,
+    );
+  }, 30000);
+  it("Bag of Tricks reveals a random set-aside nemesis card, and surges with none left", () => {
+    let s = kingpin();
+    const before = nemesisAside(s).length;
+    blankTop(s, 2);
+    s = settle(reveal(reload(s), TRICKS));
+    expect(nemesisAside(s).length).toBe(before - 1);
+    // With no set-aside nemesis card it surges.
+    seatView(s, "p1").player.setAside = [];
+    const tricks = take(s, TRICKS);
+    blankTop(s, 2);
+    const deck = s.encounter.deck.length;
+    s = settle(
+      native(reload(s), { type: "reveal", piece: tricks, actorId: "p1" }),
+    );
+    expect(s.encounter.deck.length).toBe(deck - 1);
+  }, 30000);
+  it("Bag of Tricks' boost: a set-aside nemesis card is an additional boost card", () => {
+    let s = kingpin();
+    const before = nemesisAside(s).length;
+    s.player.form = "alter";
+    s.encounter.deck.unshift(take(s, TRICKS));
+    delete s.encounter.knownTop;
+    s = settle(
+      native(reload(s), {
+        type: "enemyScheme",
+        id: s.villain.id,
+        actorId: "p1",
+      }),
+    );
+    expect(nemesisAside(s).length).toBe(before - 1);
+  }, 30000);
+  it("Unrelenting Hate: your nemesis minion activates against you; out of play it is found and revealed, otherwise an Underling", () => {
+    let s = kingpin();
+    s = settle(reveal(s, HATE));
+    expect(s.minions.some((m) => m.code === YON_ROGG)).toBe(true);
+    const hp = s.player.hp;
+    blankTop(s, 2);
+    s = settle(reveal(reload(s), HATE));
+    expect(s.player.hp).toBeLessThan(hp);
+    // Removed from the game: an Underling minion instead.
+    const yon = s.minions.find((m) => m.code === YON_ROGG)!;
+    s.minions = s.minions.filter((m) => m !== yon);
+    s.removed.push(yon);
+    s.encounter.deck.push(take(s, DIAMONDBACK));
+    s = settle(reveal(reload(s), HATE));
+    expect(s.minions.some((m) => card(m).traits?.includes("Underling"))).toBe(
+      true,
+    );
+  }, 30000);
+  it("Doctor Strange: Images of Ikonn defeats Kingpin's Influence, and Open the Dark Dimension keeps the resolving Invocation under it", () => {
+    let s = newGame({
+      heroId: "doctor_strange",
+      aspect: "protection",
+      villainId: KINGPIN_ID,
+      difficulty: "standard",
+      seed: 909,
+      pacing: "expert",
+    });
+    s = settle(s);
+    s = settle(command(s, { type: "MULLIGAN", ids: [] }));
+    s.player.form = "hero";
+    s.player.exhausted = false;
+    s.encounter.discard.push(...s.minions.splice(0));
+    const deck = s.player.invocationDeck!;
+    const [images] = deck.splice(
+      deck.findIndex((p) => p.code === "09033"),
+      1,
+    );
+    deck.unshift(images);
+    const influence = sideScheme(s, INFLUENCE, 1);
+    s.scheme.threat = 0;
+    s.player.hand = ["09006", "09006"].map((code) => ({
+      ...makePiece(s, code),
+      ownerId: "p1",
+    }));
+    s.phase = "player";
+    s = command(reload(s), {
+      type: "ABILITY",
+      id: "identity",
+      action: "spell",
+    });
+    s = pay(s, [s.player.hand[0]]);
+    // With only Kingpin's Influence holding threat, it is the scheme chosen.
+    s = settle(
+      s,
+      (v) =>
+        v.prompt?.options.find(
+          (o) => o.id === influence.id || o.id.endsWith(":" + influence.id),
+        )?.id,
+    );
+    expect(s.sideSchemes.some((p) => p.id === influence.id)).toBe(false);
+    const dimension = s.sideSchemes.find((p) => p.code === "09029")!;
+    expect(dimension.storedCards?.some((p) => p.id === images.id)).toBe(true);
+    expect(s.player.invocationDiscard?.some((p) => p.id === images.id)).toBe(
+      false,
+    );
+  }, 30000);
+  it("setup: a nemesis minion that shares a title with a character in play is removed from the game for an Underling minion", () => {
+    let s = kingpin();
+    const yon = s.encounter.discard.find((p) => p.code === YON_ROGG)!;
+    s.encounter.discard = s.encounter.discard.filter((p) => p !== yon);
+    seatView(s, "p1").player.setAside!.push(yon);
+    minion(s, YON_ROGG);
+    s.fearNoEvil!.kingpin!.setup = true;
+    s = settle(
+      native(reload(s), {
+        type: "fne:kp-nemesis-setup",
+        playerId: "p1",
+        actorId: "p1",
+      }),
+    );
+    expect(s.removed.some((p) => p.id === yon.id)).toBe(true);
+    expect(s.minions.some((m) => card(m).traits?.includes("Underling"))).toBe(
+      true,
+    );
   }, 30000);
 });

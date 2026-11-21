@@ -90,6 +90,13 @@ export interface Piece {
   fneDeceived?: boolean;
   /** Threat on this ally (Baron Zemo's Deceived allies). */
   fneThreat?: number;
+  /** Fear No Evil: threat on Black Cat; at 4 she is an ally. */
+  fneCatThreat?: number;
+  /** Fear No Evil: Black Cat, treated as an ally under a player's control. */
+  fneCatAlly?: boolean;
+  /** Fear No Evil: Spot's and Stilt-Man's counters were placed as they
+   * entered play. */
+  fneArrived?: boolean;
   /** Mind Control changes the same physical minion into a blank Controlled ally. */
   treatedAsAlly?: boolean;
   /** Possessed turns this physical ally into a Controlled minion. */
