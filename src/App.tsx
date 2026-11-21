@@ -38,6 +38,7 @@ import {
 } from "./game/doctor-strange";
 import { daredevilStoredPlayable } from "./game/daredevil";
 import { fnePackStoredPlayable } from "./game/fne-player-pack";
+import { echoStoredPlayable, ECHO_TUCK_LIMIT } from "./game/echo";
 import {
   msMarvelAbilityOptions,
   msMarvelDiscardPlayable,
@@ -10191,6 +10192,64 @@ function Tabletop({
                     </div>
                   </section>
                 )}
+                {s.heroId === "echo" &&
+                  (s.player.echoTucked || []).length > 0 && (
+                    <section
+                      className="attached-event-area echo-tucked-area"
+                      aria-label="Events tucked under Echo"
+                    >
+                      <span className="table-group-label">
+                        TUCKED UNDER ECHO · {(s.player.echoTucked || []).length}
+                        /{ECHO_TUCK_LIMIT}
+                      </span>
+                      <div className="attached-card-list">
+                        {(s.player.echoTucked || []).map((event) => {
+                          const ready = echoStoredPlayable(s).some(
+                            (p) => p.id === event.id,
+                          );
+                          const reason = ready
+                            ? playable(s, event)
+                            : s.player.form !== "hero"
+                              ? "Change to hero form first."
+                              : "Photographic Reflexes must be in your hand.";
+                          const cost = cardCost(s, card(event), event);
+                          return (
+                            <div className="attached-piece" key={event.id}>
+                              <button
+                                className="attached-card"
+                                aria-label={`Inspect ${card(event).name} tucked under Echo`}
+                                onClick={() =>
+                                  inspect({
+                                    code: event.code,
+                                    piece: event,
+                                    hand: true,
+                                    playerId: s.activePlayerId,
+                                  })
+                                }
+                              >
+                                <CardImage code={event.code} />
+                                <span>{card(event).name}</span>
+                              </button>
+                              <button
+                                className="ability-button"
+                                aria-label={`Photographic Reflexes: play ${card(event).name}`}
+                                title={
+                                  reason ||
+                                  `Discard Photographic Reflexes and pay ${plural(cost, "resource")}`
+                                }
+                                disabled={!canUseAction || !!reason}
+                                onClick={() =>
+                                  sendAction({ type: "PLAY", id: event.id })
+                                }
+                              >
+                                Replay · {cost}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  )}
                 {s.encounter.dealt.filter((p) => p.dealtTo === s.activePlayerId)
                   .length > 0 && (
                   <div

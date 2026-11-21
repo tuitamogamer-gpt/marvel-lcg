@@ -1,4 +1,5 @@
 import { magikPending, magikTopPlayable } from "./magik.js";
+import { echoStoredPlayable } from "./echo.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import players from "../data/core-player.json" with { type: "json" };
 import type { Card, GameState, Piece } from "./types.js";
@@ -279,6 +280,8 @@ export function eventPlaySources(s: GameState): Piece[] {
     ...s.player.inPlay
       .filter((p) => p.code === "27007" && !isTextBlank(s, p))
       .flatMap((p) => (p.storedCards || []).filter(event)),
+    // Photographic Reflexes plays an event tucked under Echo.
+    ...echoStoredPlayable(s),
   ];
 }
 
@@ -315,6 +318,7 @@ export function defenseEventSources(s: GameState): Piece[] {
     ...s.player.inPlay
       .filter((p) => ["26013", "27007"].includes(p.code) && !isTextBlank(s, p))
       .flatMap((p) => (p.storedCards || []).filter(defense)),
+    ...echoStoredPlayable(s).filter(defense),
   ];
 }
 

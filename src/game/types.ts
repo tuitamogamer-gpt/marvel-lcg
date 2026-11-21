@@ -500,6 +500,9 @@ export interface GameState {
     /** Daredevil's faceup Sense deck (top first). Its order is open
      * information; Sense upgrades leaving play return to its bottom. */
     senseDeck?: Piece[];
+    /** Events tucked under Echo (Watch and Learn): faceup, not in play, at
+     * most three. Each keeps its owner. */
+    echoTucked?: Piece[];
   };
   villain: Piece & { hp: number; maxHp: number; stage: number };
   scheme: { code: string; threat: number; index: number };

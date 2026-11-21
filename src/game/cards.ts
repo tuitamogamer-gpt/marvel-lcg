@@ -52,6 +52,7 @@ import {
 } from "./doctor-strange.js";
 import { spectrumStats } from "./spectrum.js";
 import { daredevilHasTrait, daredevilStats } from "./daredevil.js";
+import { fnePackHeroStats } from "./fne-player-pack.js";
 import { warlockStats } from "./warlock.js";
 import { mtsPlayerPackHeroStats } from "./mts-player-pack.js";
 import { nebulaStats, nebulaNamedCharacterModifiers } from "./nebula.js";
@@ -967,6 +968,20 @@ export const HEROES = [
     description:
       "Play Sense upgrades from your Sense deck onto enemies and schemes, then spend them for bursts of damage and thwart.",
     style: "Sense deck · Justice",
+    complexity: 3,
+  },
+  {
+    id: "echo",
+    code: "60037a",
+    alter: "60037b",
+    name: "Echo",
+    identity: "Maya Lopez",
+    aspect: "protection" as Aspect,
+    color: "#2f6f8f",
+    tag: "Watch and learn.",
+    description:
+      "Tuck the events your team plays under Echo, then replay them with Photographic Reflexes.",
+    style: "Tucked events · Protection",
     complexity: 3,
   },
 ];
@@ -2246,6 +2261,7 @@ export function deckCodes(
       (hero === "nightcrawler" && aspect === "protection") ||
       (hero === "nick_fury" && aspect === "justice") ||
       (hero === "daredevil" && aspect === "justice") ||
+      (hero === "echo" && aspect === "protection") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
       (hero === "rogue" && aspect === "protection") ||
@@ -2458,7 +2474,8 @@ export function heroStats(s: GameState) {
         ? heroCard(s)
         : card(HEROES.find((h) => h.id === s.heroId)!.code);
   s = textActiveState(s);
-  return {
+  // Innate Reflexes, Ronin and The Best Offense... (Fear No Evil).
+  return fnePackHeroStats(s, {
     attack:
       h.attack! +
       collectorIdentityStats(s).attack +
@@ -2628,7 +2645,7 @@ export function heroStats(s: GameState) {
       msMarvelStats(s).recover +
       visionAlterStats(s).recover +
       sinisterPlayerPackIdentityModifiers(s, { isTextBlank }).recover,
-  };
+  });
 }
 export function handSize(s: GameState) {
   const base =

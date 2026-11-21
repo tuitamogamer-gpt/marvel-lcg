@@ -1,10 +1,12 @@
-# Fear No Evil's heroes: Daredevil
+# Fear No Evil's heroes: Daredevil and Echo
 
-Fear No Evil's heroes come with their own starter decks. This continuation imports the first of them, **Daredevil**, with all fifteen of his signature cards, his five Sense upgrades, Sensory Overload, Bullseye's nemesis set and the twelve justice and basic cards of his starter deck. Echo, the box's second hero, remains pending.
+Fear No Evil's heroes come with their own starter decks. Both are imported: **Daredevil**, with all fifteen of his signature cards, his five Sense upgrades, Sensory Overload, Bullseye's nemesis set and the twelve justice and basic cards of his starter deck, and **Echo**, with all fifteen of her signature cards, Raised by the Kingpin, Kingpin's nemesis set and the protection and basic cards of her starter deck.
 
-The engine module is `src/game/daredevil.ts`; the aspect and basic cards are in `src/game/fne-player-pack.ts`, which Echo's protection and basic cards will join. Foggy Nelson and the three basic resources already compiled as exact equivalents; Chance Encounter (60025) reprints Vision's Chance Encounter (26034) and is registered as that native rules code, keeping its own printing. The imported catalog, original starter list and artwork remain unchanged.
+The engine modules are `src/game/daredevil.ts` and `src/game/echo.ts`; the aspect and basic cards of both starter decks are in `src/game/fne-player-pack.ts`. Foggy Nelson and the three basic resources already compiled as exact equivalents. Chance Encounter (60025), Powerful Punch (60051) and Superpower Training (60056) reprint Vision's Chance Encounter (26034), Mutant Genesis's Powerful Punch (32014) and NeXt Evolution's Superpower Training (40059), and are registered as those native rules codes, keeping their own printings. The imported catalog, original starter lists and artwork remain unchanged.
 
-## Rules
+## Daredevil
+
+### Rules
 
 - **Setup:** Matt Murdock begins the game with a Sense deck. The five Sense upgrades (Acute Tactility, Enhanced Olfaction, Heightened Hearing, Radar Sense and Superior Taste) are shuffled into a faceup deck beside the identity. Its order is open information and cannot change. The Sense upgrades are not part of the forty-card playing deck.
 - **Superhuman Senses** (hero Action): play the top card of the Sense deck as if it were in your hand, paying its cost. The Sense deck's top card is offered under the Sense deck and as an identity ability.
@@ -14,27 +16,60 @@ The engine module is `src/game/daredevil.ts`; the aspect and basic cards are in 
 - **Sensory Overload** stays in the Matt Murdock player's play area: each Sense upgrade that enters play deals that player 1 damage, and after a recovery in alter-ego form the player may discard it.
 - **Bullseye's nemesis set:** Bullseye's When Revealed discards a Persona support you control, or he attacks you even in alter-ego form. Deadliest Man Alive gives an enemy titled Bullseye a facedown boost card when he attacks. Stolen Sai attaches to the enemy with the highest ATK (your choice on a tie), gives the attached character's attacks piercing, and its Hero Action spends two physical resources to give it to Elektra or discard it; its boost gives the attack piercing. Eye on the Target removes an ally or Persona support you control from the game, or Bullseye attacks you; if he is not in play, it finds him in the encounter deck, discard pile or a set-aside nemesis set and reveals him.
 - **Justice and basic cards:** Blindspot confuses an enemy with an upgrade attached after he thwarts. Cloak's acceleration icon counts until Dagger is in play; his Action spends two energy resources to find Dagger and put her into play, and Dagger takes 1 less consequential damage after a basic power while Cloak is in play. Ghost Rider spends an energy resource (two against the villain) to confuse the enemy he attacks. Know Your Enemy removes 1 threat twice. De-escalation (player side scheme, 4 threat, Victory 0) removes an acceleration token when defeated. Legal Trouble attaches to a minion without one and gives it -2 SCH. Move in Shadow removes 1 threat after you play a card, including itself. Stealth Training stuns an enemy after you thwart and exactly defeat a side scheme, and is played under any player's control. Stick gives a friendly Martial Artist's basic attack or thwart +1 by exhausting, or -1 to ready itself. Contingency Planning tucks one upgrade from your hand that can attach to a minion or side scheme and plays it as if from hand. Dance with the Devil attaches to an enemy and deals it 3 damage as an attack when discarded.
-- **New keywords:** Discount X (traits) makes a card cost X less when your identity has a listed trait. Temporary discards the card from play at the end of the round. Team-Up (A and B) needs friendly characters titled or subtitled A and B in play; deck building already needed one of them as the identity. Tucked cards are faceup, are not in play and are discarded when the card they are under leaves play.
 
-## Interface
+### Interface
 
 - The **Sense deck** sits beside the player's piles: its count, the top card and its cost, and a **Superhuman Senses** button that plays the top card. Opening the pile lists the whole deck in order.
 - Contingency Planning's tucked upgrade appears with a **Play Upgrade** button, like other stored cards.
 - Sense upgrades attach where the player chooses; their triggered abilities are offered at their timing points. Heightened Hearing is offered in the window as an enemy initiates its attack.
 
-## Coverage boundaries
+### Coverage boundaries
 
 - Acute Tactility and Enhanced Olfaction on a defeated villain are offered once the defeat and the next stage's effects have resolved, rather than before the stage changes. On a minion or a scheme they are true interrupts.
 - "You attack" and "you thwart" for Radar Sense and Superior Taste are your identity's attacks and thwarts, including attack and thwart events; an ally's attacks do not trigger them.
 - A "Daredevil card" for Karen Page is a card from Daredevil's identity-specific set.
 - Stick interrupts the identity's basic attack and thwart and an ally's basic attack and thwart; its effect on basic defense and recovery is not offered.
-- Echo and the protection cards of her starter deck are not yet imported; See No Evil, Hear No Evil is not part of Daredevil's starter deck.
 - In Fear No Evil's missions against the Bullseye Underling, Daredevil's nemesis Bullseye can be in play beside the villain; no rule removes either.
+
+## Echo
+
+### Rules
+
+- **Watch and Learn** (Echo, Response): after any player plays an aspect or basic event, Echo may tuck that event under her identity from that player's discard pile. If more than three cards are then tucked under her, the Echo player discards one at a time until three remain. Tucked cards are faceup and not in play, keep their owner, stay through changes of form and go to their owner's discard pile when they leave. Watch and Learn needs Echo in hero form with her identity's text active.
+- **Practice Makes Perfect** (Maya Lopez, Interrupt): when she changes to hero form, she may search her deck for an aspect or basic event and add it to her hand, then shuffle. The search is offered before the form changes.
+- **Photographic Reflexes** (three printings, two copies each) has no play ability: in hero form, discarding a copy from hand plays an event tucked under Echo as if it were in hand, for 2 less, whenever that event could be played from hand. Action events are played from the tucked-events strip or with the PLAY command; reaction events such as Get Their Attention or Powerful Punch are offered among their windows' options. The copy discarded is the first in hand, and it cannot also pay for that event; other copies can. The event goes to its owner's discard pile, and Watch and Learn cannot trigger for it.
+- **Signature cards:** Daredevil (ally) makes the next event you play this round cost 1 less after he attacks or thwarts; each use adds 1. Study the Tape adds an aspect event, a basic event or a Photographic Reflexes from any player's discard pile to your hand. The Rez (Alter-Ego Action) heals Maya Lopez by the highest printed cost among the cards tucked under her. American Sign Language (Hero Resource) exhausts for a wild resource toward an event played by any player, from any player's payment. Choreography shuffles an aspect or basic event from your discard pile into your deck and draws a card in alter-ego form. Echo's Katana exhausts after you play an event to deal damage equal to that event's printed cost to an enemy, as a piercing attack. Improvisation answers each event you play: heal 1 if it is an Attack, remove 1 threat if it is a Defense, deal 1 damage if it is a Thwart. Muscle Memory adds a tucked event to your hand.
+- **Raised by the Kingpin** stays in the Maya Lopez player's play area. When revealed it finds Kingpin, from the encounter deck, its discard pile or a set-aside nemesis set, or from Echo's set-aside nemesis set, and puts him into play engaged with that player. Its player cannot deal damage to Kingpin, and after each of their identity's thwarts the threat removed is placed on it; with 4 or more it is removed from the game.
+- **Kingpin's nemesis set:** Kingpin schemes instead when he would attack the Maya Lopez player. Master Manipulator (2 threat per player) finds Kingpin when revealed, keeps him from taking damage, and its boost reveals it while he is in play. Kingpin's Henchman has guard and keeps Kingpin from taking damage. Pawn of the Kingpin makes Kingpin scheme in alter-ego form, or surges if he is not in play; in hero form it deals damage equal to your hero's ATK to a hero of your choice.
+- **Protection and basic cards:** Innate Reflexes gives your hero +1 DEF and has Starting. Army of One readies your hero. In Harm's Way deals X damage to an enemy and then removes X threat, X being your DEF. Both cost 1 more for each ally you control. Get Their Attention removes 3 threat as an enemy initiates an attack, as a defense-labeled interrupt. The Best Offense... (Temporary) gives your hero +1 DEF and uses your DEF, modifiers included, in place of your THW and ATK. Ronin gives your hero +1 DEF and retaliate 1 while you control no allies. Stand Alone exhausts to ready your exhausted hero when an enemy attacks you and you control no allies. See No Evil, Hear No Evil (Team-Up Daredevil and Echo) resolves two choices of 3 damage to an enemy and 3 threat removed from a scheme. Powerful Punch and Superpower Training resolve as their original printings.
+- **Starting** (new in Fear No Evil): before the opening hands are drawn, a player whose deck holds a card with Starting is offered to add it as the first card of their starting hand; it counts against the hand size and can be mulliganed. A deck holds at most one.
+- **Kingpin** is read by title: the villain of Fear No Evil's Kingpin scenario is also titled Kingpin, so Raised by the Kingpin, Master Manipulator and Kingpin's Henchman also keep that villain from taking damage, and "if Kingpin is in play" counts him.
+
+### Interface
+
+- The events tucked under Echo appear in the stored-card strip, "TUCKED UNDER ECHO · N/3", each with a **Replay** button (Photographic Reflexes) and its reduced cost. In alter-ego form, without a copy in hand, or for an event played only in its reaction window, the button is disabled with the reason as its title.
+- Watch and Learn, the excess tucked card and Practice Makes Perfect are choices naming each card; Echo's Katana and Improvisation are offered after each event you play, with the event's other responses.
+- The Starting offer for Innate Reflexes is a choice before the opening hand.
+
+### Coverage boundaries
+
+- Watch and Learn is offered after the event player's own responses to the event.
+- Daredevil's response follows his basic attacks and thwarts; defending is not treated as a basic power.
+- The copy of Photographic Reflexes that is discarded is the first in hand; the player cannot choose a different printing.
+- Echo's nemesis Kingpin and the Kingpin villain can both be in play; no rule removes either, and Raised by the Kingpin's search does not put a second card titled Kingpin into play.
+- The nemesis minion an encounter card finds (Raised by the Kingpin, Pursued by the Past, Shadow of the Past and similar) is the minion its nemesis set marks as the nemesis minion: Kingpin, never a Kingpin's Henchman. The same rule now applies to every nemesis set with several minions.
+
+## Shared keywords
+
+- **Discount X (traits)** makes a card cost X less when your identity has a listed trait.
+- **Temporary** discards the card from play at the end of the round.
+- **Team-Up (A and B)** needs friendly characters titled or subtitled A and B in play; deck building already needed one of them as the identity.
+- **Tucked cards** are faceup, are not in play and are discarded when the card they are under leaves play.
 
 ## Verification
 
-The engine tests (`tests/daredevil-engine.test.ts`) cover every Daredevil face and starter card with the original physical cards: the Sense deck's setup, Superhuman Senses and the bottom-of-deck replacement; each Sense upgrade's trigger; Elektra, the events, Focus the Senses, the supports and upgrades; Sensory Overload and the nemesis set; and every justice and basic card, including Discount, Temporary, Team-Up and tuck.
+The engine tests (`tests/daredevil-engine.test.ts`, `tests/echo-engine.test.ts`) cover every face of both heroes and their starter cards with the original physical cards. For Daredevil: the Sense deck's setup, Superhuman Senses and the bottom-of-deck replacement; each Sense upgrade's trigger; Elektra, the events, Focus the Senses, the supports and upgrades; Sensory Overload and the nemesis set; and every justice and basic card, including Discount, Temporary, Team-Up and tuck. For Echo: Watch and Learn with the three-card limit, a teammate's event and its owner's discard pile; Photographic Reflexes from the strip and in an attack's reaction window, with the discarded copy kept out of the payment; Practice Makes Perfect; every signature card; Raised by the Kingpin, the nemesis minion and the nemesis set; and every protection and basic card, including Starting and the two reprints.
 
-The source matrix adds Daredevil as the fifty-third hero against every scenario, difficulty and supported module: 11,752 new missions, with all 611,104 previous names and seeds hashing identically to the complete grid of `ec9bfaf`. The Daredevil browser check (`npm run test:daredevil`) plays the Sense deck and Contingency Planning through the public interface at four widths, with accessibility audits, layout checks and exact reloads.
+The source matrix adds Daredevil as the fifty-third hero (11,752 missions, with all 611,104 previous names and seeds hashing identically to the complete grid of `ec9bfaf`) and Echo as the fifty-fourth (11,752 missions, with all 622,856 previous names and seeds hashing identically to the complete grid of `0d54e31`), against every scenario, difficulty and supported module. The browser checks (`npm run test:daredevil`, `npm run test:echo`) play the Sense deck, Contingency Planning and the tucked events through the public interface at four widths, with accessibility audits, layout checks and exact reloads.
 
-Rules references: the Fear No Evil rules insert (the Sense deck, Discount, Temporary, Team-Up) and the original card texts, [Rules Reference 1.8](https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf) (Defend and Defense, Find, Nemesis Encounter Set, Obligation, Piercing, Team-Up, Temporary, Tuck, Unique).
+Rules references: the Fear No Evil rules insert (the Sense deck, Discount, Temporary, Team-Up, Starting, tuck) and the original card texts, [Rules Reference 1.8](https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf) (Defend and Defense, Find, Nemesis Encounter Set, Obligation, Piercing, Team-Up, Temporary, Tuck, Unique).

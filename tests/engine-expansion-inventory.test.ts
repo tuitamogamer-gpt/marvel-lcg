@@ -96,6 +96,7 @@ import {
 import { GOD_OF_LIES_CODES } from "../src/game/god-of-lies";
 import { FEAR_NO_EVIL_CODES } from "../src/game/fear-no-evil";
 import { DAREDEVIL_SCRIPT_CODES } from "../src/game/daredevil";
+import { ECHO_SCRIPT_CODES } from "../src/game/echo";
 import { FNE_PLAYER_PACK_SCRIPT_CODES } from "../src/game/fne-player-pack";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
@@ -184,11 +185,15 @@ const badoonCodes = new Set<string>([
   ...TRICKSTER_MAGIC_CODES,
   ...GOD_OF_LIES_CODES,
   ...FEAR_NO_EVIL_CODES,
-  // Fear No Evil's heroes: Daredevil, his starter deck's justice and basic
-  // cards and the Chance Encounter reprint.
+  // Fear No Evil's heroes: Daredevil and Echo, their starter decks' aspect
+  // and basic cards and the Chance Encounter, Powerful Punch and Superpower
+  // Training reprints.
   ...DAREDEVIL_SCRIPT_CODES,
+  ...ECHO_SCRIPT_CODES,
   ...FNE_PLAYER_PACK_SCRIPT_CODES,
   "60025",
+  "60051",
+  "60056",
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -563,6 +568,7 @@ describe("complete expansion rules inventory", () => {
       ["aos", "maria_hill"],
       ["aos", "nick_fury"],
       ["fne", "daredevil"],
+      ["fne", "echo"],
     ])
       expect(
         inventory.heroes.find(
@@ -603,10 +609,10 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(3710);
-    expect(coverage.unsupportedFaces).toBe(841);
-    expect(coverage.dedicatedFaces).toBe(3272);
-    expect(coverage.registeredHeroIds).toHaveLength(58);
+    expect(coverage.executableFaces).toBe(3738);
+    expect(coverage.unsupportedFaces).toBe(813);
+    expect(coverage.dedicatedFaces).toBe(3300);
+    expect(coverage.registeredHeroIds).toHaveLength(59);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
     );
@@ -1155,6 +1161,9 @@ describe("complete expansion rules inventory", () => {
         // Fear No Evil's heroes: Daredevil, his justice and basic cards and
         // the Chance Encounter reprint.
         36 -
+        // Echo, her protection and basic cards and the Powerful Punch and
+        // Superpower Training reprints.
+        28 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -1758,7 +1767,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(179);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(180);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

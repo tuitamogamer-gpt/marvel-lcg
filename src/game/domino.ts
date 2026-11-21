@@ -1,5 +1,6 @@
 import { card } from "./card-definitions.js";
 import { isTextBlank } from "./card-text.js";
+import { rulesCode } from "./rules-code.js";
 import { allInPlay, playerOrder, seatView } from "./team.js";
 import type { AntManTarget } from "./ant-man.js";
 import type { Effect, GameState, Option, Piece, Resource } from "./types.js";
@@ -369,9 +370,10 @@ export function dominoRevealOptions(s: GameState, p: Piece): Option[] {
     : [];
 }
 export function dominoSideSchemeDefeated(s: GameState, p: Piece): Effect[] {
-  if (!["40054", "40059"].includes(p.code)) return [];
+  // Superpower Training is reprinted in Fear No Evil (60056).
+  if (!["40054", "40059"].includes(rulesCode(p))) return [];
   return playerOrder(s).map((seat) =>
-    D("side-reward", { code: p.code, actorId: seat.id }),
+    D("side-reward", { code: rulesCode(p), actorId: seat.id }),
   );
 }
 export function dominoEncounter(s: GameState, p: Piece): Effect[] | null {

@@ -1161,6 +1161,7 @@ export async function generateAudit(
     "src/game/god-of-lies.ts",
     "src/game/fear-no-evil.ts",
     "src/game/daredevil.ts",
+    "src/game/echo.ts",
     "src/game/fne-player-pack.ts",
     "src/game/reveal-window.ts",
     "src/game/black-widow.ts",

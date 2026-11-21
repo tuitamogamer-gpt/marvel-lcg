@@ -285,3 +285,7 @@ Kingpin's help explains Public Support, the nemesis minions and The King's Gambi
 ## Daredevil, 2026-11-21
 
 The Sense deck sits beside Daredevil's piles as its own framed area, "SENSE DECK · FACEUP", with the pile count, the top card and its cost, and a "Superhuman Senses" button that plays the top card; opening the pile lists the whole deck top first, since its order is open information. Sense upgrades attached to the main scheme join the scheme's attached cards, those on an enemy join the enemy's. Contingency Planning's tucked upgrade appears in the same stored-card strip as other playable stored cards, with a "Play Upgrade" button and its cost.
+
+## Echo, 2026-11-21
+
+The events tucked under Echo sit in the stored-card strip beside her piles, labeled "TUCKED UNDER ECHO · N/3". Each tucked event shows its card, which opens the card preview, and a "Replay · cost" button, named "Photographic Reflexes: play" for assistive technology, with the cost already reduced by 2 and narrow enough for the card's column; the button is disabled, with the reason as its title, in alter-ego form, without a Photographic Reflexes in hand, or for an event played only in its reaction window, where the same tucked event is offered among the window's options. Watch and Learn, the excess tucked card and Practice Makes Perfect are ordinary choices naming the card; the Starting offer for Innate Reflexes is a choice before the opening hand is drawn. Raised by the Kingpin sits in Maya Lopez's play area with its threat counted on the card.

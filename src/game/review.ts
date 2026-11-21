@@ -66,6 +66,8 @@ function cardLocations(s: GameState) {
     put(p.invocationDiscard || [], "Invocation discard", name);
     // Daredevil's Sense deck is faceup: its order is open information.
     put(p.senseDeck || [], "Sense deck", name);
+    // Events tucked under Echo are faceup.
+    put(p.echoTucked || [], "Tucked under Echo", name);
   }
   put(s.encounter.deck, "Deck", "Encounter", false);
   put(s.encounter.discard, "Discard");

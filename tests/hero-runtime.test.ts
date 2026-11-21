@@ -49,7 +49,7 @@ describe("imported hero definitions and printed starter legality", () => {
   it("imported identities stay unautomated until their full runtime is installed", () => {
     expect(
       HERO_RUNTIME.filter((h) => h.scripted).map((h) => h.id),
-    ).toHaveLength(58);
+    ).toHaveLength(59);
     expect(heroRuntime("maria_hill")?.scripted).toBe(true);
     expect(heroRuntime("captain_america")?.scripted).toBe(true);
     expect(heroRuntime("wsp")?.scripted).toBe(true);
@@ -86,9 +86,10 @@ describe("imported hero definitions and printed starter legality", () => {
       "iceman",
       "jubilee",
       "daredevil",
+      "echo",
     ])
       expect(heroRuntime(id)?.scripted).toBe(true);
-    expect(heroRuntime("echo")?.scripted).toBe(false);
+    expect(heroRuntime("black_panther_shuri")?.scripted).toBe(false);
   });
   for (const hero of HERO_RUNTIME)
     it(`${hero.name} starter follows its printed deck rules`, () => {

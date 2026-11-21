@@ -45,6 +45,7 @@ import * as ench from "./enchantress-villain.js";
 import * as gol from "./god-of-lies.js";
 import * as fne from "./fear-no-evil.js";
 import * as daredevil from "./daredevil.js";
+import * as echo from "./echo.js";
 import * as fnePack from "./fne-player-pack.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
@@ -989,7 +990,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           nebula.nebulaRetaliate(s) +
           vision.visionRetaliate(s) +
           wasp.waspRetaliate(textActiveState(s)) +
-          gmwPack.gmwPlayerPackRetaliate(textActiveState(s), gmwPorts)
+          gmwPack.gmwPlayerPackRetaliate(textActiveState(s), gmwPorts) +
+          fnePack.fnePackRetaliate(textActiveState(s))
         : 0)
     );
   const p = find(s, source);
@@ -3147,6 +3149,7 @@ function check(s: GameState) {
         "invocationDeck",
         "invocationDiscard",
         "senseDeck",
+        "echoTucked",
       ] as const) {
         const zone = state[key];
         if (!zone) continue;
@@ -3758,6 +3761,7 @@ function dealDamage(
     (mojoGenres.mojoGenreVillainImmune(s, target) ||
       spiral.spiralVillainImmune(s, target) ||
       jug.jugImmune(s, target) ||
+      echo.echoKingpinImmune(s, target, source) ||
       ench.enchantressImmune(s, target) ||
       apoc.apocalypseImmune(s, target) ||
       db.darkBeastImmune(s, target) ||
@@ -7426,6 +7430,7 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
       blackWidowAllyDiscount(s, c) +
       doctorStrangeCostModifier(s, c) +
       daredevil.daredevilCostModifier(s) +
+      echo.echoCostModifier(s, c, physical) +
       fnePack.fnePackCostModifier(s, c, (trait) =>
         captainPackHasTrait(s, "hero", trait),
       ) +
@@ -8018,6 +8023,7 @@ function thwartAction(
     source === "hero"
       ? [
           ...daredevil.daredevilAfterThwart(s, target),
+          ...echo.echoAfterThwart(s, removed),
           ...fnePack.fnePackAfterThwart(
             s,
             { target, amount: n, before: beforeThreat, removed },
@@ -10812,14 +10818,14 @@ export function newGame(config: {
       sabretoothPorts,
       config.senatorDamage,
     );
-    openingHands(s);
+    openingHandsNow(s);
   } else if (v.id === "mutagen_formula") {
     add(s, ...mutagenSetup(), E("openingHands", { actorId: s.firstPlayerId }));
     run(s);
   } else if (v.id === "risky_business") {
     add(s, ...riskySetup(), E("openingHands", { actorId: s.firstPlayerId }));
     run(s);
-  } else openingHands(s);
+  } else openingHandsNow(s);
   log(
     s,
     `${team.length} hero${team.length > 1 ? "es" : ""} vs. ${v.name} · ${difficulty}. Confirm each opening hand.`,
@@ -10828,10 +10834,48 @@ export function newGame(config: {
   syncSeat(s);
   return s;
 }
-function openingHands(s: GameState) {
+/** Opening hands outside the effect queue: a Starting offer is a prompt, so
+ * the queue runs until it is answered. */
+function openingHandsNow(s: GameState) {
+  openingHands(s);
+  if (!s.queue.length) return;
+  const pacing = s.pacing;
+  s.pacing = "expert";
+  run(s);
+  s.pacing = pacing;
+}
+function openingHands(s: GameState, startingHandled = false) {
+  // Starting (Fear No Evil): before drawing, a player may add the card with
+  // Starting from their deck as the first card of their starting hand.
+  if (!startingHandled) {
+    const offers = playerOrder(s).flatMap((seat) => {
+      const p = fnePack.fnePackStartingCard(seatView(s, seat));
+      return p
+        ? [
+            E("optional", {
+              title: card(p).name,
+              text: `Starting: add ${card(p).name} to your starting hand?`,
+              effects: [E("fnep:starting", { id: p.id })],
+              image: p.code,
+              actorId: seat.id,
+            }),
+          ]
+        : [];
+    });
+    if (offers.length) {
+      add(
+        s,
+        ...offers,
+        E("openingHands", { startingHandled: true, actorId: s.firstPlayerId }),
+      );
+      return;
+    }
+  }
   for (const seat of s.players) {
     activateSeat(s, seat.id);
-    draw(s, handSize(s));
+    const starting = Number(s.flags.fnepStarting || 0);
+    delete s.flags.fnepStarting;
+    draw(s, Math.max(0, handSize(s) - starting));
   }
   activateSeat(s, s.firstPlayerId);
 }
@@ -10923,6 +10967,8 @@ function initialSetup(s: GameState) {
   );
 }
 const reactionCards = [
+  // Fear No Evil: Get Their Attention.
+  "60049",
   "44005",
   "44017",
   "44022",
@@ -11069,6 +11115,7 @@ export function playable(s: GameState, p: Piece): string | null {
     nightcrawler.nightcrawlerPlayRestriction(s, p, nightcrawlerPorts) ||
     mariaHill.mariaHillPlayRestriction(s, p) ||
     daredevil.daredevilPlayRestriction(s, p, ddPorts) ||
+    echo.echoPlayRestriction(s, p) ||
     fnePack.fnePackPlayRestriction(s, p, fnePackPorts) ||
     iceman.icemanPlayRestriction(s, p, icemanPorts) ||
     gambit.gambitPlayRestriction(s, p, gambitPorts) ||
@@ -11689,6 +11736,8 @@ function play(
   const storedTuck = fnePack
     .fnePackStoredPlayable(s)
     .some((x) => x.id === p.id);
+  // Photographic Reflexes plays an event tucked under Echo.
+  const storedEcho = echo.echoStoredPlayable(s).some((x) => x.id === p.id);
   const stagedMinionCost =
     !!s.flags[`nightcrawlerMinionCostPaid:${p.id}`] &&
     s.resolving.some((q) => q.id === p.id);
@@ -11700,6 +11749,7 @@ function play(
     storedGeorge ||
     storedSense ||
     storedTuck ||
+    storedEcho ||
     stagedMinionCost;
   const magikOrigin = magik.magikPending(s, p);
   const fromHand = s.player.hand.some((x) => x.id === p.id) || magikOrigin;
@@ -11742,6 +11792,11 @@ function play(
     need(
       fnePack.fnePackTakeStored(s, p.id),
       "The tucked upgrade is no longer under Contingency Planning.",
+    );
+  else if (storedEcho)
+    need(
+      echo.echoTakeTucked(s, p.id, echoPorts),
+      "The event is no longer tucked under Echo.",
     );
   else if (magikOrigin)
     need(magik.magikTakePending(s, p.id), "The staged top-card play changed.");
@@ -11807,6 +11862,8 @@ function play(
   s.flags.discount = 0;
   // Enhanced Olfaction's reduction applies to this one card.
   daredevil.daredevilCardPlayed(s);
+  // Daredevil (Echo's ally): the next event's reduction is used.
+  echo.echoCardPlayed(s, p);
   track(s, "cardsPlayed", 1);
   log(s, `Play ${c.name}.`, "good");
   // Stryfe: Mind Alteration and Psionic Amnesia after you play a card.
@@ -12389,6 +12446,7 @@ function event(
     psylocke.psylockeEvent(s, p, paid) ??
     domino.dominoEvent(s, p) ??
     daredevil.daredevilEvent(s, p) ??
+    echo.echoEvent(s, p) ??
     fnePack.fnePackEvent(s, p) ??
     x23.x23Event(s, p) ??
     mariaHill.mariaHillEvent(s, p) ??
@@ -12761,7 +12819,9 @@ function flip(
   }
   if (counts) need(!s.player.flipped, "You already changed form this turn.");
   if (!magikHandled) {
-    const interrupt = magik.magikBeforeFlip(s, counts, target);
+    const interrupt =
+      magik.magikBeforeFlip(s, counts, target) ??
+      echo.echoBeforeFlip(s, counts, target);
     if (interrupt) {
       add(s, ...interrupt);
       return;
@@ -13363,6 +13423,7 @@ function ability(s: GameState, id: string, action = "special") {
   }
   const fearNoEvilOptions = [
     ...daredevil.daredevilAbilityOptions(s, id, ddPorts),
+    ...echo.echoAbilityOptions(s, id, echoPorts),
     ...fnePack.fnePackAbilityOptions(s, id, fnePackPorts),
   ];
   const fearNoEvilSelected =
@@ -16812,6 +16873,7 @@ export function nativeHeroAbilityOptions(s: GameState, id = "identity") {
     ...mariaHill.mariaHillAbilityOptions(s, id, mariaHillPorts),
     ...mariaHill.mariaHillHandOptions(s, id),
     ...daredevil.daredevilAbilityOptions(s, id, ddPorts),
+    ...echo.echoAbilityOptions(s, id, echoPorts),
     ...fnePack.fnePackAbilityOptions(s, id, fnePackPorts),
     ...bishop.bishopAbilityOptions(s, id, bishopPorts),
     ...magnetoHero.magnetoHeroAbilityOptions(s, id, magnetoHeroPorts),
@@ -17403,6 +17465,18 @@ const wreckingCrewPorts: wreckingCrew.WreckingCrewPorts = {
 /** Put the player's nemesis minion into play engaged with them from the
  * encounter deck, its discard pile or the set-aside area. Returns true when
  * the set-aside minion that Shadow of the Past would reveal entered play. */
+/** A nemesis set's own nemesis minion. Sets with other minions (Hydra
+ * Soldiers, Kingpin's Henchmen...) mark it "nemesis minion". */
+function nemesisMinionCard(c: Card, set: string): boolean {
+  if (c.type_code !== "minion" || c.set_code !== set) return false;
+  const marked = (x: Card) => /nemesis minion/i.test(x.text || "");
+  return (
+    marked(c) ||
+    !CATALOG_CARDS.some(
+      (x) => x.set_code === set && x.type_code === "minion" && marked(x),
+    )
+  );
+}
 /** Old Grudge and Analysis Paralysis: the player's nemesis card of this
  * type from the encounter deck, its discard pile or the set-aside area. */
 function takeNemesisCard(
@@ -17413,7 +17487,9 @@ function takeNemesisCard(
   const view = seatView(s, playerId);
   const set = `${view.heroId}_nemesis`;
   const match = (p: Piece) =>
-    card(p).type_code === type && card(p).set_code === set;
+    type === "minion"
+      ? nemesisMinionCard(card(p), set)
+      : card(p).type_code === type && card(p).set_code === set;
   for (const zone of [s.encounter.deck, s.encounter.discard]) {
     const i = zone.findIndex(match);
     if (i >= 0) {
@@ -17433,7 +17509,7 @@ function takeNemesisCard(
     (c) =>
       c.set_code === set &&
       c.pack_code === heroCard(view).pack_code &&
-      c.type_code === type,
+      (type === "minion" ? nemesisMinionCard(c, set) : c.type_code === type),
   );
   if (!printed) return undefined;
   view.flags[flag] = true;
@@ -17472,8 +17548,7 @@ function setAsideNemesisSet(
 function putNemesisMinion(s: GameState, playerId: string): boolean {
   const view = seatView(s, playerId);
   const set = `${view.heroId}_nemesis`;
-  const isMinion = (p: Piece) =>
-    card(p).type_code === "minion" && card(p).set_code === set;
+  const isMinion = (p: Piece) => nemesisMinionCard(card(p), set);
   if (s.minions.some(isMinion)) return false;
   for (const zone of [s.encounter.deck, s.encounter.discard]) {
     const found = zone.find(isMinion);
@@ -17494,7 +17569,7 @@ function putNemesisMinion(s: GameState, playerId: string): boolean {
     (c) =>
       c.set_code === set &&
       c.pack_code === heroCard(view).pack_code &&
-      c.type_code === "minion",
+      nemesisMinionCard(c, set),
   );
   if (!minion) return false;
   mutagenPorts.putMinion(s, makePiece(s, minion.code), playerId);
@@ -21900,6 +21975,7 @@ const sinisterPlayerPackPorts: sinisterPlayerPack.SinisterPlayerPackPorts = {
     ...ghostSpider.ghostSpiderStoredPlayable(s, ghostSpiderPorts),
     ...daredevil.daredevilStoredPlayable(s),
     ...fnePack.fnePackStoredPlayable(s),
+    ...echo.echoStoredPlayable(s),
   ],
   canPlayWithDiscount: (s, p, discount, exhaustId) => {
     const costSource = exhaustId
@@ -24893,6 +24969,64 @@ const fnePackPorts: fnePack.FnePackPorts = {
   attack: niAttackProgram,
   transferControl: (s, id, playerId) =>
     hulkPackPorts.transferControl(s, id, playerId),
+  heroDefense: (s) => heroStats(s).defense,
+  canReadyIdentity: (s) => canReadyIdentity(s),
+  cardCost: (s, p) => cardCost(s, card(p), p),
+  canPayCard: (s, p) =>
+    canPay(
+      s,
+      cardCost(s, card(p), p),
+      sinisterPlayRequirements(p),
+      p.id,
+      p.code,
+    ),
+  eventSources: (s) => eventPlaySources(s),
+  playReaction: (s, p, effects, after) =>
+    add(
+      s,
+      E("payRequest", {
+        title: card(p).name,
+        cost: cardCost(s, card(p), p),
+        piece: p,
+        requirements: sinisterPlayRequirements(p),
+        cancelable: true,
+        after: [
+          E("resolveHandEvent", {
+            id: p.id,
+            after: effects,
+            continuation: after,
+          }),
+        ],
+        cancellationQueue: after,
+      }),
+    ),
+  shuffleDeck: (s) => {
+    revealHidden(s);
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+};
+const echoPorts: echo.EchoPorts = {
+  queue: add,
+  choose,
+  log: (s, text, kind) => log(s, text, kind),
+  revealHidden,
+  shuffleDeck: (s) => {
+    revealHidden(s);
+    s.player.deck = shuffle(s, s.player.deck);
+  },
+  enemies: (s, attack) => targets(s, "enemy", attack),
+  schemes: (s, thwart) => targets(s, "scheme", false, thwart),
+  attack: niAttackProgram,
+  heroAttack: (s) => heroStats(s).attack,
+  damaged: (s) => s.player.hp < maxHP(s),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+  activate: (s, request) => mutagenPorts.activate(s, request),
+  giveObligation: (s, p, playerId) =>
+    spectrumPorts.giveObligation(s, p, playerId),
+  removeFromGame: (s, id) => ddPorts.removeFromGame(s, id),
+  takeNemesisMinion: (s, playerId) => takeNemesisCard(s, playerId, "minion"),
+  putMinion: (s, p, playerId) => mutagenPorts.putMinion(s, p, playerId),
+  reveal: (s, p, playerId) => blackWidowVillainPorts.reveal(s, p, playerId),
 };
 const mariaHillPorts: mariaHill.MariaHillPorts = {
   queue: add,
@@ -26336,6 +26470,18 @@ function enemyAttack(
     );
     return;
   }
+  // Echo's nemesis Kingpin: when he would attack the Maya Lopez player, he
+  // schemes instead.
+  if (!originalTarget && echo.echoKingpinSchemesInstead(s, id)) {
+    log(s, "Kingpin schemes instead of attacking the Maya Lopez player.");
+    enemyScheme(
+      s,
+      id,
+      extra,
+      activation ? { ...activation, kind: "scheme" } : undefined,
+    );
+    return;
+  }
   // Across the Mojoverse: an Escaped Spiral schemes instead of attacking.
   if (!originalTarget && spiral.spiralSchemesInstead(s, id)) {
     log(s, "Spiral is Escaped: she schemes instead of attacking.");
@@ -27297,6 +27443,7 @@ function boostEffects(s: GameState, p: Piece) {
     gol.godOfLiesBoost(s, p) ??
     fne.fneBoost(s, p) ??
     daredevil.daredevilBoost(s, p) ??
+    echo.echoBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -30210,6 +30357,7 @@ function reveal(
     crossbones.crossbonesReveal(s, p) ??
     redSkullModules.redSkullReveal(s, p) ??
     daredevil.daredevilEncounter(s, p) ??
+    echo.echoEncounter(s, p) ??
     domino.dominoEncounter(s, p) ??
     psylocke.psylockeEncounterReveal(s, p) ??
     bishop.bishopEncounter(s, p) ??
@@ -31641,6 +31789,7 @@ function resolve(s: GameState, e: Effect) {
   if (resolveSpiderWomanEffect(s, e, swPorts)) return;
   if (resolveDoctorStrangeEffect(s, e, dsPorts)) return;
   if (daredevil.resolveDaredevilEffect(s, e, ddPorts)) return;
+  if (echo.resolveEchoEffect(s, e, echoPorts)) return;
   if (fnePack.resolveFnePackEffect(s, e, fnePackPorts)) return;
   if (resolveBlackWidowEffect(s, e, bwPorts)) return;
   const spdrCompletedWindow = s.revealWindows?.[e.windowId];
@@ -32759,7 +32908,8 @@ function resolve(s: GameState, e: Effect) {
           .find((p) => p.id === e.id) ||
         ghostSpider
           .ghostSpiderStoredPlayable(s, ghostSpiderPorts)
-          .find((p) => p.id === e.id);
+          .find((p) => p.id === e.id) ||
+        echo.echoStoredPlayable(s).find((p) => p.id === e.id);
       need(available, "The reaction card is no longer available.");
       const agility = !e.agilityHandled
         ? spiderWomanCardPlayed(s, card(available!))
@@ -32777,13 +32927,15 @@ function resolve(s: GameState, e: Effect) {
               s,
               e.id,
               ghostSpiderPorts,
-            )!;
+            ) ||
+            echo.echoTakeTucked(s, e.id, echoPorts)!;
       const playToken = nativeCardPlayCommitted(s, p);
       if (e.ghostContext)
         ghostSpider.ghostSpiderCommitReaction(s, p, e.ghostContext);
       starLord.starLordHandPlayFinished(s, p.id);
       beginResolution(s, p);
       s.flags.discount = 0;
+      echo.echoCardPlayed(s, p);
       msMarvelCardPlayed(s);
       captainCardPlayed(s, card(p));
       captainPackCardPlayed(s, card(p));
@@ -33967,6 +34119,8 @@ function resolve(s: GameState, e: Effect) {
               effect.piece?.id === p.id
             ),
         );
+        // Watch and Learn follows the event player's own responses.
+        add(s, ...echo.echoEventFinished(s, p));
         add(
           s,
           E("nativeEventPlayResponses", {
@@ -34058,6 +34212,13 @@ function resolve(s: GameState, e: Effect) {
         ...jubilee.jubileeAfterEventOptions(s, e.piece, e.jubileeUsed || [], [
           again,
         ]),
+        ...echo.echoAfterEventOptions(
+          s,
+          e.piece,
+          e.echoUsed || [],
+          [again],
+          echoPorts,
+        ),
       ];
       if (options.length)
         choose(
@@ -34201,7 +34362,7 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "openingHands":
-      openingHands(s);
+      openingHands(s, !!e.startingHandled);
       break;
     case "clearMainCompletion":
       s.pendingMainCompletion = false;
@@ -37440,6 +37601,7 @@ function resolve(s: GameState, e: Effect) {
         );
       add(s, ...bishop.bishopAllyUsed(s, p));
       add(s, ...mariaHill.mariaHillAllyUsed(s, p));
+      add(s, ...echo.echoAfterAllyBasic(s, p));
       add(s, ...draxPack.draxPackAfterAllyBasic(s, p));
       add(s, ...mtsPlayerPack.mtsPlayerPackAfterAllyBasic(s, p));
       add(s, ...hulkPackAllyResponse(s, p, !!e.attack));
@@ -38510,6 +38672,23 @@ function resolve(s: GameState, e: Effect) {
                     a.attacker,
                     [],
                     ddPorts,
+                  )
+                  .filter((entry) => !usedIds.includes(entry.id))
+                  .map((entry) => ({
+                    ...entry,
+                    effects: entry.effects.map((effect) => ({
+                      ...effect,
+                      after: [resume(entry.id)],
+                    })),
+                  }))
+              : []),
+            ...(againstPlayer && !friendlySource
+              ? fnePack
+                  .fnePackAttackInitiatedOptions(
+                    view,
+                    e.playerId,
+                    eventPlaySources(view),
+                    fnePackPorts,
                   )
                   .filter((entry) => !usedIds.includes(entry.id))
                   .map((entry) => ({
@@ -41875,7 +42054,8 @@ export function dispatch(state: GameState, command: Command): GameState {
           daredevil
             .daredevilStoredPlayable(s)
             .find((p) => p.id === command.id) ||
-          fnePack.fnePackStoredPlayable(s).find((p) => p.id === command.id);
+          fnePack.fnePackStoredPlayable(s).find((p) => p.id === command.id) ||
+          echo.echoStoredPlayable(s).find((p) => p.id === command.id);
         need(p, "Card is not available to play.");
         const reason = playable(s, p!);
         need(!reason, reason || "");
@@ -42550,6 +42730,10 @@ export function summarize(s: GameState) {
       sense:
         p.heroId === daredevil.DAREDEVIL_ID
           ? (seatView(s, p).player.senseDeck || []).map((q) => q.code)
+          : undefined,
+      tucked:
+        p.heroId === echo.ECHO_ID
+          ? (seatView(s, p).player.echoTucked || []).map((q) => q.code)
           : undefined,
       exhausted: seatView(s, p).player.exhausted,
       statuses: {

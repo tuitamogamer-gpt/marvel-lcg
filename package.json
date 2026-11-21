@@ -109,7 +109,8 @@
     "test:enchantress": "node scripts/enchantress-check.mjs",
     "test:god-of-lies": "node scripts/god-of-lies-check.mjs",
     "test:fear-no-evil": "node scripts/fear-no-evil-check.mjs",
-    "test:daredevil": "node scripts/daredevil-check.mjs"
+    "test:daredevil": "node scripts/daredevil-check.mjs",
+    "test:echo": "node scripts/echo-check.mjs"
   },
   "dependencies": {
     "@fontsource/barlow-condensed": "^5.2.8",

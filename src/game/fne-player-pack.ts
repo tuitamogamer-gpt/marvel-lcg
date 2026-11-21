@@ -1,10 +1,13 @@
 /**
  * Fear No Evil's aspect and basic player cards from the two hero starter
- * decks. This part holds Daredevil's justice and basic cards: Blindspot,
- * Cloak and Dagger, Ghost Rider, Know Your Enemy, De-escalation, Legal
- * Trouble, Move in Shadow, Stealth Training, Stick, Contingency Planning and
- * Dance with the Devil. Chance Encounter (60025) reprints Vision's 26034 and
- * resolves through its native rules code.
+ * decks. Daredevil's justice and basic cards: Blindspot, Cloak and Dagger,
+ * Ghost Rider, Know Your Enemy, De-escalation, Legal Trouble, Move in Shadow,
+ * Stealth Training, Stick, Contingency Planning and Dance with the Devil.
+ * Echo's protection and basic cards: Innate Reflexes, Army of One, Get Their
+ * Attention, In Harm's Way, The Best Offense..., Ronin, Stand Alone and See
+ * No Evil, Hear No Evil. Chance Encounter (60025), Powerful Punch (60051) and
+ * Superpower Training (60056) reprint 26034, 32014 and 40059 and resolve
+ * through their native rules codes.
  *
  * Keywords new in Fear No Evil (rules insert):
  * - Discount X (traits): the card costs X less if your identity has one of
@@ -14,6 +17,9 @@
  *   and B are in play (deck building also needs one of them as identity).
  * - Tuck: tucked cards are faceup, not in play, and are discarded when the
  *   card they are under leaves play.
+ * - Starting: before drawing their starting hand, a player may search their
+ *   deck for its card with Starting and add it as the first card of that
+ *   hand. It counts against the hand size and can be mulliganed.
  */
 import { card } from "./card-definitions.js";
 import { isTextBlank } from "./card-text.js";
@@ -41,6 +47,14 @@ export const STEALTH_TRAINING = "60028";
 export const STICK = "60029";
 export const CONTINGENCY_PLANNING = "60030";
 export const DANCE_WITH_THE_DEVIL = "60031";
+export const INNATE_REFLEXES = "60038";
+export const ARMY_OF_ONE = "60048";
+export const GET_THEIR_ATTENTION = "60049";
+export const IN_HARMS_WAY = "60050";
+export const BEST_OFFENSE = "60052";
+export const RONIN = "60053";
+export const STAND_ALONE = "60054";
+export const SEE_NO_EVIL = "60055";
 /** Daredevil's starter deck: justice and basic cards with native rules.
  * Chance Encounter is registered as a reprint of 26034. */
 export const FNE_JUSTICE_CODES: readonly string[] = [
@@ -59,10 +73,26 @@ export const FNE_BASIC_CODES: readonly string[] = [
   CONTINGENCY_PLANNING,
   DANCE_WITH_THE_DEVIL,
 ];
+/** Echo's starter deck: protection and basic cards with native rules.
+ * Powerful Punch and Superpower Training are registered as reprints. */
+export const FNE_PROTECTION_CODES: readonly string[] = [
+  INNATE_REFLEXES,
+  ARMY_OF_ONE,
+  GET_THEIR_ATTENTION,
+  IN_HARMS_WAY,
+  BEST_OFFENSE,
+  RONIN,
+  STAND_ALONE,
+];
+export const FNE_ECHO_BASIC_CODES: readonly string[] = [SEE_NO_EVIL];
 export const FNE_PLAYER_PACK_SCRIPT_CODES: readonly string[] = [
   ...FNE_JUSTICE_CODES,
   ...FNE_BASIC_CODES,
+  ...FNE_PROTECTION_CODES,
+  ...FNE_ECHO_BASIC_CODES,
 ];
+/** Events played only in their reaction window. */
+export const FNE_REACTION_CODES: readonly string[] = [GET_THEIR_ATTENTION];
 
 export interface FnePackTarget {
   id: string;
@@ -97,6 +127,21 @@ export interface FnePackPorts {
   discard(s: GameState, id: string): void;
   attack(s: GameState, effects: Effect[], after: Effect[]): void;
   transferControl(s: GameState, id: string, playerId: string): void;
+  heroDefense(s: GameState): number;
+  canReadyIdentity(s: GameState): boolean;
+  cardCost(s: GameState, p: Piece): number;
+  canPayCard(s: GameState, p: Piece): boolean;
+  /** Events playable now from the hand or as if from hand. */
+  eventSources(s: GameState): Piece[];
+  shuffleDeck(s: GameState): void;
+  /** Play a reaction event from its source as if from hand: pay its cost,
+   * resolve these effects, then continue with `after`. */
+  playReaction(
+    s: GameState,
+    p: Piece,
+    effects: Effect[],
+    after: Effect[],
+  ): void;
 }
 
 const E = (type: string, args: Record<string, unknown> = {}): Effect => ({
@@ -144,9 +189,47 @@ export function fnePackCostModifier(
   c: Card,
   identityHasTrait: (trait: string) => boolean,
 ): number {
+  // Army of One and In Harm's Way: 1 more for each ally you control.
+  if (c.code === ARMY_OF_ONE || c.code === IN_HARMS_WAY)
+    return alliesControlled(s);
   const discount = fnePackDiscount(c);
   if (!discount || !FNE_PLAYER_PACK_SCRIPT_CODES.includes(c.code)) return 0;
   return discount.traits.some(identityHasTrait) ? -discount.amount : 0;
+}
+const alliesControlled = (s: GameState) =>
+  s.player.inPlay.filter((p) => card(p).type_code === "ally").length;
+export const isStarting = (p: Piece | string) =>
+  /(?:^|[.\n])\s*Starting\b/.test(plain(card(p).text));
+/** Starting: the card a player may add as the first card of their starting
+ * hand (each deck holds at most one). */
+export function fnePackStartingCard(s: GameState): Piece | undefined {
+  return s.player.deck.find(
+    (p) => isStarting(p) && FNE_PLAYER_PACK_SCRIPT_CODES.includes(p.code),
+  );
+}
+/** Innate Reflexes, The Best Offense... and Ronin: +1 DEF; The Best
+ * Offense... uses DEF in place of THW and ATK, ignoring their modifiers. */
+export function fnePackHeroStats<
+  T extends { attack: number; thwart: number; defense: number },
+>(s: GameState, stats: T): T {
+  const count = (code: string) =>
+    s.player.inPlay.filter((p) => p.code === code && live(s, p)).length;
+  const offense = count(BEST_OFFENSE);
+  const defense =
+    stats.defense +
+    count(INNATE_REFLEXES) +
+    offense +
+    (alliesControlled(s) ? 0 : count(RONIN));
+  return offense
+    ? { ...stats, defense, attack: defense, thwart: defense }
+    : { ...stats, defense };
+}
+/** Ronin: retaliate 1 while you do not control any allies. */
+export function fnePackRetaliate(s: GameState): number {
+  return !alliesControlled(s) &&
+    s.player.inPlay.some((p) => p.code === RONIN && live(s, p))
+    ? 1
+    : 0;
 }
 export const isTemporary = (p: Piece | string) =>
   /(?:^|[.\n])\s*Temporary\b/.test(plain(card(p).text));
@@ -241,16 +324,84 @@ export function fnePackPlayRestriction(
     !ports.schemes(s, true).length
   )
     return "There is no threat to remove.";
+  if (
+    p.code === ARMY_OF_ONE &&
+    (!s.player.exhausted || !ports.canReadyIdentity(s))
+  )
+    return "Your hero is not exhausted.";
   return null;
 }
 export function fnePackEvent(s: GameState, p: Piece): Effect[] | null {
-  if (p.code !== KNOW_YOUR_ENEMY) return null;
-  const thwart = E("target", {
+  switch (p.code) {
+    case KNOW_YOUR_ENEMY: {
+      const thwart = schemeThwart("Know Your Enemy", 1);
+      return [thwart, thwart];
+    }
+    case ARMY_OF_ONE:
+      return [E("ready", { target: "hero" })];
+    case IN_HARMS_WAY:
+      return [P("harm")];
+    case SEE_NO_EVIL:
+      return [P("see-no-evil")];
+  }
+  return null;
+}
+/** A thwart-labeled removal from a scheme the player chooses. */
+const schemeThwart = (title: string, amount: number) =>
+  E("target", {
     group: "scheme",
-    title: "Know Your Enemy",
-    action: E("thwart", { amount: 1, action: true }),
+    title,
+    action: E("thwart", { amount, action: true }),
   });
-  return [thwart, thwart];
+/** Attack-labeled damage to an enemy the player chooses. */
+const enemyAttack = (title: string, amount: number) =>
+  E("target", {
+    group: "enemy",
+    title,
+    action: E("damage", {
+      amount,
+      attack: true,
+      source: "hero",
+      attackInitiated: true,
+    }),
+  });
+/** Get Their Attention (Hero Interrupt, defense/thwart) and Stand Alone
+ * (Hero Interrupt) when an enemy initiates an attack. Get Their Attention
+ * comes from the hand or any source that plays events as if from hand. */
+export function fnePackAttackInitiatedOptions(
+  s: GameState,
+  attackedPlayerId: string,
+  sources: Piece[],
+  ports: FnePackPorts,
+): Option[] {
+  if (s.player.form !== "hero" || deadpoolTriggeredBlocked(s)) return [];
+  const attention = sources
+    .filter((p) => p.code === GET_THEIR_ATTENTION && ports.canPayCard(s, p))
+    .map((p) =>
+      O(
+        `attention:${p.id}`,
+        `Get Their Attention · remove 3 threat (${ports.cardCost(s, p)} resources)`,
+        [P("attention-play", { id: p.id })],
+        p.code,
+      ),
+    );
+  const stand =
+    s.activePlayerId === attackedPlayerId &&
+    !alliesControlled(s) &&
+    s.player.exhausted &&
+    ports.canReadyIdentity(s)
+      ? own(s, STAND_ALONE)
+          .filter((q) => !q.exhausted)
+          .map((q) =>
+            O(
+              `stand-alone:${q.id}`,
+              "Stand Alone · exhaust it: ready your hero",
+              [P("stand-alone", { id: q.id })],
+              q.code,
+            ),
+          )
+      : [];
+  return [...attention, ...stand];
 }
 export function fnePackEntered(s: GameState, p: Piece): Effect[] {
   if (p.code === LEGAL_TROUBLE || p.code === DANCE_WITH_THE_DEVIL)
@@ -773,6 +924,86 @@ export function resolveFnePackEffect(
         Array(cost).fill("energy") as Resource[],
         [E("status", { target: e.target, status: "confused" })],
       );
+      break;
+    }
+    case "fnep:starting": {
+      // Starting: the first card of the starting hand.
+      const i = s.player.deck.findIndex((q) => q.id === e.id);
+      if (i < 0) break;
+      const [p] = s.player.deck.splice(i, 1);
+      s.player.hand.push(p);
+      s.flags.fnepStarting = Number(s.flags.fnepStarting || 0) + 1;
+      ports.shuffleDeck(s);
+      ports.log(s, `Starting: ${name(p)} begins in your hand.`, "good");
+      break;
+    }
+    case "fnep:attention-play": {
+      // Played from hand (or as if from hand): pay, then remove 3 threat.
+      const after = (e.after as Effect[] | undefined) || [];
+      const p = ports
+        .eventSources(s)
+        .find((q) => q.id === e.id && q.code === GET_THEIR_ATTENTION);
+      if (p) ports.playReaction(s, p, [P("attention")], after);
+      else ports.queue(s, ...after);
+      break;
+    }
+    case "fnep:attention":
+      ports.queue(s, schemeThwart("Get Their Attention", 3));
+      break;
+    case "fnep:stand-alone": {
+      const p = own(s, STAND_ALONE).find((q) => q.id === e.id);
+      if (p && !p.exhausted && ports.canReadyIdentity(s))
+        ports.queue(
+          s,
+          E("exhaust", { id: p.id }),
+          E("ready", { target: "hero" }),
+          ...((e.after as Effect[] | undefined) || []),
+        );
+      else ports.queue(s, ...((e.after as Effect[] | undefined) || []));
+      break;
+    }
+    case "fnep:harm": {
+      // X is your DEF: deal X damage to an enemy, then remove X threat.
+      const x = ports.heroDefense(s);
+      ports.attack(
+        s,
+        [enemyAttack("In Harm's Way", x)],
+        [schemeThwart("In Harm's Way", x)],
+      );
+      break;
+    }
+    case "fnep:see-no-evil":
+      ports.choose(
+        s,
+        "See No Evil, Hear No Evil",
+        "Choose 2 (the same option may be chosen twice).",
+        [
+          O("damage-damage", "Deal 3 damage to an enemy, twice", [
+            P("see-no-evil-resolve", { damage: 2, threat: 0 }),
+          ]),
+          O("damage-threat", "Deal 3 damage and remove 3 threat", [
+            P("see-no-evil-resolve", { damage: 1, threat: 1 }),
+          ]),
+          O("threat-threat", "Remove 3 threat from a scheme, twice", [
+            P("see-no-evil-resolve", { damage: 0, threat: 2 }),
+          ]),
+        ],
+      );
+      break;
+    case "fnep:see-no-evil-resolve": {
+      const damage = Number(e.damage || 0);
+      const threat = Array.from({ length: Number(e.threat || 0) }, () =>
+        schemeThwart("See No Evil, Hear No Evil", 3),
+      );
+      if (damage)
+        ports.attack(
+          s,
+          Array.from({ length: damage }, () =>
+            enemyAttack("See No Evil, Hear No Evil", 3),
+          ),
+          threat,
+        );
+      else ports.queue(s, ...threat);
       break;
     }
     case "fnep:de-escalation": {

@@ -42,8 +42,10 @@ const nativeAliases = new Map<string, string>([
   ["32016", "13033"],
   ["32046", "10015"],
   ["32051", "21022"],
-  // Fear No Evil: Chance Encounter.
+  // Fear No Evil: Chance Encounter, Powerful Punch and Superpower Training.
   ["60025", "26034"],
+  ["60051", "32014"],
+  ["60056", "40059"],
 ]);
 for (const card of catalog as Card[]) {
   const canonical = fingerprints.get(fingerprint(card));

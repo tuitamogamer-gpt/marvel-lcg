@@ -51,6 +51,7 @@ import { mtsPlayerPackCardResources } from "./mts-player-pack.js";
 import { isTextBlank } from "./card-text.js";
 import { MILANO, badoonMilanoSource } from "./badoon.js";
 import { godOfLiesResourceSources } from "./god-of-lies.js";
+import { echoReservedReflexes, echoSignLanguageSources } from "./echo.js";
 import { hawkeyeResourceSources } from "./hawkeye.js";
 import { spiderWomanResourceSources } from "./spider-woman.js";
 import { blackWidowResourceSources } from "./black-widow.js";
@@ -121,8 +122,12 @@ function localPaymentSources(
   handOnly = false,
 ) {
   const target = targetCode ? card(targetCode) : undefined;
+  // A tucked event's Photographic Reflexes is discarded, not spent.
+  const reserved = echoReservedReflexes(s, exclude);
   const sources: PaymentSource[] = s.player.hand
-    .filter((p) => p.id !== exclude && hulkCanSpendCard(s, p))
+    .filter(
+      (p) => p.id !== exclude && p.id !== reserved && hulkCanSpendCard(s, p),
+    )
     .map((p) => ({
       id: p.id,
       name: card(p).name,
@@ -401,6 +406,18 @@ export function paymentSources(
     for (const source of godOfLiesResourceSources(s))
       if (!sources.some((existing) => existing.id === source.id))
         sources.push(source);
+    // American Sign Language: a wild resource for an event played by any
+    // player.
+    for (const source of echoSignLanguageSources(s, targetCode))
+      if (!sources.some((existing) => existing.id === source.id))
+        sources.push(
+          source.playerId
+            ? {
+                ...source,
+                name: `${heroCard(seatView(s, source.playerId)).name} · ${source.name}`,
+              }
+            : source,
+        );
   }
   return sources.filter(
     (source) =>
