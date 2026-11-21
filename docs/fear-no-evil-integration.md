@@ -1,10 +1,10 @@
 # Fear No Evil, parts one to three: missions, Underlings and modular sets
 
-These imports open Fear No Evil. Its scenarios are missions: a mission main scheme played against a chosen Underling villain instead of a villain's own scenario. Part one added two missions, The Getaway and Art Museum Heist, the Underlings Bullseye, Electro and Hammerhead, and the Cops, Drive and The Owl modular sets. Part two added the Stop the Presses! mission, the Underlings Purple Man and Typhoid Mary, and the Tombstone and Tracksuit Mafia modular sets. Part three adds The Raft Breakout mission and the Disasters modular set. Every modular set of these parts joins every scenario.
+These imports open Fear No Evil. Its scenarios are missions: a mission main scheme played against a chosen Underling villain instead of a villain's own scenario. Part one added two missions, The Getaway and Art Museum Heist, the Underlings Bullseye, Electro and Hammerhead, and the Cops, Drive and The Owl modular sets. Part two added the Stop the Presses! mission, the Underlings Purple Man and Typhoid Mary, and the Tombstone and Tracksuit Mafia modular sets. Part three adds The Raft Breakout and Protection Racket missions and the Disasters modular set. Every modular set of these parts joins every scenario.
 
 ## Original source and scope
 
-`src/game/fear-no-evil.ts` registers 123 original faces, 62 from part one, 46 from part two and 15 from part three:
+`src/game/fear-no-evil.ts` registers 136 original faces, 62 from part one, 46 from part two and 28 from part three:
 
 - **The Getaway:** both sides of its main scheme, Out Front and its Alongside side, Escort Vehicle, Jackknifed Tanker Truck, Burning Rubber (2) and Pedestrians (2).
 - **Art Museum Heist:** both sides of its main scheme, the four Art attachments (Impossible Object, Inspiring Pottery, Replica Shield and Stunning Landscape), Art Thief (2) and Tug of War (2).
@@ -18,8 +18,9 @@ These imports open Fear No Evil. Its scenarios are missions: a mission main sche
 - **Tombstone:** Cold as Ice, Hard as Marble, Beetle, Tombstone and Hit List. **Tracksuit Mafia:** Ivan Banionis, The Clown, Tracksuit Mafioso, Tracksuit Bro (3) and Tracksuit Mafia.
 - **The Raft Breakout:** both sides of its main scheme, Master Key, the six Prisoners (Absorbing Man, Baron Zemo, Drang, Mysterio, Proxima Midnight and Rhino) and Imprisoned.
 - **Disasters:** Mystic Incursion, Sinking Ferry, Towering Inferno, Collapsing Bridge and Bystanders in Peril.
+- **Protection Racket:** both sides of its five main schemes (Battle in the Bodega, Bull in a China Shop, Hung Out to Dry, Pawn Shop Showdown and A Slice of the Pizza Dough), Shop Proprietor, Man-Bull and Change of Venue (2).
 
-The imported catalog, original source decks and artwork remain unchanged. The encounter deck holds the mission's set, the chosen Underling's set, the Standard set and two modular sets, with the Expert set in Expert; Cops and Drive are preselected for The Getaway, Cops and The Owl for Art Museum Heist, Tombstone and Tracksuit Mafia for Stop the Presses!, and The Owl and Tombstone for The Raft Breakout.
+The imported catalog, original source decks and artwork remain unchanged. The encounter deck holds the mission's set, the chosen Underling's set, the Standard set and two modular sets, with the Expert set in Expert; Cops and Drive are preselected for The Getaway, Cops and The Owl for Art Museum Heist, Tombstone and Tracksuit Mafia for Stop the Presses!, The Owl and Tombstone for The Raft Breakout, and Disasters and Tracksuit Mafia for Protection Racket.
 
 ## Native rules
 
@@ -41,6 +42,9 @@ The imported catalog, original source decks and artwork remain unchanged. The en
 - **Prisoners:** the six Elite Prisoners are villainous. Absorbing Man tucks the top card of your deck under him as he attacks you and gets +1 ATK for each resource type on the cards tucked under him. Baron Zemo places 1 threat on an ally without threat when revealed, and each ally with threat on it is a Deceived minion engaged with its controller while he is in play, with a blank text box and SCH equal to its THW. Drang gains a barrage counter after he attacks you, then you take 1 indirect damage for each. Mysterio deals that activation's treachery boost cards to you facedown after he attacks you. Proxima Midnight places 1 threat on the main scheme or gets +2 ATK as she attacks you. Rhino has toughness and overkill, and his boost gives the activating enemy a tough status card.
 - **Imprisoned:** it stays in your play area: you cannot thwart, attack or change to alter-ego form. Its Hero Action spends 3 resources of any type, or exhausts characters you control with a total THW of 3 or more, to discard it; its boost reveals it.
 - **Disasters:** Mystic Incursion, Sinking Ferry and Towering Inferno enter play with 2 civilian counters (Uses) and a crisis icon: while one is in play, no threat can be removed from the main scheme. Each Hero Action spends two resources of its type (mental, energy or physical), or exhausts a hero or ally you control, to remove 1 civilian counter, or 2 if the exhausted character is Mystic, Aerial or has a tough status card; the last counter discards it. Collapsing Bridge (hazard, hinder 2 per player) gets 1 threat back each time threat is removed from it. Bystanders in Peril (peril) places a civilian counter on a Disaster environment, or finds a Disaster and reveals it; its boost places a civilian counter.
+- **Protection Racket:** each player chooses a main scheme for their own play area, in player order, among those not yet chosen (they are dealt at random in Expert); the others are set aside. Each starts with no threat and completes at 10, and if any main scheme is completed or any player is eliminated, the players lose. Step one of the villain phase places the same threat, acceleration icons and tokens included, on every main scheme. The active player's main scheme is the one on the table: the villain and the minions engaged with that player scheme against it, and an effect that refers to the main scheme in a player's play area, or to "your" main scheme, uses that player's. Basic thwarts and thwart effects may target any main scheme, and a crisis icon protects all of them.
+- **The five main schemes:** Battle in the Bodega deals 1 damage to the attacker and places 1 threat on itself after a character in its play area is attacked (once per phase in Standard). Bull in a China Shop places threat equal to the excess damage dealt to an ally in its play area (an ally or a minion engaged with that player in Expert). Hung Out to Dry deals 1 damage to a character that enters play in its play area and places 1 threat. Pawn Shop Showdown makes the first upgrade played into its play area each round cost 1 less, and places 1 threat after an attachment or upgrade enters play there. A Slice of the Pizza Dough heals 1 damage from a character in its play area that defeats another character or a side scheme, and places 1 threat.
+- **Its encounter cards:** Shop Proprietor (surge), an ally of the encounter set, is shuffled into the encounter deck unowned and enters play under your control when revealed; as it leaves play, 4 threat goes on the main scheme in its play area. Man-Bull places threat on the main scheme equal to the excess damage his attack deals, and his boost does the same for the attack it boosts. Change of Venue (surge) swaps your main scheme with a random set-aside one, which keeps the threat; attachments on the previous main scheme are discarded, and its boost resolves it.
 - **Tracksuit Mafia:** each Tracksuit minion has teamwork: when it enters play with another Tracksuit minion in play, it activates against its player. Tracksuit Mafia tucks the first Tracksuit minion discarded from the encounter deck, and after a player reveals a Tracksuit minion, that player reveals one of the minions tucked there. Ivan Banionis gains an acceleration token when revealed and after he schemes; The Clown (villainous) gets a facedown boost card after he schemes. A defeated Tracksuit Mafioso (retaliate 2) or Tracksuit Bro is tucked under Tracksuit Mafia; without it, the Mafioso stuns and confuses its defeater and the Bro is shuffled into the encounter deck. Both are vulnerable.
 
 ## Interface
@@ -49,12 +53,13 @@ The imported catalog, original source decks and artwork remain unchanged. The en
 - The objective reads "Defeat Bullseye · stage 1 of 2" with the speed counters or the Art on the villain. The main scheme's note counts the speed counters or explains the acceleration X.
 - Out Front, the Spine, Electric Charge, Drained of Power and the Vehicles show their damage or counters. The Art pieces, Electric Charge, Hardheaded and Flight Serum offer their Hero Actions on the card; Wanted offers its Hero Action in its player's play area.
 - Mission setup also offers Purple Man and Typhoid Mary, explains Stop the Presses!, and with Typhoid Mary chosen explains how she is beaten. Her objective reads "Settle Mary's mind · N of 3 tokens on Disturbed Psyche", and Stop the Presses!'s main scheme notes the undefended-attack choice.
+- Protection Racket's help explains the separate main schemes. The main scheme on the table notes its own Forced Response, whose play area it is in, and each other player's main scheme with its threat; thwarts offer the other main schemes as targets, and Shop Proprietor's caption states its Forced Interrupt.
 - The Raft Breakout's help explains the Master Key and the Prisoners; its main scheme notes the threat each defeated minion removes, Master Key explains its Forced Response, Absorbing Man counts the cards tucked under him and his ATK bonus, Drang his barrage counters, a Deceived ally is marked and Imprisoned's caption states its restrictions. Each Disaster counts its civilian counters and offers its Hero Actions on the card; Collapsing Bridge explains its Forced Response.
 - Disturbed Psyche counts its damage and threat tokens. The Daily Bugle explains its Alter-Ego Action and offers it for each ready Daily Bugle support you control. The Daily Bugle supports are captioned with their stamina counters and Purple Man's commands with their command counters, with their Actions and Forced Actions on the card. Establish Trust, Exclusive Interview and Tracksuit Mafia carry captions, the last counting its tucked minions; Mary Walker and Assembled Armor show their state, Ivan Banionis counts his acceleration tokens and a Converted ally is marked.
 
 ## Coverage boundaries
 
-- Only standalone missions are playable: the campaign's check marks, Protection Racket, Kingpin, Daredevil, Echo and the other Fear No Evil sets follow in later imports.
+- Only standalone missions are playable: the campaign's check marks, Kingpin, Daredevil, Echo and the other Fear No Evil sets follow in later imports.
 - Art Museum Heist's acceleration X counts per player, like The Getaway's printed acceleration.
 - Out Front replaces damage before tough and before the Vehicles take it; Vehicles take damage before Adamantium-Laced Spine prevents it.
 - Whiplash's interrupt resolves as the attack's damage is dealt, still spending its charge counter even if the attack defeats him.
@@ -66,18 +71,26 @@ The imported catalog, original source decks and artwork remain unchanged. The en
 - Firefighter and Security Guard choose among the cards that can leave play: a permanent support, upgrade or ally stays in play.
 - Typhoid Mary's damage and threat tokens are tracked on Disturbed Psyche; she flips as the round ends, after the villain phase.
 - Betty Brant's Interrupt is offered when a boost card is turned faceup during an enemy activation; Robbie Robertson's Response follows every facedown encounter card dealt to a player.
+- Protection Racket's villain, minion, side scheme and environment effects that refer to "the main scheme" use the active player's main scheme, not every main scheme at once.
 - Imprisoned's restrictions apply to your identity: allies can still attack and thwart, as with Wrapped in Metal.
 - A Disaster's crisis icon also counts for effects that ignore crisis, such as Shadowcat's.
 - Absorbing Man tucks nothing when your deck is empty; the cards tucked under him go to their owner's discard pile when he leaves play.
-- The executable registry contains 3,638 faces, including 3,200 dedicated faces, with 913 imported faces still unsupported. There are 57 playable identities, fifty-seven scenarios and 102 modular sets. The inventory pins 177 source files.
+- The executable registry contains 3,651 faces, including 3,213 dedicated faces, with 900 imported faces still unsupported. There are 57 playable identities, fifty-eight scenarios and 102 modular sets. The inventory pins 177 source files.
 
-The configured source matrix contains 589,264 cases in sixteen disjoint shards of 36,829; CI runs the sixteen shards in parallel. Part three adds 16,432 cases:
+The configured source matrix contains 600,184 cases in sixteen disjoint shards of 37,511 or 37,512; CI runs the sixteen shards in parallel. Protection Racket adds 10,920 cases:
+
+- 10,608 for Protection Racket: 52 expansion starter identities × two difficulties × all 102 modular sets;
+- 312 with Standard II and Expert II, with Standard III, or with the S.H.I.E.L.D. Executive Board added to it.
+
+Manifest hashes retain all 589,264 previous mission names and seeds, checked against the complete grid of `b9d86e6`.
+
+The Raft Breakout and the Disasters added 16,432 cases:
 
 - 10,608 for The Raft Breakout: 52 expansion starter identities × two difficulties × all 102 modular sets;
 - 312 with Standard II and Expert II, with Standard III, or with the S.H.I.E.L.D. Executive Board added to it;
 - 5,512 with the Disasters set in each of the fifty-three other scenarios with modular sets that allow it.
 
-Manifest hashes retain all 572,832 previous mission names and seeds, checked against the complete grid of `67c6cc6`.
+Their manifest hashes retained all 572,832 earlier mission names and seeds, checked against the complete grid of `67c6cc6`.
 
 Part two added 21,632 cases:
 
@@ -95,4 +108,4 @@ Part one added 36,816 cases:
 
 Its manifest hashes retained all 514,384 earlier mission names and seeds, checked against the complete grid of `ba7b749`.
 
-Rules references: the Fear No Evil rules insert (missions, Underlings and standalone setup) and the original card texts, [Rules Reference 1.8](https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf) (Acceleration Tokens, Crisis, Elite, Guard, Hazard, Hinder, Overkill, Patrol, Peril, Permanent, Piercing, Quickstrike, Ranged, Retaliate, Stalwart, Surge, Teamwork, Toughness, Uses, Villainous, Vulnerable).
+Rules references: the Fear No Evil rules insert (missions, Underlings and standalone setup) and the original card texts, [Rules Reference 1.8](https://cdn.svc.asmodee.net/production-fantasyflightgames/uploads/2026/09/mc_rulesreference_v18_compressed.pdf) (Acceleration Tokens, Crisis, Elimination, Elite, Guard, Hazard, Hinder, Overkill, Patrol, Peril, Permanent, Piercing, Quickstrike, Ranged, Retaliate, Stalwart, Surge, Teamwork, Toughness, Uses, Villainous, Vulnerable).

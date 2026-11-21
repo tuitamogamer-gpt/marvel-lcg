@@ -956,10 +956,24 @@ h3 {
   font-size: 7px;
   line-height: 1.2;
 }
-/* Melee in the Mojo-seum's one-line completion note sits below the threat
- * line: the threat token, anchored to the bottom, rises by that line. */
+/* Scenarios with notes under the main scheme: the threat token lies on the
+ * card's lower right corner however many lines the notes wrap to, instead
+ * of rising from the bottom of the column by one line. */
+.app .physical-table .main-scheme.magog-scheme {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+}
+.app .physical-table .main-scheme.magog-scheme > .scheme-card,
 .app .physical-table .main-scheme.magog-scheme > .stat-token {
-  bottom: 38px;
+  grid-area: 2 / 1;
+}
+.app .physical-table .main-scheme.magog-scheme > .stat-token {
+  position: relative;
+  right: -5px;
+  bottom: 0;
+  align-self: end;
+  justify-self: end;
 }
 /* On the narrowest phones the crowds wrap below the main scheme instead of
  * scrolling out of the lane. */

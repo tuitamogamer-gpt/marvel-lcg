@@ -5,7 +5,7 @@ import type {
   MutagenEnginePorts,
   MutagenForcedResponse,
 } from "./mutagen-formula.js";
-import { playerOrder, seatView } from "./team.js";
+import { onSeatActivated, playerOrder, seatView } from "./team.js";
 import type {
   Card,
   Effect,
@@ -30,6 +30,7 @@ export const FNE_MISSION_IDS = [
   HEIST_ID,
   "fne_stop_the_presses",
   "fne_the_raft_breakout",
+  "fne_protection_racket",
 ];
 
 export const UNDERLINGS = {
@@ -307,6 +308,41 @@ const PART_THREE_SCRIPT_CODES = [
   PERIL,
 ];
 
+// Protection Racket
+export const RACKET_ID = "fne_protection_racket";
+export const RACKET_SCHEMES = [
+  "60134b",
+  "60135b",
+  "60136b",
+  "60137b",
+  "60138b",
+];
+const BODEGA = "60134b";
+const CHINA_SHOP = "60135b";
+const HUNG_OUT = "60136b";
+const PAWN_SHOP = "60137b";
+const PIZZA = "60138b";
+export const PROPRIETOR = "60139";
+const MAN_BULL = "60140";
+const VENUE = "60141";
+/** Part four's faces. */
+const PART_FOUR_CODES = [
+  "60134a",
+  "60134b",
+  "60135a",
+  "60135b",
+  "60136a",
+  "60136b",
+  "60137a",
+  "60137b",
+  "60138a",
+  "60138b",
+  PROPRIETOR,
+  MAN_BULL,
+  VENUE,
+];
+const PART_FOUR_SCRIPT_CODES = [PROPRIETOR, MAN_BULL, VENUE];
+
 /** Every face registered by this import. */
 export const FEAR_NO_EVIL_CODES = [
   "60065",
@@ -373,6 +409,7 @@ export const FEAR_NO_EVIL_CODES = [
   SWOOP,
   ...PART_TWO_CODES,
   ...PART_THREE_CODES,
+  ...PART_FOUR_CODES,
 ] as const;
 
 /** The encounter cards scripted here: everything that can be revealed. */
@@ -422,6 +459,7 @@ export const FNE_SCRIPT_CODES: readonly string[] = [
   SWOOP,
   ...PART_TWO_SCRIPT_CODES,
   ...PART_THREE_SCRIPT_CODES,
+  ...PART_FOUR_SCRIPT_CODES,
 ];
 /** The attachments among them, which enter play through their own entry. */
 export const FNE_ATTACHMENT_CODES: readonly string[] = [
@@ -525,6 +563,21 @@ export interface FearNoEvilState {
   tucked?: Record<string, Piece[]>;
   /** The Raft Breakout: its Prisoners were revealed at setup. */
   raftSetup?: boolean;
+  /** Protection Racket: each player's main scheme; the focused one is the
+   * native s.scheme. */
+  racket?: {
+    focus: string;
+    schemes: Record<string, { code: string; threat: number; index: number }>;
+    names?: Record<string, string>;
+    setAside: string[];
+    chosen?: boolean;
+    /** Battle in the Bodega's once-per-phase limit in standard mode. */
+    bodega?: Record<string, string>;
+    /** Pawn Shop Showdown: the round its discount was used. */
+    pawn?: Record<string, number>;
+    /** Shop Proprietor and its controller. */
+    proprietors?: Record<string, string>;
+  };
 }
 
 export interface FearNoEvilPorts extends MutagenEnginePorts {
@@ -775,13 +828,14 @@ export function fearNoEvilSetup(s: GameState, ports: FearNoEvilPorts) {
   }
   partTwoSetup(s, ports);
   partThreeSetup(s, ports);
+  partFourSetup(s, ports);
 }
 
 // ------------------------------------------------------------- villain
 
 /** The Underling stages' When Revealed abilities. */
 export function fneVillainRevealed(s: GameState): Effect[] {
-  return [...underlingRevealed(s), ...raftPrisoners(s)];
+  return [...underlingRevealed(s), ...raftPrisoners(s), ...racketChoices(s)];
 }
 function underlingRevealed(s: GameState): Effect[] {
   if (!s.fearNoEvil || !s.villain || isTextBlank(s, s.villain)) return [];
@@ -838,6 +892,16 @@ export function fneMainNote(s: GameState) {
     return `Undefended attacks: ${expert(s) ? 3 : 2} threat here or 1 stamina`;
   if (s.scheme.code === RAFT)
     return "Each defeated minion removes 1 threat here (Elite: 2)";
+  if (s.scheme.code === BODEGA)
+    return `Your character attacked: 1 damage to the attacker, 1 threat here${expert(s) ? "" : " (once per phase)"}`;
+  if (s.scheme.code === CHINA_SHOP)
+    return `Excess damage to your allies${expert(s) ? " or minions" : ""} becomes threat here`;
+  if (s.scheme.code === HUNG_OUT)
+    return "A character entering your play area: 1 damage to it, 1 threat here";
+  if (s.scheme.code === PAWN_SHOP)
+    return "First upgrade each round costs 1 less; attachments and upgrades here add 1 threat";
+  if (s.scheme.code === PIZZA)
+    return "Your character defeats a character or side scheme: it heals 1, 1 threat here";
   return "";
 }
 /** A caption for the counters and damage on this import's attachments. */
@@ -888,6 +952,8 @@ export function fneInPlayCaption(s: GameState, p: Piece) {
     return `${plural(p.counters || 0, "command counter")} · Forced Action before your turn ends`;
   if (p.code === IMPRISONED)
     return "You cannot thwart, attack or change to alter-ego form";
+  if (p.code === PROPRIETOR)
+    return "Leaves play: 4 threat on the main scheme in your play area";
   return "";
 }
 /** The counters on this import's cards in a player's play area. */
@@ -1018,7 +1084,7 @@ export function fneRevealCard(s: GameState, p: Piece, c: Card): Card {
 }
 function gainsSurge(s: GameState, p: Piece) {
   const playerId = s.activePlayerId;
-  if (partTwoSurge(s, p)) return true;
+  if (partTwoSurge(s, p) || partFourSurge(s, p)) return true;
   switch (p.code) {
     case ESCORT:
       return speed(s) >= 9;
@@ -1140,6 +1206,7 @@ export function fneDamageTaken(
 export function fneCheck(s: GameState, ports: FearNoEvilPorts) {
   if (!s.fearNoEvil || over(s) || !s.villain) return;
   partTwoCheck(s, ports);
+  partFourCheck(s, ports);
   if (over(s)) return;
   const out = villainAttachment(s, OUT_FRONT);
   if (!out || s.scheme.threat > 0) return;
@@ -1370,6 +1437,7 @@ export function fneAfterAttack(
   for (const [key, title, effects, sourceId] of [
     ...partTwoAfterAttack(s, r),
     ...partThreeAfterAttack(s, r),
+    ...partFourAfterAttack(s, r),
   ])
     respond(key, title, effects, sourceId);
   return responses;
@@ -1425,6 +1493,7 @@ export function fneMinionDefeated(
   m: Piece,
   textWasBlank: boolean,
   defeaterId: string,
+  source?: string,
 ): Effect[] {
   const effects: Effect[] = [];
   if (!textWasBlank && m.code === COP)
@@ -1435,16 +1504,23 @@ export function fneMinionDefeated(
     effects.push(F("consolidate", { id: m.id }));
   effects.push(...partTwoMinionDefeated(s, m, textWasBlank, defeaterId));
   effects.push(...partThreeMinionDefeated(s, m));
+  effects.push(...racketDefeated(s, source));
   return effects;
 }
 /** When Defeated: Charging Up. */
-export function fneSchemeDefeated(s: GameState, p: Piece): Effect[] {
+export function fneSchemeDefeated(
+  s: GameState,
+  p: Piece,
+  source?: string,
+): Effect[] {
+  const effects: Effect[] = [];
   if (p.code === CHARGING && !isTextBlank(s, p) && chargeCard(s))
-    return [F("charge", { n: 3 })];
+    effects.push(F("charge", { n: 3 }));
   // Tracksuit Mafia's tucked minions go to the encounter discard pile.
   if (p.code === TRACKSUIT && s.fearNoEvil?.tucked?.[p.id]?.length)
-    return [F("untuck", { id: p.id })];
-  return [];
+    effects.push(F("untuck", { id: p.id }));
+  effects.push(...racketDefeated(s, source));
+  return effects;
 }
 
 // ------------------------------------------------------- Drained of Power
@@ -1682,7 +1758,12 @@ export function fneReveal(s: GameState, p: Piece): Effect[] | null {
     case SWOOP:
       return [F("swoop", { playerId, hero, actorId: playerId })];
     default:
-      return partTwoReveal(s, p) ?? partThreeReveal(s, p) ?? [];
+      return (
+        partTwoReveal(s, p) ??
+        partThreeReveal(s, p) ??
+        partFourReveal(s, p) ??
+        []
+      );
   }
 }
 export function fneBoost(s: GameState, p: Piece): Effect[] | null {
@@ -1692,6 +1773,8 @@ export function fneBoost(s: GameState, p: Piece): Effect[] | null {
   if (two) return two;
   const three = partThreeBoost(s, p);
   if (three) return three;
+  const four = partFourBoost(s, p);
+  if (four) return four;
   const a = s.attack;
   switch (p.code) {
     case BLOODLUST:
@@ -3163,6 +3246,7 @@ export function resolveFearNoEvilEffect(
     default:
       if (resolvePartTwo(s, e, ports)) break;
       if (resolvePartThree(s, e, ports)) break;
+      if (resolvePartFour(s, e, ports)) break;
       throw Error(`Unknown Fear No Evil effect: ${e.type}`);
   }
   return true;
@@ -3625,8 +3709,9 @@ export function fneAcceleration(s: GameState) {
 /** Teamwork (Tracksuit): the entering minion activates against you if
  * another Tracksuit minion is in play. */
 export function fneEngaged(s: GameState, p: Piece): Effect[] {
-  if (!tracksuit(p) || !active(s, p)) return [];
-  return [F("teamwork", { id: p.id })];
+  const entered = racketMinionEntered(s, p);
+  if (!tracksuit(p) || !active(s, p)) return entered;
+  return [...entered, F("teamwork", { id: p.id })];
 }
 
 // ------------------------------------------------------------ activations
@@ -5435,3 +5520,598 @@ function resolvePartThree(
 }
 const findEnvCode = (s: GameState, id: unknown) =>
   (s.environments || []).find((q) => q.id === id)?.code || "";
+
+// ============================================================ part four
+
+/** Fear No Evil, part four: the Protection Racket mission, a separate main
+ * scheme in each player's play area. */
+
+type RacketScheme = { code: string; threat: number; index: number };
+const racket = (s: GameState) =>
+  s.fearNoEvil?.mission === RACKET_ID ? s.fearNoEvil.racket : undefined;
+/** A player's main scheme, wherever the focus is. */
+function racketScheme(
+  s: GameState,
+  playerId: string,
+): RacketScheme | undefined {
+  const r = racket(s);
+  if (!r || !r.schemes[playerId]) return undefined;
+  return r.focus === playerId ? s.scheme : r.schemes[playerId];
+}
+const racketCode = (s: GameState, playerId: string | undefined) =>
+  playerId ? racketScheme(s, playerId)?.code : undefined;
+/** The player's main scheme becomes the native s.scheme. */
+function racketFocus(s: GameState, playerId: string) {
+  const r = racket(s);
+  if (!r || r.focus === playerId || !r.schemes[playerId]) return;
+  r.schemes[r.focus] = { ...s.scheme };
+  s.scheme = { ...r.schemes[playerId] };
+  r.focus = playerId;
+}
+onSeatActivated((s) => {
+  if (racket(s)) racketFocus(s, s.activePlayerId);
+});
+/** Run fn with another player's main scheme native, then restore. */
+export function withRacketFocus<R>(
+  s: GameState,
+  playerId: string,
+  fn: () => R,
+): R {
+  const r = racket(s);
+  if (!r || r.focus === playerId || !r.schemes[playerId]) return fn();
+  const previous = r.focus;
+  racketFocus(s, playerId);
+  try {
+    return fn();
+  } finally {
+    racketFocus(s, previous);
+  }
+}
+/** The target id of another player's main scheme. */
+export function fneRacketTarget(target: string | undefined) {
+  return target?.startsWith("racket:") ? target.slice(7) : undefined;
+}
+/** The main schemes out of focus are legal targets too. */
+export function fneRacketTargets(s: GameState, thwarting: boolean) {
+  const r = racket(s);
+  if (!r) return [];
+  return playerOrder(s)
+    .filter((seat) => seat.id !== r.focus && r.schemes[seat.id])
+    .filter((seat) => !thwarting || r.schemes[seat.id].threat > 0)
+    .map((seat) => ({
+      id: `racket:${seat.id}`,
+      label: `${name(r.schemes[seat.id].code)} (${r.names?.[seat.id] || seat.id})`,
+      code: r.schemes[seat.id].code,
+    }));
+}
+/** The threat on a main scheme out of focus. */
+export function fneRacketThreat(s: GameState, target: string) {
+  const playerId = fneRacketTarget(target);
+  return playerId ? racketScheme(s, playerId)?.threat || 0 : 0;
+}
+/** Protection Racket's main schemes complete at 10 threat. */
+export function fneMainLimit(s: GameState): number | undefined {
+  return racket(s) && RACKET_SCHEMES.includes(s.scheme.code) ? 10 : undefined;
+}
+/** Step one of the villain phase: each main scheme gains the same threat. */
+export function fneStepOne(s: GameState, amount: number): Effect[] {
+  return racket(s) && amount > 0 ? [F("racket-step-one", { amount })] : [];
+}
+/** The other players' main schemes, for the interface. */
+export function fneRacketOthers(s: GameState) {
+  const r = racket(s);
+  if (!r) return [];
+  return playerOrder(s)
+    .filter((seat) => seat.id !== r.focus && r.schemes[seat.id])
+    .map((seat) => ({
+      playerId: seat.id,
+      name: r.names?.[seat.id] || seat.id,
+      code: r.schemes[seat.id].code,
+      threat: r.schemes[seat.id].threat,
+    }));
+}
+/** Protection Racket: whose play area the shown main scheme is in, and
+ * the other players' main schemes with their threat. */
+export function fneRacketNote(s: GameState) {
+  const r = racket(s);
+  if (!r) return "";
+  return [
+    `In ${r.names?.[r.focus] || r.focus}'s play area`,
+    ...fneRacketOthers(s).map(
+      (o) => `${o.name}: ${name(o.code)}, ${o.threat} of 10 threat`,
+    ),
+  ].join(" · ");
+}
+/** Threat on a player's main scheme; the focused one through the native
+ * threat effect. */
+function racketThreat(s: GameState, playerId: string, n: number): Effect[] {
+  if (n <= 0) return [];
+  const r = racket(s);
+  if (!r || r.focus === playerId)
+    return [{ type: "threat", target: "main", amount: n }];
+  return [F("racket-threat", { playerId, amount: n })];
+}
+
+// ------------------------------------------------------------- setup
+
+/** Each player chooses a Protection Racket main scheme (at random in
+ * expert mode); the others are set aside. */
+function partFourSetup(s: GameState, ports: FearNoEvilPorts) {
+  const st = s.fearNoEvil!;
+  if (st.mission !== RACKET_ID) return;
+  const pool = expert(s)
+    ? ports.shuffle(s, [...RACKET_SCHEMES])
+    : [...RACKET_SCHEMES];
+  const schemes: Record<string, RacketScheme> = {};
+  const names: Record<string, string> = {};
+  for (const seat of playerOrder(s)) {
+    const code = pool.shift()!;
+    schemes[seat.id] = { code, threat: 0, index: s.scheme.index };
+    names[seat.id] = ports.heroName(s, seat.id);
+  }
+  st.racket = {
+    focus: s.activePlayerId,
+    schemes,
+    names,
+    setAside: pool,
+    chosen: expert(s),
+  };
+  s.scheme = { ...schemes[s.activePlayerId] };
+  // Shop Proprietor, the set's ally, is shuffled into the encounter deck; it
+  // belongs to no player until it enters play.
+  const proprietor = ports.makePiece(s, PROPRIETOR);
+  delete proprietor.ownerId;
+  s.encounter.deck = ports.shuffle(s, [...s.encounter.deck, proprietor]);
+  ports.log(
+    s,
+    expert(s)
+      ? `Protection Racket: ${playerOrder(s)
+          .map(
+            (seat) => `${names[seat.id]} faces ${name(schemes[seat.id].code)}`,
+          )
+          .join("; ")}.`
+      : "Protection Racket: each player chooses a main scheme for their play area.",
+  );
+}
+/** Standard: each player chooses their main scheme, in player order. */
+function racketChoices(s: GameState): Effect[] {
+  const r = racket(s);
+  if (!r || r.chosen) return [];
+  r.chosen = true;
+  return playerOrder(s).map((seat) =>
+    F("racket-choose", { playerId: seat.id, actorId: seat.id }),
+  );
+}
+
+// ------------------------------------------------------------- rules
+
+function partFourCheck(s: GameState, ports: FearNoEvilPorts) {
+  const r = racket(s);
+  if (!r || over(s)) return;
+  if (s.players.some((seat) => seat.eliminated)) {
+    ports.endGame(
+      s,
+      false,
+      "A player is eliminated: the Protection Racket takes the neighborhood.",
+    );
+    return;
+  }
+  for (const seat of playerOrder(s)) {
+    const scheme = racketScheme(s, seat.id);
+    if (seat.id !== r.focus && scheme && scheme.threat >= 10) {
+      ports.endGame(
+        s,
+        false,
+        `${name(scheme.code)} is completed: the Protection Racket wins.`,
+      );
+      return;
+    }
+  }
+  // Shop Proprietor: 4 threat on its controller's main scheme as it leaves.
+  for (const [id, playerId] of Object.entries(r.proprietors || {})) {
+    if (findCharacter(s, id)) continue;
+    delete r.proprietors![id];
+    for (const seat of s.players) {
+      const view = seatView(s, seat.id).player;
+      const i = view.discard.findIndex((q) => q.id === id);
+      if (i >= 0) s.encounter.discard.push(...view.discard.splice(i, 1));
+    }
+    ports.log(
+      s,
+      "Shop Proprietor leaves play: 4 threat on the main scheme in its play area.",
+      "bad",
+    );
+    ports.queue(s, ...racketThreat(s, playerId, 4));
+  }
+}
+function partFourSurge(s: GameState, p: Piece) {
+  return p.code === PROPRIETOR || p.code === VENUE;
+}
+/** Pawn Shop Showdown: the first upgrade played into this play area each
+ * round costs 1 less. */
+export function fneCostReduction(s: GameState, p: { code: string }) {
+  const r = racket(s);
+  if (!r || typeOf(p.code) !== "upgrade") return 0;
+  const playerId = s.activePlayerId;
+  return racketCode(s, playerId) === PAWN_SHOP && r.pawn?.[playerId] !== s.round
+    ? 1
+    : 0;
+}
+/** A player card played into play: Pawn Shop Showdown's upgrades. */
+export function fneCardPlayed(s: GameState, p: Piece, playerId: string) {
+  const r = racket(s);
+  if (!r || typeOf(p) !== "upgrade" || racketCode(s, playerId) !== PAWN_SHOP)
+    return [];
+  (r.pawn ||= {})[playerId] = s.round;
+  return [F("pawn", { playerId, id: p.id })];
+}
+/** An encounter attachment attaches to a character in a play area. */
+export function fneAttached(s: GameState, p: Piece, target: string): Effect[] {
+  if (!racket(s) || typeOf(p) !== "attachment") return [];
+  const playerId = target.startsWith("hero:")
+    ? target.slice(5)
+    : allyOwner(s, target) ||
+      s.minions.find((m) => m.id === target)?.engagedWith;
+  return playerId && racketCode(s, playerId) === PAWN_SHOP
+    ? [F("pawn", { playerId, id: p.id })]
+    : [];
+}
+/** Hung Out to Dry: an ally enters play in this play area. */
+export function fneAllyEntered(s: GameState, p: Piece): Effect[] {
+  const playerId = allyOwner(s, p.id);
+  return playerId && racketCode(s, playerId) === HUNG_OUT
+    ? [F("hung-out", { id: p.id, playerId })]
+    : [];
+}
+function racketMinionEntered(s: GameState, p: Piece): Effect[] {
+  return p.engagedWith && racketCode(s, p.engagedWith) === HUNG_OUT
+    ? [F("hung-out", { id: p.id, playerId: p.engagedWith })]
+    : [];
+}
+/** The play area of a character about to take damage: its controller's
+ * for an ally, the engaged player's for a minion. */
+export function fneDamageArea(
+  s: GameState,
+  target: string,
+): { playerId: string; kind: "ally" | "minion" } | undefined {
+  if (!racket(s)) return undefined;
+  const ally = findCharacter(s, target);
+  if (ally && typeOf(ally) === "ally") {
+    const playerId = allyOwner(s, target);
+    return playerId ? { playerId, kind: "ally" } : undefined;
+  }
+  const minion = s.minions.find((m) => m.id === target);
+  return minion?.engagedWith
+    ? { playerId: minion.engagedWith, kind: "minion" }
+    : undefined;
+}
+/** Damage dealt: Bull in a China Shop's and Man-Bull's excess damage. */
+export function fneDamageDealt(
+  s: GameState,
+  target: string,
+  source: string,
+  attack: boolean,
+  excess: number,
+  area?: { playerId: string; kind: "ally" | "minion" },
+): Effect[] {
+  if (excess <= 0) return [];
+  const effects: Effect[] = [];
+  // Bull in a China Shop: an ally (in expert mode, an ally or a minion) in
+  // this play area.
+  if (
+    area &&
+    racketCode(s, area.playerId) === CHINA_SHOP &&
+    (area.kind === "ally" || expert(s))
+  )
+    effects.push(F("china-shop", { playerId: area.playerId, amount: excess }));
+  if (attack) {
+    const attacker = s.minions.find((m) => m.id === source);
+    // Man-Bull: threat equal to the excess damage of his attack.
+    if (attacker?.code === MAN_BULL && active(s, attacker))
+      effects.push(
+        F("man-bull", {
+          playerId: attacker.engagedWith || s.activePlayerId,
+          amount: excess,
+        }),
+      );
+    // Man-Bull's boost: the same for the activation it boosted.
+    const a = s.attack;
+    if (a?.fneManBull && a.attacker === source)
+      effects.push(
+        F("man-bull", {
+          playerId: a.originalPlayerId || s.activePlayerId,
+          amount: excess * a.fneManBull,
+        }),
+      );
+  }
+  return effects;
+}
+
+// ------------------------------------------------------------ activations
+
+function partFourAfterAttack(s: GameState, r: FneAttackReceipt) {
+  const out: [string, string, Effect[], string?][] = [];
+  const rk = racket(s);
+  if (!rk || !alive(s, r.playerId)) return out;
+  const code = racketCode(s, r.playerId);
+  // Battle in the Bodega: a character in this play area was attacked.
+  if (code === BODEGA) {
+    const key = `${s.round}:${s.phase}`;
+    if (expert(s) || rk.bodega?.[r.playerId] !== key)
+      out.push([
+        "bodega",
+        name(BODEGA),
+        [
+          F("bodega", {
+            playerId: r.playerId,
+            attackerId: r.attackerId,
+            key,
+            actorId: r.playerId,
+          }),
+        ],
+      ]);
+  }
+  // A Slice of the Pizza Dough: a minion in this play area defeated a
+  // character.
+  const m = s.minions.find((q) => q.id === r.attackerId);
+  if (
+    r.defeatedAlly &&
+    m?.engagedWith &&
+    racketCode(s, m.engagedWith) === PIZZA
+  )
+    out.push([
+      "pizza",
+      name(PIZZA),
+      [F("pizza", { playerId: m.engagedWith, character: m.id })],
+    ]);
+  return out;
+}
+/** A Slice of the Pizza Dough: a character in this play area defeated a
+ * minion or a side scheme. */
+function racketDefeated(s: GameState, source: string | undefined): Effect[] {
+  if (!racket(s) || !source) return [];
+  const playerId =
+    source === "hero"
+      ? s.activePlayerId
+      : source.startsWith("hero:")
+        ? source.slice(5)
+        : allyOwner(s, source);
+  if (!playerId || racketCode(s, playerId) !== PIZZA) return [];
+  const character =
+    source === "hero" || source.startsWith("hero:")
+      ? identityOf(playerId)
+      : source;
+  return [F("pizza", { playerId, character })];
+}
+
+// ------------------------------------------------------------ reveals
+
+function partFourReveal(s: GameState, p: Piece): Effect[] | null {
+  const playerId = s.activePlayerId;
+  switch (p.code) {
+    case PROPRIETOR:
+      return [F("proprietor", { id: p.id, playerId, actorId: playerId })];
+    case VENUE:
+      return [F("venue", { playerId, actorId: playerId })];
+    default:
+      return PART_FOUR_SCRIPT_CODES.includes(p.code) ? [] : null;
+  }
+}
+function partFourBoost(s: GameState, p: Piece): Effect[] | null {
+  const playerId = boostPlayer(s);
+  switch (p.code) {
+    case MAN_BULL:
+      return s.attack ? [F("man-bull-boost")] : [];
+    case VENUE:
+      return [F("venue", { playerId, actorId: playerId })];
+    default:
+      return PART_FOUR_SCRIPT_CODES.includes(p.code) ? [] : null;
+  }
+}
+
+// ------------------------------------------------------------ resolver
+
+function resolvePartFour(
+  s: GameState,
+  e: Effect,
+  ports: FearNoEvilPorts,
+): boolean {
+  const r = racket(s);
+  switch (e.type) {
+    case "fne:racket-choose": {
+      // Standard: choose your main scheme among those not yet chosen.
+      const playerId = String(e.playerId);
+      if (!r || !r.schemes[playerId]) return true;
+      const current = racketScheme(s, playerId)!.code;
+      const choices = [current, ...r.setAside];
+      ports.choose(
+        s,
+        "Protection Racket",
+        `${r.names?.[playerId] || playerId}: choose the main scheme for your play area.`,
+        choices.map((code) =>
+          option(code, name(code), [F("racket-set", { playerId, code })], code),
+        ),
+      );
+      return true;
+    }
+    case "fne:racket-set": {
+      const playerId = String(e.playerId);
+      const scheme = r && racketScheme(s, playerId);
+      if (!r || !scheme) return true;
+      const code = String(e.code);
+      if (code !== scheme.code) {
+        r.setAside = [...r.setAside.filter((c) => c !== code), scheme.code];
+        scheme.code = code;
+      }
+      ports.log(
+        s,
+        `${r.names?.[playerId] || playerId} protects ${name(code)}.`,
+      );
+      return true;
+    }
+    case "fne:racket-step-one": {
+      // Each main scheme out of focus gains the same threat.
+      if (!r) return true;
+      for (const seat of playerOrder(s)) {
+        if (seat.id === r.focus || !r.schemes[seat.id]) continue;
+        r.schemes[seat.id].threat += Number(e.amount) || 0;
+        ports.log(
+          s,
+          `${name(r.schemes[seat.id].code)} gains ${e.amount} threat (${r.schemes[seat.id].threat} of 10).`,
+          "bad",
+        );
+      }
+      return true;
+    }
+    case "fne:racket-threat": {
+      const playerId = String(e.playerId);
+      if (!r || !r.schemes[playerId]) return true;
+      if (r.focus === playerId) {
+        ports.queue(s, { type: "threat", target: "main", amount: e.amount });
+        return true;
+      }
+      r.schemes[playerId].threat += Number(e.amount) || 0;
+      ports.log(
+        s,
+        `${name(r.schemes[playerId].code)} gains ${e.amount} threat (${r.schemes[playerId].threat} of 10).`,
+        "bad",
+      );
+      return true;
+    }
+    case "fne:bodega": {
+      // 1 damage to the attacker and 1 threat here.
+      const playerId = String(e.playerId);
+      if (!r || !alive(s, playerId)) return true;
+      if (!expert(s)) {
+        if (r.bodega?.[playerId] === e.key) return true;
+        (r.bodega ||= {})[playerId] = String(e.key);
+      }
+      const attacker = String(e.attackerId);
+      ports.queue(
+        s,
+        ...(enemyIds(s).includes(attacker)
+          ? [
+              {
+                type: "damage",
+                target: attacker,
+                amount: 1,
+                source: BODEGA,
+                origin: "encounter",
+              },
+            ]
+          : []),
+        ...racketThreat(s, playerId, 1),
+      );
+      return true;
+    }
+    case "fne:china-shop":
+      ports.log(
+        s,
+        `Bull in a China Shop: ${e.amount} excess damage becomes threat.`,
+        "bad",
+      );
+      ports.queue(s, ...racketThreat(s, String(e.playerId), Number(e.amount)));
+      return true;
+    case "fne:man-bull":
+      ports.log(
+        s,
+        `Man-Bull: ${e.amount} excess damage becomes threat on the main scheme.`,
+        "bad",
+      );
+      ports.queue(
+        s,
+        ...(r
+          ? racketThreat(s, String(e.playerId), Number(e.amount))
+          : [{ type: "threat", target: "main", amount: e.amount }]),
+      );
+      return true;
+    case "fne:man-bull-boost": {
+      const a = s.attack;
+      if (a) a.fneManBull = (a.fneManBull || 0) + 1;
+      return true;
+    }
+    case "fne:hung-out": {
+      // 1 damage to the character entering play, 1 threat here.
+      const playerId = String(e.playerId);
+      const id = String(e.id);
+      const present =
+        !!findCharacter(s, id) || s.minions.some((m) => m.id === id);
+      ports.queue(
+        s,
+        ...(present
+          ? [
+              {
+                type: "damage",
+                target: id,
+                amount: 1,
+                source: HUNG_OUT,
+                origin: "encounter",
+              },
+            ]
+          : []),
+        ...racketThreat(s, playerId, 1),
+      );
+      return true;
+    }
+    case "fne:pawn":
+      ports.queue(s, ...racketThreat(s, String(e.playerId), 1));
+      return true;
+    case "fne:pizza": {
+      // Heal 1 damage from the defeating character, 1 threat here.
+      const playerId = String(e.playerId);
+      const character = String(e.character);
+      ports.queue(
+        s,
+        {
+          type: "heal",
+          target: character.startsWith("hero:") ? "hero" : character,
+          amount: 1,
+          actorId: playerId,
+        },
+        ...racketThreat(s, playerId, 1),
+      );
+      return true;
+    }
+    case "fne:proprietor": {
+      // Shop Proprietor enters play under your control.
+      const playerId = String(e.playerId);
+      const p = s.resolving.find((q) => q.id === e.id);
+      if (!p || !alive(s, playerId)) return true;
+      s.resolving = s.resolving.filter((q) => q.id !== p.id);
+      delete p.ownerId;
+      seatView(s, playerId).player.inPlay.push(p);
+      if (r) (r.proprietors ||= {})[p.id] = playerId;
+      ports.log(
+        s,
+        `Shop Proprietor joins ${ports.heroName(s, playerId)}.`,
+        "good",
+      );
+      ports.queue(s, ...fneAllyEntered(s, p));
+      return true;
+    }
+    case "fne:venue": {
+      // Swap your main scheme with a random set-aside one; its threat
+      // moves, and attachments on the old one are discarded.
+      const playerId = String(e.playerId);
+      const scheme = r && racketScheme(s, playerId);
+      if (!r || !scheme || !r.setAside.length) return true;
+      const [next] = ports.shuffle(s, [...r.setAside]);
+      r.setAside = [...r.setAside.filter((c) => c !== next), scheme.code];
+      const old = scheme.code;
+      scheme.code = next;
+      if (r.focus === playerId)
+        for (const a of s.attachments.filter((q) =>
+          ["main", `main:${old}`].includes(q.attachedTo || ""),
+        ))
+          ports.discardPiece(s, a.id);
+      ports.log(
+        s,
+        `Change of Venue: ${name(old)} gives way to ${name(next)}, with its ${scheme.threat} threat.`,
+        "bad",
+      );
+      return true;
+    }
+    default:
+      return false;
+  }
+}

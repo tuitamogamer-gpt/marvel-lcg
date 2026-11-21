@@ -1021,10 +1021,10 @@ describe("published expansion starters across every supported mission setting", 
     expect(executiveBoardSets).toHaveLength(
       alternativeSets.length - heroIds.length * 2,
     );
-    expect(VILLAINS).toHaveLength(57);
+    expect(VILLAINS).toHaveLength(58);
     expect(MODULES).toHaveLength(102);
     expect(heroIds).toHaveLength(52);
-    expect(missions).toHaveLength(589264);
+    expect(missions).toHaveLength(600184);
     const redSkullModules = ["hydra_assault", "weap_master", "hydra_patrol"];
     const key = (mission: (typeof missions)[number]) =>
       [
@@ -1036,27 +1036,44 @@ describe("published expansion starters across every supported mission setting", 
       ].join("/");
     const manifest = (list: typeof missions) =>
       list.map((mission) => `${key(mission)} seed${mission.seed}`).sort();
-    // Fear No Evil's The Raft Breakout joins as the fifty-seventh scenario,
-    // with every modular set, and its Disasters modular set joins every other
-    // scenario with modular sets. Every earlier name and seed stays in place:
-    // the 572,832 configurations before them hash identically to the
-    // complete grid of 67c6cc6.
+    // Fear No Evil's Protection Racket joins as the fifty-eighth scenario,
+    // with every modular set. Every earlier name and seed stays in place: the
+    // 589,264 configurations before it hash identically to the complete grid
+    // of b9d86e6.
     expect(
-      missions.filter((m) => m.villainId === "fne_the_raft_breakout"),
+      missions.filter((m) => m.villainId === "fne_protection_racket"),
+    ).toHaveLength(52 * 2 * 102 + 52 * 2 * 3);
+    const fneThreeGrid = missions.filter(
+      (m) => m.villainId !== "fne_protection_racket",
+    );
+    expect(fneThreeGrid).toHaveLength(589264);
+    expect(
+      createHash("sha256")
+        .update(manifest(fneThreeGrid).join("\n"))
+        .digest("hex"),
+    ).toBe("4f556b16666454c77ea6e09afec3d5254fb469ff60b82b5ccdb3f8ff03291052");
+    // Fear No Evil's The Raft Breakout joined as the fifty-seventh scenario
+    // before that, with every modular set, and its Disasters modular set
+    // joined every other scenario with modular sets: the 572,832
+    // configurations before them hash identically to the complete grid of
+    // 67c6cc6.
+    expect(
+      fneThreeGrid.filter((m) => m.villainId === "fne_the_raft_breakout"),
     ).toHaveLength(52 * 2 * 102 + 52 * 2 * 3);
     for (const scenario of VILLAINS.filter(
       (v) =>
         v.moduleCount !== 0 &&
         v.id !== "thunderbolts" &&
-        v.id !== "fne_the_raft_breakout",
+        v.id !== "fne_the_raft_breakout" &&
+        v.id !== "fne_protection_racket",
     ))
       expect(
-        missions.filter(
+        fneThreeGrid.filter(
           (m) => m.villainId === scenario.id && m.module === "fne_disasters",
         ),
         scenario.id,
       ).toHaveLength(52 * 2);
-    const fneTwoGrid = missions.filter(
+    const fneTwoGrid = fneThreeGrid.filter(
       (m) =>
         m.villainId !== "fne_the_raft_breakout" && m.module !== "fne_disasters",
     );
@@ -1080,7 +1097,8 @@ describe("published expansion starters across every supported mission setting", 
         v.moduleCount !== 0 &&
         v.id !== "thunderbolts" &&
         v.id !== "fne_stop_the_presses" &&
-        v.id !== "fne_the_raft_breakout",
+        v.id !== "fne_the_raft_breakout" &&
+        v.id !== "fne_protection_racket",
     ))
       for (const module of fneTwoModules)
         expect(
@@ -1118,6 +1136,7 @@ describe("published expansion starters across every supported mission setting", 
         v.id !== "thunderbolts" &&
         v.id !== "fne_stop_the_presses" &&
         v.id !== "fne_the_raft_breakout" &&
+        v.id !== "fne_protection_racket" &&
         !fneMissions.includes(v.id),
     ))
       for (const module of fneModules)
@@ -1170,6 +1189,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       expect(
@@ -1207,6 +1227,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       expect(
@@ -1226,6 +1247,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       expect(
@@ -1274,6 +1296,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       for (const module of thunderboltsSets)
@@ -1312,6 +1335,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       expect(
@@ -1352,6 +1376,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       expect(
@@ -1393,6 +1418,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       for (const module of blackWidowSets)
@@ -1417,7 +1443,8 @@ describe("published expansion starters across every supported mission setting", 
     // sets before that, with one configuration per hero, difficulty and
     // scenario that uses the Standard set: the 387,712 configurations before
     // them hash identically to the complete grid of 8387e99.
-    expect(missions.filter((m) => m.variant === "iii")).toHaveLength(5720);
+    expect(missions.filter((m) => m.variant === "iii")).toHaveLength(5824);
+    expect(fneThreeGrid.filter((m) => m.variant === "iii")).toHaveLength(5720);
     expect(fneTwoGrid.filter((m) => m.variant === "iii")).toHaveLength(5616);
     expect(fneOneGrid.filter((m) => m.variant === "iii")).toHaveLength(5512);
     expect(golGrid.filter((m) => m.variant === "iii")).toHaveLength(5304);
@@ -1468,6 +1495,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       for (const module of enSabahNurSets)
@@ -1513,6 +1541,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       for (const module of darkBeastSets)
@@ -1557,6 +1586,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       expect(
@@ -1601,6 +1631,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       expect(
@@ -1645,6 +1676,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       for (const module of aoaSets)
@@ -1691,6 +1723,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       for (const module of stryfeSets)
@@ -1749,6 +1782,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       expect(
@@ -1797,6 +1831,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       expect(
@@ -1846,7 +1881,8 @@ describe("published expansion starters across every supported mission setting", 
         v.id !== "fne_the_getaway" &&
         v.id !== "fne_art_museum_heist" &&
         v.id !== "fne_stop_the_presses" &&
-        v.id !== "fne_the_raft_breakout",
+        v.id !== "fne_the_raft_breakout" &&
+        v.id !== "fne_protection_racket",
     ))
       for (const module of nextSets)
         expect(
@@ -1896,6 +1932,7 @@ describe("published expansion starters across every supported mission setting", 
           "fne_art_museum_heist",
           "fne_stop_the_presses",
           "fne_the_raft_breakout",
+          "fne_protection_racket",
         ].includes(v.id),
     ))
       expect(
@@ -2174,8 +2211,12 @@ describe("published expansion starters across every supported mission setting", 
     expect(fneOneGrid.filter((m) => m.variant === "board")).toHaveLength(5408);
     expect(fneTwoGrid.filter((m) => m.variant === "ii")).toHaveLength(5616);
     expect(fneTwoGrid.filter((m) => m.variant === "board")).toHaveLength(5512);
-    expect(missions.filter((m) => m.variant === "ii")).toHaveLength(5720);
-    expect(missions.filter((m) => m.variant === "board")).toHaveLength(5616);
+    expect(fneThreeGrid.filter((m) => m.variant === "ii")).toHaveLength(5720);
+    expect(fneThreeGrid.filter((m) => m.variant === "board")).toHaveLength(
+      5616,
+    );
+    expect(missions.filter((m) => m.variant === "ii")).toHaveLength(5824);
+    expect(missions.filter((m) => m.variant === "board")).toHaveLength(5720);
     // Kang and the Temporal, Master of Time and Anachronauts modular sets
     // extended the grid before that: the 103,584 configurations before it
     // hash identically to the complete grid of 1600763.
@@ -2588,9 +2629,9 @@ describe("published expansion starters across every supported mission setting", 
     ).toBe("bfd15ff0e1081015f5b01d55beb096051c63af39d842c8342b0a8e70ad1f6b9e");
     const perShard = (keep: (mission: MissionConfig) => boolean) =>
       partitions.map((partition) => partition.filter(keep).length);
-    // Each shard runs 663 of the 10,608 configurations of a scenario
-    // with all 102 modular sets, 650 or 663 of the 10,504 of a scenario whose fixed or
-    // reserved set leaves 101, 637 or 650 of Dark Beast's 10,296, and 39 of the 624 of
+    // Each shard runs 650 or 676 of the 10,608 configurations of a scenario
+    // with all 102 modular sets, 650 or 676 of the 10,504 of a scenario whose fixed or
+    // reserved set leaves 101, 624 or 650 of Dark Beast's 10,296, and 26 or 52 of the 624 of
     // Thunderbolts, which allows only its six sets.
     for (const scenario of VILLAINS.filter((v) => v.moduleCount !== 0)) {
       const counts = perShard(
@@ -2605,12 +2646,12 @@ describe("published expansion starters across every supported mission setting", 
       for (const count of counts)
         expect(
           total === 624
-            ? [39]
+            ? [26, 52]
             : total === 10296
-              ? [637, 650]
+              ? [624, 650]
               : total === 10504
-                ? [650, 663]
-                : [663],
+                ? [650, 676]
+                : [650, 676],
           scenario.id,
         ).toContain(count);
     }
@@ -2634,64 +2675,64 @@ describe("published expansion starters across every supported mission setting", 
     expect(
       perShard((mission) => !mission.variant && mission.villainId === "kang"),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676,
+      676,
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "the_hood",
       ),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650,
+      650,
     ]);
     expect(
       perShard((mission) => !mission.variant && mission.villainId === "magog"),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      676, 676, 650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650, 650, 676,
+      676,
     ]);
     expect(
       perShard((mission) => !mission.variant && mission.villainId === "spiral"),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      650, 650, 676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676, 676, 650,
+      650,
     ]);
     expect(
       perShard((mission) => !mission.variant && mission.villainId === "mojo"),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      676, 676, 650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650, 650, 676,
+      676,
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "morlock_siege",
       ),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      650, 650, 676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676, 676, 650,
+      650,
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "on_the_run",
       ),
     ).toEqual([
-      650, 650, 663, 663, 650, 650, 663, 663, 650, 650, 663, 663, 650, 650, 663,
-      663,
+      650, 650, 650, 650, 650, 650, 676, 676, 650, 650, 650, 650, 650, 650, 676,
+      676,
     ]);
     expect(
       perShard((mission) => !mission.variant && mission.villainId === "stryfe"),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650,
+      650,
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "juggernaut",
       ),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650,
+      650,
     ]);
     expect(
       perShard(
@@ -2699,13 +2740,13 @@ describe("published expansion starters across every supported mission setting", 
           !mission.variant && mission.villainId === "mister_sinister",
       ),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676,
+      676,
     ]);
     expect(
       perShard((mission) => !mission.variant && mission.villainId === "unus"),
     ).toEqual([
-      663, 663, 650, 650, 663, 663, 650, 650, 663, 663, 650, 650, 663, 663, 650,
+      650, 650, 650, 650, 676, 676, 650, 650, 650, 650, 650, 650, 676, 676, 650,
       650,
     ]);
     expect(
@@ -2713,56 +2754,62 @@ describe("published expansion starters across every supported mission setting", 
         (mission) => !mission.variant && mission.villainId === "four_horsemen",
       ),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      676, 676, 650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650, 650, 676,
+      676,
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "apocalypse",
       ),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      650, 650, 676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676, 676, 650,
+      650,
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "dark_beast",
       ),
     ).toEqual([
-      637, 637, 650, 650, 637, 637, 650, 650, 637, 637, 650, 650, 637, 637, 650,
+      650, 650, 650, 650, 624, 624, 650, 650, 650, 650, 650, 650, 624, 624, 650,
       650,
+    ]);
+    expect(
+      perShard((m) => !m.variant && m.villainId === "fne_protection_racket"),
+    ).toEqual([
+      650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676,
+      676,
     ]);
     expect(
       perShard((m) => !m.variant && m.villainId === "fne_the_raft_breakout"),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650,
+      650,
     ]);
     expect(
       perShard((m) => !m.variant && m.villainId === "fne_stop_the_presses"),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676,
+      676,
     ]);
     expect(
       perShard((m) => !m.variant && m.villainId === "fne_the_getaway"),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676,
+      676,
     ]);
     expect(
       perShard((m) => !m.variant && m.villainId === "fne_art_museum_heist"),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650,
+      650,
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "god_of_lies",
       ),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650,
+      650,
     ]);
     expect(
       perShard(
@@ -2770,33 +2817,33 @@ describe("published expansion starters across every supported mission setting", 
           !mission.variant && mission.villainId === "enchantress_villain",
       ),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676,
+      676,
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "baron_zemo",
       ),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650,
+      650,
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "thunderbolts",
       ),
-    ).toEqual([39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39, 39]);
+    ).toEqual([26, 26, 26, 26, 52, 52, 52, 52, 26, 26, 26, 26, 52, 52, 52, 52]);
     expect(
       perShard((mission) => !mission.variant && mission.villainId === "modok"),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650,
+      650,
     ]);
     expect(
       perShard((mission) => !mission.variant && mission.villainId === "batroc"),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676,
+      676,
     ]);
     expect(
       perShard(
@@ -2804,43 +2851,44 @@ describe("published expansion starters across every supported mission setting", 
           !mission.variant && mission.villainId === "black_widow_villain",
       ),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650,
+      650,
     ]);
     expect(
       perShard(
         (mission) => !mission.variant && mission.villainId === "en_sabah_nur",
       ),
     ).toEqual([
-      663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663, 663,
-      663,
+      650, 650, 650, 650, 676, 676, 676, 676, 650, 650, 650, 650, 676, 676, 676,
+      676,
     ]);
     // The two scenarios without modular sets each spread over eight of the
     // sixteen shards.
     expect(
       perShard((mission) => mission.villainId === "the_wrecking_crew"),
-    ).toEqual([0, 0, 13, 13, 0, 0, 13, 13, 0, 0, 13, 13, 0, 0, 13, 13]);
+    ).toEqual([0, 0, 26, 26, 0, 0, 0, 0, 0, 0, 26, 26, 0, 0, 0, 0]);
     expect(perShard((mission) => mission.villainId === "sinister_six")).toEqual(
-      [0, 0, 13, 13, 0, 0, 13, 13, 0, 0, 13, 13, 0, 0, 13, 13],
+      [0, 0, 26, 26, 0, 0, 0, 0, 0, 0, 26, 26, 0, 0, 0, 0],
     );
     expect(perShard((mission) => mission.variant === "ii")).toEqual([
+      364, 364, 364, 364, 364, 364, 364, 364, 364, 364, 364, 364, 364, 364, 364,
+      364,
+    ]);
+    expect(perShard((mission) => mission.variant === "iii")).toEqual([
+      364, 364, 364, 364, 364, 364, 364, 364, 364, 364, 364, 364, 364, 364, 364,
+      364,
+    ]);
+    expect(perShard((mission) => mission.variant === "board")).toEqual([
       358, 358, 358, 358, 358, 358, 358, 358, 357, 357, 357, 357, 357, 357, 357,
       357,
     ]);
-    expect(perShard((mission) => mission.variant === "iii")).toEqual([
-      357, 357, 357, 357, 357, 357, 357, 357, 358, 358, 358, 358, 358, 358, 358,
-      358,
-    ]);
-    expect(perShard((mission) => mission.variant === "board")).toEqual([
-      351, 351, 351, 351, 351, 351, 351, 351, 351, 351, 351, 351, 351, 351, 351,
-      351,
-    ]);
-    expect(new Set(missions.map(key)).size).toBe(589264);
-    expect(new Set(combined.map(key)).size).toBe(589264);
+    expect(new Set(missions.map(key)).size).toBe(600184);
+    expect(new Set(combined.map(key)).size).toBe(600184);
     expect(manifest(combined)).toEqual(manifest(missions));
-    expect(partitions.map((partition) => partition.length)).toEqual(
-      Array(16).fill(36829),
-    );
+    expect(partitions.map((partition) => partition.length)).toEqual([
+      ...Array(8).fill(37512),
+      ...Array(8).fill(37511),
+    ]);
     for (const partition of partitions)
       expect(new Set(partition.map((mission) => mission.heroId)).size).toBe(52);
     for (const heroId of heroIds) {
@@ -2848,14 +2896,14 @@ describe("published expansion starters across every supported mission setting", 
         (partition) =>
           partition.filter((mission) => mission.heroId === heroId).length,
       );
-      expect(Math.min(...perShard)).toBeGreaterThanOrEqual(706);
-      expect(Math.max(...perShard)).toBeLessThanOrEqual(709);
-      expect(perShard.reduce((total, count) => total + count, 0)).toBe(11332);
+      expect(Math.min(...perShard)).toBeGreaterThanOrEqual(720);
+      expect(Math.max(...perShard)).toBeLessThanOrEqual(722);
+      expect(perShard.reduce((total, count) => total + count, 0)).toBe(11542);
     }
     expect(selectedMissions).toHaveLength(
-      isSharded ? partitions[Number(shardIndex)].length : 589264,
+      isSharded ? partitions[Number(shardIndex)].length : 600184,
     );
-    // Hashing every layer of the 589,264-configuration manifest takes a few
+    // Hashing every layer of the 600,184-configuration manifest takes a few
     // seconds on its own.
   }, 60000);
   for (const mission of selectedMissions)

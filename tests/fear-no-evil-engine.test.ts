@@ -1,5 +1,6 @@
 /** Fear No Evil, parts one to three: the missions The Getaway, Art Museum
- * Heist, Stop the Presses! and The Raft Breakout with the Underlings
+ * Heist, Stop the Presses!, The Raft Breakout and Protection Racket with the
+ * Underlings
  * Bullseye, Electro, Hammerhead, Purple Man and Typhoid Mary, and the Cops,
  * Drive, The Owl, Tombstone, Tracksuit Mafia and Disasters modular sets,
  * exercised with the original physical cards. Every command crosses a JSON
@@ -9,14 +10,16 @@ import { CATALOG_CARDS, MODULES, VILLAINS, card } from "../src/game/cards";
 import {
   abilityOptions,
   canChangeIdentityForm,
+  cardCost,
   dispatch,
   enemyStats,
   escalation,
   makePiece,
   newGame,
+  schemeLimit,
 } from "../src/game/engine";
 import { hasExecutableScript } from "../src/game/script-registry";
-import { seatView } from "../src/game/team";
+import { activateSeat, seatView } from "../src/game/team";
 import {
   FEAR_NO_EVIL_CODES,
   fneAcceleration,
@@ -28,6 +31,7 @@ import {
   fneMainNote,
   fneMinionCaption,
   fneObjective,
+  fneRacketTargets,
   fneSideSchemeCaption,
   fneUnderlingFor,
   fneVillainPhaseBegins,
@@ -279,12 +283,13 @@ describe("Fear No Evil registration and setup", () => {
       "fne_tracksuit_mafia",
       "fne_the_raft_breakout",
       "fne_disasters",
+      "fne_protection_racket",
     ];
     const faces = CATALOG_CARDS.filter((c) => sets.includes(c.set_code || ""));
     expect(faces.map((c) => c.code).sort()).toEqual(
       [...FEAR_NO_EVIL_CODES].sort(),
     );
-    expect(faces).toHaveLength(123);
+    expect(faces).toHaveLength(136);
     for (const c of faces) expect(hasExecutableScript(c), c.code).toBe(true);
     const getaway = VILLAINS.find((v) => v.id === GETAWAY_ID)!;
     expect(getaway.schemes).toEqual([GETAWAY]);
@@ -1921,5 +1926,192 @@ describe("Disasters", () => {
     expect(
       s.encounter.deck.filter((p) => card(p).set_code === "fne_disasters"),
     ).toHaveLength(5);
+  }, 30000);
+});
+
+// ------------------------------------------------------------ part four
+
+const RACKET_ID = "fne_protection_racket";
+const BODEGA = "60134b";
+const CHINA_SHOP = "60135b";
+const HUNG_OUT = "60136b";
+const PAWN_SHOP = "60137b";
+const PIZZA = "60138b";
+const PROPRIETOR = "60139";
+const MAN_BULL = "60140";
+const VENUE = "60141";
+
+/** Protection Racket with this main scheme in the active player's area. */
+function racketGame(code: string, players = 1) {
+  const s = started(RACKET_ID, "hammerhead", "standard", players);
+  const r = s.fearNoEvil!.racket!;
+  const current = s.scheme.code;
+  if (current !== code) {
+    r.setAside = [...r.setAside.filter((c) => c !== code), current];
+    s.scheme.code = code;
+  }
+  s.scheme.threat = 0;
+  return reload(s);
+}
+
+describe("Protection Racket", () => {
+  it("setup: each player chooses a main scheme for their play area; the others are set aside", () => {
+    const s = opened(RACKET_ID, "bullseye", "standard", 2);
+    const r = s.fearNoEvil!.racket!;
+    expect(Object.keys(r.schemes).sort()).toEqual(["p1", "p2"]);
+    const codes = [s.scheme.code, r.schemes.p2.code];
+    expect(new Set(codes).size).toBe(2);
+    expect(r.setAside).toHaveLength(3);
+    expect(s.scheme.threat).toBe(0);
+    expect(schemeLimit(s)).toBe(10);
+    expect(fneMainNote(s)).toBeTruthy();
+    // Shop Proprietor, an ally, is shuffled into the encounter deck unowned.
+    const proprietors = [...s.encounter.deck, ...s.encounter.dealt].filter(
+      (p) => p.code === PROPRIETOR,
+    );
+    expect(proprietors).toHaveLength(1);
+    expect(proprietors[0].ownerId).toBeUndefined();
+  }, 30000);
+  it("Expert: the main schemes are dealt at random, and the focus follows the active player", () => {
+    let s = opened(RACKET_ID, "bullseye", "expert", 2);
+    const r = s.fearNoEvil!.racket!;
+    const p2 = r.schemes.p2.code;
+    expect(r.chosen).toBe(true);
+    s.scheme.threat = 3;
+    activateSeat(s, "p2");
+    expect(s.scheme.code).toBe(p2);
+    activateSeat(s, "p1");
+    expect(s.scheme.threat).toBe(3);
+  }, 30000);
+  it("step one adds the same threat to every main scheme; completing any of them loses", () => {
+    let s = racketGame(BODEGA, 2);
+    const r = s.fearNoEvil!.racket!;
+    r.schemes.p2.threat = 8;
+    s = settle(native(reload(s), { type: "villainStepOne" }));
+    expect(s.scheme.threat).toBe(1);
+    expect(s.fearNoEvil!.racket!.schemes.p2.threat).toBe(9);
+    s = settle(native(reload(s), { type: "villainStepOne" }));
+    expect(s.phase).toBe("lost");
+  }, 30000);
+  it("a player's elimination loses the game", () => {
+    let s = racketGame(BODEGA, 2);
+    seatView(s, "p2").player.hp = 1;
+    s = settle(
+      native(reload(s), {
+        type: "damage",
+        target: "hero",
+        amount: 5,
+        source: s.villain.id,
+        actorId: "p2",
+      }),
+    );
+    expect(s.phase).toBe("lost");
+  }, 30000);
+  it("another player's main scheme can be thwarted", () => {
+    let s = racketGame(BODEGA, 2);
+    s.fearNoEvil!.racket!.schemes.p2.threat = 4;
+    s = reload(s);
+    expect(fneRacketTargets(s, true).map((t) => t.id)).toEqual(["racket:p2"]);
+    s = settle(native(s, { type: "thwart", target: "racket:p2", amount: 3 }));
+    expect(s.fearNoEvil!.racket!.schemes.p2.threat).toBe(1);
+    expect(s.scheme.threat).toBe(0);
+  }, 30000);
+  it("Battle in the Bodega: after a character here is attacked, 1 damage to the attacker and 1 threat, once per phase", () => {
+    let s = racketGame(BODEGA);
+    const m = minion(s, "60203");
+    blankTop(s, 4);
+    s.player.hp = 30;
+    s = settle(
+      native(reload(s), { type: "enemyAttack", id: m.id, actorId: "p1" }),
+    );
+    expect(s.minions.find((p) => p.id === m.id)!.damage).toBe(1);
+    expect(s.scheme.threat).toBe(1);
+    s = settle(
+      native(reload(s), { type: "enemyAttack", id: m.id, actorId: "p1" }),
+    );
+    expect(s.scheme.threat).toBe(1);
+  }, 30000);
+  it("Bull in a China Shop: excess damage dealt to your ally becomes threat here", () => {
+    let s = racketGame(CHINA_SHOP);
+    const cat = ally(s, "01002");
+    s = settle(native(reload(s), { ...hit(cat.id, 5), source: s.villain.id }));
+    // Black Cat's 2 hit points: 3 excess damage.
+    expect(s.scheme.threat).toBe(3);
+  }, 30000);
+  it("Hung Out to Dry: a character entering your play area takes 1 damage and adds 1 threat", () => {
+    let s = racketGame(HUNG_OUT);
+    s = settle(reveal(s, "60203"));
+    const bro = s.minions.find((p) => p.code === "60203")!;
+    expect(bro.damage).toBe(1);
+    expect(s.scheme.threat).toBe(1);
+  }, 30000);
+  it("Pawn Shop Showdown: the first upgrade each round costs 1 less, and an upgrade here adds 1 threat", () => {
+    let s = racketGame(PAWN_SHOP);
+    const helmet = playerCard(s, "01016");
+    expect(cardCost(s, card(helmet), helmet)).toBe(1);
+    s.player.hand.push(helmet, playerCard(s, "01088"));
+    s.phase = "player";
+    s = reload(s);
+    s = command(s, { type: "PLAY", id: helmet.id });
+    s = settle(
+      pay(
+        s,
+        s.player.hand.filter((p) => p.code === "01088"),
+      ),
+    );
+    expect(s.player.inPlay.some((p) => p.id === helmet.id)).toBe(true);
+    expect(s.scheme.threat).toBe(1);
+    const flight = playerCard(s, "01017");
+    expect(cardCost(s, card(flight), flight)).toBe(2);
+  }, 30000);
+  it("A Slice of the Pizza Dough: your character defeats a minion, heals 1 and adds 1 threat", () => {
+    let s = racketGame(PIZZA);
+    s.player.hp -= 2;
+    const hp = s.player.hp;
+    const bro = minion(s, "60203");
+    s = settle(native(reload(s), hit(bro.id, 3)));
+    expect(s.player.hp).toBe(hp + 1);
+    expect(s.scheme.threat).toBe(1);
+  }, 30000);
+  it("Shop Proprietor joins you; when it leaves play, 4 threat on your main scheme", () => {
+    let s = racketGame(BODEGA);
+    blankTop(s, 2);
+    const shop = take(s, PROPRIETOR);
+    const deck = s.encounter.deck.length;
+    s = settle(
+      native(reload(s), { type: "reveal", piece: shop, actorId: "p1" }),
+    );
+    expect(inPlayOf(s, shop.id)).toBeTruthy();
+    // Surge.
+    expect(s.encounter.deck.length).toBe(deck - 1);
+    expect(fneInPlayCaption(s, inPlayOf(s, shop.id)!)).toBe(
+      "Leaves play: 4 threat on the main scheme in your play area",
+    );
+    s = settle(native(reload(s), { ...hit(shop.id, 3), source: s.villain.id }));
+    expect(inPlayOf(s, shop.id)).toBeUndefined();
+    expect(s.scheme.threat).toBe(4);
+    expect(s.encounter.discard.some((p) => p.id === shop.id)).toBe(true);
+  }, 30000);
+  it("Man-Bull: the excess damage of his attack becomes threat", () => {
+    let s = racketGame(BODEGA);
+    s.fearNoEvil!.racket!.bodega = { p1: `${s.round}:${s.phase}` };
+    const m = minion(s, MAN_BULL);
+    const cat = ally(s, "01002");
+    blankTop(s, 3);
+    s = settle(
+      native(reload(s), { type: "enemyAttack", id: m.id, actorId: "p1" }),
+      (v) => v.prompt?.options.find((o) => o.id === cat.id)?.id,
+    );
+    // 4 ATK against Black Cat's 2 hit points.
+    expect(s.scheme.threat).toBe(2);
+  }, 30000);
+  it("Change of Venue swaps your main scheme with a random set-aside one, keeping its threat", () => {
+    let s = racketGame(BODEGA);
+    s.scheme.threat = 5;
+    blankTop(s, 2);
+    s = settle(reveal(reload(s), VENUE));
+    expect(s.scheme.code).not.toBe(BODEGA);
+    expect(s.scheme.threat).toBe(5);
+    expect(s.fearNoEvil!.racket!.setAside).toContain(BODEGA);
   }, 30000);
 });

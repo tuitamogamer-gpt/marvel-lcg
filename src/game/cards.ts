@@ -1875,6 +1875,23 @@ export const VILLAINS = [
       "An Underling holds the Master Key to every cell in the Raft. Each hero faces an escaped Prisoner from the start; defeat the escapees to pull threat back off the breakout before the prison empties.",
     color: "#4d5b6e",
   },
+  {
+    id: "fne_protection_racket",
+    name: "Protection Racket",
+    // Fear No Evil mission, played against a chosen Underling. Each player
+    // protects a main scheme of their own.
+    codes: ["60065", "60066", "60067"],
+    schemes: ["60134b"],
+    module: "fne_disasters",
+    moduleCount: 2,
+    defaultModules: ["fne_disasters", "fne_tracksuit_mafia"],
+    difficulty: 3,
+    title: "Protection Racket",
+    location: "Hell's Kitchen",
+    description:
+      "An Underling shakes down the neighborhood's shops. Each hero protects a business of their own, a main scheme with its own trouble; if any of them falls or any hero goes down, the racket wins.",
+    color: "#7a4b32",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },

@@ -3184,6 +3184,8 @@ export function schemeLimit(s: GameState) {
   const apocalypseLimit = apoc.apocalypseMainLimit(s);
   if (apocalypseLimit !== undefined) return apocalypseLimit + surveillance;
   if (value) return value.threshold + surveillance;
+  const racketLimit = fne.fneMainLimit(s);
+  if (racketLimit !== undefined) return racketLimit + surveillance;
   return (
     (card(s.scheme.code).threat || 0) *
       (card(s.scheme.code).threat_fixed ? 1 : s.playerCount) +
@@ -3706,6 +3708,8 @@ function dealDamage(
   )
     n += gambit.gambitDamageBonus(s);
   const original = find(s, target);
+  // Protection Racket: the play area of the character taking the damage.
+  const fneArea = fne.fneDamageArea(s, target);
   const dealt = traits.noDamageInstance
     ? 0
     : Math.max(0, traits.damageDealt ?? n);
@@ -4372,6 +4376,18 @@ function dealDamage(
       E("deadpool:ray-end", { target, actorId: s.activePlayerId }),
     );
   }
+  // Bull in a China Shop and Man-Bull: excess damage becomes threat.
+  add(
+    s,
+    ...fne.fneDamageDealt(
+      s,
+      target,
+      source,
+      attack || !!traits.enemyAttack,
+      result.excessDamage,
+      fneArea,
+    ),
+  );
   return result;
 }
 function applyDamage(
@@ -5152,6 +5168,7 @@ function defeatCharacter(
             source.startsWith("hero:")
               ? source.slice(5)
               : controller(s, source)?.id || s.activePlayerId,
+            source,
           )
         : []),
     );
@@ -5906,6 +5923,13 @@ function threat(
     );
     return;
   }
+  const racketThreatPlayer = fne.fneRacketTarget(target);
+  if (racketThreatPlayer) {
+    fne.withRacketFocus(s, racketThreatPlayer, () =>
+      threat(s, "main", n, skipInterrupt),
+    );
+    return;
+  }
   const vgThreatKey = venomGoblin.vgTargetKey(target);
   if (vgThreatKey) {
     if (venomGoblin.vgScheme(s, vgThreatKey))
@@ -6509,6 +6533,11 @@ function thwart(
     spiral.spiralThwartLocked(s, target)
   )
     return 0;
+  const racketThwartPlayer = fne.fneRacketTarget(target);
+  if (racketThwartPlayer)
+    return fne.withRacketFocus(s, racketThwartPlayer, () =>
+      thwart(s, "main", n, ignoreCrisis, source),
+    );
   const vgThwartKey = venomGoblin.vgTargetKey(target);
   if (vgThwartKey)
     return venomGoblin.vgScheme(s, vgThwartKey)
@@ -6766,7 +6795,7 @@ function defeatScheme(
         ...btc.batrocSchemeDefeated(s, p),
         ...zemo.zemoSchemeDefeated(s, p),
         ...gol.godOfLiesSchemeDefeated(s, p),
-        ...fne.fneSchemeDefeated(s, p),
+        ...fne.fneSchemeDefeated(s, p, source),
         ...mdk.modokSchemeDefeated(
           s,
           p,
@@ -7119,6 +7148,7 @@ export function targets(
               ...[
                 ...towerDefense.towerDefenseSchemeTarget(s),
                 ...venomGoblin.vgSchemeTargets(s, !!thwarting),
+                ...fne.fneRacketTargets(s, !!thwarting),
               ].filter(
                 (t) =>
                   !(thwarting && mojoGenres.mojoGenreThwartLocked(s, t.id)),
@@ -7246,7 +7276,9 @@ function scriptContext(
             ? towerDefense.towerDefenseOtherThreat(s) > 0
             : venomGoblin.vgTargetKey(id)
               ? venomGoblin.vgTargetThreat(s, id!) > 0
-              : !!target && (target as Piece).counters > 0;
+              : fne.fneRacketTarget(id)
+                ? fne.fneRacketThreat(s, id!) > 0
+                : !!target && (target as Piece).counters > 0;
       if (node.op === "status") {
         if (!target) return false;
         const definition = id?.startsWith("hero")
@@ -7307,6 +7339,7 @@ export function cardCost(s: GameState, c: Card, physical?: Piece) {
         stormPorts,
       ) -
       gambit.gambitDiscount(s, c) -
+      fne.fneCostReduction(s, physical || c) -
       captainAllyDiscount(s, c) -
       captainPackDiscount(s, c) -
       msMarvelDiscount(s) -
@@ -11701,6 +11734,8 @@ function play(
     s.player.inPlay.push(p);
     // Stryfe: Mind Trap and Extreme Measures after a card enters play.
     add(s, ...sty.stryfeEnteredPlay(s, p, s.activePlayerId));
+    // Pawn Shop Showdown: an upgrade played into its play area.
+    add(s, ...fne.fneCardPlayed(s, p, s.activePlayerId));
     cyclops.cyclopsEffectiveLeadership(s, p);
     if (p.code === "36019") p.counters = 3;
     if (p.code === "37013") p.counters = 3;
@@ -14237,6 +14272,7 @@ const mutagenPorts: MutagenEnginePorts = {
     removeEncounterInstance(s, p.id);
     p.attachedTo = enemyId;
     s.attachments.push(p);
+    add(s, ...fne.fneAttached(s, p, enemyId));
   },
   discardPiece,
   shuffleIntoEncounter: (s, p) => {
@@ -15201,7 +15237,9 @@ const waspPorts: wasp.WaspPorts = {
             ? towerDefense.towerDefenseOtherThreat(s)
             : venomGoblin.vgTargetKey(p.target)
               ? venomGoblin.vgTargetThreat(s, p.target)
-              : s.sideSchemes.find((x) => x.id === p.target)?.counters || 0,
+              : fne.fneRacketTarget(p.target)
+                ? fne.fneRacketThreat(s, p.target)
+                : s.sideSchemes.find((x) => x.id === p.target)?.counters || 0,
     }));
     const queuedBefore = s.queue.length;
     swPorts.thwartDistribution(s, packets);
@@ -15215,8 +15253,10 @@ const waspPorts: wasp.WaspPorts = {
             ? towerDefense.towerDefenseOtherThreat(s)
             : venomGoblin.vgTargetKey(p.target)
               ? venomGoblin.vgTargetThreat(s, p.target)
-              : s.sideSchemes.find((x) => x.id === p.target)?.counters || 0) ===
-          0,
+              : fne.fneRacketTarget(p.target)
+                ? fne.fneRacketThreat(s, p.target)
+                : s.sideSchemes.find((x) => x.id === p.target)?.counters ||
+                  0) === 0,
     );
     add(
       s,
@@ -34111,6 +34151,8 @@ function resolve(s: GameState, e: Effect) {
       break;
     case "allyEnter": {
       const p = find(s, e.id);
+      // Hung Out to Dry: an ally enters play in its play area.
+      if (p) add(s, ...fne.fneAllyEntered(s, p));
       if (p)
         allyEnter(
           s,
@@ -40504,35 +40546,35 @@ function resolve(s: GameState, e: Effect) {
         `Place ${escalation(s)} threat for ${s.playerCount} starting hero(es), plus ${(e.kangArea ? 0 : s.encounter.acceleration) + hood.hoodAcceleration(s) + hoodModular.hoodModularAcceleration(s) + inheritorsAcceleration(s) + s.sideSchemes.reduce((n, p) => n + iceman.icemanSchemeIcon(s, p, "scheme_acceleration") + ironheart.ironheartSchemeIcons(s, p, { isTextBlank }).acceleration + Number(p.accelerationTokens || 0), 0)} acceleration.`,
         "bad",
       );
+      const stepOneAmount =
+        escalation(s) +
+        (e.kangArea ? 0 : s.encounter.acceleration) +
+        hood.hoodAcceleration(s) +
+        hoodModular.hoodModularAcceleration(s) +
+        inheritorsAcceleration(s) +
+        angel.angelAcceleration(s) +
+        sinisterSix.sixEnemyIcons(s, "acceleration") +
+        s.attachments.filter((p) => p.code === "40031" && !isTextBlank(s, p))
+          .length +
+        deadpool.deadpoolPlayerIcons(s, "scheme_acceleration") +
+        mojoGenres.mojoGenreAcceleration(s) +
+        bwv.blackWidowAcceleration(s) +
+        fne.fneAcceleration(s) +
+        s.sideSchemes.reduce(
+          (n, p) =>
+            n +
+            iceman.icemanSchemeIcon(s, p, "scheme_acceleration") +
+            ironheart.ironheartSchemeIcons(s, p, { isTextBlank }).acceleration +
+            Number(p.accelerationTokens || 0),
+          0,
+        );
       add(
         s,
         E("threat", {
           target: "main",
-          amount:
-            escalation(s) +
-            (e.kangArea ? 0 : s.encounter.acceleration) +
-            hood.hoodAcceleration(s) +
-            hoodModular.hoodModularAcceleration(s) +
-            inheritorsAcceleration(s) +
-            angel.angelAcceleration(s) +
-            sinisterSix.sixEnemyIcons(s, "acceleration") +
-            s.attachments.filter(
-              (p) => p.code === "40031" && !isTextBlank(s, p),
-            ).length +
-            deadpool.deadpoolPlayerIcons(s, "scheme_acceleration") +
-            mojoGenres.mojoGenreAcceleration(s) +
-            bwv.blackWidowAcceleration(s) +
-            fne.fneAcceleration(s) +
-            s.sideSchemes.reduce(
-              (n, p) =>
-                n +
-                iceman.icemanSchemeIcon(s, p, "scheme_acceleration") +
-                ironheart.ironheartSchemeIcons(s, p, { isTextBlank })
-                  .acceleration +
-                Number(p.accelerationTokens || 0),
-              0,
-            ),
+          amount: stepOneAmount,
         }),
+        ...fne.fneStepOne(s, stepOneAmount),
         ...(rulesCode(s.scheme) === "01138b"
           ? eachPlayer(s, E("ultronChoice", { amount: 2 }))
           : []),

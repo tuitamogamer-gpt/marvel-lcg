@@ -595,9 +595,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(3638);
-    expect(coverage.unsupportedFaces).toBe(913);
-    expect(coverage.dedicatedFaces).toBe(3200);
+    expect(coverage.executableFaces).toBe(3651);
+    expect(coverage.unsupportedFaces).toBe(900);
+    expect(coverage.dedicatedFaces).toBe(3213);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -1140,6 +1140,8 @@ describe("complete expansion rules inventory", () => {
         46 -
         // Fear No Evil, part three: The Raft Breakout and Disasters.
         15 -
+        // Fear No Evil, part three: Protection Racket.
+        13 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -1496,7 +1498,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(57);
+    ).toHaveLength(58);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "venom_goblin",

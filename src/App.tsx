@@ -485,6 +485,7 @@ import {
   fneMinionCaption,
   fneMission,
   fneObjective,
+  fneRacketNote,
   fneSideSchemeCaption,
 } from "./game/fear-no-evil";
 import {
@@ -3052,7 +3053,9 @@ export default function App() {
                             ? "A Fear No Evil mission against the chosen Underling. Each hero controls a random Daily Bugle support with 3 stamina counters; if one leaves play, or the main scheme completes, you lose. After an undefended attack against you, place 2 threat on the main scheme (3 in Expert) or spend a stamina counter. In alter-ego form, exhaust a Bugle support at the Daily Bugle to give it a stamina counter back. Tombstone and Tracksuit Mafia are preselected."
                             : villain.id === "fne_the_raft_breakout"
                               ? "A Fear No Evil mission against the chosen Underling. The villain holds the Master Key: each hero starts against an escaped Elite Prisoner, and after the villain schemes, its minion boost cards are dealt to you facedown. Every defeated minion takes 1 threat off the breakout (2 for an Elite). The Owl and Tombstone are preselected."
-                              : "A Fear No Evil mission against the chosen Underling. One random Art piece starts on the villain, and the main scheme gains 1 more threat each villain phase for every Art on the villain. Use each Art's Hero Action to take it to your hero, and defend: an undefended attack moves an Art back to the villain. Cops and The Owl are preselected."}
+                              : villain.id === "fne_protection_racket"
+                                ? "A Fear No Evil mission against the chosen Underling. Each hero protects a shop: one of five main schemes in their own play area (dealt at random in Expert), each with its own Forced Response and a limit of 10 threat. Step one adds the same threat to every main scheme, the villain schemes against the active player's, and if any of them completes or any hero is eliminated, you lose. Disasters and Tracksuit Mafia are preselected."
+                                : "A Fear No Evil mission against the chosen Underling. One random Art piece starts on the villain, and the main scheme gains 1 more threat each villain phase for every Art on the villain. Use each Art's Hero Action to take it to your hero, and defend: an undefended attack moves an Art back to the villain. Cops and The Owl are preselected."}
                       </p>
                       {underling === "typhoid_mary" && (
                         <p className="setting-help">
@@ -7957,6 +7960,9 @@ function Tabletop({
                     )}
                     {!!s.fearNoEvil && fneMainNote(s) && (
                       <p className="magog-scheme-note">{fneMainNote(s)}</p>
+                    )}
+                    {!!s.fearNoEvil?.racket && fneRacketNote(s) && (
+                      <p className="magog-scheme-note">{fneRacketNote(s)}</p>
                     )}
 
                     {batroc(s) && batrocMainNote(s) && (

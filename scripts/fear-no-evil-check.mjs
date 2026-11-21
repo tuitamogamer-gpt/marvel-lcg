@@ -25,10 +25,10 @@ await build({
       "import {newGame,dispatch,makePiece} from './src/game/engine.ts';",
       "import {card} from './src/game/cards.ts';",
       "import {syncSeat} from './src/game/team.ts';",
-      "export {UNDERLINGS,fneAttachmentCaption,fneEnvironmentCaption,fneInPlayCaption,fneMainNote,fneMinionCaption,fneObjective,fneSideSchemeCaption} from './src/game/fear-no-evil.ts';",
+      "export {UNDERLINGS,fneAttachmentCaption,fneEnvironmentCaption,fneInPlayCaption,fneMainNote,fneMinionCaption,fneObjective,fneRacketNote,fneSideSchemeCaption} from './src/game/fear-no-evil.ts';",
       "export const definition=p=>card(p);",
       "export function fixture(kind){",
-      " const mission=kind==='heist'||kind==='typhoid'?'fne_art_museum_heist':kind==='bugle'||kind==='tracksuit'?'fne_stop_the_presses':kind==='imprisoned'?'fne_the_raft_breakout':'fne_the_getaway';",
+      " const mission=kind==='heist'||kind==='typhoid'?'fne_art_museum_heist':kind==='bugle'||kind==='tracksuit'?'fne_stop_the_presses':kind==='imprisoned'?'fne_the_raft_breakout':kind==='proprietor'?'fne_protection_racket':'fne_the_getaway';",
       " const underling=kind==='drained'?'electro':kind==='vehicle'?'hammerhead':kind==='bugle'||kind==='converted'?'purple_man':kind==='typhoid'?'typhoid_mary':'bullseye';",
       " const difficulty=kind==='spine'?'expert':'standard';",
       " let s=newGame({heroId:'captain_marvel',aspect:'aggression',villainId:mission,difficulty,seed:60128,pacing:'expert',underling});",
@@ -56,6 +56,7 @@ await build({
       " else if(kind==='tracksuit'){const p=take('60204');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
       " else if(kind==='disaster'){const p=makePiece(s,'60179');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
       " else if(kind==='imprisoned'){const p=take('60150');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
+      " else if(kind==='proprietor'){const p=take('60139');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
       " else if(kind==='converted'){const ally=makePiece(s,'01030');ally.ownerId='p1';s.player.inPlay.push(ally);const p=take('60100');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
       " else throw Error('Unknown fixture '+kind);",
       " syncSeat(s);return{state:s,...result};",
@@ -78,6 +79,7 @@ const {
   fneMainNote,
   fneMinionCaption,
   fneObjective,
+  fneRacketNote,
   fneSideSchemeCaption,
 } = await import(pathToFileURL(fixturePath).href);
 const require = createRequire(import.meta.url);
@@ -140,9 +142,11 @@ const SET_SIZES = {
   fne_stop_the_presses: 8,
   fne_tombstone: 5,
   fne_tracksuit_mafia: 7,
-  // Part three: Master Key, the six Prisoners and Imprisoned.
+  // Part three: Master Key, the six Prisoners and Imprisoned; Shop
+  // Proprietor, Man-Bull and two Change of Venue.
   fne_the_raft_breakout: 8,
   fne_disasters: 5,
+  fne_protection_racket: 4,
 };
 function originals(s, held = []) {
   const all = [...pieces(s), ...held];
@@ -396,7 +400,17 @@ const MISSIONS = {
     modules: ["fne_the_owl", "fne_tombstone"],
     threat: 2,
   },
+  fne_protection_racket: {
+    name: "Protection Racket",
+    help: /Each hero protects a shop/,
+    // Chosen in standard mode, dealt at random in expert mode.
+    choose: "Bull In A China Shop",
+    scheme: "60135b",
+    modules: ["fne_disasters", "fne_tracksuit_mafia"],
+    threat: 0,
+  },
 };
+const RACKET_SCHEMES = ["60134b", "60135b", "60136b", "60137b", "60138b"];
 const SETUPS = [
   ["fne_the_getaway", "standard", "bullseye"],
   ["fne_the_getaway", "expert", "electro"],
@@ -405,6 +419,8 @@ const SETUPS = [
   ["fne_stop_the_presses", "standard", "purple_man"],
   ["fne_stop_the_presses", "expert", "typhoid_mary"],
   ["fne_the_raft_breakout", "standard", "electro"],
+  ["fne_protection_racket", "standard", "hammerhead"],
+  ["fne_protection_racket", "expert", "purple_man"],
 ];
 try {
   for (const width of widths)
@@ -434,11 +450,22 @@ try {
         await page.getByText(/^Typhoid Mary is never defeated/).waitFor();
       await page.locator("#mission-seed").fill("60128");
       await page.locator("#start-btn").click();
-      let s = await settle();
+      // Protection Racket: each player chooses a main scheme in standard
+      // mode.
+      const racketChoice = async () => {
+        const next = await settle(
+          (s) => !!m.choose && s.prompt?.title === "Protection Racket",
+        );
+        if (next.prompt?.title !== "Protection Racket") return next;
+        assert.equal(difficulty, "standard", "chosen in standard mode only");
+        await choose(next, m.choose);
+        return settle();
+      };
+      let s = await racketChoice();
       await page
         .getByRole("button", { name: "Keep hand & begin", exact: true })
         .click();
-      s = await settle();
+      s = await racketChoice();
       assert.equal(s.phase, "player");
       assert.equal(s.villainId, villainId);
       assert.ok(s.fearNoEvil, "Fear No Evil's rules are on");
@@ -450,7 +477,9 @@ try {
         [code, TYPHOID_SIDES[code]].includes(s.villain.code),
         "the Underling's stage, on either side for Typhoid Mary",
       );
-      assert.equal(s.scheme.code, m.scheme);
+      if (villainId === "fne_protection_racket" && difficulty === "expert")
+        assert.ok(RACKET_SCHEMES.includes(s.scheme.code), "a random shop");
+      else assert.equal(s.scheme.code, m.scheme);
       assert.equal(s.scheme.threat, m.threat);
       if (villainId === "fne_the_getaway") {
         assert.equal(s.fearNoEvil.speed, difficulty === "expert" ? 2 : 1);
@@ -485,6 +514,14 @@ try {
           ),
           "an escaped Prisoner",
         );
+      } else if (villainId === "fne_protection_racket") {
+        assert.deepEqual(
+          Object.keys(s.fearNoEvil.racket.schemes),
+          ["p1"],
+          "one main scheme per player",
+        );
+        assert.equal(s.fearNoEvil.racket.setAside.length, 4);
+        await shown(fneRacketNote(s));
       } else {
         assert.ok(
           (s.environments || []).some((p) => p.code === "60152"),
@@ -512,7 +549,7 @@ try {
       await captions(s);
       await artwork([
         s.villain.code,
-        m.scheme,
+        s.scheme.code,
         ...s.attachments.map((p) => p.code),
       ]);
       const owned = originals(s);
@@ -716,6 +753,24 @@ try {
     assert.deepEqual(originals(s), owned);
     await resumeExact();
     await audit("converted", width);
+    checks.push({ ...current });
+
+    current = { kind: "proprietor", width };
+    f = fixture("proprietor");
+    owned = originals(f.state, f.pending);
+    await open(width, f.state);
+    s = await resolveFixture();
+    assert.ok(
+      s.player.inPlay.some((p) => p.code === "60139"),
+      "Shop Proprietor under your control",
+    );
+    await shown(fneMainNote(s));
+    await shown(fneRacketNote(s));
+    await captions(s);
+    await artwork(["60139", s.scheme.code]);
+    assert.deepEqual(originals(s), owned);
+    await resumeExact();
+    await audit("proprietor", width);
     checks.push({ ...current });
   }
   assert.deepEqual(errors, []);

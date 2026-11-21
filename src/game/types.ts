@@ -261,6 +261,8 @@ export interface Attack {
   fneLady?: boolean;
   /** Fear No Evil's additional boost cards, dealt with the attack's boosts. */
   fneExtraBoosts?: number;
+  /** Man-Bull's boost: threat for this attack's excess damage. */
+  fneManBull?: number;
   afterActivation?: Effect[];
   /** Effects tied to this actual attack, before optional aftermath responses. */
   visionAfterAttack?: Effect[];
