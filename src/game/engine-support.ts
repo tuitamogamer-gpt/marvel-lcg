@@ -85,6 +85,8 @@ import {
 } from "./enchantress-villain.js";
 import { GOD_OF_LIES_CODES } from "./god-of-lies.js";
 import { FEAR_NO_EVIL_CODES } from "./fear-no-evil.js";
+import { DAREDEVIL_SCRIPT_CODES } from "./daredevil.js";
+import { FNE_PLAYER_PACK_SCRIPT_CODES } from "./fne-player-pack.js";
 import { TASKMASTER_SCRIPT_CODES } from "./taskmaster.js";
 import { ABSORBING_MAN_SCRIPT_CODES } from "./absorbing-man.js";
 import { CROSSBONES_SCRIPT_CODES } from "./crossbones.js";
@@ -244,6 +246,7 @@ export const SCRIPTED_HERO_IDS = new Set([
   "nightcrawler",
   "nick_fury",
   "magneto",
+  "daredevil",
 ]);
 export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...NIGHTCRAWLER_SCRIPT_CODES,
@@ -403,6 +406,11 @@ export const EXPLICIT_CARD_SCRIPTS = new Set<string>([
   ...TRICKSTER_MAGIC_CODES,
   ...GOD_OF_LIES_CODES,
   ...FEAR_NO_EVIL_CODES,
+  // Fear No Evil's heroes: Daredevil and the starter deck's justice and
+  // basic cards. Chance Encounter reprints Vision's 26034.
+  ...DAREDEVIL_SCRIPT_CODES,
+  ...FNE_PLAYER_PACK_SCRIPT_CODES,
+  "60025",
   ...RED_SKULL_SCRIPT_CODES,
   ...ZZZAX_SCRIPT_CODES,
   ...INHERITORS_SCRIPT_CODES,

@@ -180,7 +180,19 @@ export function deadpoolPlayerIcons(
     | "scheme_amplify"
     | "scheme_hazard",
 ) {
-  return allInPlay(s).reduce((n, p) => n + icemanSchemeIcon(s, p, key), 0);
+  return allInPlay(s).reduce(
+    (n, p) =>
+      n + (daggerSuppresses(s, p, key) ? 0 : icemanSchemeIcon(s, p, key)),
+    0,
+  );
+}
+/** Dagger (Fear No Evil): Cloak loses each acceleration icon. */
+function daggerSuppresses(s: GameState, p: Piece, key: string) {
+  return (
+    key === "scheme_acceleration" &&
+    p.code === "60020" &&
+    allInPlay(s).some((q) => q.code === "60021" && !isTextBlank(s, q))
+  );
 }
 export function deadpoolResources(
   s: GameState,

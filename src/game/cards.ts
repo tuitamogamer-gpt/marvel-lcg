@@ -51,6 +51,7 @@ import {
   doctorStrangeTraits,
 } from "./doctor-strange.js";
 import { spectrumStats } from "./spectrum.js";
+import { daredevilHasTrait, daredevilStats } from "./daredevil.js";
 import { warlockStats } from "./warlock.js";
 import { mtsPlayerPackHeroStats } from "./mts-player-pack.js";
 import { nebulaStats, nebulaNamedCharacterModifiers } from "./nebula.js";
@@ -952,6 +953,20 @@ export const HEROES = [
     description:
       "Gather intelligence in Stealth, then spend suit threat on an Assault.",
     style: "Suit forms · Justice",
+    complexity: 3,
+  },
+  {
+    id: "daredevil",
+    code: "60001a",
+    alter: "60001b",
+    name: "Daredevil",
+    identity: "Matt Murdock",
+    aspect: "justice" as Aspect,
+    color: "#981d1f",
+    tag: "The Man Without Fear.",
+    description:
+      "Play Sense upgrades from your Sense deck onto enemies and schemes, then spend them for bursts of damage and thwart.",
+    style: "Sense deck · Justice",
     complexity: 3,
   },
 ];
@@ -2230,6 +2245,7 @@ export function deckCodes(
       (hero === "jubilee" && aspect === "justice") ||
       (hero === "nightcrawler" && aspect === "protection") ||
       (hero === "nick_fury" && aspect === "justice") ||
+      (hero === "daredevil" && aspect === "justice") ||
       (hero === "colossus" && aspect === "protection") ||
       (hero === "shadowcat" && aspect === "aggression") ||
       (hero === "rogue" && aspect === "protection") ||
@@ -2397,6 +2413,7 @@ export function aerial(s: GameState, visited: string[] = []): boolean {
     (s.player.form === "hero" &&
       (has(s, "01017") || !!s.flags.aerial || thorStats(s).aerial)) ||
     (s.heroId === "angel" && s.player.form === "hero") ||
+    daredevilHasTrait(s, "hero", "Aerial") ||
     nickFuryAerial(s) ||
     icemanStats(s).aerial ||
     magnetoHeroStats(s).aerial ||
@@ -2471,6 +2488,7 @@ export function heroStats(s: GameState) {
       msMarvelStats(s).atk +
       thorStats(s).atk +
       doctorStrangeStats(s).attack +
+      daredevilStats(s).attack +
       hawkeyeStats(s).atk +
       antManStats(s).attack +
       waspStats(s).attack +
@@ -2604,6 +2622,7 @@ export function heroStats(s: GameState) {
     recover:
       card(HEROES.find((h) => h.id === s.heroId)!.alter).recover! +
       scriptedModifier(s, "recover") +
+      daredevilStats(s).recover +
       nightcrawlerStats(s).recover +
       hulkStats(s).recover +
       msMarvelStats(s).recover +

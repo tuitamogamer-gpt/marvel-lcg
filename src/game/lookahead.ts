@@ -1,4 +1,6 @@
 import { magikRevealedTop, magikTopPlayable } from "./magik.js";
+import { daredevilStoredPlayable } from "./daredevil.js";
+import { fnePackStoredPlayable } from "./fne-player-pack.js";
 import {
   doctorStrangeAbilityOptions,
   doctorStrangeTopInvocation,
@@ -169,6 +171,8 @@ export function candidates(s: GameState): Command[] {
   for (const p of [
     ...s.player.hand,
     ...[magikTopPlayable(s)].filter((p): p is Piece => !!p),
+    ...daredevilStoredPlayable(s),
+    ...fnePackStoredPlayable(s),
   ])
     if (!playable(s, p)) list.push({ type: "PLAY", id: p.id });
   for (const p of s.player.inPlay) {
@@ -373,7 +377,7 @@ export function planPrompt(
 function describe(s: GameState, c: Command) {
   switch (c.type) {
     case "PLAY":
-      return `Play ${card([...s.player.hand, ...[magikTopPlayable(s)].filter((p): p is Piece => !!p)].find((p) => p.id === c.id)!).name}`;
+      return `Play ${card([...s.player.hand, ...[magikTopPlayable(s)].filter((p): p is Piece => !!p), ...daredevilStoredPlayable(s), ...fnePackStoredPlayable(s)].find((p) => p.id === c.id)!).name}`;
     case "BASIC":
       return c.action === "attack"
         ? "Basic attack"

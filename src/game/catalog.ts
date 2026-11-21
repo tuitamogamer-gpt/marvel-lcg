@@ -94,7 +94,7 @@ const appStarters: CatalogDeck[] = HEROES.map((hero) => ({
   ...(hero.id === "warlock"
     ? { aspects: ["aggression", "justice", "leadership", "protection"] }
     : {}),
-  ...(hero.id === "ironheart"
+  ...(hero.id === "ironheart" || hero.id === "daredevil"
     ? { supplementaryCards: heroSupplementaryCards(hero.id) }
     : {}),
 }));

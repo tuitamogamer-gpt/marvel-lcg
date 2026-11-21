@@ -175,6 +175,7 @@ export function deckErrors(
       "nick_fury",
       "magneto",
       "maria_hill",
+      "daredevil",
     ].includes(heroId)
   ) {
     const selected = chosenAspects || heroDeckAspects(heroId, codes, aspect);

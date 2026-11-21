@@ -1,6 +1,7 @@
 import { magikTopPlayable } from "./magik.js";
 import catalog from "../data/catalog-cards.json" with { type: "json" };
 import { isTextBlank } from "./card-text.js";
+import { rulesCode } from "./rules-code.js";
 import { allInPlay, controller, playerOrder, seatView } from "./team.js";
 import type { AntManTarget } from "./ant-man.js";
 import type {
@@ -234,7 +235,7 @@ export function visionPackCardEntered(s: GameState, p: Piece): Effect[] {
   if (p.code === "26033") p.counters = 2;
   return p.code === "26016"
     ? [P("flow-control", { id: p.id })]
-    : p.code === "26034" && !p.attachedTo
+    : rulesCode(p) === "26034" && !p.attachedTo
       ? [P("chance-attach", { id: p.id })]
       : [];
 }
@@ -270,7 +271,7 @@ export function visionPackAttachmentTargets(
   s: GameState,
   p: Piece,
 ): AntManTarget[] | null {
-  return p.code === "26034"
+  return rulesCode(p) === "26034"
     ? s.sideSchemes
         .filter(
           (scheme) =>
@@ -344,7 +345,7 @@ export function visionPackPlayRestriction(
 ): string | null {
   if (p.code === "26016" && !flowSeats(s).length)
     return "Each player already controls Flow Like Water.";
-  if (p.code === "26034" && !visionPackAttachmentTargets(s, p)?.length)
+  if (rulesCode(p) === "26034" && !visionPackAttachmentTargets(s, p)?.length)
     return "Chance Encounter needs a side scheme without one attached.";
   if (p.code === "26024" && !rebootTargets(s, ports).length)
     return "Reboot needs a friendly Android it can ready or heal.";
@@ -431,7 +432,9 @@ export function visionPackSchemeDefeating(
   return allInPlay(s)
     .filter(
       (a) =>
-        a.code === "26034" && a.attachedTo === p.id && !ports.isTextBlank(s, a),
+        rulesCode(a) === "26034" &&
+        a.attachedTo === p.id &&
+        !ports.isTextBlank(s, a),
     )
     .map((a) =>
       E("optional", {
@@ -670,7 +673,7 @@ export function resolveVisionPackEffect(
       break;
     }
     case "vision-pack:chance-attach": {
-      const p = own(s, e.id, "26034");
+      const p = [own(s, e.id)].find((q) => !!q && rulesCode(q) === "26034");
       need(p, "Chance Encounter is unavailable.");
       const targets = visionPackAttachmentTargets(s, p!) || [];
       need(targets.length, "Chance Encounter needs an unoccupied side scheme.");
@@ -690,7 +693,7 @@ export function resolveVisionPackEffect(
       break;
     }
     case "vision-pack:chance-target": {
-      const p = own(s, e.id, "26034");
+      const p = [own(s, e.id)].find((q) => !!q && rulesCode(q) === "26034");
       need(
         p && visionPackAttachmentTargets(s, p)!.some((t) => t.id === e.target),
         "Chance Encounter's scheme is unavailable or occupied.",

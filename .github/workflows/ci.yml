@@ -29,8 +29,8 @@ jobs:
   missions:
     name: Source missions (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    # Each shard now runs 38,194 configurations; the slowest took about 119
-    # minutes at 34,450.
+    # Each shard now runs 38,928 or 38,929 configurations; the slowest took
+    # about 119 minutes at 34,450.
     timeout-minutes: 180
     strategy:
       fail-fast: false
@@ -193,6 +193,8 @@ jobs:
             scripts: test:god-of-lies
           - group: fear-no-evil
             scripts: test:fear-no-evil
+          - group: daredevil
+            scripts: test:daredevil
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

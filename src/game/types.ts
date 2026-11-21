@@ -497,6 +497,9 @@ export interface GameState {
      * player draw pile or its exhaustion rule. Only its current top is faceup. */
     invocationDeck?: Piece[];
     invocationDiscard?: Piece[];
+    /** Daredevil's faceup Sense deck (top first). Its order is open
+     * information; Sense upgrades leaving play return to its bottom. */
+    senseDeck?: Piece[];
   };
   villain: Piece & { hp: number; maxHp: number; stage: number };
   scheme: { code: string; threat: number; index: number };

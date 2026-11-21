@@ -36,6 +36,8 @@ import {
   doctorStrangeAbilityOptions,
   doctorStrangeTopInvocation,
 } from "./game/doctor-strange";
+import { daredevilStoredPlayable } from "./game/daredevil";
+import { fnePackStoredPlayable } from "./game/fne-player-pack";
 import {
   msMarvelAbilityOptions,
   msMarvelDiscardPlayable,
@@ -10088,6 +10090,107 @@ function Tabletop({
                       </small>
                     </section>
                   )}
+                {s.heroId === "daredevil" &&
+                  s.phase !== "mulligan" &&
+                  (s.player.senseDeck || []).length > 0 && (
+                    <section
+                      className="invocation-area sense-area"
+                      aria-label="Sense deck"
+                    >
+                      <span className="table-group-label">
+                        SENSE DECK · FACEUP
+                      </span>
+                      <div className="table-piles">
+                        <TablePile
+                          kind="hero"
+                          count={s.player.senseDeck!.length}
+                          top={s.player.senseDeck![0]}
+                          label="Top of the Sense deck"
+                          onOpen={() =>
+                            setPile({
+                              title: "Sense deck · top first",
+                              cards: s.player.senseDeck || [],
+                            })
+                          }
+                        />
+                      </div>
+                      <small>
+                        {card(s.player.senseDeck![0]).name} ·{" "}
+                        {plural(
+                          cardCost(s, card(s.player.senseDeck![0])),
+                          "resource",
+                        )}
+                      </small>
+                      {daredevilStoredPlayable(s).map((top) => {
+                        const reason = playable(s, top);
+                        return (
+                          <button
+                            key={top.id}
+                            className="ability-button"
+                            aria-label={`Superhuman Senses: play ${card(top).name}`}
+                            title={
+                              reason ||
+                              `Pay ${plural(cardCost(s, card(top)), "resource")}`
+                            }
+                            disabled={!canUseAction || !!reason}
+                            onClick={() =>
+                              sendAction({ type: "PLAY", id: top.id })
+                            }
+                          >
+                            Superhuman Senses · {cardCost(s, card(top))}
+                          </button>
+                        );
+                      })}
+                    </section>
+                  )}
+                {fnePackStoredPlayable(s).length > 0 && (
+                  <section
+                    className="attached-event-area"
+                    aria-label="Contingency Planning tucked upgrade"
+                  >
+                    <span className="table-group-label">
+                      CONTINGENCY PLANNING · TUCKED
+                    </span>
+                    <div className="attached-card-list">
+                      {fnePackStoredPlayable(s).map((upgrade) => {
+                        const reason = playable(s, upgrade);
+                        const cost = cardCost(s, card(upgrade), upgrade);
+                        return (
+                          <div className="attached-piece" key={upgrade.id}>
+                            <button
+                              className="attached-card"
+                              aria-label={`Inspect ${card(upgrade).name} tucked under Contingency Planning`}
+                              onClick={() =>
+                                inspect({
+                                  code: upgrade.code,
+                                  piece: upgrade,
+                                  hand: true,
+                                  playerId: s.activePlayerId,
+                                })
+                              }
+                            >
+                              <CardImage code={upgrade.code} />
+                              <span>{card(upgrade).name}</span>
+                            </button>
+                            <button
+                              className="ability-button"
+                              aria-label={`Play from Contingency Planning: ${card(upgrade).name}`}
+                              title={
+                                reason || `Pay ${plural(cost, "resource")}`
+                              }
+                              disabled={!canUseAction || !!reason}
+                              onClick={() =>
+                                sendAction({ type: "PLAY", id: upgrade.id })
+                              }
+                            >
+                              Play Upgrade · {cost}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
                 {s.encounter.dealt.filter((p) => p.dealtTo === s.activePlayerId)
                   .length > 0 && (
                   <div
