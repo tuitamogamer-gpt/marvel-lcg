@@ -247,6 +247,14 @@ export interface Attack {
   kfanHammerDealt?: boolean;
   /** You Dare Oppose Me?'s boost: this attack gains overkill. */
   kfanOverkill?: boolean;
+  /** Incessant Pursuit redirected this attack to the attached ally. */
+  fnePursuit?: string;
+  /** Raise the Stakes gave Bullseye this attack's additional boost card. */
+  fneStakes?: string;
+  /** Lady Bullseye's additional boost card for an undefended attack. */
+  fneLady?: boolean;
+  /** Fear No Evil's additional boost cards, dealt with the attack's boosts. */
+  fneExtraBoosts?: number;
   afterActivation?: Effect[];
   /** Effects tied to this actual attack, before optional aftermath responses. */
   visionAfterAttack?: Effect[];
@@ -335,6 +343,8 @@ export interface GameState {
   /** God of Lies: Loki, God of Lies, Worlds Collide, the shatter counters
    * and the set-aside Avatars of Loki. */
   godOfLies?: import("./god-of-lies.js").GodOfLiesState;
+  /** Fear No Evil: the mission, the chosen Underling and its counters. */
+  fearNoEvil?: import("./fear-no-evil.js").FearNoEvilState;
   venomGoblin?: import("./venom-goblin.js").VenomGoblinState;
   /** Across the Mojoverse: the show deck. */
   spiral?: import("./spiral.js").SpiralState;

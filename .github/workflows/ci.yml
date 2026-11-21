@@ -191,6 +191,8 @@ jobs:
             scripts: test:enchantress
           - group: god-of-lies
             scripts: test:god-of-lies
+          - group: fear-no-evil
+            scripts: test:fear-no-evil
           - group: crossbones
             scripts: test:crossbones
           - group: red-skull-modules

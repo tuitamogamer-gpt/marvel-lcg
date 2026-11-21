@@ -94,6 +94,7 @@ import {
   TRICKSTER_MAGIC_CODES,
 } from "../src/game/enchantress-villain";
 import { GOD_OF_LIES_CODES } from "../src/game/god-of-lies";
+import { FEAR_NO_EVIL_CODES } from "../src/game/fear-no-evil";
 import { hasExecutableScript } from "../src/game/script-registry";
 import {
   EXPLICIT_CARD_SCRIPTS,
@@ -180,6 +181,7 @@ const badoonCodes = new Set<string>([
   ...ENCHANTRESS_CODES,
   ...TRICKSTER_MAGIC_CODES,
   ...GOD_OF_LIES_CODES,
+  ...FEAR_NO_EVIL_CODES,
 ]);
 const read = (file: string) =>
   JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
@@ -563,7 +565,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(96);
+    expect(MODULES).toHaveLength(99);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "temporal",
@@ -593,9 +595,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(3515);
-    expect(coverage.unsupportedFaces).toBe(1036);
-    expect(coverage.dedicatedFaces).toBe(3077);
+    expect(coverage.executableFaces).toBe(3577);
+    expect(coverage.unsupportedFaces).toBe(974);
+    expect(coverage.dedicatedFaces).toBe(3139);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -1130,6 +1132,9 @@ describe("complete expansion rules inventory", () => {
         44 -
         // Trickster Takeover: God of Lies.
         37 -
+        // Fear No Evil, part one: The Getaway, Art Museum Heist, Bullseye,
+        // Electro, Hammerhead, Cops, Drive and The Owl.
+        62 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -1302,7 +1307,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(96);
+    expect(coverage.registeredModules).toHaveLength(99);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -1486,7 +1491,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(53);
+    ).toHaveLength(55);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "venom_goblin",
@@ -1733,7 +1738,7 @@ describe("complete expansion rules inventory", () => {
   });
 
   it("pins data and runtime hashes so the checked inventory cannot silently drift", () => {
-    expect(Object.keys(inventory.sourceHashes)).toHaveLength(176);
+    expect(Object.keys(inventory.sourceHashes)).toHaveLength(177);
     for (const [file, expected] of Object.entries(inventory.sourceHashes)) {
       const actual = createHash("sha256")
         .update(readFileSync(new URL(`../${file}`, import.meta.url)))

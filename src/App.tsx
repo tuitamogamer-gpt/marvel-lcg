@@ -473,6 +473,15 @@ import {
   synergyUse,
 } from "./game/god-of-lies";
 import {
+  FNE_ACTION_CODES,
+  UNDERLINGS,
+  UNDERLING_IDS,
+  fneAttachmentCaption,
+  fneMainNote,
+  fneMission,
+  fneObjective,
+} from "./game/fear-no-evil";
+import {
   AERIAL_BOMBARDMENT,
   IMPERVIOUS,
   OUT_OF_REACH,
@@ -1300,6 +1309,8 @@ export default function App() {
   >("original");
   // Agents of S.H.I.E.L.D.'s Executive Board, added to any scenario.
   const [executiveBoard, setExecutiveBoard] = useState(false);
+  // Fear No Evil missions: the chosen Underling, or "" for one from the seed.
+  const [underling, setUnderling] = useState("");
   const recommendedSenatorDamage =
     heroic > 0 ? 3 : difficulty === "expert" ? 2 : 1;
   const resolvedCaptureAllocation = team.map((_, index) =>
@@ -1659,6 +1670,7 @@ export default function App() {
                   standardIII: game.standardIII,
                   executiveBoard:
                     !!game.executiveBoard && game.villainId !== "baron_zemo",
+                  underling: game.fearNoEvil?.underling,
                   seed: sameSeed ? game.startSeed || undefined : undefined,
                 }
               : {
@@ -1693,6 +1705,7 @@ export default function App() {
                   executiveBoard
                     ? { executiveBoard: true }
                     : {}),
+                  ...(fneMission(villain.id) && underling ? { underling } : {}),
                   seed: parseSeed(seedText),
                 },
         ),
@@ -3007,6 +3020,32 @@ export default function App() {
                       preselected.
                     </p>
                   )}
+                  {fneMission(villain.id) && (
+                    <>
+                      <div className="setting-line">
+                        <span>Underling</span>
+                        <div className="segmented">
+                          {["", ...UNDERLING_IDS].map((id) => (
+                            <button
+                              key={id || "random"}
+                              className={underling === id ? "selected" : ""}
+                              aria-pressed={underling === id}
+                              onClick={() => setUnderling(id)}
+                            >
+                              {id
+                                ? UNDERLINGS[id as keyof typeof UNDERLINGS].name
+                                : "Random"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="setting-help">
+                        {villain.id === "fne_the_getaway"
+                          ? "A Fear No Evil mission against the chosen Underling. Out Front, the villain cannot be hurt: damage removes main scheme threat instead, and with no threat left you pull up Alongside and the villain takes 2 damage per hero. Each round that ends with threat adds speed counters, which drive Burning Rubber, Pedestrians and the Escort Vehicle. Cops and Drive are preselected."
+                          : "A Fear No Evil mission against the chosen Underling. One random Art piece starts on the villain, and the main scheme gains 1 more threat each villain phase for every Art on the villain. Use each Art's Hero Action to take it to your hero, and defend: an undefended attack moves an Art back to the villain. Cops and The Owl are preselected."}
+                      </p>
+                    </>
+                  )}
                   {villain.id === "thunderbolts" && (
                     <p className="setting-help">
                       Choose one modular set with an Elite Thunderbolt, plus one
@@ -3477,7 +3516,9 @@ export default function App() {
                       ? `${difficulty === "expert" ? 3 : 2} villains to defeat`
                       : villain.id === "god_of_lies"
                         ? `${(card("55029a").health! + (difficulty === "expert" ? 2 : 0)) * team.length} Avatar HP · Loki ${card(GOD_OF_LIES_LOKI).health! * team.length}`
-                        : `${card(villain.codes[difficulty === "expert" ? 1 : 0]).health! * team.length} villain HP`}
+                        : fneMission(villain.id) && !underling
+                          ? "Underling HP varies"
+                          : `${card((fneMission(villain.id) && underling ? UNDERLINGS[underling as keyof typeof UNDERLINGS].codes : villain.codes)[difficulty === "expert" ? 1 : 0]).health! * team.length} villain HP`}
                   </span>
                   <span>
                     <Target size={16} />
@@ -6653,6 +6694,13 @@ function AttachedCards({
                 {p.counters} {p.counters === 1 ? "secret" : "secrets"}
               </small>
             )}
+            {!!fneAttachmentCaption(game, p) && (
+              <small
+                aria-label={`${card(p).name}: ${fneAttachmentCaption(game, p)}`}
+              >
+                {fneAttachmentCaption(game, p)}
+              </small>
+            )}
             {(!!HYPNOTIC_GAZES[p.code] ||
               TRANCES.includes(p.code) ||
               TEMPTATIONS.includes(p.code)) && (
@@ -6814,6 +6862,9 @@ function AttachedCards({
                 LOVE_TRIANGLE,
                 // God of Lies: Wrapped in Chains.
                 WRAPPED_IN_CHAINS,
+                // Fear No Evil: the Art pieces, Electric Charge, Hardheaded
+                // and Flight Serum.
+                ...FNE_ACTION_CODES,
               ].includes(p.code)
                 ? abilityOptions(game, p)
                 : []),
@@ -7186,33 +7237,35 @@ function Tabletop({
                             ? enchantressObjective(s)
                             : s.godOfLies
                               ? godOfLiesObjective(s)
-                              : s.hela
-                                ? helaOdinCaptive(s)
-                                  ? "Free Odin, then defeat Hela"
-                                  : "Defeat Hela's Mystic side"
-                                : s.loki
-                                  ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
-                                  : s.horsemen
-                                    ? `Bring all four Horsemen to 0 · ${horsemenVillains(s).filter((v) => !horsemanStanding(s, v)).length} of 4 at 0`
-                                    : apocalypse(s)
-                                      ? noLongerWorthy(s)
-                                        ? "Defeat Apocalypse · No Longer Worthy"
-                                        : `Storm the citadel · ${apocalypseCitadel(s)} of 3 cleared`
-                                      : s.sinisterSix
-                                        ? "Escape: clear the Light at the End"
-                                        : s.wreckingCrew
-                                          ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
-                                          : s.kang
-                                            ? kangObjective(s)
-                                            : magogScenario(s)
-                                              ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
-                                              : s.spiral
-                                                ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
-                                                : s.morlockSiege
-                                                  ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
-                                                  : onTheRun(s)
-                                                    ? `Defeat ${card(s.villain).name} twice · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? 0 : 1} of 2`
-                                                    : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
+                              : s.fearNoEvil
+                                ? fneObjective(s)
+                                : s.hela
+                                  ? helaOdinCaptive(s)
+                                    ? "Free Odin, then defeat Hela"
+                                    : "Defeat Hela's Mystic side"
+                                  : s.loki
+                                    ? `Defeat ${s.loki.victoryCondition} Lokis · ${lokiVictories(s)} defeated`
+                                    : s.horsemen
+                                      ? `Bring all four Horsemen to 0 · ${horsemenVillains(s).filter((v) => !horsemanStanding(s, v)).length} of 4 at 0`
+                                      : apocalypse(s)
+                                        ? noLongerWorthy(s)
+                                          ? "Defeat Apocalypse · No Longer Worthy"
+                                          : `Storm the citadel · ${apocalypseCitadel(s)} of 3 cleared`
+                                        : s.sinisterSix
+                                          ? "Escape: clear the Light at the End"
+                                          : s.wreckingCrew
+                                            ? `Defeat all four villains · ${s.wreckingCrew.defeated.length} defeated`
+                                            : s.kang
+                                              ? kangObjective(s)
+                                              : magogScenario(s)
+                                                ? `Wow the crowd · ${magogRatings(s, "challengers")} of ${magogFinishAt(s)} ratings`
+                                                : s.spiral
+                                                  ? `Corner Spiral · defeat stage ${s.difficulty === "expert" ? "III" : "II"}`
+                                                  : s.morlockSiege
+                                                    ? `Rout ${ROUTED_TO_WIN} Marauders · ${morlockRouted(s)} routed`
+                                                    : onTheRun(s)
+                                                      ? `Defeat ${card(s.villain).name} twice · ${otrCaptor(s)?.code === CAPTOR_CONFIDENT ? 0 : 1} of 2`
+                                                      : `Defeat stage ${s.difficulty === "expert" ? "III" : "II"}`}
               </b>
             </span>
             <span
@@ -7735,7 +7788,7 @@ function Tabletop({
                   <VenomGoblinMainSchemes game={s} inspect={inspect} />
                 ) : (
                   <div
-                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen || apocalypse(s) || enSabahNur(s) || blackWidowVillain(s) || batroc(s) || modok(s) || thunderbolts(s) || !!s.zemo || !!s.enchantress || !!s.godOfLies ? " magog-scheme" : ""}`}
+                    className={`main-scheme ${threatCritical ? "critical" : ""}${magogScenario(s) || s.morlockSiege || juggernaut(s) || misterSinister(s) || stryfe(s) || unus(s) || !!s.horsemen || apocalypse(s) || enSabahNur(s) || blackWidowVillain(s) || batroc(s) || modok(s) || thunderbolts(s) || !!s.zemo || !!s.enchantress || !!s.godOfLies || !!s.fearNoEvil ? " magog-scheme" : ""}`}
                     style={
                       {
                         "--scheme-actions": mainActionPiece
@@ -7880,6 +7933,9 @@ function Tabletop({
                       <p className="magog-scheme-note">
                         {godOfLiesMainNote(s)}
                       </p>
+                    )}
+                    {!!s.fearNoEvil && fneMainNote(s) && (
+                      <p className="magog-scheme-note">{fneMainNote(s)}</p>
                     )}
 
                     {batroc(s) && batrocMainNote(s) && (

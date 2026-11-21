@@ -205,7 +205,7 @@ describe("Apocalypse: original source", () => {
       defaultModules: ["dark_riders", "infinites"],
       fixedSets: ["prelates"],
     });
-    expect(MODULES.at(-18)?.id).toBe("dark_riders");
+    expect(MODULES.at(-21)?.id).toBe("dark_riders");
     expect(scenarioModules("apocalypse")).toHaveLength(MODULES.length);
   });
 

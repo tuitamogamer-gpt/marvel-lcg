@@ -1810,6 +1810,39 @@ export const VILLAINS = [
       "Loki hides behind his illusions. Shatter each Avatar of Loki to wound the God of Lies, and coordinate your synergy before his worlds collide.",
     color: "#4f6d1f",
   },
+  {
+    id: "fne_the_getaway",
+    name: "The Getaway",
+    // Fear No Evil mission, played against a chosen Underling (Bullseye,
+    // Electro or Hammerhead) whose stage cards replace these at setup.
+    codes: ["60065", "60066", "60067"],
+    schemes: ["60128b"],
+    module: "fne_cops",
+    moduleCount: 2,
+    defaultModules: ["fne_cops", "fne_drive"],
+    difficulty: 3,
+    title: "The Getaway",
+    location: "Hell's Kitchen",
+    description:
+      "An Underling races through Hell's Kitchen out front of the chase. Clear the main scheme to pull up alongside, strike while you can, and end it before the speed counters pile up.",
+    color: "#8c2f23",
+  },
+  {
+    id: "fne_art_museum_heist",
+    name: "Art Museum Heist",
+    // Fear No Evil mission, played against a chosen Underling.
+    codes: ["60065", "60066", "60067"],
+    schemes: ["60121b"],
+    module: "fne_cops",
+    moduleCount: 2,
+    defaultModules: ["fne_cops", "fne_the_owl"],
+    difficulty: 3,
+    title: "Art Museum Heist",
+    location: "Manhattan",
+    description:
+      "An Underling is looting the museum. Each Art piece on the villain speeds up the heist: take the art back with your Hero Actions and defend your hero before the thieves walk out with the collection.",
+    color: "#9a7a2c",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1920,6 +1953,9 @@ export const MODULES = [
   { id: "the_leaper", name: "The Leaper", difficulty: 3 },
   { id: "s.h.i.e.l.d.", name: "S.H.I.E.L.D.", difficulty: 2 },
   { id: "trickster_magic", name: "Trickster Magic", difficulty: 3 },
+  { id: "fne_cops", name: "Cops", difficulty: 2 },
+  { id: "fne_drive", name: "Drive", difficulty: 2 },
+  { id: "fne_the_owl", name: "The Owl", difficulty: 3 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(

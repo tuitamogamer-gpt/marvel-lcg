@@ -43,6 +43,7 @@ import * as tb from "./thunderbolts.js";
 import * as zemo from "./baron-zemo.js";
 import * as ench from "./enchantress-villain.js";
 import * as gol from "./god-of-lies.js";
+import * as fne from "./fear-no-evil.js";
 import * as taskmaster from "./taskmaster.js";
 import * as absorbingMan from "./absorbing-man.js";
 import * as crossbones from "./crossbones.js";
@@ -644,6 +645,7 @@ function keyword(p: Piece | string, name: string, s?: GameState) {
     !!(s && typeof p !== "string" && tb.thunderboltsKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && ench.enchantressKeyword(s, p, name) > 0) ||
     !!(s && typeof p !== "string" && gol.godOfLiesKeyword(s, p, name) > 0) ||
+    !!(s && typeof p !== "string" && fne.fneKeyword(s, p, name) > 0) ||
     !!(
       s &&
       typeof p !== "string" &&
@@ -690,7 +692,8 @@ function nativeStatusModifiers(s: GameState, p: StatusState) {
     unus.unusKeyword(s, piece, "Stalwart") > 0 ||
     apoc.apocalypseKeyword(s, piece, "Stalwart") > 0 ||
     ench.enchantressKeyword(s, piece, "Stalwart") > 0 ||
-    gol.godOfLiesKeyword(s, piece, "Stalwart") > 0
+    gol.godOfLiesKeyword(s, piece, "Stalwart") > 0 ||
+    fne.fneKeyword(s, piece, "Stalwart") > 0
       ? { stalwart: true }
       : {}),
     ...(piece.code === "50060" && !isTextBlank(s, piece)
@@ -761,7 +764,8 @@ function giveCharacterStatus(
             storm.stormGlobal(s).stalwart ||
             !!printedKeyword(heroCard(identity), "Stalwart") ||
             nebula.nebulaAttackKeywords(identity).stalwart ||
-            vision.visionStalwart(identity),
+            vision.visionStalwart(identity) ||
+            fne.fneIdentityStalwart(s, identity.activePlayerId),
           toughLimit: colossus.colossusToughLimit(identity, colossusPorts),
           steady:
             magik.magikStats(identity).steady ||
@@ -928,6 +932,8 @@ function defenseBlocked(s: GameState, enemyId: string) {
   );
 }
 function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
+  // Deadly Sai: Bullseye's attacks lose ranged.
+  if (name === "Ranged" && fne.fneLosesRanged(s, source)) return 0;
   if (
     name === "Piercing" &&
     nightcrawlerEncounter.nightcrawlerEncounterEnemyModifiers(s, source)
@@ -1030,7 +1036,8 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           mdk.modokKeyword(s, p, "Stalwart") > 0 ||
           magog.magogKeyword(s, p, "Stalwart") > 0 ||
           ench.enchantressKeyword(s, p, "Stalwart") > 0 ||
-          gol.godOfLiesKeyword(s, p, "Stalwart") > 0),
+          gol.godOfLiesKeyword(s, p, "Stalwart") > 0 ||
+          fne.fneKeyword(s, p, "Stalwart") > 0),
     ),
     Number(
       name === "Quickstrike" &&
@@ -1057,6 +1064,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           btc.batrocKeyword(s, p, "Piercing") > 0 ||
           mdk.modokKeyword(s, p, "Piercing") > 0 ||
           ench.enchantressKeyword(s, p, "Piercing") > 0 ||
+          fne.fneKeyword(s, p, "Piercing") > 0 ||
           storm.stormPiercing(s, p) ||
           redSkullModules.redSkullPiercing(s, p.id) ||
           crossbones.crossbonesPiercing(s, p.id, card) ||
@@ -1090,6 +1098,7 @@ function sourceKeyword(s: GameState, source: string, name: PrintedKeyword) {
           btc.batrocKeyword(s, p, "Ranged") > 0 ||
           mdk.modokKeyword(s, p, "Ranged") > 0 ||
           tb.thunderboltsKeyword(s, p, "Ranged") > 0 ||
+          fne.fneKeyword(s, p, "Ranged") > 0 ||
           granted.ranged ||
           (s.attack?.attacker === p.id && s.attack.experimentalWeaponsRanged) ||
           (s.attack?.attacker === p.id && s.attack.redSkullModulesRanged) ||
@@ -2792,6 +2801,9 @@ function check(s: GameState) {
   // God of Lies: a defeated identity changes to alter-ego once the attack,
   // activation or card in progress has finished.
   if (s.godOfLies?.alterEgo?.length) add(s, ...gol.godOfLiesFlush(s));
+  // The Getaway: Out Front flips once the main scheme has no threat.
+  if (s.fearNoEvil && (s.phase === "player" || s.phase === "villain"))
+    fne.fneCheck(s, fnePorts);
   for (const p of allInPlay(s).filter(
     (p) =>
       (p.code === "40021" && !allInPlay(s).some((q) => q.code === "40015")) ||
@@ -3157,6 +3169,8 @@ export function escalation(s: GameState) {
   if (evasion !== undefined) return evasion;
   const widow = bwv.blackWidowEscalation(s);
   if (widow !== undefined) return widow;
+  const heist = fne.fneEscalation(s);
+  if (heist !== undefined) return heist;
   return (
     (card(s.scheme.code).escalation_threat || 0) *
     (card(s.scheme.code).escalation_threat_fixed ? 1 : s.playerCount)
@@ -3753,10 +3767,18 @@ function dealDamage(
           nativePlayerCardSource(s, source),
         ) ??
         loki.lokiDamageProhibited(s, target) ??
-        kang.kangDamageProhibited(s, target))
+        kang.kangDamageProhibited(s, target) ??
+        fne.fneDamageProhibited(s, target))
       : undefined;
   if (prohibition) {
     log(s, prohibition);
+    replaced = { actualDamage: 0, excessDamage: 0, damageDealt: 0 };
+  } else if (
+    dealt > 0 &&
+    target === s.villain.id &&
+    fne.fneOutFrontReplace(s, target, dealt, fnePorts)
+  ) {
+    // Out Front: the damage removes threat from the main scheme instead.
     replaced = { actualDamage: 0, excessDamage: 0, damageDealt: 0 };
   } else if (dealt > 0 && target === s.villain.id) {
     const reflex = taskmaster.taskmasterReflect(s, target, attack, source);
@@ -4389,6 +4411,9 @@ function applyDamage(
   if (target === "hero") {
     if (!traits.grootHandled) n -= groot.grootPreventDamage(s, "hero", n);
     if (n <= 0) return none;
+    // Carjacking: a Vehicle attachment takes the identity's damage instead.
+    n = fne.fneDamageTaken(s, `hero:${s.activePlayerId}`, n, fnePorts);
+    if (n <= 0) return none;
     s.player.hp -= n;
     add(s, ...nickFury.nickFuryDamaged(s, undefined, n, "hero"));
     if (
@@ -4473,6 +4498,9 @@ function applyDamage(
     // Heightened Reflexes: 2 of the damage Batroc would take is prevented.
     n = btc.batrocDamageTaken(s, target, n, batrocPorts);
     if (!n) return none;
+    // Vehicle attachments and Adamantium-Laced Spine.
+    n = fne.fneDamageTaken(s, target, n, fnePorts);
+    if (!n) return none;
     const infinite = hela.helaInfiniteHp(s);
     const excess = infinite ? 0 : Math.max(0, n - s.villain.hp);
     const result = {
@@ -4508,6 +4536,11 @@ function applyDamage(
     return result;
   }
   const m = find(s, target)!;
+  // A Vehicle attachment takes the minion's damage instead.
+  if (s.minions.some((q) => q.id === m.id)) {
+    n = fne.fneDamageTaken(s, target, n, fnePorts);
+    if (!n) return none;
+  }
   const remain = pieceHP(s, m) - m.damage;
   const excess = Math.max(0, n - remain);
   const result = {
@@ -5074,6 +5107,16 @@ function defeatCharacter(
         : []),
       ...(minion
         ? gol.godOfLiesMinionDefeated(
+            s,
+            m,
+            textWasBlank,
+            source.startsWith("hero:")
+              ? source.slice(5)
+              : controller(s, source)?.id || s.activePlayerId,
+          )
+        : []),
+      ...(minion
+        ? fne.fneMinionDefeated(
             s,
             m,
             textWasBlank,
@@ -5726,9 +5769,10 @@ function advanceVillain(
   const config = VILLAINS.find((v) => v.id === s.villainId)!;
   wideawake.projectWideawakeEnemyLeftPlay(s, s.villain.id);
   s.villain.stage++;
+  const stageCodes = fne.fneVillainCodes(s, config.codes);
   s.villain.code =
-    riskyNextVillainFace(s, config.codes[s.villain.stage - 1]) ||
-    config.codes[s.villain.stage - 1];
+    riskyNextVillainFace(s, stageCodes[s.villain.stage - 1]) ||
+    stageCodes[s.villain.stage - 1];
   // Across the Mojoverse: the next Spiral enters play on the side the
   // defeated one was on.
   s.villain.code = spiral.spiralNextStageCode(s, previousCode, s.villain.code);
@@ -5791,6 +5835,7 @@ function villainSetup(s: GameState) {
     ...db.darkBeastVillainRevealed(s),
     ...bwv.blackWidowVillainRevealed(s),
     ...ench.enchantressVillainRevealed(s),
+    ...fne.fneVillainRevealed(s),
   );
   add(s, ...(magneto.magnetoReveal(s, s.villain, { isTextBlank }) || []));
   add(
@@ -6683,6 +6728,7 @@ function defeatScheme(
         ...btc.batrocSchemeDefeated(s, p),
         ...zemo.zemoSchemeDefeated(s, p),
         ...gol.godOfLiesSchemeDefeated(s, p),
+        ...fne.fneSchemeDefeated(s, p),
         ...mdk.modokSchemeDefeated(
           s,
           p,
@@ -7296,6 +7342,7 @@ function captainPackHasTrait(
   if (db.darkBeastTrait(s, target, trait)) return true;
   if (mdk.modokTrait(s, target, trait)) return true;
   if (ench.enchantressTrait(s, target, trait.replace(/\.$/, ""))) return true;
+  if (fne.fneTrait(s, target, trait.replace(/\.$/, ""))) return true;
   if (jubilee.jubileeEnemyTrait(s, target, trait)) return true;
   if (
     (target === "hero" || target === `hero:${s.activePlayerId}`) &&
@@ -7642,6 +7689,7 @@ function attackAction(
   const attacker = combatCharacter(s, source);
   const defender = combatCharacter(s, target);
   const previousEffects = new Set(s.queue);
+  const whiplash = fne.fneEnemyAttacked(s, target, source, s.activePlayerId);
   const result = dealDamage(
     s,
     target,
@@ -7653,6 +7701,7 @@ function attackAction(
     traits,
   );
   if (result) add(s, ...magnetoHero.magnetoHeroEnemyAttacked(s, target));
+  add(s, ...whiplash);
   add(
     s,
     ...hoodModular.hoodModularEnemyAttacked(
@@ -9265,6 +9314,9 @@ export function newGame(config: {
   /** Add the S.H.I.E.L.D. Executive Board, which does not count as a
    * modular set; Baron Zemo always uses it. */
   executiveBoard?: boolean;
+  /** Fear No Evil missions: the Underling villain (bullseye, electro or
+   * hammerhead); otherwise one is picked from the seed. */
+  underling?: string;
 }): GameState {
   const team = config.heroes || [
     { heroId: config.heroId, aspect: config.aspect },
@@ -9427,6 +9479,9 @@ export function newGame(config: {
     attack: null,
   };
   s.startSeed = s.seed;
+  // Fear No Evil: the mission is played against the chosen Underling.
+  const fneUnderling = fne.fneUnderlingFor(v.id, config.underling, s.seed);
+  if (fneUnderling) fne.fneInitVillain(s, fneUnderling);
   for (const seat of players) {
     activateSeat(s, seat.id);
     const codes =
@@ -9559,52 +9614,57 @@ export function newGame(config: {
                                         ench.ENCHANTRESS_MODULAR_SETS as readonly string[]
                                       ).includes(c.set_code || "")
                                     ? "tt"
-                                    : [
-                                          "temporal",
-                                          "anachronauts",
-                                          "mot",
-                                        ].includes(c.set_code || "")
-                                      ? "toafk"
-                                      : c.set_code === "exodus"
-                                        ? "gambit"
-                                        : c.set_code === "sauron"
-                                          ? "iceman"
-                                          : c.set_code === "crazy_gang"
-                                            ? "ncrawler"
-                                            : c.set_code === "hellfire"
-                                              ? "magneto"
-                                              : c.set_code === "arcade"
-                                                ? "jubilee"
-                                                : c.set_code === "reavers"
-                                                  ? "rogue"
-                                                  : c.set_code === "deathstrike"
-                                                    ? "wolv"
+                                    : (
+                                          fne.FNE_MODULAR_SETS as readonly string[]
+                                        ).includes(c.set_code || "")
+                                      ? "fne"
+                                      : [
+                                            "temporal",
+                                            "anachronauts",
+                                            "mot",
+                                          ].includes(c.set_code || "")
+                                        ? "toafk"
+                                        : c.set_code === "exodus"
+                                          ? "gambit"
+                                          : c.set_code === "sauron"
+                                            ? "iceman"
+                                            : c.set_code === "crazy_gang"
+                                              ? "ncrawler"
+                                              : c.set_code === "hellfire"
+                                                ? "magneto"
+                                                : c.set_code === "arcade"
+                                                  ? "jubilee"
+                                                  : c.set_code === "reavers"
+                                                    ? "rogue"
                                                     : c.set_code ===
-                                                        "shadow_king"
-                                                      ? "storm"
+                                                        "deathstrike"
+                                                      ? "wolv"
                                                       : c.set_code ===
-                                                          "ironspider_sinister"
-                                                        ? "spdr"
+                                                          "shadow_king"
+                                                        ? "storm"
                                                         : c.set_code ===
-                                                            "inheritors"
-                                                          ? "spiderham"
+                                                            "ironspider_sinister"
+                                                          ? "spdr"
                                                           : c.set_code ===
-                                                              "zzzax"
-                                                            ? "ironheart"
+                                                              "inheritors"
+                                                            ? "spiderham"
                                                             : c.set_code ===
-                                                                "armadillo"
-                                                              ? "nova"
-                                                              : [
-                                                                    "goblin_gimmicks",
-                                                                    "a_mess_of_things",
-                                                                    "power_drain",
-                                                                    "running_interference",
-                                                                  ].includes(
-                                                                    c.set_code ||
-                                                                      "",
-                                                                  )
-                                                                ? "gob"
-                                                                : "core")) ||
+                                                                "zzzax"
+                                                              ? "ironheart"
+                                                              : c.set_code ===
+                                                                  "armadillo"
+                                                                ? "nova"
+                                                                : [
+                                                                      "goblin_gimmicks",
+                                                                      "a_mess_of_things",
+                                                                      "power_drain",
+                                                                      "running_interference",
+                                                                    ].includes(
+                                                                      c.set_code ||
+                                                                        "",
+                                                                    )
+                                                                  ? "gob"
+                                                                  : "core")) ||
           (c.set_code ===
             (v.id === "magneto"
               ? "magneto_villain"
@@ -9614,6 +9674,9 @@ export function newGame(config: {
             c.pack_code === scenarioPack) ||
           (v.fixedSets?.includes(c.set_code || "") &&
             c.pack_code === scenarioPack) ||
+          (!!s.fearNoEvil &&
+            c.set_code === fne.UNDERLINGS[s.fearNoEvil.underling].set &&
+            c.pack_code === "fne") ||
           (executiveBoard &&
             c.set_code === zemo.EXECUTIVE_BOARD_SET &&
             c.pack_code === "aos") ||
@@ -9638,6 +9701,7 @@ export function newGame(config: {
           !["villain", "main_scheme"].includes(c.type_code) &&
           c.code !== "32088b" &&
           c.code !== badoon.MILANO &&
+          !fne.fneSetupCard(c.code) &&
           !(v.id === "escape_the_museum" && c.set_code === "ship_command") &&
           c.code !== nebulaVillain.POWER_STONE &&
           c.code !== ronan.UNIVERSAL_WEAPON &&
@@ -9751,6 +9815,8 @@ export function newGame(config: {
   // God of Lies: a random Avatar of Loki, the Synergy environments and
   // Intense Focus.
   if (v.id === "god_of_lies") gol.godOfLiesSetup(s, golPorts);
+  // Fear No Evil: the mission's Setup.
+  if (s.fearNoEvil) fne.fearNoEvilSetup(s, fnePorts);
   if (v.id === "modok")
     mdk.modokSetup(s, {
       makePiece: (s, code) => makePiece(s, code),
@@ -12738,6 +12804,7 @@ export function abilityOptions(
     ...zemo.zemoActions(s, p, zemoPorts),
     ...ench.enchantressActions(s, p, enchantressPorts),
     ...gol.godOfLiesActions(s, p, golPorts),
+    ...fne.fneActions(s, p, fnePorts),
     ...taskmaster.taskmasterActions(s, p),
     ...redSkull.redSkullActions(s, p),
     ...goblinModuleAttachmentActions(s, p),
@@ -14320,7 +14387,8 @@ function countActivationBoost(s: GameState, id: string, after: Effect[]): void {
             db.darkBeastBoostIcons(s, p) +
             esn.esnBoostIcons(s, p) +
             btc.batrocBoostIcons(s, p) +
-            mdk.modokBoostIcons(s, p),
+            mdk.modokBoostIcons(s, p) +
+            fne.fneBoostIcons(s, p),
         ],
       },
     ),
@@ -14386,6 +14454,7 @@ const bwPorts: BlackWidowPorts = {
             esn.esnBoostIcons(s, p) +
             btc.batrocBoostIcons(s, p) +
             mdk.modokBoostIcons(s, p) +
+            fne.fneBoostIcons(s, p) +
             scarletWitch.scarletWitchBoostIconBonus(textActiveState(s)) +
             activationAmplify(s));
   },
@@ -17951,6 +18020,50 @@ const golPorts: gol.GodOfLiesPorts = {
     s.encounter.dealt.push(p);
     add(s, ...nickFury.nickFuryDealt(s));
   },
+};
+const fnePorts: fne.FearNoEvilPorts = {
+  ...mutagenPorts,
+  log: (s, text, kind) => log(s, text, kind),
+  reveal: (s, p, playerId) => blackWidowVillainPorts.reveal(s, p, playerId),
+  indirect: (s, playerId, amount, sourceId, title) =>
+    hoodModularPorts.indirect(s, playerId, amount, sourceId, title),
+  mill: (s, playerId, n) => mysterioPorts.millPlayer(s, playerId, n),
+  shuffle: (s, items) => shuffle(s, items),
+  makePiece: (s, code) => makePiece(s, code),
+  heroName: (s, playerId) => heroCard(seatView(s, playerId)).name,
+  canAddStatus: (s, target, status) => dsPorts.canAddStatus(s, target, status),
+  removeFromGame: (s, id) => movePieceFromPlay(s, id, true),
+  discardHandCard: (s, playerId, id) =>
+    kangPorts.discardHandCard(s, playerId, id),
+  defeatMinion: (s, id) => {
+    const p = s.minions.find((q) => q.id === id);
+    if (p) defeatCharacter(s, p, "60095");
+  },
+  enemyStat: (s, id, stat) => {
+    const p =
+      id === s.villain.id
+        ? (s.villain as Piece)
+        : s.minions.find((q) => q.id === id);
+    if (!p) return 0;
+    return stat === "attack"
+      ? enemyStats(s, p).attack
+      : enemySCH(s, p, p.engagedWith || s.activePlayerId);
+  },
+  remainingHealth: (s, id) => {
+    if (id === s.villain.id) return s.villain.hp;
+    const p = find(s, id);
+    return p ? pieceHP(s, p) - p.damage : 0;
+  },
+  identityHealth: (s, playerId) => seatView(s, playerId).player.hp,
+  attackCharacter: (s, enemyId, playerId, targetId) =>
+    add(
+      s,
+      E("enemyAttack", {
+        id: enemyId,
+        originalTarget: targetId.startsWith("hero:") ? undefined : targetId,
+        actorId: playerId,
+      }),
+    ),
 };
 const zemoPorts: zemo.ZemoPorts = {
   ...mutagenPorts,
@@ -25926,6 +26039,36 @@ function enemyAttack(
       return;
     }
   }
+  // Incessant Pursuit: the villain attacks the attached ally instead.
+  if (!friendlySource && !originalTarget) {
+    const pursued = fne.fneAttackRedirect(s, id, s.activePlayerId);
+    if (pursued.length === 1) originalTarget = pursued[0].id;
+    else if (pursued.length > 1) {
+      choose(
+        s,
+        "Incessant Pursuit",
+        `${card(p).name} attacks an ally with Incessant Pursuit instead. Choose the ally.`,
+        pursued.map((m) =>
+          option(
+            m.id,
+            card(m).name,
+            [
+              E("enemyAttack", {
+                id,
+                extra,
+                activation,
+                originalTarget: m.id,
+                actorId: s.activePlayerId,
+              }),
+            ],
+            undefined,
+            m.code,
+          ),
+        ),
+      );
+      return;
+    }
+  }
   if (!friendlySource && !originalTarget && nickFury.nickFuryStealth(s)) {
     enemyScheme(s, id, extra, {
       ...activation,
@@ -26123,6 +26266,12 @@ function enemyAttack(
         "attack",
       ),
       ...gol.godOfLiesActivationInitiated(
+        s,
+        id,
+        s.attack.originalPlayerId!,
+        "attack",
+      ),
+      ...fne.fneActivationInitiated(
         s,
         id,
         s.attack.originalPlayerId!,
@@ -26350,7 +26499,8 @@ function prepareAttackBoosts(s: GameState) {
       (a.isVillain ? db.darkBeastAdditionalBoosts(s) : 0) +
       (a.isVillain ? bwv.blackWidowAdditionalBoosts(s) : 0) +
       tb.thunderboltsAdditionalBoosts(s, a.attacker) +
-      zemo.zemoAdditionalBoosts(s);
+      zemo.zemoAdditionalBoosts(s) +
+      (a.fneExtraBoosts || 0);
   for (let i = 0; i < n; i++) {
     const p = drawEncounter(s);
     if (p) a.pendingBoosts.push(p);
@@ -26655,6 +26805,7 @@ function boostEffects(s: GameState, p: Piece) {
     zemo.zemoBoost(s, p) ??
     ench.enchantressBoost(s, p) ??
     gol.godOfLiesBoost(s, p) ??
+    fne.fneBoost(s, p) ??
     thanos.thanosBoost(s, p) ??
     hela.helaBoost(s, p) ??
     loki.lokiBoost(s, p) ??
@@ -26906,6 +27057,18 @@ function enemyScheme(
     );
     return;
   }
+  // Cop: when it would scheme, it attacks the villain instead.
+  if (fne.fneCopAttacksInstead(s, id)) {
+    log(s, `${card(p).name} attacks the villain instead of scheming.`);
+    enemyAttack(
+      s,
+      id,
+      extra,
+      request ? { ...request, kind: "attack" } : undefined,
+      s.villain.id,
+    );
+    return;
+  }
   if (!request?.nickInformantHandled && s.minions.some((q) => q.id === id)) {
     const next = E("ghostNativeEnemyScheme", {
       id,
@@ -27001,6 +27164,7 @@ function enemyScheme(
     ...esn.esnActivationInitiated(s, id, s.activePlayerId, "scheme"),
     ...zemo.zemoActivationInitiated(s, id, s.activePlayerId, "scheme"),
     ...gol.godOfLiesActivationInitiated(s, id, s.activePlayerId, "scheme"),
+    ...fne.fneActivationInitiated(s, id, s.activePlayerId, "scheme"),
     ...masterMold.masterMoldBeforeScheme(s, moldReceipt, { isTextBlank }),
     E(pendingBoosts.length ? "revealSchemeBoost" : "finishScheme"),
   );
@@ -27026,8 +27190,26 @@ function enemySCH(s: GameState, p: Piece, playerId: string): number {
     mdk.modokEnemyStat(s, p, "scheme") +
     kang.kangEnemyStat(s, p, "scheme", playerId) +
     sin.sinisterStatBonus(s, p, "scheme") +
-    sty.stryfeStatBonus(s, p, "scheme", playerId)
+    sty.stryfeStatBonus(s, p, "scheme", playerId) +
+    fne.fneEnemyStat(s, p, "scheme", {
+      highestThwart: () => fneHighestThwart(s),
+      hasTrait: (id, trait) => captainPackHasTrait(s, id, trait),
+    })
   );
+}
+/** The highest THW among characters in play (Chameleon). */
+function fneHighestThwart(s: GameState) {
+  let best = 0;
+  for (const seat of playerOrder(s)) {
+    if (seat.eliminated) continue;
+    const view = seatView(s, seat);
+    if (view.player.form === "hero")
+      best = Math.max(best, heroStats(view).thwart);
+    for (const p of view.player.inPlay)
+      if (card(p).type_code === "ally")
+        best = Math.max(best, allyStat(view, p, "thwart"));
+  }
+  return best;
 }
 export function enemyStats(
   s: GameState,
@@ -27118,6 +27300,7 @@ function finishScheme(s: GameState) {
             ? s.sideSchemes.find((q) => q.code === "44034")!.id
             : (wreckingCrew.wreckingCrewSchemeTarget(s, p) ??
               esn.esnSchemeTarget(s, p) ??
+              fne.fneSchemeTarget(s, p) ??
               phoenix.phoenixSchemeTarget(s, p)),
         amount:
           amount +
@@ -27148,6 +27331,7 @@ function finishScheme(s: GameState) {
     ...mdk.modokActivated(s, id),
     ...tb.thunderboltsSchemed(s, id, s.activePlayerId),
     ...ench.enchantressSchemed(s, id, s.activePlayerId),
+    ...fne.fneSchemed(s, id, s.activePlayerId),
     ...tb.thunderboltsActivated(s, id, s.activePlayerId),
     ...hood
       .hoodAfterActivation(s, {
@@ -28149,6 +28333,28 @@ function finishAttackAfterDamage(
               !find(s, target),
             boostCodes: a.boostCodes || [],
           }),
+          ...fne.fneAfterAttack(s, {
+            token: a.id!,
+            attackerId: a.attacker,
+            targetId: target === "hero" ? `hero:${recipientId}` : target,
+            playerId: a.defender?.startsWith("hero:")
+              ? a.defender.slice(5)
+              : recipientId,
+            damageTaken: a.damage || 0,
+            undefended:
+              (!a.defender || a.defender === "none") && !a.eventDefense,
+            defeatedAlly:
+              target !== "hero" &&
+              !target.startsWith("hero:") &&
+              before > 0 &&
+              a.gmwReturnedDefender !== target &&
+              !find(s, target),
+            heroDefended:
+              !!a.defender &&
+              (a.defender === "hero" || a.defender.startsWith("hero:")),
+            pursuit: a.fnePursuit,
+            stakes: a.fneStakes,
+          }),
           ...wreckingCrew.wreckingCrewAttackResponses(
             s,
             {
@@ -28750,12 +28956,16 @@ function reveal(
             ench.enchantressRevealCard(
               s,
               p,
-              gol.godOfLiesRevealCard(
+              fne.fneRevealCard(
                 s,
                 p,
-                knifeSurge || moduleSurge
-                  ? { ...c, text: `Surge.\n${c.text || ""}` }
-                  : c,
+                gol.godOfLiesRevealCard(
+                  s,
+                  p,
+                  knifeSurge || moduleSurge
+                    ? { ...c, text: `Surge.\n${c.text || ""}` }
+                    : c,
+                ),
               ),
             ),
           ),
@@ -29001,6 +29211,7 @@ function reveal(
         ...zemo.ZEMO_CODES,
         ...ench.ENCHANTRESS_SCRIPT_CODES,
         ...gol.GOD_OF_LIES_SCRIPT_CODES,
+        ...fne.FNE_SCRIPT_CODES,
       ].some((code) => code === p.code) &&
         c.type_code !== "attachment") ||
       (zola.ZOLA_SCRIPT_CODES.some((code) => code === p.code) &&
@@ -29074,7 +29285,8 @@ function reveal(
         (tb.THUNDERBOLTS_IN_PLAY_OBLIGATIONS as readonly string[]).includes(
           p.code,
         ) ||
-        (zemo.ZEMO_IN_PLAY_OBLIGATIONS as readonly string[]).includes(p.code))
+        (zemo.ZEMO_IN_PLAY_OBLIGATIONS as readonly string[]).includes(p.code) ||
+        (fne.FNE_IN_PLAY_OBLIGATIONS as readonly string[]).includes(p.code))
     ) {
       s.resolving = s.resolving.filter((x) => x.id !== p.id);
       if (!s.player.inPlay.some((x) => x.id === p.id)) {
@@ -29278,6 +29490,7 @@ function reveal(
       ...zemo.ZEMO_CODES,
       ...ench.ENCHANTRESS_SCRIPT_CODES,
       ...gol.GOD_OF_LIES_SCRIPT_CODES,
+      ...fne.FNE_SCRIPT_CODES,
       ...zzzax.ZZZAX_SCRIPT_CODES,
       ...inheritors.INHERITORS_SCRIPT_CODES,
       "30027",
@@ -29298,15 +29511,20 @@ function reveal(
     const window = beginRevealWindow(
       s,
       p,
-      unus.unusRevealCard(
+      fne.fneRevealCard(
         s,
         p,
-        jug.jugRevealCard(
+        unus.unusRevealCard(
           s,
           p,
-          venomGoblin.venomGoblinGainsSurge(s, p) && !printedKeyword(c, "Surge")
-            ? { ...c, text: `Surge.\n${c.text || ""}` }
-            : c,
+          jug.jugRevealCard(
+            s,
+            p,
+            venomGoblin.venomGoblinGainsSurge(s, p) &&
+              !printedKeyword(c, "Surge")
+              ? { ...c, text: `Surge.\n${c.text || ""}` }
+              : c,
+          ),
         ),
       ),
       s.activePlayerId,
@@ -29358,6 +29576,7 @@ function reveal(
       zemo.zemoReveal(s, p) ??
       ench.enchantressReveal(s, p) ??
       gol.godOfLiesReveal(s, p) ??
+      fne.fneReveal(s, p) ??
       collector.collectorReveal(s, p) ??
       badoon.badoonReveal(s, p) ??
       redSkull.redSkullReveal(s, p) ??
@@ -29478,6 +29697,7 @@ function reveal(
     zemo.zemoReveal(s, p) ??
     ench.enchantressReveal(s, p) ??
     gol.godOfLiesReveal(s, p) ??
+    fne.fneReveal(s, p) ??
     collector.collectorReveal(s, p) ??
     badoon.badoonReveal(s, p) ??
     redSkull.redSkullReveal(s, p) ??
@@ -30955,6 +31175,7 @@ function resolve(s: GameState, e: Effect) {
           zemo.zemoReveal(state, piece) ??
           ench.enchantressReveal(state, piece) ??
           gol.godOfLiesReveal(state, piece) ??
+          fne.fneReveal(state, piece) ??
           collector.collectorReveal(state, piece) ??
           badoon.badoonReveal(state, piece) ??
           redSkull.redSkullReveal(state, piece) ??
@@ -31126,6 +31347,7 @@ function resolve(s: GameState, e: Effect) {
   if (zemo.resolveZemoEffect(s, e, zemoPorts)) return;
   if (ench.resolveEnchantressEffect(s, e, enchantressPorts)) return;
   if (gol.resolveGodOfLiesEffect(s, e, golPorts)) return;
+  if (fne.resolveFearNoEvilEffect(s, e, fnePorts)) return;
   if (thanos.resolveThanosEffect(s, e, thanosPorts)) return;
   if (hela.resolveHelaEffect(s, e, helaPorts)) return;
   if (loki.resolveLokiEffect(s, e, lokiPorts)) return;
@@ -34969,6 +35191,10 @@ function resolve(s: GameState, e: Effect) {
       }
       break;
     case "thwart": {
+      // Traffic Jam: an identity with a Vehicle attachment removes threat
+      // from it instead.
+      const jam = fne.fneThwartTarget(s, e);
+      if (jam) e.target = jam;
       const statView = e.thwartStatPlayerId
         ? seatView(s, e.thwartStatPlayerId)
         : s;
@@ -35161,6 +35387,11 @@ function resolve(s: GameState, e: Effect) {
       const fear = hoodModular.hoodModularReadyCost(s, e, hoodModularPorts);
       if (fear) {
         add(s, ...fear);
+        break;
+      }
+      const drainedCost = fne.fneReadyCost(s, e);
+      if (drainedCost) {
+        add(s, ...drainedCost);
         break;
       }
       if (e.target === "hero") readyIdentity(s);
@@ -37962,6 +38193,7 @@ function resolve(s: GameState, e: Effect) {
         }
       }
       if (!a.pendingBoosts) prepareAttackBoosts(s);
+      fne.fneBoostsResolving(s, fnePorts);
       add(s, E(a.pendingBoosts?.length ? "revealBoost" : "damageWindow"));
       break;
     }
@@ -39880,6 +40112,8 @@ function resolve(s: GameState, e: Effect) {
       else if (db.darkBeast(s)) villainSetup(s);
       // Black Widow (II) also resolves its When Revealed ability at setup.
       else if (bwv.blackWidowVillain(s)) villainSetup(s);
+      // The Underling's When Revealed resolves at setup.
+      else if (s.fearNoEvil) villainSetup(s);
       break;
     case "wolverinePlayerPhase":
       add(
@@ -39985,8 +40219,14 @@ function resolve(s: GameState, e: Effect) {
             )
             .map((p) => p.id)
         : [];
+      // Drained of Power: each exhausted upgrade readies only if paid for.
+      const drained = fne.fneDrainedUpgrades(s, s.activePlayerId);
       for (const p of [...s.player.inPlay, ...controlledNPCs(s)]) {
-        if (canReadyPiece(s, p) && !undermined.includes(p.id))
+        if (
+          canReadyPiece(s, p) &&
+          !undermined.includes(p.id) &&
+          !drained.includes(p.id)
+        )
           p.exhausted = false;
         p.bonusAtk = 0;
         p.bonusThw = 0;
@@ -39996,6 +40236,7 @@ function resolve(s: GameState, e: Effect) {
       ench.enchantressReady(s, s.activePlayerId);
       delete s.flags.helaReadyStep;
       add(s, ...zemo.zemoReadySupports(s, s.activePlayerId, undermined));
+      add(s, ...fne.fneReadyUpgrades(s, s.activePlayerId, drained));
       s.flags.lead = 0;
       s.flags.aerial = false;
       s.flags.discount = 0;
@@ -40330,6 +40571,11 @@ function resolve(s: GameState, e: Effect) {
       break;
     }
     case "newRound": {
+      // The Getaway: speed counters, and Alongside flips back to Out Front.
+      if (!e.fneRoundEnded) {
+        fne.fneRoundEnded(s, fnePorts);
+        e.fneRoundEnded = true;
+      }
       if (!e.thunderboltsRoundEnded) {
         const effects = tb.thunderboltsRoundEnded(s);
         if (effects.length) {
@@ -41188,6 +41434,7 @@ export function dispatch(state: GameState, command: Command): GameState {
               ...zemo.zemoActions(s, p, zemoPorts),
               ...ench.enchantressActions(s, p, enchantressPorts),
               ...gol.godOfLiesActions(s, p, golPorts),
+              ...fne.fneActions(s, p, fnePorts),
               ...taskmaster.taskmasterActions(s, p),
               ...redSkull.redSkullActions(s, p),
               ...hawkeyeAbilityOptions(s, p.id, hawkeyePorts),
@@ -41332,6 +41579,17 @@ export function dispatch(state: GameState, command: Command): GameState {
           ) {
             const selected = db
               .darkBeastActions(s, db.darkBeastActionSource(s, command.id)!)
+              .find((o) => !command.action || o.id === command.action);
+            need(selected, "This action needs its printed cost.");
+            add(s, ...selected!.effects);
+          } else if (
+            fne.fneActionSource(s, command.id) &&
+            fne
+              .fneActions(s, fne.fneActionSource(s, command.id)!, fnePorts)
+              .some((o) => !command.action || o.id === command.action)
+          ) {
+            const selected = fne
+              .fneActions(s, fne.fneActionSource(s, command.id)!, fnePorts)
               .find((o) => !command.action || o.id === command.action);
             need(selected, "This action needs its printed cost.");
             add(s, ...selected!.effects);

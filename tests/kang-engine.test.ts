@@ -185,7 +185,7 @@ describe("The Once and Future Kang original source", () => {
     expect(MODULES.map((m) => m.id)).toEqual(
       expect.arrayContaining(["temporal", "mot", "anachronauts"]),
     );
-    expect(scenarioModules("kang")).toHaveLength(96);
+    expect(scenarioModules("kang")).toHaveLength(99);
   });
   it.each([1, 2, 3])(
     "sets up Kang (I), Kang's Arrival and the set-aside cards for %s players",
