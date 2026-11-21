@@ -274,7 +274,7 @@ describe("Baron Zemo: original source", () => {
     expect(ZEMO_CODES).toHaveLength(39);
     for (const code of ZEMO_CODES)
       expect(hasExecutableScript(code), code).toBe(true);
-    expect(MODULES.at(-5)?.id).toBe("s.h.i.e.l.d.");
+    expect(MODULES.at(-7)?.id).toBe("s.h.i.e.l.d.");
     expect([...ZEMO_MODULAR_SETS]).toEqual(["s.h.i.e.l.d."]);
     expect(
       scenarioModules("baron_zemo").some(

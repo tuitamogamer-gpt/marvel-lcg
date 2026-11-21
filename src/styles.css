@@ -903,6 +903,15 @@ option {
   background: #eef0e8;
   color: var(--ink);
 }
+/* Five Underlings and Random: two even rows of three choices. */
+.segmented.segmented-wrap {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+}
+.segmented.segmented-wrap button {
+  padding-inline: 6px;
+}
 .module-label {
   display: flex;
   flex-direction: column;

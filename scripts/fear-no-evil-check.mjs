@@ -22,14 +22,14 @@ await build({
   stdin: {
     resolveDir: process.cwd(),
     contents: [
-      "import {newGame,dispatch} from './src/game/engine.ts';",
+      "import {newGame,dispatch,makePiece} from './src/game/engine.ts';",
       "import {card} from './src/game/cards.ts';",
       "import {syncSeat} from './src/game/team.ts';",
-      "export {UNDERLINGS,fneAttachmentCaption,fneMainNote,fneObjective} from './src/game/fear-no-evil.ts';",
+      "export {UNDERLINGS,fneAttachmentCaption,fneEnvironmentCaption,fneInPlayCaption,fneMainNote,fneMinionCaption,fneObjective,fneSideSchemeCaption} from './src/game/fear-no-evil.ts';",
       "export const definition=p=>card(p);",
       "export function fixture(kind){",
-      " const mission=kind==='heist'?'fne_art_museum_heist':'fne_the_getaway';",
-      " const underling=kind==='drained'?'electro':kind==='vehicle'?'hammerhead':'bullseye';",
+      " const mission=kind==='heist'||kind==='typhoid'?'fne_art_museum_heist':kind==='bugle'||kind==='tracksuit'?'fne_stop_the_presses':'fne_the_getaway';",
+      " const underling=kind==='drained'?'electro':kind==='vehicle'?'hammerhead':kind==='bugle'||kind==='converted'?'purple_man':kind==='typhoid'?'typhoid_mary':'bullseye';",
       " const difficulty=kind==='spine'?'expert':'standard';",
       " let s=newGame({heroId:'captain_marvel',aspect:'aggression',villainId:mission,difficulty,seed:60128,pacing:'expert',underling});",
       " function command(c){s=dispatch(s,c);if(s.error)throw Error(s.error);}",
@@ -51,6 +51,10 @@ await build({
       " else if(kind==='heist'){const p=take('60126');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
       " else if(kind==='drained'){const p=take('60080');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
       " else if(kind==='vehicle'){const p=take('60186');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
+      " else if(kind==='bugle'){s.player.form='alter';}",
+      " else if(kind==='typhoid'){native([{type:'damage',target:s.villain.id,amount:s.villain.hp,source:'hero'}]);}",
+      " else if(kind==='tracksuit'){const p=take('60204');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
+      " else if(kind==='converted'){const ally=makePiece(s,'01030');ally.ownerId='p1';s.player.inPlay.push(ally);const p=take('60100');result.pending=[p];native([{type:'reveal',piece:p,actorId:'p1'}]);}",
       " else throw Error('Unknown fixture '+kind);",
       " syncSeat(s);return{state:s,...result};",
       "}",
@@ -67,8 +71,12 @@ const {
   definition,
   UNDERLINGS,
   fneAttachmentCaption,
+  fneEnvironmentCaption,
+  fneInPlayCaption,
   fneMainNote,
+  fneMinionCaption,
   fneObjective,
+  fneSideSchemeCaption,
 } = await import(pathToFileURL(fixturePath).href);
 const require = createRequire(import.meta.url);
 const axe = await readFile(require.resolve("axe-core/axe.min.js"), "utf8");
@@ -96,6 +104,8 @@ function pieces(s) {
       ];
     }),
     ...s.minions,
+    ...s.minions.flatMap((p) => p.inheritorBoosts || []),
+    ...Object.values(s.fearNoEvil?.tucked || {}).flat(),
     ...s.sideSchemes,
     ...s.attachments,
     ...(s.environments || []),
@@ -121,6 +131,13 @@ const SET_SIZES = {
   fne_cops: 5,
   fne_drive: 5,
   fne_the_owl: 5,
+  // Part two: Disturbed Psyche and Establish Trust count with Typhoid Mary's
+  // set, the Daily Bugle and its four supports with Stop the Presses!.
+  fne_purple_man: 12,
+  fne_typhoid_mary: 13,
+  fne_stop_the_presses: 8,
+  fne_tombstone: 5,
+  fne_tracksuit_mafia: 7,
 };
 function originals(s, held = []) {
   const all = [...pieces(s), ...held];
@@ -319,13 +336,32 @@ async function resolveFixture() {
   await until((s) => s.prompt?.title !== "Original encounter effect", "it");
   return settle();
 }
-/** The captions of this import's attachments in play. */
+/** The captions of this import's attachments, environments, side schemes
+ * and minions in play. */
 async function captions(s) {
   for (const p of s.attachments) {
     const caption = fneAttachmentCaption(s, p);
     if (caption) await shown(caption);
   }
+  for (const p of s.environments || []) {
+    const caption = fneEnvironmentCaption(s, p);
+    if (caption) await shown(caption);
+  }
+  for (const p of s.sideSchemes) {
+    const caption = fneSideSchemeCaption(s, p);
+    if (caption) await shown(caption);
+  }
+  for (const p of s.minions) {
+    const caption = fneMinionCaption(s, p);
+    if (caption) await shown(caption);
+  }
+  for (const p of s.player.inPlay) {
+    const caption = fneInPlayCaption(s, p);
+    if (caption) await shown(caption);
+  }
 }
+const BUGLE_SUPPORTS = ["60153", "60154", "60155", "60156"];
+const TYPHOID_SIDES = { "60110a": "60110b", "60111a": "60111b" };
 const MISSIONS = {
   fne_the_getaway: {
     name: "The Getaway",
@@ -341,12 +377,21 @@ const MISSIONS = {
     modules: ["fne_cops", "fne_the_owl"],
     threat: 1,
   },
+  fne_stop_the_presses: {
+    name: "Stop the Presses!",
+    help: /Each hero controls a random Daily Bugle support/,
+    scheme: "60151b",
+    modules: ["fne_tombstone", "fne_tracksuit_mafia"],
+    threat: 1,
+  },
 };
 const SETUPS = [
   ["fne_the_getaway", "standard", "bullseye"],
   ["fne_the_getaway", "expert", "electro"],
   ["fne_art_museum_heist", "standard", "hammerhead"],
   ["fne_art_museum_heist", "expert", "bullseye"],
+  ["fne_stop_the_presses", "standard", "purple_man"],
+  ["fne_stop_the_presses", "expert", "typhoid_mary"],
 ];
 try {
   for (const width of widths)
@@ -372,6 +417,8 @@ try {
         .filter({ has: page.locator("span", { hasText: /^Underling$/ }) })
         .getByRole("button", { name: UNDERLINGS[underling].name, exact: true })
         .click();
+      if (underling === "typhoid_mary")
+        await page.getByText(/^Typhoid Mary is never defeated/).waitFor();
       await page.locator("#mission-seed").fill("60128");
       await page.locator("#start-btn").click();
       let s = await settle();
@@ -385,7 +432,11 @@ try {
       assert.equal(s.fearNoEvil.underling, underling);
       assert.deepEqual(s.modules, m.modules);
       const stage = difficulty === "expert" ? 1 : 0;
-      assert.equal(s.villain.code, UNDERLINGS[underling].codes[stage]);
+      const code = UNDERLINGS[underling].codes[stage];
+      assert.ok(
+        [code, TYPHOID_SIDES[code]].includes(s.villain.code),
+        "the Underling's stage, on either side for Typhoid Mary",
+      );
       assert.equal(s.scheme.code, m.scheme);
       assert.equal(s.scheme.threat, m.threat);
       if (villainId === "fne_the_getaway") {
@@ -396,7 +447,7 @@ try {
           ),
           "Out Front on the villain",
         );
-      } else
+      } else if (villainId === "fne_art_museum_heist")
         assert.equal(
           s.attachments.filter(
             (p) =>
@@ -406,6 +457,28 @@ try {
           1,
           "one Art on the villain",
         );
+      else {
+        assert.ok(
+          (s.environments || []).some((p) => p.code === "60152"),
+          "the Daily Bugle in play",
+        );
+        const support = s.player.inPlay.find((p) =>
+          BUGLE_SUPPORTS.includes(p.code),
+        );
+        assert.equal(support?.counters, 3, "a Daily Bugle support, 3 stamina");
+        await artwork(["60152", support.code]);
+      }
+      if (underling === "typhoid_mary") {
+        assert.ok(
+          (s.environments || []).some((p) => p.code === "60112"),
+          "Disturbed Psyche in play",
+        );
+        assert.equal(
+          s.sideSchemes.find((p) => p.code === "60113a")?.counters,
+          11,
+          "Establish Trust: 8 threat and hinder 3 in Expert",
+        );
+      }
       await shown(fneObjective(s));
       await shown(fneMainNote(s));
       await captions(s);
@@ -500,6 +573,79 @@ try {
     assert.deepEqual(originals(s), owned);
     await resumeExact();
     await audit("vehicle", width);
+    checks.push({ ...current });
+
+    current = { kind: "bugle", width };
+    f = fixture("bugle");
+    owned = originals(f.state);
+    await open(width, f.state);
+    s = await saved();
+    const support = s.player.inPlay.find((p) =>
+      BUGLE_SUPPORTS.includes(p.code),
+    );
+    await captions(s);
+    await page
+      .getByRole("button", {
+        name: new RegExp(
+          "^Alter-Ego Action · exhaust .*: 1 stamina counter on it$",
+        ),
+      })
+      .first()
+      .click();
+    s = await until(
+      (next) =>
+        next.player.inPlay.find((p) => p.id === support.id)?.counters === 4,
+      "the Daily Bugle's Alter-Ego Action",
+    );
+    assert.ok(s.player.inPlay.find((p) => p.id === support.id).exhausted);
+    await captions(s);
+    assert.deepEqual(originals(s), owned);
+    await resumeExact();
+    await audit("bugle", width);
+    checks.push({ ...current });
+
+    current = { kind: "typhoid", width };
+    f = fixture("typhoid");
+    owned = originals(f.state);
+    await open(width, f.state);
+    s = await resolveFixture();
+    assert.deepEqual(s.fearNoEvil.psyche, { damage: 1, threat: 0 });
+    assert.equal(s.villain.hp, s.villain.maxHp, "her hit points reset");
+    await shown(fneObjective(s));
+    await captions(s);
+    await artwork(["60112", "60113a"]);
+    assert.deepEqual(originals(s), owned);
+    await resumeExact();
+    await audit("typhoid", width);
+    checks.push({ ...current });
+
+    current = { kind: "tracksuit", width };
+    f = fixture("tracksuit");
+    owned = originals(f.state, f.pending);
+    await open(width, f.state);
+    s = await resolveFixture();
+    const mafia = s.sideSchemes.find((p) => p.code === "60204");
+    assert.equal(s.fearNoEvil.tucked[mafia.id].length, 1, "a minion tucked");
+    await captions(s);
+    assert.deepEqual(originals(s), owned);
+    await resumeExact();
+    await audit("tracksuit", width);
+    checks.push({ ...current });
+
+    current = { kind: "converted", width };
+    f = fixture("converted");
+    owned = originals(f.state, f.pending);
+    await open(width, f.state);
+    s = await resolveFixture();
+    assert.ok(
+      s.minions.some((p) => p.code === "01030" && p.fneConverted),
+      "the ally is a Converted minion",
+    );
+    await captions(s);
+    await artwork(["60100"]);
+    assert.deepEqual(originals(s), owned);
+    await resumeExact();
+    await audit("converted", width);
     checks.push({ ...current });
   }
   assert.deepEqual(errors, []);

@@ -880,7 +880,8 @@ function canReadyPiece(s: GameState, p: Piece) {
     !ebonyMaw.ebonyMawRestrained(s, p.id) &&
     !jug.jugCannotReady(s, p) &&
     !sin.sinisterCannotReady(s, p, controller(s, p.id)?.id) &&
-    hela.helaCanReadyPiece(s, p)
+    hela.helaCanReadyPiece(s, p) &&
+    fne.fneCanReady(s, p)
   );
 }
 function readyIdentity(s: GameState) {
@@ -1820,6 +1821,7 @@ function dealEncounter(s: GameState, playerId = s.activePlayerId) {
     p.dealtTo = playerId;
     s.encounter.dealt.push(p);
     add(s, ...nickFury.nickFuryDealt(s));
+    add(s, ...fne.fneDealt(s, playerId, p.id));
   }
 }
 function removedByPlayerElimination(s: GameState, p: Piece) {
@@ -2475,6 +2477,25 @@ function nativeIdentityDamageSource(s: GameState, source: string) {
 function syncValkyrieConvertedCards(s: GameState) {
   phoenix.phoenixSyncControlled(s);
   for (const p of [...s.minions]) {
+    // Converted: the ally is an Influenced minion while it is attached.
+    if (p.fneConverted) {
+      if (
+        s.attachments.some((a) => a.code === "60100" && a.attachedTo === p.id)
+      ) {
+        p.treatedAsMinion = true;
+        continue;
+      }
+      delete p.fneConverted;
+      delete p.treatedAsMinion;
+      s.minions.splice(s.minions.indexOf(p), 1);
+      const owner = s.players.find(
+        (seat) => seat.id === (p.ownerId || p.engagedWith) && !seat.eliminated,
+      );
+      delete p.engagedWith;
+      if (owner) seatView(s, owner).player.inPlay.push(p);
+      else s.removed.push(p);
+      continue;
+    }
     // Manipulated Mind: the ally is a minion while it is attached.
     if (p.mysterioManipulated) {
       if (
@@ -4510,6 +4531,7 @@ function applyDamage(
     if (!infinite) s.villain.hp -= n;
     track(s, "damageDealt", n);
     log(s, `${card(s.villain).name} takes ${n} damage.`, "good");
+    add(s, ...fne.fneVillainDamaged(s, n));
     // Mental Transferal: the attached character takes as much damage.
     add(s, ...sty.stryfeVillainDamaged(s, target, n));
     // Ulik's Forced Response after a player damages Enchantress.
@@ -5444,6 +5466,9 @@ function advanceVillain(
     gol.godOfLiesVillainWouldBeDefeated(s, golPorts);
     return;
   }
+  // Typhoid Mary: Disturbed Psyche takes a damage token and her hit points
+  // reset instead of her defeat.
+  if (fne.fneVillainWouldBeDefeated(s, fnePorts)) return;
   const priorityKey = `cyclopsPriority:${s.villain.id}:${s.villain.stage}`;
   if (!s.flags[priorityKey]) {
     const winner = source.startsWith("hero:")
@@ -6568,6 +6593,10 @@ function thwart(
       return removed;
     // Stryfe's Grasp (Permanent): its last threat flips it to Living Bomb.
     if (removed > 0 && !p.counters && sty.stryfeGraspCleared(s, p, stryfePorts))
+      return removed;
+    // Establish Trust (Permanent): a threat token on Disturbed Psyche, and it
+    // flips to Mary Walker.
+    if (removed > 0 && !p.counters && fne.fneTrustCleared(s, p, fnePorts))
       return removed;
     if (
       !p.counters &&
@@ -18064,6 +18093,24 @@ const fnePorts: fne.FearNoEvilPorts = {
         actorId: playerId,
       }),
     ),
+  allyAttack: (s, id) => {
+    const p = find(s, id);
+    return p ? allyStat(s, p, "attack") : 0;
+  },
+  endTurn: (s, discard) => endPlayerTurn(s, discard),
+  cancelBoost: (s, id) => {
+    bwPorts.cancelBoostIcons(s, id);
+    bwPorts.cancelBoostAbility(s, id);
+  },
+  dealFacedown: (s, p, playerId) => {
+    removeEncounterInstance(s, p.id);
+    p.dealtTo = playerId;
+    s.encounter.dealt.push(p);
+    add(s, ...nickFury.nickFuryDealt(s));
+    add(s, ...fne.fneDealt(s, playerId, p.id));
+  },
+  putEnvironment: (s, p) => visionPorts.putEnvironment(s, p),
+  endGame: (s, won, reason) => endGame(s, won, reason),
 };
 const zemoPorts: zemo.ZemoPorts = {
   ...mutagenPorts,
@@ -21323,6 +21370,7 @@ function minionEntered(s: GameState, p: Piece) {
     ...acolytes.acolytesEngaged(s, p),
     ...otr.otrEngaged(s, p),
     ...apoc.apocalypseEngaged(s, p),
+    ...fne.fneEngaged(s, p),
     ...db.darkBeastEngaged(s, p),
     ...ironspider.ironspiderSinisterEngagementResponses(s, p),
     ...spiderHam.spiderHamMinionEngaged(s, p),
@@ -24048,6 +24096,7 @@ const nightcrawlerEncounterPorts: nightcrawlerEncounter.NightcrawlerEncounterPor
           ...acolytes.acolytesEngaged(s, p),
           ...otr.otrEngaged(s, p),
           ...apoc.apocalypseEngaged(s, p),
+          ...fne.fneEngaged(s, p),
           ...db.darkBeastEngaged(s, p),
           ...ironspider.ironspiderSinisterEngagementResponses(s, p),
           ...spiderHam.spiderHamMinionEngaged(s, p),
@@ -25916,6 +25965,12 @@ function enemyAttack(
     canceled();
     return;
   }
+  // Mary Walker: the attached villain cannot activate.
+  if (fne.fneCannotActivate(s, p.id)) {
+    log(s, "Mary Walker: the villain cannot activate.");
+    canceled();
+    return;
+  }
   if (p.stunned) {
     consumeStatus(
       nebulaSource?.kind === "hero"
@@ -26983,7 +27038,10 @@ function enemyScheme(
     ];
   const p = find(s, id);
   if (!p) return;
-  if (p.id === s.villain.id && kang.kangVillainAbsent(s)) {
+  if (
+    (p.id === s.villain.id && kang.kangVillainAbsent(s)) ||
+    fne.fneCannotActivate(s, p.id)
+  ) {
     if (request?.after)
       add(s, {
         ...request.after,
@@ -29292,6 +29350,7 @@ function reveal(
       if (!s.player.inPlay.some((x) => x.id === p.id)) {
         s.player.inPlay.push(p);
         tb.thunderboltsObligationEntered(p);
+        fne.fneObligationEntered(p);
       }
     }
     add(
@@ -38310,6 +38369,13 @@ function resolve(s: GameState, e: Effect) {
             })),
           ),
         );
+      options.push(
+        ...fne.fneBoostInterruptOptions(
+          s,
+          e.piece,
+          after.map((x) => ({ ...x, actorId: original })),
+        ),
+      );
       if (e.scheme && bwPorts.numericBoostIcons(s, e.piece.id) > 0)
         options.push(
           ...playerOrder(s).flatMap((seat) =>
@@ -40313,6 +40379,7 @@ function resolve(s: GameState, e: Effect) {
             ...nebulaVillain.nebulaVillainPhaseInterrupts(s),
             ...hood.hoodVillainPhaseInterrupts(s),
             ...kreeFanatic.kreeFanaticVillainPhaseInterrupts(s),
+            ...fne.fneVillainPhaseBegins(s),
             ...(s.environments || [])
               .filter((p) => p.code === "29039" && !isTextBlank(s, p))
               .map((p) =>
@@ -40393,6 +40460,7 @@ function resolve(s: GameState, e: Effect) {
             deadpool.deadpoolPlayerIcons(s, "scheme_acceleration") +
             mojoGenres.mojoGenreAcceleration(s) +
             bwv.blackWidowAcceleration(s) +
+            fne.fneAcceleration(s) +
             s.sideSchemes.reduce(
               (n, p) =>
                 n +
@@ -41863,7 +41931,12 @@ export function dispatch(state: GameState, command: Command): GameState {
             s.activePlayerId,
             command.discard || [],
           );
+          // Purple Man's commands: their Forced Actions too.
+          const commands = forced.length
+            ? []
+            : fne.fneTurnEnding(s, s.activePlayerId, command.discard || []);
           if (forced.length) add(s, ...forced);
+          else if (commands.length) add(s, ...commands);
           else endPlayerTurn(s, command.discard);
         }
       }

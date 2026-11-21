@@ -84,6 +84,8 @@ export interface Piece {
   treatedAsMinion?: boolean;
   /** Manipulated Mind: this ally is treated as a minion. */
   mysterioManipulated?: boolean;
+  /** Converted: this ally is treated as an Influenced minion. */
+  fneConverted?: boolean;
   /** Mind Control changes the same physical minion into a blank Controlled ally. */
   treatedAsAlly?: boolean;
   /** Possessed turns this physical ally into a Controlled minion. */

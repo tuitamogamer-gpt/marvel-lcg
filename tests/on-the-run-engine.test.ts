@@ -251,7 +251,7 @@ describe("On the Run: original source", () => {
       defaultModules: ["military_grade", "nasty_boys"],
       fixedSets: ["mutant_slayers"],
     });
-    expect(MODULES.at(-28)?.id).toBe("nasty_boys");
+    expect(MODULES.at(-30)?.id).toBe("nasty_boys");
     expect(scenarioModules("on_the_run").map((m) => m.id)).not.toContain(
       "mutant_slayers",
     );

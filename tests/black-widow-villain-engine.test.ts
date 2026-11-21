@@ -253,7 +253,7 @@ describe("Black Widow: original source", () => {
       ...AIM_SCIENCE_CODES,
     ])
       expect(hasExecutableScript(code), code).toBe(true);
-    expect(MODULES.slice(-15, -13).map((m) => m.id)).toEqual([
+    expect(MODULES.slice(-17, -15).map((m) => m.id)).toEqual([
       "a.i.m._abduction",
       "a.i.m._science",
     ]);

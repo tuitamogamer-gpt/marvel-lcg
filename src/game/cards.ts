@@ -1843,6 +1843,22 @@ export const VILLAINS = [
       "An Underling is looting the museum. Each Art piece on the villain speeds up the heist: take the art back with your Hero Actions and defend your hero before the thieves walk out with the collection.",
     color: "#9a7a2c",
   },
+  {
+    id: "fne_stop_the_presses",
+    name: "Stop the Presses!",
+    // Fear No Evil mission, played against a chosen Underling.
+    codes: ["60065", "60066", "60067"],
+    schemes: ["60151b"],
+    module: "fne_tombstone",
+    moduleCount: 2,
+    defaultModules: ["fne_tombstone", "fne_tracksuit_mafia"],
+    difficulty: 3,
+    title: "Stop the Presses!",
+    location: "The Daily Bugle",
+    description:
+      "An Underling wants the Daily Bugle's story buried. Each hero protects a Bugle reporter whose stamina fuels their help; keep every one of them in the game and defend against the attacks that wear them down.",
+    color: "#3b5f8a",
+  },
 ];
 export const MODULES = [
   { id: "a_mess_of_things", name: "A Mess of Things", difficulty: 2 },
@@ -1956,6 +1972,8 @@ export const MODULES = [
   { id: "fne_cops", name: "Cops", difficulty: 2 },
   { id: "fne_drive", name: "Drive", difficulty: 2 },
   { id: "fne_the_owl", name: "The Owl", difficulty: 3 },
+  { id: "fne_tombstone", name: "Tombstone", difficulty: 3 },
+  { id: "fne_tracksuit_mafia", name: "Tracksuit Mafia", difficulty: 3 },
 ];
 /** How many modular sets a scenario uses with this many players. */
 export function scenarioModuleCount(

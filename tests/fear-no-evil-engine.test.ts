@@ -1,7 +1,8 @@
-/** Fear No Evil, part one: the missions The Getaway and Art Museum Heist
- * with the Underlings Bullseye, Electro and Hammerhead, and the Cops, Drive
- * and The Owl modular sets, exercised with the original physical cards.
- * Every command crosses a JSON save/reload boundary. */
+/** Fear No Evil, parts one and two: the missions The Getaway, Art Museum
+ * Heist and Stop the Presses! with the Underlings Bullseye, Electro,
+ * Hammerhead, Purple Man and Typhoid Mary, and the Cops, Drive, The Owl,
+ * Tombstone and Tracksuit Mafia modular sets, exercised with the original
+ * physical cards. Every command crosses a JSON save/reload boundary. */
 import { describe, expect, it } from "vitest";
 import { CATALOG_CARDS, MODULES, VILLAINS, card } from "../src/game/cards";
 import {
@@ -16,8 +17,14 @@ import { hasExecutableScript } from "../src/game/script-registry";
 import { seatView } from "../src/game/team";
 import {
   FEAR_NO_EVIL_CODES,
+  fneAcceleration,
+  fneCanReady,
+  fneKeyword,
+  fneMainNote,
   fneObjective,
+  fneSideSchemeCaption,
   fneUnderlingFor,
+  fneVillainPhaseBegins,
 } from "../src/game/fear-no-evil";
 import type { Effect, GameState, Piece } from "../src/game/types";
 import {
@@ -259,12 +266,17 @@ describe("Fear No Evil registration and setup", () => {
       "fne_cops",
       "fne_drive",
       "fne_the_owl",
+      "fne_purple_man",
+      "fne_typhoid_mary",
+      "fne_stop_the_presses",
+      "fne_tombstone",
+      "fne_tracksuit_mafia",
     ];
     const faces = CATALOG_CARDS.filter((c) => sets.includes(c.set_code || ""));
     expect(faces.map((c) => c.code).sort()).toEqual(
       [...FEAR_NO_EVIL_CODES].sort(),
     );
-    expect(faces).toHaveLength(62);
+    expect(faces).toHaveLength(108);
     for (const c of faces) expect(hasExecutableScript(c), c.code).toBe(true);
     const getaway = VILLAINS.find((v) => v.id === GETAWAY_ID)!;
     expect(getaway.schemes).toEqual([GETAWAY]);
@@ -272,14 +284,27 @@ describe("Fear No Evil registration and setup", () => {
     const heist = VILLAINS.find((v) => v.id === HEIST_ID)!;
     expect(heist.schemes).toEqual([HEIST]);
     expect(heist.defaultModules).toEqual(["fne_cops", "fne_the_owl"]);
-    for (const id of ["fne_cops", "fne_drive", "fne_the_owl"])
+    const presses = VILLAINS.find((v) => v.id === "fne_stop_the_presses")!;
+    expect(presses.schemes).toEqual(["60151b"]);
+    expect(presses.defaultModules).toEqual([
+      "fne_tombstone",
+      "fne_tracksuit_mafia",
+    ]);
+    for (const id of [
+      "fne_cops",
+      "fne_drive",
+      "fne_the_owl",
+      "fne_tombstone",
+      "fne_tracksuit_mafia",
+    ])
       expect(MODULES.some((m) => m.id === id)).toBe(true);
   });
   it("picks the chosen Underling, or one from the seed", () => {
     expect(fneUnderlingFor(GETAWAY_ID, "electro", 1)).toBe("electro");
-    expect(fneUnderlingFor(GETAWAY_ID, undefined, 3)).toBe("bullseye");
-    expect(fneUnderlingFor(GETAWAY_ID, undefined, 4)).toBe("electro");
-    expect(fneUnderlingFor(GETAWAY_ID, undefined, 5)).toBe("hammerhead");
+    expect(fneUnderlingFor(GETAWAY_ID, undefined, 3)).toBe("purple_man");
+    expect(fneUnderlingFor(GETAWAY_ID, undefined, 4)).toBe("typhoid_mary");
+    expect(fneUnderlingFor(GETAWAY_ID, undefined, 5)).toBe("bullseye");
+    expect(fneUnderlingFor(GETAWAY_ID, undefined, 7)).toBe("hammerhead");
     expect(fneUnderlingFor("rhino", "electro", 1)).toBeUndefined();
   });
   it("The Getaway: 1 speed counter, Out Front on Bullseye (I), 2 threat per player, Adamantium-Laced Spine set aside", () => {
@@ -867,5 +892,708 @@ describe("Cops, Drive and The Owl", () => {
       s.encounter.deck.filter((p) => card(p).set_code === "fne_drive"),
     ).toHaveLength(5);
     expect(s.fearNoEvil).toBeUndefined();
+  }, 30000);
+});
+
+// ------------------------------------------------------------ part two
+
+const PRESSES_ID = "fne_stop_the_presses";
+const PRESSES = "60151b";
+const BUGLE = "60152";
+const URICH = "60153";
+const BETTY = "60154";
+const JJJ = "60155";
+const ROBBIE = "60156";
+const BUGLE_SUPPORTS = [URICH, BETTY, JJJ, ROBBIE];
+const INTERVIEW = "60157";
+const NEWS = "60158";
+const PURPLE_MAN = ["60097", "60098", "60099"];
+const CONVERTED = "60100";
+const FIREFIGHTER = "60101";
+const JUDGE = "60102";
+const SECURITY = "60103";
+const SKATER = "60104";
+const FIGHT = "60105";
+const PROTECT = "60106";
+const SERVE = "60107";
+const SUGGESTION = "60108";
+const SWAY = "60109";
+const TYPHOID_A = "60110a";
+const BLOODY_A = "60110b";
+const TYPHOID_B = "60111a";
+const BLOODY_B = "60111b";
+const PSYCHE = "60112";
+const TRUST = "60113a";
+const MARY_WALKER = "60113b";
+const TELEKINESIS = "60114";
+const SLASH = "60115";
+const NOVA = "60116";
+const ARMOR = "60117";
+const BLADES = "60118";
+const BULWARK = "60119";
+const LOOKOUT = "60120";
+const COLD = "60195";
+const MARBLE = "60196";
+const BEETLE = "60197";
+const TOMBSTONE = "60198";
+const HIT_LIST = "60199";
+const IVAN = "60200";
+const CLOWN = "60201";
+const MAFIOSO = "60202";
+const BRO = "60203";
+const TRACKSUIT = "60204";
+
+/** Typhoid Mary on the chosen side, without the mission's Art or Out Front
+ * in the way. */
+function typhoid(
+  side = TYPHOID_A,
+  difficulty: "standard" | "expert" = "standard",
+  players = 1,
+) {
+  const s = started(HEIST_ID, "typhoid_mary", difficulty, players);
+  for (const a of s.attachments.filter((p) => ARTS.includes(p.code)))
+    a.attachedTo = "hero:p9";
+  s.villain.code = side;
+  return reload(s);
+}
+/** The Daily Bugle support of a player, made the chosen support. */
+function bugleOf(s: GameState, code: string, playerId = "p1") {
+  const p = seatView(s, playerId).player.inPlay.find((q) =>
+    BUGLE_SUPPORTS.includes(q.code),
+  )!;
+  p.code = code;
+  return p;
+}
+const inPlayOf = (s: GameState, id: string, playerId = "p1") =>
+  seatView(s, playerId).player.inPlay.find((p) => p.id === id);
+const trust = (s: GameState) => s.sideSchemes.find((p) => p.code === TRUST);
+
+describe("Fear No Evil, part two: setup", () => {
+  it("Stop the Presses!: the Daily Bugle, a random Daily Bugle support with 3 stamina counters for each player, 1 threat per player", () => {
+    const s = opened(PRESSES_ID, "purple_man", "standard", 2);
+    expect(s.villain.code).toBe(PURPLE_MAN[0]);
+    expect(s.villain.hp).toBe(26);
+    expect(s.scheme.code).toBe(PRESSES);
+    expect(s.scheme.threat).toBe(2);
+    expect((s.environments || []).map((p) => p.code)).toEqual([BUGLE]);
+    const supports = s.players.flatMap((seat) =>
+      seatView(s, seat.id).player.inPlay.filter((p) =>
+        BUGLE_SUPPORTS.includes(p.code),
+      ),
+    );
+    expect(supports).toHaveLength(2);
+    for (const p of supports) expect(p.counters).toBe(3);
+    expect(
+      s.removed.filter((p) => BUGLE_SUPPORTS.includes(p.code)),
+    ).toHaveLength(2);
+    const sets = new Set(s.encounter.deck.map((p) => card(p).set_code));
+    for (const set of [
+      "fne_purple_man",
+      "fne_stop_the_presses",
+      "fne_tombstone",
+      "fne_tracksuit_mafia",
+      "standard",
+    ])
+      expect(sets.has(set), set).toBe(true);
+    expect(
+      s.encounter.deck.some((p) => [BUGLE, ...BUGLE_SUPPORTS].includes(p.code)),
+    ).toBe(false);
+    expect(fneObjective(s)).toBe("Defeat Purple Man · stage 1 of 2");
+    expect(fneMainNote(s)).toBe(
+      "Undefended attacks: 2 threat here or 1 stamina",
+    );
+  }, 30000);
+  it("Typhoid Mary: Disturbed Psyche puts her into play on a random side; Establish Trust starts with 8 threat per player", () => {
+    const s = opened(GETAWAY_ID, "typhoid_mary", "standard", 2);
+    expect([TYPHOID_A, BLOODY_A]).toContain(s.villain.code);
+    expect(s.villain.hp).toBe(20);
+    expect((s.environments || []).map((p) => p.code)).toEqual([PSYCHE]);
+    expect(trust(s)!.counters).toBe(16);
+    expect(
+      s.encounter.deck.some((p) =>
+        [PSYCHE, TRUST, MARY_WALKER].includes(p.code),
+      ),
+    ).toBe(false);
+    expect(fneObjective(s)).toBe(
+      "Settle Mary's mind · 0 of 3 tokens on Disturbed Psyche · 1 speed counter",
+    );
+  }, 30000);
+  it("Expert: Typhoid Mary (B), with toughness on her Typhoid side, and Establish Trust with 11 threat per player", () => {
+    const s = opened(GETAWAY_ID, "typhoid_mary", "expert");
+    expect([TYPHOID_B, BLOODY_B]).toContain(s.villain.code);
+    expect(s.villain.hp).toBe(13);
+    expect(s.villain.tough).toBe(s.villain.code === TYPHOID_B);
+    expect(trust(s)!.counters).toBe(11);
+  }, 30000);
+});
+
+describe("Typhoid Mary", () => {
+  it("is never defeated: a damage token goes on Disturbed Psyche and her hit points reset; 3 tokens win", () => {
+    let s = typhoid();
+    s = settle(native(s, hit(s.villain.id, 12)));
+    expect(s.fearNoEvil!.psyche).toEqual({ damage: 1, threat: 0 });
+    expect(s.villain.hp).toBe(10);
+    expect(s.villain.code).toBe(TYPHOID_A);
+    expect(s.phase).not.toBe("won");
+    s.fearNoEvil!.psyche = { damage: 2, threat: 0 };
+    s = settle(native(reload(s), hit(s.villain.id, 10)));
+    expect(s.phase).toBe("won");
+  }, 30000);
+  it("Establish Trust: cleared, a threat token goes on Disturbed Psyche and Mary Walker keeps the villain from activating", () => {
+    let s = typhoid();
+    const t = trust(s)!;
+    s = settle(native(s, { type: "thwart", target: t.id, amount: 8 }));
+    expect(s.fearNoEvil!.psyche).toEqual({ damage: 0, threat: 1 });
+    expect(trust(s)).toBeUndefined();
+    expect(att(s, MARY_WALKER)!.attachedTo).toBe(s.villain.id);
+    blankTop(s, 3);
+    s.player.hp = 30;
+    s = villainAttacks(reload(s));
+    expect(s.player.hp).toBe(30);
+  }, 30000);
+  it("Mary Walker: after the villain takes damage, each player is dealt a facedown encounter card and she flips back", () => {
+    let s = typhoid(TYPHOID_A, "standard", 2);
+    const mary = attachTo(s, MARY_WALKER, s.villain.id);
+    s.sideSchemes = s.sideSchemes.filter((p) => p.code !== TRUST);
+    const dealt = s.encounter.dealt.length;
+    s = settle(native(reload(s), hit(s.villain.id, 2)));
+    expect(s.encounter.dealt.length).toBe(dealt + 2);
+    expect(att(s, MARY_WALKER)).toBeUndefined();
+    expect(trust(s)!.id).toBe(mary.id);
+    expect(trust(s)!.counters).toBe(16);
+  }, 30000);
+  it("Disturbed Psyche flips her as the villain phase ends; Mary Walker flips back as the round ends", () => {
+    let s = typhoid();
+    attachTo(s, MARY_WALKER, s.villain.id);
+    s.sideSchemes = s.sideSchemes.filter((p) => p.code !== TRUST);
+    s = settle(native(reload(s), { type: "newRound" }));
+    expect(s.villain.code).toBe(BLOODY_A);
+    expect(att(s, MARY_WALKER)).toBeUndefined();
+    expect(trust(s)!.counters).toBe(8);
+    s = settle(native(s, { type: "newRound" }));
+    expect(s.villain.code).toBe(TYPHOID_A);
+  }, 30000);
+  it("Bloody Mary (B): flipped faceup, she deals 1 damage to each identity", () => {
+    let s = typhoid(TYPHOID_B, "expert", 2);
+    const hp = [s.player.hp, seatView(s, "p2").player.hp];
+    s = settle(native(s, { type: "newRound" }));
+    expect(s.villain.code).toBe(BLOODY_B);
+    expect(seatView(s, "p1").player.hp).toBe(hp[0] - 1);
+    expect(seatView(s, "p2").player.hp).toBe(hp[1] - 1);
+  }, 30000);
+  it("Psionic Slash: Mary Walker flips back to Establish Trust, and the villain schemes", () => {
+    let s = typhoid();
+    attachTo(s, MARY_WALKER, s.villain.id);
+    s.sideSchemes = s.sideSchemes.filter((p) => p.code !== TRUST);
+    blankTop(s, 3);
+    const threat = s.scheme.threat;
+    s = settle(reveal(reload(s), SLASH));
+    expect(att(s, MARY_WALKER)).toBeUndefined();
+    expect(trust(s)).toBeTruthy();
+    // Typhoid Mary (A): 2 SCH.
+    expect(s.scheme.threat).toBe(threat + 2);
+  }, 30000);
+  it("Hail of Blades: the villain attacks you even in alter-ego form", () => {
+    let s = typhoid(BLOODY_A);
+    s.player.form = "alter";
+    s.player.hp = 30;
+    blankTop(s, 3);
+    s = settle(reveal(reload(s), BLADES));
+    // Bloody Mary (A): 2 ATK.
+    expect(s.player.hp).toBe(28);
+  }, 30000);
+  it("Psi Nova: 1 damage to each character you control, and you are stunned", () => {
+    let s = typhoid();
+    const a = ally(s);
+    const hp = s.player.hp;
+    s = settle(reveal(reload(s), NOVA));
+    expect(s.player.hp).toBe(hp - 1);
+    expect(inPlayOf(s, a.id)!.damage).toBe(1);
+    expect(s.player.stunned).toBe(true);
+  }, 30000);
+  it("Assembled Armor takes the villain's damage and is discarded at 5", () => {
+    let s = typhoid();
+    s = settle(reveal(s, ARMOR));
+    expect(att(s, ARMOR)!.attachedTo).toBe(s.villain.id);
+    s = settle(native(s, hit(s.villain.id, 3)));
+    expect(s.villain.hp).toBe(10);
+    expect(att(s, ARMOR)!.damage).toBe(3);
+    s = settle(native(s, hit(s.villain.id, 2)));
+    expect(att(s, ARMOR)).toBeUndefined();
+    expect(s.villain.hp).toBe(10);
+    s = settle(native(s, hit(s.villain.id, 2)));
+    expect(s.villain.hp).toBe(8);
+  }, 30000);
+  it("Psionic Slash's boost: while Typhoid Mary activates, 3 damage to an ally you control", () => {
+    let s = typhoid();
+    const a = ally(s, "01030");
+    s.encounter.deck.unshift(take(s, SLASH), makePiece(s, "01098"));
+    delete s.encounter.knownTop;
+    s = villainAttacks(reload(s));
+    expect(inPlayOf(s, a.id)!.damage).toBe(3);
+  }, 30000);
+  it("Hand Lookout's boost gives the activating enemy an additional boost card", () => {
+    let s = typhoid(BLOODY_A);
+    s.encounter.deck.unshift(take(s, LOOKOUT));
+    blankTop(s, 0);
+    s.encounter.deck.splice(1, 0, makePiece(s, "01098"), makePiece(s, "01098"));
+    delete s.encounter.knownTop;
+    s = villainAttacks(reload(s));
+    expect(s.encounter.discard.filter((p) => p.code === "01098")).toHaveLength(
+      1,
+    );
+  }, 30000);
+  it("Telekinesis: its Hero Action spends 2 physical resources to discard it", () => {
+    let s = typhoid();
+    const tk = attachTo(s, TELEKINESIS, s.villain.id);
+    const strength = [playerCard(s, "01090"), makePiece(s, "01090")];
+    s.player.hand.push(...strength);
+    s = reload(s);
+    const option = abilityOptions(s, att(s, TELEKINESIS)!)[0];
+    expect(option?.id).toBe("telekinesis");
+    s = command(s, { type: "ABILITY", id: tk.id, action: "telekinesis" });
+    s = settle(
+      pay(
+        s,
+        s.player.hand.filter((p) => strength.some((q) => q.id === p.id)),
+      ),
+    );
+    expect(att(s, TELEKINESIS)).toBeUndefined();
+  }, 30000);
+  it("Telekinesis's boost: 3 indirect damage, and each character damaged this way is exhausted", () => {
+    let s = typhoid();
+    s.encounter.deck.unshift(take(s, TELEKINESIS), makePiece(s, "01098"));
+    delete s.encounter.knownTop;
+    s.player.hp = 30;
+    s = villainAttacks(reload(s));
+    // Typhoid Mary (A): 1 ATK and Telekinesis's boost icon, then 3 indirect
+    // damage.
+    expect(s.player.hp).toBe(25);
+    expect(s.player.exhausted).toBe(true);
+  }, 30000);
+});
+
+describe("Purple Man", () => {
+  it("Influenced minions gain guard, then villainous, then patrol; Power of Suggestion makes every minion Influenced", () => {
+    const s = started(GETAWAY_ID, "purple_man", "expert");
+    const judge = minion(s, JUDGE);
+    const ivan = minion(s, IVAN);
+    expect(fneKeyword(s, judge, "Guard")).toBe(1);
+    expect(fneKeyword(s, judge, "Villainous")).toBe(1);
+    expect(fneKeyword(s, judge, "Patrol")).toBe(0);
+    expect(fneKeyword(s, ivan, "Guard")).toBe(0);
+    sideScheme(s, SUGGESTION);
+    expect(fneKeyword(s, ivan, "Guard")).toBe(1);
+    s.villain.code = PURPLE_MAN[2];
+    expect(fneKeyword(s, judge, "Patrol")).toBe(1);
+  }, 30000);
+  it("a boost card from his set is dealt to you facedown after the activation", () => {
+    let s = started(GETAWAY_ID, "purple_man");
+    take(s, OUT_FRONT);
+    const judge = take(s, JUDGE);
+    s.encounter.deck.unshift(judge, makePiece(s, "01098"));
+    delete s.encounter.knownTop;
+    s = villainAttacks(reload(s));
+    expect(s.encounter.dealt.find((p) => p.id === judge.id)?.dealtTo).toBe(
+      "p1",
+    );
+    expect(s.encounter.discard.some((p) => p.id === judge.id)).toBe(false);
+  }, 30000);
+  it("Converted makes the highest-cost ally you control an Influenced minion engaged with you, with SCH equal to its THW", () => {
+    let s = started(GETAWAY_ID, "purple_man");
+    ally(s, "01002");
+    const machine = ally(s, "01030");
+    s = settle(reveal(reload(s), CONVERTED));
+    const m = s.minions.find((p) => p.id === machine.id)!;
+    expect(m.engagedWith).toBe("p1");
+    expect(att(s, CONVERTED)!.attachedTo).toBe(machine.id);
+    expect(inPlayOf(s, machine.id)).toBeUndefined();
+    expect(enemyStats(s, m).scheme).toBe(1);
+    expect(fneKeyword(s, m, "Guard")).toBe(1);
+  }, 30000);
+  it("a Converted ally defeated as a minion goes to its owner's discard pile", () => {
+    let s = started(GETAWAY_ID, "purple_man");
+    const machine = ally(s, "01030");
+    s = settle(reveal(reload(s), CONVERTED));
+    expect(s.minions.some((p) => p.id === machine.id)).toBe(true);
+    s = settle(native(s, hit(machine.id, 4)));
+    expect(s.minions.some((p) => p.id === machine.id)).toBe(false);
+    expect(s.player.discard.some((p) => p.id === machine.id)).toBe(true);
+    expect(s.encounter.discard.some((p) => p.id === machine.id)).toBe(false);
+    expect(att(s, CONVERTED)).toBeUndefined();
+  }, 30000);
+  it("Converted surges without an ally", () => {
+    let s = started(GETAWAY_ID, "purple_man");
+    blankTop(s, 2);
+    const converted = take(s, CONVERTED);
+    const deck = s.encounter.deck.length;
+    s = settle(native(s, { type: "reveal", piece: converted, actorId: "p1" }));
+    expect(s.encounter.deck.length).toBe(deck - 1);
+  }, 30000);
+  it("Firefighter discards the highest-cost support or upgrade; Judge places 3 threat; Skater Punk deals 3 damage to its defeater", () => {
+    let s = started(GETAWAY_ID, "purple_man");
+    const pepper = playerCard(s, "01033");
+    const reactor = playerCard(s, "01035");
+    for (const p of [pepper, reactor]) {
+      p.ownerId = "p1";
+      s.player.inPlay.push(p);
+    }
+    const ff = minion(s, FIREFIGHTER);
+    s = settle(native(reload(s), hit(ff.id, 3)));
+    expect(inPlayOf(s, pepper.id)).toBeUndefined();
+    expect(inPlayOf(s, reactor.id)).toBeTruthy();
+    const judge = minion(s, JUDGE);
+    const threat = s.scheme.threat;
+    s = settle(native(reload(s), hit(judge.id, 2)));
+    expect(s.scheme.threat).toBe(threat + 3);
+    const skater = minion(s, SKATER);
+    const hp = s.player.hp;
+    s = settle(native(reload(s), hit(skater.id, 2)));
+    expect(s.player.hp).toBe(hp - 3);
+  }, 30000);
+  it("Firefighter leaves a permanent upgrade in play", () => {
+    let s = started(GETAWAY_ID, "purple_man");
+    const gamma = makePiece(s, "21002");
+    gamma.ownerId = "p1";
+    s.player.inPlay.push(gamma);
+    const ff = minion(s, FIREFIGHTER);
+    s = settle(native(reload(s), hit(ff.id, 3)));
+    expect(s.minions.some((p) => p.id === ff.id)).toBe(false);
+    expect(inPlayOf(s, gamma.id)).toBeTruthy();
+  }, 30000);
+  it("Security Guard discards the ally with the highest ATK", () => {
+    let s = started(GETAWAY_ID, "purple_man");
+    const cat = ally(s, "01002");
+    const machine = ally(s, "01030");
+    const guard = minion(s, SECURITY);
+    s = settle(native(reload(s), hit(guard.id, 4)));
+    expect(inPlayOf(s, machine.id)).toBeUndefined();
+    expect(inPlayOf(s, cat.id)).toBeTruthy();
+  }, 30000);
+  it('"serve." stays in your play area with 3 command counters; its Forced Action places 2 threat', () => {
+    let s = started(GETAWAY_ID, "purple_man");
+    s = settle(reveal(s, SERVE));
+    const serve = s.player.inPlay.find((p) => p.code === SERVE)!;
+    expect(serve.counters).toBe(3);
+    const option = abilityOptions(s, serve)[0];
+    expect(option?.id).toBe("command");
+    const threat = s.scheme.threat;
+    s = settle(
+      command(s, { type: "ABILITY", id: serve.id, action: "command" }),
+    );
+    expect(s.scheme.threat).toBe(threat + 2);
+    expect(inPlayOf(s, serve.id)!.counters).toBe(2);
+    expect(inPlayOf(s, serve.id)!.exhausted).toBe(true);
+  }, 30000);
+  it('"fight." resolves its Forced Action before the turn ends', () => {
+    let s = started(GETAWAY_ID, "purple_man");
+    s = settle(reveal(s, FIGHT));
+    s.phase = "player";
+    s.player.hp = 30;
+    s = reload(s);
+    s = command(s, { type: "END_TURN", discard: [] });
+    expect(s.prompt?.title).toBe('"fight."');
+    s = settle(choose(s, "hero:p1"));
+    expect(s.player.hp).toBeLessThanOrEqual(28);
+    const fight = s.player.inPlay.find((p) => p.code === FIGHT);
+    expect(fight?.counters ?? 0).toBeLessThan(3);
+  }, 30000);
+  it('"protect." gives the villain a tough status card', () => {
+    let s = started(GETAWAY_ID, "purple_man");
+    s = settle(reveal(s, PROTECT));
+    const protect = s.player.inPlay.find((p) => p.code === PROTECT)!;
+    s = settle(
+      command(s, { type: "ABILITY", id: protect.id, action: "command" }),
+    );
+    expect(s.villain.tough).toBe(true);
+    expect(inPlayOf(s, protect.id)!.counters).toBe(2);
+  }, 30000);
+  it("Sway the Masses reveals an Influenced minion from the encounter discard pile, or surges", () => {
+    let s = started(GETAWAY_ID, "purple_man");
+    const judge = take(s, JUDGE);
+    s.encounter.discard.push(judge);
+    s = settle(reveal(reload(s), SWAY));
+    expect(s.minions.some((p) => p.id === judge.id)).toBe(true);
+    blankTop(s, 2);
+    const sway = take(s, SWAY);
+    const deck = s.encounter.deck.length;
+    s = settle(
+      native(reload(s), { type: "reveal", piece: sway, actorId: "p1" }),
+    );
+    expect(s.encounter.deck.length).toBe(deck - 1);
+  }, 30000);
+});
+
+describe("Stop the Presses!", () => {
+  it("after an undefended attack you place 2 threat, or remove a stamina counter; a support with none left is discarded and the players lose", () => {
+    let s = started(PRESSES_ID, "purple_man");
+    const support = bugleOf(s, URICH);
+    support.counters = 1;
+    blankTop(s, 3);
+    const threat = s.scheme.threat;
+    s = settle(
+      native(reload(s), {
+        type: "enemyAttack",
+        id: s.villain.id,
+        actorId: "p1",
+      }),
+      (v) => (v.prompt?.title === "Stop the Presses!" ? "threat" : undefined),
+    );
+    expect(s.scheme.threat).toBe(threat + 2);
+    blankTop(s, 3);
+    s = settle(
+      native(s, { type: "enemyAttack", id: s.villain.id, actorId: "p1" }),
+      (v) =>
+        v.prompt?.title === "Stop the Presses!"
+          ? `stamina:${support.id}`
+          : undefined,
+    );
+    expect(inPlayOf(s, support.id)).toBeUndefined();
+    expect(s.phase).toBe("lost");
+  }, 30000);
+  it("the Daily Bugle's Alter-Ego Action exhausts a Daily Bugle support for a stamina counter", () => {
+    let s = started(PRESSES_ID, "purple_man");
+    s.player.form = "alter";
+    const support = bugleOf(s, BETTY);
+    s = reload(s);
+    const env = (s.environments || []).find((p) => p.code === BUGLE)!;
+    const option = abilityOptions(s, env)[0];
+    expect(option?.id).toBe(`bugle:${support.id}`);
+    s = settle(command(s, { type: "ABILITY", id: env.id, action: option.id }));
+    expect(inPlayOf(s, support.id)!.counters).toBe(4);
+    expect(inPlayOf(s, support.id)!.exhausted).toBe(true);
+  }, 30000);
+  it("Ben Urich looks at the top 2 encounter cards and discards 1", () => {
+    let s = started(PRESSES_ID, "purple_man");
+    const urich = bugleOf(s, URICH);
+    blankTop(s, 2);
+    const top = s.encounter.deck[0].id;
+    s = reload(s);
+    s = command(s, { type: "ABILITY", id: urich.id, action: "urich" });
+    expect(s.prompt?.title).toBe("Ben Urich");
+    s = settle(choose(s, "discard:0"));
+    expect(s.encounter.discard.some((p) => p.id === top)).toBe(true);
+    expect(inPlayOf(s, urich.id)!.counters).toBe(2);
+    expect(inPlayOf(s, urich.id)!.exhausted).toBe(true);
+  }, 30000);
+  it("J. Jonah Jameson deals you a facedown encounter card and draws 2", () => {
+    let s = started(PRESSES_ID, "purple_man");
+    const jjj = bugleOf(s, JJJ);
+    s = reload(s);
+    const hand = s.player.hand.length;
+    const dealt = s.encounter.dealt.length;
+    s = settle(command(s, { type: "ABILITY", id: jjj.id, action: "jjj" }));
+    expect(s.player.hand.length).toBe(hand + 2);
+    expect(s.encounter.dealt.length).toBe(dealt + 1);
+    expect(inPlayOf(s, jjj.id)!.counters).toBe(2);
+  }, 30000);
+  it("Robbie Robertson looks at a dealt facedown card and swaps it", () => {
+    let s = started(PRESSES_ID, "purple_man");
+    const robbie = bugleOf(s, ROBBIE);
+    blankTop(s, 2);
+    const first = s.encounter.deck[0].id;
+    s = reload(s);
+    s = native(s, { type: "dealEncounter", playerId: "p1" } as Effect);
+    s = settle(s, (v) =>
+      v.prompt?.title === "Robbie Robertson"
+        ? v.prompt.options.some((o) => o.id === "use")
+          ? "use"
+          : "swap"
+        : undefined,
+    );
+    expect(s.encounter.discard.some((p) => p.id === first)).toBe(true);
+    expect(s.encounter.dealt.filter((p) => p.dealtTo === "p1").length).toBe(1);
+    expect(inPlayOf(s, robbie.id)!.counters).toBe(2);
+  }, 30000);
+  it("Betty Brant cancels a boost card and gives the enemy another", () => {
+    let s = started(PRESSES_ID, "purple_man");
+    take(s, OUT_FRONT);
+    const betty = bugleOf(s, BETTY);
+    s.encounter.deck.unshift(makePiece(s, "01190"), makePiece(s, "01098"));
+    delete s.encounter.knownTop;
+    s.player.hp = 30;
+    s = settle(
+      native(reload(s), {
+        type: "enemyAttack",
+        id: s.villain.id,
+        actorId: "p1",
+      }),
+      (v) =>
+        v.prompt?.options.find((o) => /betty/.test(o.id))?.id ||
+        (v.prompt?.title === "Stop the Presses!" ? "threat" : undefined),
+    );
+    // Purple Man (I): 0 ATK; Shadow of the Past's 2 boost icons are canceled.
+    expect(s.player.hp).toBe(30);
+    expect(inPlayOf(s, betty.id)!.counters).toBe(2);
+  }, 30000);
+  it("Exclusive Interview exhausts each Daily Bugle support, which cannot ready", () => {
+    let s = started(PRESSES_ID, "purple_man");
+    const support = bugleOf(s, URICH);
+    s = settle(reveal(s, INTERVIEW));
+    expect(inPlayOf(s, support.id)!.exhausted).toBe(true);
+    expect(fneCanReady(s, inPlayOf(s, support.id)!)).toBe(false);
+  }, 30000);
+  it("Breaking News: exhaust a Daily Bugle support and remove a stamina counter, or 2 threat", () => {
+    let s = started(PRESSES_ID, "purple_man");
+    const support = bugleOf(s, URICH);
+    s = reveal(reload(s), NEWS);
+    expect(s.prompt?.title).toBe("Breaking News");
+    s = settle(choose(s, `bugle:${support.id}`));
+    expect(inPlayOf(s, support.id)!.counters).toBe(2);
+    expect(inPlayOf(s, support.id)!.exhausted).toBe(true);
+  }, 30000);
+});
+
+describe("Tombstone and Tracksuit Mafia", () => {
+  it("Cold as Ice attaches to the minion with the highest base hit points with a tough status card; after it schemes, the first player is confused", () => {
+    let s = started(GETAWAY_ID, "bullseye");
+    minion(s, BRO);
+    const tomb = minion(s, TOMBSTONE);
+    s = settle(reveal(reload(s), COLD));
+    expect(att(s, COLD)!.attachedTo).toBe(tomb.id);
+    expect(s.minions.find((p) => p.id === tomb.id)!.tough).toBe(true);
+    s.player.form = "alter";
+    blankTop(s, 3);
+    s = settle(
+      native(reload(s), { type: "enemyScheme", id: tomb.id, actorId: "p1" }),
+    );
+    expect(s.player.confused).toBe(true);
+    expect(att(s, COLD)).toBeUndefined();
+  }, 30000);
+  it("Hard as Marble: after the attached minion attacks, the attacked character is stunned", () => {
+    let s = started(GETAWAY_ID, "bullseye");
+    const tomb = minion(s, TOMBSTONE);
+    s = settle(reveal(reload(s), MARBLE));
+    expect(att(s, MARBLE)!.attachedTo).toBe(tomb.id);
+    blankTop(s, 3);
+    s.player.hp = 30;
+    s = settle(
+      native(reload(s), { type: "enemyAttack", id: tomb.id, actorId: "p1" }),
+    );
+    expect(s.player.stunned).toBe(true);
+    expect(att(s, MARBLE)).toBeUndefined();
+  }, 30000);
+  it("Beetle finds an attachment that attaches to a minion", () => {
+    let s = started(PRESSES_ID, "bullseye");
+    s = settle(reveal(s, BEETLE));
+    const beetle = s.minions.find((p) => p.code === BEETLE)!;
+    expect(
+      s.attachments.some(
+        (p) => p.attachedTo === beetle.id && [COLD, MARBLE].includes(p.code),
+      ),
+    ).toBe(true);
+    expect(beetle.tough).toBe(true);
+  }, 30000);
+  it("Tombstone's boost gives the villain a tough status card", () => {
+    let s = started(GETAWAY_ID, "bullseye");
+    take(s, OUT_FRONT);
+    s.encounter.deck.unshift(take(s, TOMBSTONE), makePiece(s, "01098"));
+    delete s.encounter.knownTop;
+    s = villainAttacks(reload(s));
+    expect(s.villain.tough).toBe(true);
+  }, 30000);
+  it("Hit List deals the first player 3 indirect damage as the villain phase begins", () => {
+    let s = started(GETAWAY_ID, "bullseye");
+    sideScheme(s, HIT_LIST);
+    const hp = s.player.hp;
+    s = settle(native(reload(s), ...fneVillainPhaseBegins(s)));
+    expect(s.player.hp).toBe(hp - 3);
+  }, 30000);
+  it("Hit List: each ally its indirect damage defeats removes 1 threat per player from it", () => {
+    let s = started(GETAWAY_ID, "bullseye");
+    const list = sideScheme(s, HIT_LIST);
+    const a = ally(s, "01002");
+    s = settle(
+      native(reload(s), ...fneVillainPhaseBegins(s)),
+      (v) => v.prompt?.options.find((o) => o.id.includes(a.id))?.id,
+    );
+    expect(s.player.inPlay.some((p) => p.id === a.id)).toBe(false);
+    expect(s.sideSchemes.find((p) => p.id === list.id)!.counters).toBe(2);
+  }, 30000);
+  it("Ivan Banionis gains acceleration tokens when revealed and after he schemes", () => {
+    let s = started(GETAWAY_ID, "bullseye");
+    s = settle(reveal(s, IVAN));
+    const ivan = s.minions.find((p) => p.code === IVAN)!;
+    expect(ivan.accelerationTokens).toBe(1);
+    expect(fneAcceleration(s)).toBe(1);
+    s.player.form = "alter";
+    blankTop(s, 3);
+    s = settle(
+      native(reload(s), { type: "enemyScheme", id: ivan.id, actorId: "p1" }),
+    );
+    expect(s.minions.find((p) => p.id === ivan.id)!.accelerationTokens).toBe(2);
+  }, 30000);
+  it("The Clown gets a facedown boost card after he schemes", () => {
+    let s = started(GETAWAY_ID, "bullseye");
+    const clown = minion(s, CLOWN);
+    s.player.form = "alter";
+    blankTop(s, 3);
+    s = settle(
+      native(reload(s), { type: "enemyScheme", id: clown.id, actorId: "p1" }),
+    );
+    expect(
+      s.minions.find((p) => p.id === clown.id)!.inheritorBoosts,
+    ).toHaveLength(1);
+  }, 30000);
+  it("Tracksuit Mafia tucks a Tracksuit minion; revealing a Tracksuit minion brings it out", () => {
+    let s = started(GETAWAY_ID, "bullseye");
+    s.encounter.deck.unshift(makePiece(s, "01098"), take(s, BRO));
+    delete s.encounter.knownTop;
+    s = settle(reveal(reload(s), TRACKSUIT));
+    const scheme = s.sideSchemes.find((p) => p.code === TRACKSUIT)!;
+    expect(s.fearNoEvil!.tucked![scheme.id].map((p) => p.code)).toEqual([BRO]);
+    expect(fneSideSchemeCaption(s, scheme)).toMatch(/^1 minion tucked here/);
+    s = settle(reveal(s, IVAN));
+    expect(s.fearNoEvil!.tucked![scheme.id]).toHaveLength(0);
+    expect(s.minions.filter((p) => [BRO, IVAN].includes(p.code))).toHaveLength(
+      2,
+    );
+  }, 30000);
+  it("a defeated Tracksuit Bro is tucked under Tracksuit Mafia, or shuffled into the encounter deck", () => {
+    let s = started(GETAWAY_ID, "bullseye");
+    const bro = minion(s, BRO);
+    const deck = s.encounter.deck.length;
+    s = settle(native(reload(s), hit(bro.id, 3)));
+    expect(s.encounter.deck.length).toBe(deck + 1);
+    expect(s.encounter.deck.some((p) => p.id === bro.id)).toBe(true);
+    const scheme = sideScheme(s, TRACKSUIT);
+    const second = minion(s, BRO);
+    s = settle(native(reload(s), hit(second.id, 3)));
+    expect(s.fearNoEvil!.tucked![scheme.id].map((p) => p.id)).toEqual([
+      second.id,
+    ]);
+  }, 30000);
+  it("a defeated Tracksuit Mafioso without Tracksuit Mafia stuns and confuses its defeater", () => {
+    let s = started(GETAWAY_ID, "bullseye");
+    const mafioso = minion(s, MAFIOSO);
+    s = settle(native(reload(s), hit(mafioso.id, 7)));
+    expect(s.player.stunned).toBe(true);
+    expect(s.player.confused).toBe(true);
+  }, 30000);
+  it("Teamwork: a Tracksuit minion entering play with another activates against you", () => {
+    let s = started(GETAWAY_ID, "bullseye");
+    minion(s, IVAN);
+    s.player.hp = 30;
+    blankTop(s, 3);
+    s = settle(reveal(reload(s), BRO));
+    // Tracksuit Bro: 2 ATK.
+    expect(s.player.hp).toBe(28);
+  }, 30000);
+  it("the modular sets join any scenario", () => {
+    const s = settle(
+      newGame({
+        heroId: "captain_marvel",
+        aspect: "aggression",
+        villainId: "rhino",
+        modules: ["fne_tracksuit_mafia"],
+        seed: 9,
+        pacing: "expert",
+      }),
+    );
+    expect(
+      s.encounter.deck.filter(
+        (p) => card(p).set_code === "fne_tracksuit_mafia",
+      ),
+    ).toHaveLength(7);
   }, 30000);
 });

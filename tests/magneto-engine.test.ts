@@ -144,7 +144,7 @@ describe("native standalone Magneto", () => {
     const v = VILLAINS.find((v) => v.id === "magneto")!;
     expect(v.module).toBe("acolytes");
     expect(v.fixedSets).toBeUndefined();
-    expect(MODULES).toHaveLength(99);
+    expect(MODULES).toHaveLength(101);
     expect(MODULES.slice(20, 22).map((module) => module.id)).toEqual([
       "exodus",
       "reavers",

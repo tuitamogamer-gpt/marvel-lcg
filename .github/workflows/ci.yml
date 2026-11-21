@@ -29,9 +29,9 @@ jobs:
   missions:
     name: Source missions (shard ${{ matrix.shard }})
     runs-on: ubuntu-latest
-    # Each shard now runs about 31,505 configurations; the slowest took about
-    # 75 minutes at 26,500.
-    timeout-minutes: 120
+    # Each shard now runs 35,802 configurations; the slowest took about 119
+    # minutes at 34,450.
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       max-parallel: 16

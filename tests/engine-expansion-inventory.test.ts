@@ -565,7 +565,7 @@ describe("complete expansion rules inventory", () => {
         installedCardClosure: true,
         installedUnsupportedDependencies: [],
       });
-    expect(MODULES).toHaveLength(99);
+    expect(MODULES).toHaveLength(101);
     expect(MODULES.map((module) => module.id)).toEqual(
       expect.arrayContaining([
         "temporal",
@@ -595,9 +595,9 @@ describe("complete expansion rules inventory", () => {
         "kree_militant",
       ]),
     );
-    expect(coverage.executableFaces).toBe(3577);
-    expect(coverage.unsupportedFaces).toBe(974);
-    expect(coverage.dedicatedFaces).toBe(3139);
+    expect(coverage.executableFaces).toBe(3623);
+    expect(coverage.unsupportedFaces).toBe(928);
+    expect(coverage.dedicatedFaces).toBe(3185);
     expect(coverage.registeredHeroIds).toHaveLength(57);
     const mutant = coverage.products.find(
       (pack: { code: string }) => pack.code === "mut_gen",
@@ -1135,6 +1135,9 @@ describe("complete expansion rules inventory", () => {
         // Fear No Evil, part one: The Getaway, Art Museum Heist, Bullseye,
         // Electro, Hammerhead, Cops, Drive and The Owl.
         62 -
+        // Fear No Evil, part two: Stop the Presses!, Purple Man, Typhoid
+        // Mary, Tombstone and Tracksuit Mafia.
+        46 -
         2135,
     ).toBe(137);
     expect(MODULES.slice(24, 26).map((module) => module.id)).toEqual([
@@ -1307,7 +1310,7 @@ describe("complete expansion rules inventory", () => {
     expect(coverage.registeredModuleIds).toEqual(
       MODULES.map((module) => module.id).sort(),
     );
-    expect(coverage.registeredModules).toHaveLength(99);
+    expect(coverage.registeredModules).toHaveLength(101);
     for (const module of coverage.registeredModules) {
       const source = cards
         .filter(
@@ -1491,7 +1494,7 @@ describe("complete expansion rules inventory", () => {
     );
     expect(
       inventory.installedRegistryCoverage.registeredScenarioIds,
-    ).toHaveLength(55);
+    ).toHaveLength(56);
     expect(
       inventory.installedRegistryCoverage.registeredScenarios.find(
         (entry: { id: string }) => entry.id === "venom_goblin",
